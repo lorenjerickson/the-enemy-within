@@ -4,11 +4,12 @@ import { useState } from "react";
 import { CREATURE_TYPES } from "@/lib/creatureTypes";
 import ImagePicker from "../../ImagePicker";
 import AttributesInput from "./AttributesInput";
+import EquipmentInput, { type EquippableItem } from "./EquipmentInput";
 import { addCreature } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-export default function CreatureForm() {
+export default function CreatureForm({ items }: { items: EquippableItem[] }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -29,6 +30,7 @@ export default function CreatureForm() {
         ))}
       </select>
       <AttributesInput />
+      <EquipmentInput items={items} />
       <button className="btn btn-primary">Save creature</button>
     </form>
   );

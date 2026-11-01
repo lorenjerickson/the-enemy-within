@@ -54,6 +54,7 @@ addColumn("items", "max_stack", "INTEGER");
 addColumn("items", "capacity", "INTEGER");
 addColumn("creatures", "type", "TEXT NOT NULL DEFAULT 'beast'");
 addColumn("creatures", "attributes", "TEXT NOT NULL DEFAULT '{}'"); // JSON Attributes
+addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equipment
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 export default db;
@@ -154,19 +155,24 @@ export interface Creature {
   image: string | null;
   type: CreatureType;
   attributes: Attributes;
+  equipment: Equipment;
 }
 
-type CreatureRow = Omit<Creature, "attributes"> & { attributes: string };
+/** Enabled equipment slots; each holds an item id, or null when empty. */
+export type Equipment = Partial<Record<EquipSlot, number | null>>;
+
+type CreatureRow = Omit<Creature, "attributes" | "equipment"> & { attributes: string; equipment: string };
 
 export function listCreatures(): Creature[] {
   return db
-    .prepare<[], CreatureRow>("SELECT id, name, description, image, type, attributes FROM creatures ORDER BY name")
+    .prepare<[], CreatureRow>("SELECT id, name, description, image, type, attributes, equipment FROM creatures ORDER BY name")
     .all()
-    .map((row) => ({ ...row, attributes: JSON.parse(row.attributes) }));
+    .map((row) => ({ ...row, attributes: JSON.parse(row.attributes), equipment: JSON.parse(row.equipment) }));
 }
 
 export function createCreature(c: Omit<Creature, "id">): void {
   db.prepare<Omit<CreatureRow, "id">>(
-    "INSERT INTO creatures (name, description, image, type, attributes) VALUES (@name, @description, @image, @type, @attributes)"
-  ).run({ ...c, attributes: JSON.stringify(c.attributes) });
+    `INSERT INTO creatures (name, description, image, type, attributes, equipment)
+     VALUES (@name, @description, @image, @type, @attributes, @equipment)`
+  ).run({ ...c, attributes: JSON.stringify(c.attributes), equipment: JSON.stringify(c.equipment) });
 }

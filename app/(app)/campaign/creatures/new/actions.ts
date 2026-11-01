@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { createCreature, CREATURE_TYPES, type CreatureType } from "@/lib/db";
+import { createCreature, CREATURE_TYPES, EQUIP_SLOTS, listItems, type CreatureType, type Equipment } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET, pointBuySpent, type Attributes } from "@/lib/attributes";
 
@@ -21,12 +21,24 @@ export async function addCreature(formData: FormData) {
     throw new Error("Point buy budget exceeded");
   }
 
+  const items = new Map(listItems().map((i) => [i.id, i]));
+  const equipment: Equipment = {};
+  for (const slot of EQUIP_SLOTS) {
+    if (formData.get(`slot:${slot}`) !== "on") continue;
+    const itemId = Number(formData.get(`item:${slot}`)) || null;
+    if (itemId !== null && !items.get(itemId)?.slots.includes(slot)) {
+      throw new Error(`Item ${itemId} cannot be equipped in ${slot}`);
+    }
+    equipment[slot] = itemId;
+  }
+
   createCreature({
     name: text("name"),
     description: text("description"),
     image: await imageFromForm(formData),
     type,
     attributes,
+    equipment,
   });
   redirect("/campaign/creatures");
 }
