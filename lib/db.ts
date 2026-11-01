@@ -30,6 +30,18 @@ db.exec(`
     description TEXT NOT NULL DEFAULT '',
     image TEXT
   );
+  CREATE TABLE IF NOT EXISTS professions (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS ranks (
+    id INTEGER PRIMARY KEY,
+    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    parent_id INTEGER REFERENCES ranks(id), -- null = first advancement from the base profession
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+  );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id)
@@ -220,4 +232,52 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
          attributes = @attributes, equipment = @equipment WHERE id = @id`
     ).run({ ...params, id });
   }
+}
+
+export interface Profession {
+  id: number;
+  name: string;
+  description: string;
+}
+
+/** An advancement option. Siblings under the same parent are alternative choices at that level. */
+export interface Rank {
+  id: number;
+  profession_id: number;
+  parent_id: number | null;
+  name: string;
+  description: string;
+}
+
+export function listProfessions(): Profession[] {
+  return db.prepare<[], Profession>("SELECT id, name, description FROM professions ORDER BY name").all();
+}
+
+export function getProfession(id: number): Profession | undefined {
+  return db.prepare<[number], Profession>("SELECT id, name, description FROM professions WHERE id = ?").get(id);
+}
+
+/** Inserts when id is null, otherwise updates. Returns the id. */
+export function saveProfession(id: number | null, p: Omit<Profession, "id">): number {
+  if (id === null) {
+    return Number(db.prepare<Omit<Profession, "id">>("INSERT INTO professions (name, description) VALUES (@name, @description)").run(p).lastInsertRowid);
+  }
+  db.prepare<Profession>("UPDATE professions SET name = @name, description = @description WHERE id = @id").run({ ...p, id });
+  return id;
+}
+
+export function listRanks(professionId: number): Rank[] {
+  return db
+    .prepare<[number], Rank>("SELECT id, profession_id, parent_id, name, description FROM ranks WHERE profession_id = ? ORDER BY id")
+    .all(professionId);
+}
+
+export function addRank(r: Omit<Rank, "id">): void {
+  db.prepare<Omit<Rank, "id">>(
+    "INSERT INTO ranks (profession_id, parent_id, name, description) VALUES (@profession_id, @parent_id, @name, @description)"
+  ).run(r);
+}
+
+export function updateRank(id: number, name: string, description: string): void {
+  db.prepare<[string, string, number]>("UPDATE ranks SET name = ?, description = ? WHERE id = ?").run(name, description, id);
 }
