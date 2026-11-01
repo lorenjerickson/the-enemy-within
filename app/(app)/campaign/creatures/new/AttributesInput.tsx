@@ -41,21 +41,29 @@ export default function AttributesInput() {
         )}
       </div>
       <div className="grid grid-cols-4 gap-2">
-        {ATTRIBUTES.map((k) => (
-          <label key={k} className="floating-label">
-            <span>{capitalize(k)} ({formatModifier(modifier(scores[k]))})</span>
-            <input
-              name={k}
-              type="number"
-              required
-              min={pointBuy ? 8 : MIN_SCORE}
-              max={pointBuy ? 15 : MAX_SCORE}
-              value={scores[k]}
-              onChange={(e) => set(k, Number(e.target.value))}
-              className="input"
-            />
-          </label>
-        ))}
+        {ATTRIBUTES.map((k) => {
+          const m = modifier(scores[k]);
+          return (
+            <div key={k} className="flex items-center gap-2">
+              <label className="floating-label flex-1">
+                <span>{capitalize(k)}</span>
+                <input
+                  name={k}
+                  type="number"
+                  required
+                  min={pointBuy ? 8 : MIN_SCORE}
+                  max={pointBuy ? 15 : MAX_SCORE}
+                  value={scores[k]}
+                  onChange={(e) => set(k, Number(e.target.value))}
+                  className="input w-full"
+                />
+              </label>
+              <span className={`badge w-10 ${m > 0 ? "badge-success" : m < 0 ? "badge-error" : "badge-ghost"}`}>
+                {formatModifier(m)}
+              </span>
+            </div>
+          );
+        })}
       </div>
       {pointBuy && remaining < 0 && <p className="text-error text-sm">Over budget by {-remaining} points.</p>}
     </fieldset>
