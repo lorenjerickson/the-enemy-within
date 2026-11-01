@@ -90,7 +90,7 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
           <li className="text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
-              <div className={`flex items-center gap-1 rounded ${selected === layer ? "bg-primary/20" : ""}`}>
+              <div className={`flex items-center gap-1 rounded ${selected === layer ? "bg-[color-mix(in_oklab,var(--color-primary)_60%,white)] text-base-100" : ""}`}>
                 <button
                   type="button"
                   aria-pressed={!hiddenSet.has(layer)}
