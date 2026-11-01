@@ -11,13 +11,26 @@ import { submitCreature } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-export default function CreatureForm({ items, initial }: { items: EquippableItem[]; initial?: Creature }) {
+/** Creature editor. Characters reuse it with their own action, title and initial data. */
+export default function CreatureForm({
+  items,
+  initial,
+  action,
+  title,
+  submitLabel = "Save creature",
+}: {
+  items: EquippableItem[];
+  initial?: Partial<Creature>;
+  action?: (formData: FormData) => Promise<void>;
+  title?: string;
+  submitLabel?: string;
+}) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
 
   return (
-    <form action={submitCreature.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
-      <h2 className="text-xl font-semibold">{initial ? "Edit creature" : "New creature"}</h2>
+    <form action={action ?? submitCreature.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
+      <h2 className="text-xl font-semibold">{title ?? (initial ? "Edit creature" : "New creature")}</h2>
       <div className="flex gap-4">
         <ImagePicker kind="creature" name={name} description={description} initial={initial?.image} />
         <div className="flex-1 space-y-3">
@@ -41,14 +54,14 @@ export default function CreatureForm({ items, initial }: { items: EquippableItem
           {MOVEMENT_TYPES.map((m) => (
             <label key={m} className="floating-label">
               <span>{capitalize(m)}</span>
-              <input name={`move:${m}`} type="number" min="0" step="any" placeholder={capitalize(m)} defaultValue={initial?.movement[m] ?? 0} className="input" />
+              <input name={`move:${m}`} type="number" min="0" step="any" placeholder={capitalize(m)} defaultValue={initial?.movement?.[m] ?? 0} className="input" />
             </label>
           ))}
         </div>
       </fieldset>
       <AttributesInput initial={initial?.attributes} />
       <EquipmentInput items={items} initial={initial?.equipment} />
-      <button className="btn btn-primary">Save creature</button>
+      <button className="btn btn-primary">{submitLabel}</button>
     </form>
   );
 }

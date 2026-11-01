@@ -48,6 +48,19 @@ db.exec(`
     item_id INTEGER NOT NULL REFERENCES items(id),
     PRIMARY KEY (profession_id, item_id)
   );
+  -- A character is a single-instance creature: a copy of a creature template that can then be changed freely.
+  CREATE TABLE IF NOT EXISTS characters (
+    id INTEGER PRIMARY KEY,
+    creature_id INTEGER REFERENCES creatures(id), -- template it was based on
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    image TEXT,
+    type TEXT NOT NULL,
+    attributes TEXT NOT NULL DEFAULT '{}',
+    equipment TEXT NOT NULL DEFAULT '{}',
+    health TEXT NOT NULL,
+    movement TEXT NOT NULL DEFAULT '{}'
+  );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
@@ -279,14 +292,16 @@ export function getCreature(id: number): Creature | undefined {
   return row && parseCreature(row);
 }
 
+const toParams = (c: Omit<Creature, "id">) => ({
+  ...c,
+  attributes: JSON.stringify(c.attributes),
+  equipment: JSON.stringify(c.equipment),
+  movement: JSON.stringify(c.movement),
+});
+
 /** Inserts when id is null, otherwise updates. */
 export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
-  const params = {
-    ...c,
-    attributes: JSON.stringify(c.attributes),
-    equipment: JSON.stringify(c.equipment),
-    movement: JSON.stringify(c.movement),
-  };
+  const params = toParams(c);
   if (id === null) {
     db.prepare<Omit<CreatureRow, "id">>(
       `INSERT INTO creatures (name, description, image, type, attributes, equipment, health, movement)
@@ -295,6 +310,39 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
   } else {
     db.prepare<CreatureRow>(
       `UPDATE creatures SET name = @name, description = @description, image = @image, type = @type,
+         attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
+    ).run({ ...params, id });
+  }
+}
+
+/** A single-instance creature, copied from a creature template. */
+export type Character = Creature & { creature_id: number | null; template_name: string | null };
+
+const CHARACTER_SELECT = `SELECT c.id, c.creature_id, t.name AS template_name, c.name, c.description, c.image, c.type,
+  c.attributes, c.equipment, c.health, c.movement FROM characters c LEFT JOIN creatures t ON t.id = c.creature_id`;
+
+type CharacterRow = CreatureRow & { creature_id: number | null; template_name: string | null };
+
+export function listCharacters(): Character[] {
+  return db.prepare<[], CharacterRow>(`${CHARACTER_SELECT} ORDER BY c.name`).all().map((r) => ({ ...r, ...parseCreature(r) }));
+}
+
+export function getCharacter(id: number): Character | undefined {
+  const row = db.prepare<[number], CharacterRow>(`${CHARACTER_SELECT} WHERE c.id = ?`).get(id);
+  return row && { ...row, ...parseCreature(row) };
+}
+
+/** Inserts (based on creatureId) when id is null, otherwise updates. */
+export function saveCharacter(id: number | null, creatureId: number | null, c: Omit<Creature, "id">): void {
+  const params = toParams(c);
+  if (id === null) {
+    db.prepare<Omit<CreatureRow, "id"> & { creature_id: number | null }>(
+      `INSERT INTO characters (creature_id, name, description, image, type, attributes, equipment, health, movement)
+       VALUES (@creature_id, @name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
+    ).run({ ...params, creature_id: creatureId });
+  } else {
+    db.prepare<CreatureRow>(
+      `UPDATE characters SET name = @name, description = @description, image = @image, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
   }
