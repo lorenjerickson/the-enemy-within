@@ -22,6 +22,12 @@ db.exec(`
     description TEXT NOT NULL DEFAULT '',
     image TEXT
   );
+  CREATE TABLE IF NOT EXISTS creatures (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    image TEXT
+  );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id)
@@ -134,4 +140,15 @@ export function createItem(item: Omit<Item, "id">): void {
     `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots)
      VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots)`
   ).run({ ...item, slots: JSON.stringify(item.slots) });
+}
+
+export interface Creature {
+  id: number;
+  name: string;
+  description: string;
+  image: string | null;
+}
+
+export function listCreatures(): Creature[] {
+  return db.prepare<[], Creature>("SELECT id, name, description, image FROM creatures ORDER BY name").all();
 }
