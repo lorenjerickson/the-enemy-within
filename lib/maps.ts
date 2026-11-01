@@ -5,21 +5,32 @@ export const MAP_LAYERS = [
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
-/** Background layer settings: a solid colour, or a texture image stretched to fill or tiled. */
+export type Padding = { top: number; right: number; bottom: number; left: number };
+export const EDGES = ["top", "right", "bottom", "left"] as const;
+
+/**
+ * Background layer settings: a solid colour, or a texture image stretched to fill or tiled.
+ * Padding (canvas pixels) insets the region the map image is drawn into.
+ */
 export interface MapBackground {
   mode: "color" | "texture";
   color: string; // #rrggbb
   image: string | null;
   fit: "fill" | "tile";
+  padding: Padding;
 }
 
-export const DEFAULT_BACKGROUND: MapBackground = { mode: "color", color: "#2a303c", image: null, fit: "fill" };
+export const DEFAULT_BACKGROUND: MapBackground = {
+  mode: "color",
+  color: "#2a303c",
+  image: null,
+  fit: "fill",
+  padding: { top: 0, right: 0, bottom: 0, left: 0 },
+};
 
-/** Map layer settings: the map image and padding (in image pixels) added around each edge. */
+/** Map layer settings: the map image, centred in the background's padded region with its aspect ratio kept. */
 export interface MapImage {
   image: string | null;
-  padding: { top: number; right: number; bottom: number; left: number };
 }
 
-export const DEFAULT_MAP_IMAGE: MapImage = { image: null, padding: { top: 0, right: 0, bottom: 0, left: 0 } };
-export const EDGES = ["top", "right", "bottom", "left"] as const;
+export const DEFAULT_MAP_IMAGE: MapImage = { image: null };

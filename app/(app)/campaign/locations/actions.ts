@@ -5,7 +5,10 @@ import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveMapImage, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
-import { EDGES, MAP_LAYERS, type MapImage, type MapLayer } from "@/lib/maps";
+import { EDGES, MAP_LAYERS, type MapLayer, type Padding } from "@/lib/maps";
+
+const paddingFromForm = (formData: FormData) =>
+  Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
 
 export async function submitLocation(id: number | null, formData: FormData) {
   await requireGm();
@@ -50,15 +53,13 @@ export async function submitBackground(locationId: number, levelId: number, form
     color,
     image: await imageFromForm(formData),
     fit: formData.get("fit") === "tile" ? "tile" : "fill",
+    padding: paddingFromForm(formData),
   });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
 export async function submitMapImage(locationId: number, levelId: number, formData: FormData) {
   await requireGm();
-  const padding = Object.fromEntries(
-    EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])
-  ) as MapImage["padding"];
-  saveMapImage(levelId, { image: await imageFromForm(formData), padding });
+  saveMapImage(levelId, { image: await imageFromForm(formData) });
   revalidatePath(`/campaign/locations/${locationId}`);
 }

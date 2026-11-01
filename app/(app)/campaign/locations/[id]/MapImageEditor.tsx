@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { EDGES, type MapImage } from "@/lib/maps";
+import type { MapImage } from "@/lib/maps";
 import ImagePicker from "../../ImagePicker";
 import { submitMapImage } from "../actions";
 
-/** Map layer editor: the map image (uploaded or generated) and padding around each edge. */
+/** Map layer editor: the map image (uploaded or generated). */
 export default function MapImageEditor({ locationId, levelId, mapImage }: { locationId: number; levelId: number; mapImage: MapImage }) {
   const [description, setDescription] = useState("");
 
@@ -20,17 +20,7 @@ export default function MapImageEditor({ locationId, levelId, mapImage }: { loca
             placeholder="Describe a map to generate (e.g. ruined chapel in a swamp)"
             className="input input-sm w-full"
           />
-          <fieldset className="fieldset">
-            <legend className="fieldset-legend">Padding (image pixels)</legend>
-            <div className="grid grid-cols-4 gap-2">
-              {EDGES.map((e) => (
-                <label key={e} className="floating-label">
-                  <span>{e[0].toUpperCase() + e.slice(1)}</span>
-                  <input name={`pad_${e}`} type="number" min="0" defaultValue={mapImage.padding[e]} placeholder={e} className="input input-sm" />
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <p className="text-xs opacity-60">The image is centred in the background&apos;s padded area, keeping its aspect ratio.</p>
         </div>
       </div>
       <button className="btn btn-primary btn-sm">Save map</button>

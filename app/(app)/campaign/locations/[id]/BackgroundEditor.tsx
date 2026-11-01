@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { MapBackground } from "@/lib/maps";
+import { EDGES, type MapBackground } from "@/lib/maps";
 import ImagePicker from "../../ImagePicker";
 import { submitBackground } from "../actions";
 
-/** Background layer editor: a solid colour, or a texture (uploaded or generated) that fills or tiles. */
+/** Background layer editor: a colour or a filled/tiled texture, plus the padding that frames the map image. */
 export default function BackgroundEditor({
   locationId,
   levelId,
@@ -53,6 +53,18 @@ export default function BackgroundEditor({
           </div>
         </div>
       </div>
+
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">Padding around the map (pixels)</legend>
+        <div className="grid grid-cols-4 gap-2">
+          {EDGES.map((e) => (
+            <label key={e} className="floating-label">
+              <span>{e[0].toUpperCase() + e.slice(1)}</span>
+              <input name={`pad_${e}`} type="number" min="0" defaultValue={background.padding[e]} placeholder={e} className="input input-sm" />
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       <button className="btn btn-primary btn-sm">Save background</button>
     </form>

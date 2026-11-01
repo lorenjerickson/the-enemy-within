@@ -57,15 +57,15 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       ctx.drawImage(img, 0, 0, w, h);
     }
   },
-  // The map image plus its padding is scaled to fit the canvas, centred; padding shows the layers beneath.
-  map: ({ mapImage: { padding: p }, mapImageEl: img }) => (ctx, w, h) => {
+  // The map image is fitted inside the background's padded region, centred, aspect ratio preserved.
+  map: ({ background: { padding: p }, mapImageEl: img }) => (ctx, w, h) => {
     if (!img) return;
-    const worldW = p.left + img.naturalWidth + p.right;
-    const worldH = p.top + img.naturalHeight + p.bottom;
-    const scale = Math.min(w / worldW, h / worldH);
-    const x = (w - worldW * scale) / 2 + p.left * scale;
-    const y = (h - worldH * scale) / 2 + p.top * scale;
-    ctx.drawImage(img, x, y, img.naturalWidth * scale, img.naturalHeight * scale);
+    const innerW = Math.max(0, w - p.left - p.right);
+    const innerH = Math.max(0, h - p.top - p.bottom);
+    const scale = Math.min(innerW / img.naturalWidth, innerH / img.naturalHeight);
+    const drawW = img.naturalWidth * scale;
+    const drawH = img.naturalHeight * scale;
+    ctx.drawImage(img, p.left + (innerW - drawW) / 2, p.top + (innerH - drawH) / 2, drawW, drawH);
   },
 };
 
