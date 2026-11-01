@@ -19,7 +19,8 @@ export default async function Creatures() {
       ) : (
         <ul className="list bg-base-200 rounded-box">
           {creatures.map((c) => (
-            <li key={c.id} className="list-row">
+            <li key={c.id}>
+              <Link href={`/campaign/creatures/${c.id}`} className="list-row hover:bg-base-300 rounded-box">
               {c.image ? (
                 <img src={c.image} alt="" className="size-12 rounded-box object-cover" />
               ) : (
@@ -29,6 +30,7 @@ export default async function Creatures() {
                 <div className="font-medium">{c.name}</div>
                 <div className="text-sm opacity-70">{c.description}</div>
               </div>
+              </Link>
             </li>
           ))}
         </ul>

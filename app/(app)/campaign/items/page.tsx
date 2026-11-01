@@ -19,7 +19,8 @@ export default async function Items() {
       ) : (
         <ul className="list bg-base-200 rounded-box">
           {items.map((item) => (
-            <li key={item.id} className="list-row">
+            <li key={item.id}>
+              <Link href={`/campaign/items/${item.id}`} className="list-row hover:bg-base-300 rounded-box">
               {item.image ? (
                 <img src={item.image} alt="" className="size-12 rounded-box object-cover" />
               ) : (
@@ -29,6 +30,7 @@ export default async function Items() {
                 <div className="font-medium">{item.name}</div>
                 <div className="text-sm opacity-70">{item.description}</div>
               </div>
+              </Link>
             </li>
           ))}
         </ul>

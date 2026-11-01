@@ -7,10 +7,20 @@ import { generateArtwork, type ArtworkKind } from "./actions";
  * Image square with Upload / Generate buttons, enabled once name and description are filled.
  * Submits as form fields "upload" (file) and "image" (generated URL); read them with imageFromForm().
  */
-export default function ImagePicker({ kind, name, description }: { kind: ArtworkKind; name: string; description: string }) {
+export default function ImagePicker({
+  kind,
+  name,
+  description,
+  initial = null,
+}: {
+  kind: ArtworkKind;
+  name: string;
+  description: string;
+  initial?: string | null;
+}) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [generatedUrl, setGeneratedUrl] = useState("");
+  const [preview, setPreview] = useState<string | null>(initial);
+  const [generatedUrl, setGeneratedUrl] = useState(initial ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const enabled = name.trim() !== "" && description.trim() !== "";

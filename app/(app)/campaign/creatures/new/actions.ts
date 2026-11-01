@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { createCreature, CREATURE_TYPES, EQUIP_SLOTS, listItems, type CreatureType, type Equipment } from "@/lib/db";
+import { saveCreature, CREATURE_TYPES, EQUIP_SLOTS, listItems, type CreatureType, type Equipment } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET, pointBuySpent, type Attributes } from "@/lib/attributes";
 
-export async function addCreature(formData: FormData) {
+/** Creates the creature when id is null, otherwise updates it. */
+export async function submitCreature(id: number | null, formData: FormData) {
   await requireGm();
   const text = (k: string) => String(formData.get(k) ?? "").trim();
   const type = text("type") as CreatureType;
@@ -32,7 +33,7 @@ export async function addCreature(formData: FormData) {
     equipment[slot] = itemId;
   }
 
-  createCreature({
+  saveCreature(id, {
     name: text("name"),
     description: text("description"),
     image: await imageFromForm(formData),

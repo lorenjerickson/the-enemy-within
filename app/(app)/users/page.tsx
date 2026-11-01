@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -38,9 +39,11 @@ export default async function Users() {
       <h2 className="text-xl font-semibold">Players</h2>
       <ul className="list bg-base-200 rounded-box">
         {listPlayers().map((p) => (
-          <li key={p.id} className="list-row">
-            <span className="font-medium">{p.name}</span>
-            <span className="opacity-70">{p.contact}</span>
+          <li key={p.id}>
+            <Link href={`/users/${p.id}`} className="list-row hover:bg-base-300 rounded-box">
+              <span className="font-medium">{p.name}</span>
+              <span className="opacity-70">{p.contact}</span>
+            </Link>
           </li>
         ))}
       </ul>

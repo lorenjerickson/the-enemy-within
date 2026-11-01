@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { createItem, EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/db";
+import { saveItem, EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
-export async function addItem(formData: FormData) {
+/** Creates the item when id is null, otherwise updates it. */
+export async function submitItem(id: number | null, formData: FormData) {
   await requireGm();
   const text = (k: string) => String(formData.get(k) ?? "").trim();
   const num = (k: string) => Number(formData.get(k)) || 0;
@@ -32,7 +33,7 @@ export async function addItem(formData: FormData) {
 
   const image = await imageFromForm(formData);
 
-  createItem({
+  saveItem(id, {
     name: text("name"),
     description: text("description"),
     image,

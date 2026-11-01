@@ -11,9 +11,9 @@ type Method = "roll" | "pointbuy";
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** Attribute score inputs (form fields named after each attribute, plus "method"). */
-export default function AttributesInput() {
+export default function AttributesInput({ initial }: { initial?: Attributes }) {
   const [method, setMethod] = useState<Method>("roll");
-  const [scores, setScores] = useState<Attributes>(defaultAttributes());
+  const [scores, setScores] = useState<Attributes>({ ...defaultAttributes(), ...initial });
   const pointBuy = method === "pointbuy";
   const remaining = POINT_BUY_BUDGET - pointBuySpent(scores);
 

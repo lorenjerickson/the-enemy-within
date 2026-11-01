@@ -103,6 +103,17 @@ export function verifyPassword(password: string, stored: string): boolean {
   return crypto.timingSafeEqual(test, Buffer.from(hash, "hex"));
 }
 
+export function getPlayer(id: number): User | undefined {
+  return db.prepare<[number], User>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ? AND role = 'player'`).get(id);
+}
+
+/** Players log in with their name, so username follows name. */
+export function updatePlayer(id: number, name: string, contact: string): void {
+  db.prepare<[string, string, string, number]>(
+    "UPDATE users SET name = ?, username = ?, contact = ? WHERE id = ? AND role = 'player'"
+  ).run(name, name, contact, id);
+}
+
 export function listPlayers(): User[] {
   return db
     .prepare<[], User>(`SELECT ${USER_COLUMNS} FROM users WHERE role = 'player' ORDER BY name`)
@@ -134,18 +145,33 @@ const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity,
 
 type ItemRow = Omit<Item, "slots"> & { slots: string };
 
+const parseItem = (row: ItemRow): Item => ({ ...row, slots: JSON.parse(row.slots) });
+
 export function listItems(): Item[] {
-  return db
-    .prepare<[], ItemRow>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`)
-    .all()
-    .map((row) => ({ ...row, slots: JSON.parse(row.slots) }));
+  return db.prepare<[], ItemRow>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all().map(parseItem);
 }
 
-export function createItem(item: Omit<Item, "id">): void {
-  db.prepare<Omit<ItemRow, "id">>(
-    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots)
-     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots)`
-  ).run({ ...item, slots: JSON.stringify(item.slots) });
+export function getItem(id: number): Item | undefined {
+  const row = db.prepare<[number], ItemRow>(`SELECT ${ITEM_COLUMNS} FROM items WHERE id = ?`).get(id);
+  return row && parseItem(row);
+}
+
+/** Inserts when id is null, otherwise updates. */
+export function saveItem(id: number | null, item: Omit<Item, "id">): void {
+  const params = { ...item, slots: JSON.stringify(item.slots) };
+  if (id === null) {
+    db.prepare<Omit<ItemRow, "id">>(
+      `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots)
+       VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots)`
+    ).run(params);
+  } else {
+    db.prepare<ItemRow>(
+      `UPDATE items SET name = @name, description = @description, image = @image, type = @type, weight = @weight,
+         value = @value, rarity = @rarity, durability = @durability, defense = @defense, damage = @damage,
+         attack = @attack, max_stack = @max_stack, capacity = @capacity, slots = @slots
+       WHERE id = @id`
+    ).run({ ...params, id });
+  }
 }
 
 export interface Creature {
@@ -163,16 +189,35 @@ export type Equipment = Partial<Record<EquipSlot, number | null>>;
 
 type CreatureRow = Omit<Creature, "attributes" | "equipment"> & { attributes: string; equipment: string };
 
+const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment";
+
+const parseCreature = (row: CreatureRow): Creature => ({
+  ...row,
+  attributes: JSON.parse(row.attributes),
+  equipment: JSON.parse(row.equipment),
+});
+
 export function listCreatures(): Creature[] {
-  return db
-    .prepare<[], CreatureRow>("SELECT id, name, description, image, type, attributes, equipment FROM creatures ORDER BY name")
-    .all()
-    .map((row) => ({ ...row, attributes: JSON.parse(row.attributes), equipment: JSON.parse(row.equipment) }));
+  return db.prepare<[], CreatureRow>(`SELECT ${CREATURE_COLUMNS} FROM creatures ORDER BY name`).all().map(parseCreature);
 }
 
-export function createCreature(c: Omit<Creature, "id">): void {
-  db.prepare<Omit<CreatureRow, "id">>(
-    `INSERT INTO creatures (name, description, image, type, attributes, equipment)
-     VALUES (@name, @description, @image, @type, @attributes, @equipment)`
-  ).run({ ...c, attributes: JSON.stringify(c.attributes), equipment: JSON.stringify(c.equipment) });
+export function getCreature(id: number): Creature | undefined {
+  const row = db.prepare<[number], CreatureRow>(`SELECT ${CREATURE_COLUMNS} FROM creatures WHERE id = ?`).get(id);
+  return row && parseCreature(row);
+}
+
+/** Inserts when id is null, otherwise updates. */
+export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
+  const params = { ...c, attributes: JSON.stringify(c.attributes), equipment: JSON.stringify(c.equipment) };
+  if (id === null) {
+    db.prepare<Omit<CreatureRow, "id">>(
+      `INSERT INTO creatures (name, description, image, type, attributes, equipment)
+       VALUES (@name, @description, @image, @type, @attributes, @equipment)`
+    ).run(params);
+  } else {
+    db.prepare<CreatureRow>(
+      `UPDATE creatures SET name = @name, description = @description, image = @image, type = @type,
+         attributes = @attributes, equipment = @equipment WHERE id = @id`
+    ).run({ ...params, id });
+  }
 }

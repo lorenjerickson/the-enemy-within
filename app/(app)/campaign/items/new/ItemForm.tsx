@@ -3,21 +3,22 @@
 import { useState } from "react";
 import { DICE_PATTERN, EQUIP_SLOTS, ITEM_TYPES, MODIFIER_PATTERN, RARITIES } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
-import { addItem } from "./actions";
+import type { Item } from "@/lib/db";
+import { submitItem } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-export default function ItemForm() {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState("");
-  const [stackable, setStackable] = useState(false);
+export default function ItemForm({ initial }: { initial?: Item }) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [type, setType] = useState<string>(initial?.type ?? "");
+  const [stackable, setStackable] = useState((initial?.max_stack ?? 1) > 1);
 
   return (
-    <form action={addItem} className="space-y-3 max-w-2xl">
-      <h2 className="text-xl font-semibold">New item</h2>
+    <form action={submitItem.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
+      <h2 className="text-xl font-semibold">{initial ? "Edit item" : "New item"}</h2>
       <div className="flex gap-4">
-        <ImagePicker kind="item" name={name} description={description} />
+        <ImagePicker kind="item" name={name} description={description} initial={initial?.image} />
         <div className="flex-1 space-y-3">
           <input name="name" placeholder="Name" required className="input w-full" value={name} onChange={(e) => setName(e.target.value)} />
           <textarea name="description" placeholder="Short description" className="textarea w-full h-[6.5rem]" value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -30,7 +31,7 @@ export default function ItemForm() {
             <option key={t} value={t}>{capitalize(t)}</option>
           ))}
         </select>
-        <select name="rarity" required defaultValue="" className="select w-full">
+        <select name="rarity" required defaultValue={initial?.rarity ?? ""} className="select w-full">
           <option value="" disabled>Rarity</option>
           {RARITIES.map((r) => (
             <option key={r} value={r}>{capitalize(r)}</option>
@@ -39,22 +40,22 @@ export default function ItemForm() {
       </div>
       <div className="grid grid-cols-3 gap-2">
         <label className="floating-label"><span>Weight (kg)</span>
-          <input name="weight" type="number" step="any" min="0" placeholder="Weight (kg)" className="input" /></label>
+          <input name="weight" type="number" step="any" min="0" placeholder="Weight (kg)" defaultValue={initial?.weight} className="input" /></label>
         <label className="floating-label"><span>Value</span>
-          <input name="value" type="number" min="0" placeholder="Value" className="input" /></label>
+          <input name="value" type="number" min="0" placeholder="Value" defaultValue={initial?.value} className="input" /></label>
         <label className="floating-label"><span>Durability (1–100)</span>
-          <input name="durability" type="number" min="1" max="100" required placeholder="Durability (1–100)" className="input" /></label>
+          <input name="durability" type="number" min="1" max="100" required placeholder="Durability (1–100)" defaultValue={initial?.durability} className="input" /></label>
       </div>
       {type === "armor" && (
         <label className="floating-label"><span>Defense dice (e.g. 1d4)</span>
-          <input name="defense" required pattern={DICE_PATTERN} placeholder="Defense dice (e.g. 1d4)" className="input w-full" /></label>
+          <input name="defense" required pattern={DICE_PATTERN} placeholder="Defense dice (e.g. 1d4)" defaultValue={initial?.defense ?? ""} className="input w-full" /></label>
       )}
       {type === "weapon" && (
         <div className="grid grid-cols-2 gap-2">
           <label className="floating-label"><span>Damage dice (e.g. 2d6)</span>
-            <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" className="input w-full" /></label>
+            <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" defaultValue={initial?.damage ?? ""} className="input w-full" /></label>
           <label className="floating-label"><span>To-hit modifier (e.g. 1d4 or -2)</span>
-            <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. 1d4 or -2)" className="input w-full" /></label>
+            <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. 1d4 or -2)" defaultValue={initial?.attack ?? ""} className="input w-full" /></label>
         </div>
       )}
       {type === "consumable" && (
@@ -66,21 +67,21 @@ export default function ItemForm() {
           {stackable && (
             <div className="flex-1">
               <label className="floating-label"><span>Max stack size</span>
-                <input name="max_stack" type="number" min="2" required placeholder="Max stack size" className="input w-full" /></label>
+                <input name="max_stack" type="number" min="2" required placeholder="Max stack size" defaultValue={initial?.max_stack ?? undefined} className="input w-full" /></label>
             </div>
           )}
         </div>
       )}
       {type === "container" && (
         <label className="floating-label"><span>Capacity (number of items or stacks)</span>
-          <input name="capacity" type="number" min="1" required placeholder="Capacity (number of items or stacks)" className="input w-full" /></label>
+          <input name="capacity" type="number" min="1" required placeholder="Capacity (number of items or stacks)" defaultValue={initial?.capacity ?? undefined} className="input w-full" /></label>
       )}
       <fieldset className="fieldset">
         <legend className="fieldset-legend">Equipment slots (leave empty if not equippable)</legend>
         <div className="grid grid-cols-4 gap-2">
           {EQUIP_SLOTS.map((slot) => (
             <label key={slot} className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="slots" value={slot} className="checkbox checkbox-sm" />
+              <input type="checkbox" name="slots" value={slot} defaultChecked={initial?.slots.includes(slot)} className="checkbox checkbox-sm" />
               {capitalize(slot)}
             </label>
           ))}
