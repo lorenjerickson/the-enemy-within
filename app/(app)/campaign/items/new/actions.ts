@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { createItem, ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/db";
 import { generateImage, saveImage } from "@/lib/images";
+import { isDiceFormula } from "@/lib/itemTypes";
 
 export async function addItem(formData: FormData) {
   await requireGm();
@@ -13,6 +14,8 @@ export async function addItem(formData: FormData) {
   if (!ITEM_TYPES.includes(type)) throw new Error("Invalid item type");
   const rarity = text("rarity") as Rarity;
   if (!RARITIES.includes(rarity)) throw new Error("Invalid rarity");
+  const defense = type === "armor" ? text("defense").toLowerCase().replace(/\s/g, "") : null;
+  if (defense !== null && !isDiceFormula(defense)) throw new Error("Invalid defense dice formula");
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
   // An uploaded file wins; otherwise use a previously generated image URL.
@@ -31,6 +34,7 @@ export async function addItem(formData: FormData) {
     value: num("value"),
     rarity,
     durability,
+    defense,
   });
   redirect("/campaign/items");
 }

@@ -3,3 +3,7 @@ export type ItemType = (typeof ITEM_TYPES)[number];
 
 export const RARITIES = ["unique", "legendary", "epic", "fine", "common", "ramshackle"] as const;
 export type Rarity = (typeof RARITIES)[number];
+
+/** Dice formula like "1d4", "2d6+1" or "d8-1". */
+export const DICE_PATTERN = "\\d*d\\d+([+\\-]\\d+)?";
+export const isDiceFormula = (s: string) => new RegExp(`^${DICE_PATTERN}$`).test(s);

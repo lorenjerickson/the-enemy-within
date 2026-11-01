@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ITEM_TYPES, RARITIES } from "@/lib/itemTypes";
+import { DICE_PATTERN, ITEM_TYPES, RARITIES } from "@/lib/itemTypes";
 import { addItem, generateItemImage } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -13,6 +13,7 @@ export default function ItemForm() {
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [type, setType] = useState("");
   const canPickImage = name.trim() !== "" && description.trim() !== "";
 
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -71,7 +72,7 @@ export default function ItemForm() {
       </div>
       {error && <div className="alert alert-error text-sm">{error}</div>}
       <div className="grid grid-cols-2 gap-2">
-        <select name="type" required defaultValue="" className="select w-full">
+        <select name="type" required value={type} onChange={(e) => setType(e.target.value)} className="select w-full">
           <option value="" disabled>Type</option>
           {ITEM_TYPES.map((t) => (
             <option key={t} value={t}>{capitalize(t)}</option>
@@ -92,6 +93,10 @@ export default function ItemForm() {
         <label className="floating-label"><span>Durability (1–100)</span>
           <input name="durability" type="number" min="1" max="100" required placeholder="Durability (1–100)" className="input" /></label>
       </div>
+      {type === "armor" && (
+        <label className="floating-label"><span>Defense dice (e.g. 1d4)</span>
+          <input name="defense" required pattern={DICE_PATTERN} placeholder="Defense dice (e.g. 1d4)" className="input w-full" /></label>
+      )}
       <button className="btn btn-primary">Save item</button>
     </form>
   );
