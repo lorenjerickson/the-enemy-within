@@ -3,6 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
+import type { ModifierTarget } from "@/lib/modifiers";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -34,6 +35,12 @@ db.exec(`
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE IF NOT EXISTS profession_modifiers (
+    id INTEGER PRIMARY KEY,
+    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    target TEXT NOT NULL, -- ModifierTarget, e.g. "attribute:might", "skill:stealth", "health"
+    value TEXT NOT NULL   -- signed number or dice expression, e.g. "+1", "-2", "1d4"
   );
   -- from_id advances to to_id; to_id's prerequisites are all its from_ids.
   CREATE TABLE IF NOT EXISTS profession_advancements (
@@ -314,4 +321,27 @@ export function linkAdvancement(fromId: number, toId: number): void {
 
 export function unlinkAdvancement(fromId: number, toId: number): void {
   db.prepare<[number, number]>("DELETE FROM profession_advancements WHERE from_id = ? AND to_id = ?").run(fromId, toId);
+}
+
+export interface ProfessionModifier {
+  id: number;
+  profession_id: number;
+  target: ModifierTarget;
+  value: string;
+}
+
+export function listProfessionModifiers(professionId: number): ProfessionModifier[] {
+  return db
+    .prepare<[number], ProfessionModifier>("SELECT id, profession_id, target, value FROM profession_modifiers WHERE profession_id = ? ORDER BY id")
+    .all(professionId);
+}
+
+export function addProfessionModifier(m: Omit<ProfessionModifier, "id">): void {
+  db.prepare<Omit<ProfessionModifier, "id">>(
+    "INSERT INTO profession_modifiers (profession_id, target, value) VALUES (@profession_id, @target, @value)"
+  ).run(m);
+}
+
+export function removeProfessionModifier(id: number): void {
+  db.prepare<[number]>("DELETE FROM profession_modifiers WHERE id = ?").run(id);
 }
