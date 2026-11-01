@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useOptimistic, useRef, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { MAP_LAYERS, type MapLayer } from "@/lib/maps";
 import { toggleLayer } from "../actions";
 
@@ -43,6 +43,7 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [selected, setSelected] = useState<MapLayer | null>(null);
 
   // Redraw every visible layer, bottom to top, whenever visibility or the canvas size changes.
   useEffect(() => {
@@ -76,21 +77,38 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
     <div className="space-y-2">
       <h3 className="font-semibold">Map</h3>
       <div className="flex gap-4">
-        <canvas ref={canvasRef} className="flex-1 min-w-0 aspect-video rounded-box bg-base-300" />
+        <div className="flex-1 min-w-0 space-y-3">
+          <canvas ref={canvasRef} className="w-full aspect-video rounded-box bg-base-300" />
+          {selected && (
+            <div className="rounded-box bg-base-200 p-3" data-editor={selected}>
+              <div className="font-semibold">{capitalize(selected)} layer</div>
+              <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
+            </div>
+          )}
+        </div>
         <ul className="w-44 shrink-0 bg-base-200 rounded-box p-2 text-sm">
           <li className="text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
-              <button
-                type="button"
-                aria-pressed={!hiddenSet.has(layer)}
-                title={hiddenSet.has(layer) ? `Show ${layer}` : `Hide ${layer}`}
-                onClick={() => onToggle(layer, hiddenSet.has(layer))}
-                className={`flex w-full items-center gap-2 px-1 py-0.5 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
-              >
-                <EyeIcon />
-                {capitalize(layer)}
-              </button>
+              <div className={`flex items-center gap-1 rounded ${selected === layer ? "bg-primary/20" : ""}`}>
+                <button
+                  type="button"
+                  aria-pressed={!hiddenSet.has(layer)}
+                  title={hiddenSet.has(layer) ? `Show ${layer}` : `Hide ${layer}`}
+                  onClick={() => onToggle(layer, hiddenSet.has(layer))}
+                  className={`p-1 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
+                >
+                  <EyeIcon />
+                </button>
+                <button
+                  type="button"
+                  aria-current={selected === layer}
+                  onClick={() => setSelected(layer)}
+                  className={`flex-1 text-left px-1 py-0.5 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
+                >
+                  {capitalize(layer)}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
