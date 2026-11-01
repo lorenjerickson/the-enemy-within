@@ -108,6 +108,7 @@ addColumn("creatures", "attributes", "TEXT NOT NULL DEFAULT '{}'"); // JSON Attr
 addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equipment
 addColumn("creatures", "health", "TEXT NOT NULL DEFAULT '1d8'"); // dice formula for initial health
 addColumn("creatures", "movement", "TEXT NOT NULL DEFAULT '{}'"); // JSON Movement
+addColumn("actions", "creature_id", "INTEGER REFERENCES creatures(id)");
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 // One-time migration: the old per-profession "ranks" tree becomes linked professions.
@@ -441,14 +442,14 @@ export function revokeItem(professionId: number, itemId: number): void {
   db.prepare<[number, number]>("DELETE FROM profession_items WHERE profession_id = ? AND item_id = ?").run(professionId, itemId);
 }
 
-/** Who grants an action. */
-export type ActionOwner = { profession_id: number } | { item_id: number };
+export type ActionOwnerColumn = "profession_id" | "item_id" | "creature_id";
+/** Who grants an action: exactly one of { profession_id }, { item_id } or { creature_id }. */
+export type ActionOwner = { [K in ActionOwnerColumn]: Record<K, number> }[ActionOwnerColumn];
+export const ownerOf = (owner: ActionOwner) => Object.entries(owner)[0] as [ActionOwnerColumn, number];
 
-/** A declared intent granted by a profession or item, with its own roll bonuses/penalties. */
-export interface Action {
+/** A declared intent granted by a profession, item or creature, with its own roll bonuses/penalties. */
+export interface Action extends Record<ActionOwnerColumn, number | null> {
   id: number;
-  profession_id: number | null;
-  item_id: number | null;
   name: string;
   description: string;
   roll: RollMode;
@@ -459,22 +460,22 @@ export interface Action {
   split: 0 | 1;
 }
 
-type ActionFields = Omit<Action, "id" | "profession_id" | "item_id">;
+type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 
-const ACTION_COLUMNS = "id, profession_id, item_id, name, description, roll, attack, damage, damage_type, radius, split";
+const ACTION_COLUMNS = "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split";
 
 export function listActions(owner: ActionOwner): Action[] {
-  const [column, id] = "item_id" in owner ? ["item_id", owner.item_id] : ["profession_id", owner.profession_id];
+  const [column, id] = ownerOf(owner);
   return db.prepare<[number], Action>(`SELECT ${ACTION_COLUMNS} FROM actions WHERE ${column} = ? ORDER BY name`).all(id);
 }
 
 /** Inserts when id is null, otherwise updates. */
 export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
   if (id === null) {
-    db.prepare<ActionFields & { profession_id: number | null; item_id: number | null }>(
-      `INSERT INTO actions (profession_id, item_id, name, description, roll, attack, damage, damage_type, radius, split)
-       VALUES (@profession_id, @item_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
-    ).run({ profession_id: null, item_id: null, ...owner, ...a });
+    db.prepare<ActionFields & Record<ActionOwnerColumn, number | null>>(
+      `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split)
+       VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
+    ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...a });
   } else {
     db.prepare<ActionFields & { id: number }>(
       `UPDATE actions SET name = @name, description = @description, roll = @roll, attack = @attack,

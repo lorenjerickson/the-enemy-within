@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getCreature, listItems } from "@/lib/db";
+import { getCreature, listActions, listItems } from "@/lib/db";
+import ActionsSection from "../../ActionsSection";
 import CreatureForm from "../new/CreatureForm";
 
 export default async function EditCreature({ params }: { params: Promise<{ id: string }> }) {
@@ -12,5 +13,12 @@ export default async function EditCreature({ params }: { params: Promise<{ id: s
   const items = listItems()
     .filter((i) => i.slots.length > 0)
     .map(({ id, name, slots }) => ({ id, name, slots }));
-  return <CreatureForm items={items} initial={creature} />;
+  return (
+    <div className="space-y-8">
+      <CreatureForm items={items} initial={creature} />
+      <div className="max-w-2xl">
+        <ActionsSection owner={{ creature_id: creature.id }} actions={listActions({ creature_id: creature.id })} />
+      </div>
+    </div>
+  );
 }

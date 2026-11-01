@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { removeAction, saveAction, type ActionOwner } from "@/lib/db";
+import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn } from "@/lib/db";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, ROLL_MODES, type DamageType, type RollMode } from "@/lib/actions";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
@@ -28,8 +28,15 @@ export async function generateArtwork(
 }
 
 /** Page that shows an owner's actions, refreshed after changes. */
-const ownerPath = (owner: ActionOwner) =>
-  "item_id" in owner ? `/campaign/items/${owner.item_id}` : `/campaign/professions/${owner.profession_id}`;
+const OWNER_PAGES: Record<ActionOwnerColumn, string> = {
+  profession_id: "/campaign/professions",
+  item_id: "/campaign/items",
+  creature_id: "/campaign/creatures",
+};
+const ownerPath = (owner: ActionOwner) => {
+  const [column, id] = ownerOf(owner);
+  return `${OWNER_PAGES[column]}/${id}`;
+};
 
 /** Creates the action when actionId is null, otherwise updates it. */
 export async function submitAction(owner: ActionOwner, actionId: number | null, formData: FormData) {
