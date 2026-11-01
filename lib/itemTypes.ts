@@ -7,3 +7,7 @@ export type Rarity = (typeof RARITIES)[number];
 /** Dice formula like "1d4", "2d6+1" or "d8-1". */
 export const DICE_PATTERN = "\\d*d\\d+([+\\-]\\d+)?";
 export const isDiceFormula = (s: string) => new RegExp(`^${DICE_PATTERN}$`).test(s);
+
+/** Signed modifier: a dice formula or flat number, e.g. "1d4", "-1d4", "+2", "-2". */
+export const MODIFIER_PATTERN = `[+\\-]?(${DICE_PATTERN}|\\d+)`;
+export const isModifierFormula = (s: string) => new RegExp(`^${MODIFIER_PATTERN}$`).test(s);

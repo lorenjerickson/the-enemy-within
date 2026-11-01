@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DICE_PATTERN, ITEM_TYPES, RARITIES } from "@/lib/itemTypes";
+import { DICE_PATTERN, ITEM_TYPES, MODIFIER_PATTERN, RARITIES } from "@/lib/itemTypes";
 import { addItem, generateItemImage } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -98,8 +98,12 @@ export default function ItemForm() {
           <input name="defense" required pattern={DICE_PATTERN} placeholder="Defense dice (e.g. 1d4)" className="input w-full" /></label>
       )}
       {type === "weapon" && (
-        <label className="floating-label"><span>Damage dice (e.g. 2d6)</span>
-          <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" className="input w-full" /></label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="floating-label"><span>Damage dice (e.g. 2d6)</span>
+            <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" className="input w-full" /></label>
+          <label className="floating-label"><span>To-hit modifier (e.g. 1d4 or -2)</span>
+            <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. 1d4 or -2)" className="input w-full" /></label>
+        </div>
       )}
       <button className="btn btn-primary">Save item</button>
     </form>

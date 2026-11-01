@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { createItem, ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/db";
 import { generateImage, saveImage } from "@/lib/images";
-import { isDiceFormula } from "@/lib/itemTypes";
+import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
 export async function addItem(formData: FormData) {
   await requireGm();
@@ -21,6 +21,8 @@ export async function addItem(formData: FormData) {
   };
   const defense = type === "armor" ? dice("defense") : null;
   const damage = type === "weapon" ? dice("damage") : null;
+  const attack = type === "weapon" ? text("attack").toLowerCase().replace(/\s/g, "") || "0" : null;
+  if (attack !== null && !isModifierFormula(attack)) throw new Error("Invalid attack modifier");
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
   // An uploaded file wins; otherwise use a previously generated image URL.
@@ -41,6 +43,7 @@ export async function addItem(formData: FormData) {
     durability,
     defense,
     damage,
+    attack,
   });
   redirect("/campaign/items");
 }

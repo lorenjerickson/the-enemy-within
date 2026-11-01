@@ -41,6 +41,7 @@ addColumn("items", "rarity", "TEXT NOT NULL DEFAULT ''");
 addColumn("items", "durability", "INTEGER NOT NULL DEFAULT 0");
 addColumn("items", "defense", "TEXT");
 addColumn("items", "damage", "TEXT");
+addColumn("items", "attack", "TEXT");
 
 export default db;
 
@@ -108,9 +109,10 @@ export interface Item {
   durability: number; // 1-100
   defense: string | null; // dice formula, armor only
   damage: string | null; // dice formula, weapons only
+  attack: string | null; // to-hit modifier (dice or flat), weapons only
 }
 
-const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage";
+const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack";
 
 export function listItems(): Item[] {
   return db.prepare<[], Item>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all();
@@ -118,7 +120,7 @@ export function listItems(): Item[] {
 
 export function createItem(item: Omit<Item, "id">): void {
   db.prepare<Omit<Item, "id">>(
-    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage)
-     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage)`
+    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack)
+     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack)`
   ).run(item);
 }
