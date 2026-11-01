@@ -6,6 +6,15 @@ import { toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 type Draw = (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
@@ -72,15 +81,16 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
           <li className="text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
-              <label className="flex items-center gap-2 px-1 py-0.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-xs"
-                  checked={!hiddenSet.has(layer)}
-                  onChange={(e) => onToggle(layer, e.target.checked)}
-                />
+              <button
+                type="button"
+                aria-pressed={!hiddenSet.has(layer)}
+                title={hiddenSet.has(layer) ? `Show ${layer}` : `Hide ${layer}`}
+                onClick={() => onToggle(layer, hiddenSet.has(layer))}
+                className={`flex w-full items-center gap-2 px-1 py-0.5 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
+              >
+                <EyeIcon />
                 {capitalize(layer)}
-              </label>
+              </button>
             </li>
           ))}
         </ul>
