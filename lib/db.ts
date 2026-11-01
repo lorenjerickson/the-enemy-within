@@ -73,11 +73,18 @@ db.exec(`
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT ''
   );
-  -- Map layers the GM has hidden on a location's map (all layers are visible by default).
-  CREATE TABLE IF NOT EXISTS location_hidden_layers (
+  -- A location's map has one or more levels (floors), each with its own layer stack.
+  CREATE TABLE IF NOT EXISTS map_levels (
+    id INTEGER PRIMARY KEY,
     location_id INTEGER NOT NULL REFERENCES locations(id),
+    name TEXT NOT NULL,
+    background TEXT -- JSON MapBackground
+  );
+  -- Layers the GM has hidden on a level (all layers are visible by default).
+  CREATE TABLE IF NOT EXISTS level_hidden_layers (
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
     layer TEXT NOT NULL, -- MapLayer
-    PRIMARY KEY (location_id, layer)
+    PRIMARY KEY (level_id, layer)
   );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
@@ -130,7 +137,6 @@ addColumn("actions", "creature_id", "INTEGER REFERENCES creatures(id)");
 addColumn("actions", "boosts", "TEXT NOT NULL DEFAULT '[]'"); // JSON Boost[]
 addColumn("actions", "duration_amount", "INTEGER NOT NULL DEFAULT 1");
 addColumn("actions", "duration_unit", "TEXT NOT NULL DEFAULT ''"); // DurationUnit, '' = instant
-addColumn("locations", "background", "TEXT"); // JSON MapBackground
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
@@ -158,6 +164,23 @@ if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pro
       SELECT id, profession_id, name, description, roll, attack, damage, damage_type, radius, split FROM profession_actions;
     DROP TABLE profession_actions;
   `);
+}
+
+// One-time migration: per-location map settings became the location's first level.
+if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'location_hidden_layers'").get()) {
+  db.transaction(() => {
+    const hasBackground = db.prepare<[], { name: string }>("PRAGMA table_info(locations)").all().some((c) => c.name === "background");
+    const locations = db.prepare<[], { id: number; background: string | null }>(
+      `SELECT id, ${hasBackground ? "background" : "NULL AS background"} FROM locations`
+    ).all();
+    for (const l of locations) {
+      const levelId = Number(
+        db.prepare("INSERT INTO map_levels (location_id, name, background) VALUES (?, 'Ground', ?)").run(l.id, l.background).lastInsertRowid
+      );
+      db.prepare("INSERT INTO level_hidden_layers (level_id, layer) SELECT ?, layer FROM location_hidden_layers WHERE location_id = ?").run(levelId, l.id);
+    }
+    db.exec("DROP TABLE location_hidden_layers");
+  })();
 }
 
 export default db;
@@ -586,26 +609,58 @@ export function saveLocation(id: number | null, l: Omit<Location, "id">): void {
   }
 }
 
-export function listHiddenLayers(locationId: number): MapLayer[] {
-  return db
-    .prepare<[number], { layer: MapLayer }>("SELECT layer FROM location_hidden_layers WHERE location_id = ?")
-    .all(locationId)
-    .map((r) => r.layer);
+export interface MapLevel {
+  id: number;
+  location_id: number;
+  name: string;
+  background: MapBackground;
+  hidden: MapLayer[];
 }
 
-export function setLayerVisible(locationId: number, layer: MapLayer, visible: boolean): void {
+/** A location's levels in creation order; a location always has at least one. */
+export function listLevels(locationId: number): MapLevel[] {
+  const select = () =>
+    db.prepare<[number], { id: number; location_id: number; name: string; background: string | null }>(
+      "SELECT id, location_id, name, background FROM map_levels WHERE location_id = ? ORDER BY id"
+    ).all(locationId);
+  let rows = select();
+  if (rows.length === 0) {
+    addLevel(locationId, "Ground");
+    rows = select();
+  }
+  return rows.map((r) => ({
+    ...r,
+    background: r.background ? { ...DEFAULT_BACKGROUND, ...JSON.parse(r.background) } : DEFAULT_BACKGROUND,
+    hidden: db
+      .prepare<[number], { layer: MapLayer }>("SELECT layer FROM level_hidden_layers WHERE level_id = ?")
+      .all(r.id)
+      .map((h) => h.layer),
+  }));
+}
+
+export function addLevel(locationId: number, name: string): number {
+  return Number(db.prepare<[number, string]>("INSERT INTO map_levels (location_id, name) VALUES (?, ?)").run(locationId, name).lastInsertRowid);
+}
+
+export function renameLevel(levelId: number, name: string): void {
+  db.prepare<[string, number]>("UPDATE map_levels SET name = ? WHERE id = ?").run(name, levelId);
+}
+
+export function removeLevel(levelId: number): void {
+  db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
+  })();
+}
+
+export function setLayerVisible(levelId: number, layer: MapLayer, visible: boolean): void {
   if (visible) {
-    db.prepare<[number, string]>("DELETE FROM location_hidden_layers WHERE location_id = ? AND layer = ?").run(locationId, layer);
+    db.prepare<[number, string]>("DELETE FROM level_hidden_layers WHERE level_id = ? AND layer = ?").run(levelId, layer);
   } else {
-    db.prepare<[number, string]>("INSERT OR IGNORE INTO location_hidden_layers (location_id, layer) VALUES (?, ?)").run(locationId, layer);
+    db.prepare<[number, string]>("INSERT OR IGNORE INTO level_hidden_layers (level_id, layer) VALUES (?, ?)").run(levelId, layer);
   }
 }
 
-export function getBackground(locationId: number): MapBackground {
-  const row = db.prepare<[number], { background: string | null }>("SELECT background FROM locations WHERE id = ?").get(locationId);
-  return row?.background ? { ...DEFAULT_BACKGROUND, ...JSON.parse(row.background) } : DEFAULT_BACKGROUND;
-}
-
-export function saveBackground(locationId: number, background: MapBackground): void {
-  db.prepare<[string, number]>("UPDATE locations SET background = ? WHERE id = ?").run(JSON.stringify(background), locationId);
+export function saveBackground(levelId: number, background: MapBackground): void {
+  db.prepare<[string, number]>("UPDATE map_levels SET background = ? WHERE id = ?").run(JSON.stringify(background), levelId);
 }

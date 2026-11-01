@@ -49,10 +49,12 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
  */
 export default function MapView({
   locationId,
+  levelId,
   hidden,
   background,
 }: {
   locationId: number;
+  levelId: number;
   hidden: MapLayer[];
   background: MapBackground;
 }) {
@@ -101,13 +103,12 @@ export default function MapView({
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
       setHidden([layer, visible]);
-      await toggleLayer(locationId, layer, visible);
+      await toggleLayer(locationId, levelId, layer, visible);
     });
   }
 
   return (
     <div className="space-y-2">
-      <h3 className="font-semibold">Map</h3>
       <div className="flex gap-4">
         <div className="flex-1 min-w-0 space-y-3">
           <canvas ref={canvasRef} className="w-full aspect-video rounded-box bg-base-300" />
@@ -115,7 +116,7 @@ export default function MapView({
             <div className="rounded-box bg-base-200 p-3" data-editor={selected}>
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
-                <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} background={background} />
+                <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
               ) : (
                 <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
               )}

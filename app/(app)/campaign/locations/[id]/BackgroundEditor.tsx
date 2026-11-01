@@ -6,12 +6,20 @@ import ImagePicker from "../../ImagePicker";
 import { submitBackground } from "../actions";
 
 /** Background layer editor: a solid colour, or a texture (uploaded or generated) that fills or tiles. */
-export default function BackgroundEditor({ locationId, background }: { locationId: number; background: MapBackground }) {
+export default function BackgroundEditor({
+  locationId,
+  levelId,
+  background,
+}: {
+  locationId: number;
+  levelId: number;
+  background: MapBackground;
+}) {
   const [mode, setMode] = useState(background.mode);
   const [textureDescription, setTextureDescription] = useState("");
 
   return (
-    <form action={submitBackground.bind(null, locationId)} className="space-y-3">
+    <form action={submitBackground.bind(null, locationId, levelId)} className="space-y-3">
       <div className="join">
         {(["color", "texture"] as const).map((m) => (
           <label key={m} className={`btn btn-sm join-item ${mode === m ? "btn-primary" : ""}`}>
