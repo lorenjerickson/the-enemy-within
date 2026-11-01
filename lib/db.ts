@@ -13,7 +13,11 @@ db.exec(`
     contact TEXT,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL
-  )
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id)
+  );
 `);
 
 export default db;
@@ -44,4 +48,10 @@ export function createUser(u: Omit<User, "id">, password: string): void {
   db.prepare<[string, string, string | null, string, Role]>(
     "INSERT INTO users (name, username, contact, password_hash, role) VALUES (?, ?, ?, ?, ?)"
   ).run(u.name, u.username, u.contact, hashPassword(password), u.role);
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  const test = crypto.scryptSync(password, salt, 64);
+  return crypto.timingSafeEqual(test, Buffer.from(hash, "hex"));
 }

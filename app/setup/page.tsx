@@ -10,7 +10,7 @@ async function createGm(formData: FormData) {
     { name: field("name"), username: field("username"), contact: field("contact") || null, role: "gm" },
     field("password")
   );
-  redirect("/");
+  redirect("/login");
 }
 
 export default async function Setup() {
