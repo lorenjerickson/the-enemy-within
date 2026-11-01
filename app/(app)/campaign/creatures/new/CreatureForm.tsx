@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CREATURE_TYPES } from "@/lib/creatureTypes";
+import { DICE_PATTERN } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
 import AttributesInput from "./AttributesInput";
 import EquipmentInput, { type EquippableItem } from "./EquipmentInput";
@@ -24,12 +25,16 @@ export default function CreatureForm({ items, initial }: { items: EquippableItem
           <textarea name="description" placeholder="Description" className="textarea w-full h-[6.5rem]" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
       </div>
-      <select name="type" required defaultValue={initial?.type ?? ""} className="select w-full">
-        <option value="" disabled>Creature type</option>
-        {CREATURE_TYPES.map((t) => (
-          <option key={t} value={t}>{capitalize(t)}</option>
-        ))}
-      </select>
+      <div className="grid grid-cols-2 gap-2">
+        <select name="type" required defaultValue={initial?.type ?? ""} className="select w-full">
+          <option value="" disabled>Creature type</option>
+          {CREATURE_TYPES.map((t) => (
+            <option key={t} value={t}>{capitalize(t)}</option>
+          ))}
+        </select>
+        <label className="floating-label"><span>Health dice (e.g. 2d8+4)</span>
+          <input name="health" required pattern={DICE_PATTERN} placeholder="Health dice (e.g. 2d8+4)" defaultValue={initial?.health} className="input w-full" /></label>
+      </div>
       <AttributesInput initial={initial?.attributes} />
       <EquipmentInput items={items} initial={initial?.equipment} />
       <button className="btn btn-primary">Save creature</button>

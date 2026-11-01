@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { saveCreature, CREATURE_TYPES, EQUIP_SLOTS, listItems, type CreatureType, type Equipment } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
+import { isDiceFormula } from "@/lib/itemTypes";
 import { ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET, pointBuySpent, type Attributes } from "@/lib/attributes";
 
 /** Creates the creature when id is null, otherwise updates it. */
@@ -12,6 +13,8 @@ export async function submitCreature(id: number | null, formData: FormData) {
   const text = (k: string) => String(formData.get(k) ?? "").trim();
   const type = text("type") as CreatureType;
   if (!CREATURE_TYPES.includes(type)) throw new Error("Invalid creature type");
+  const health = text("health").toLowerCase().replace(/\s/g, "");
+  if (!isDiceFormula(health)) throw new Error("Invalid health dice formula");
 
   const attributes = Object.fromEntries(ATTRIBUTES.map((k) => [k, Number(formData.get(k))])) as Attributes;
   for (const k of ATTRIBUTES) {
@@ -40,6 +43,7 @@ export async function submitCreature(id: number | null, formData: FormData) {
     type,
     attributes,
     equipment,
+    health,
   });
   redirect("/campaign/creatures");
 }

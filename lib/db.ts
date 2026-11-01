@@ -67,6 +67,7 @@ addColumn("items", "capacity", "INTEGER");
 addColumn("creatures", "type", "TEXT NOT NULL DEFAULT 'beast'");
 addColumn("creatures", "attributes", "TEXT NOT NULL DEFAULT '{}'"); // JSON Attributes
 addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equipment
+addColumn("creatures", "health", "TEXT NOT NULL DEFAULT '1d8'"); // dice formula for initial health
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 export default db;
@@ -194,6 +195,7 @@ export interface Creature {
   type: CreatureType;
   attributes: Attributes;
   equipment: Equipment;
+  health: string; // dice formula rolled for initial health
 }
 
 /** Enabled equipment slots; each holds an item id, or null when empty. */
@@ -201,7 +203,7 @@ export type Equipment = Partial<Record<EquipSlot, number | null>>;
 
 type CreatureRow = Omit<Creature, "attributes" | "equipment"> & { attributes: string; equipment: string };
 
-const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment";
+const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment, health";
 
 const parseCreature = (row: CreatureRow): Creature => ({
   ...row,
@@ -223,13 +225,13 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
   const params = { ...c, attributes: JSON.stringify(c.attributes), equipment: JSON.stringify(c.equipment) };
   if (id === null) {
     db.prepare<Omit<CreatureRow, "id">>(
-      `INSERT INTO creatures (name, description, image, type, attributes, equipment)
-       VALUES (@name, @description, @image, @type, @attributes, @equipment)`
+      `INSERT INTO creatures (name, description, image, type, attributes, equipment, health)
+       VALUES (@name, @description, @image, @type, @attributes, @equipment, @health)`
     ).run(params);
   } else {
     db.prepare<CreatureRow>(
       `UPDATE creatures SET name = @name, description = @description, image = @image, type = @type,
-         attributes = @attributes, equipment = @equipment WHERE id = @id`
+         attributes = @attributes, equipment = @equipment, health = @health WHERE id = @id`
     ).run({ ...params, id });
   }
 }
