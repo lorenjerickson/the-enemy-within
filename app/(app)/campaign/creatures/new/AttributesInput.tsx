@@ -1,0 +1,63 @@
+"use client";
+
+import { useState } from "react";
+import {
+  ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET,
+  defaultAttributes, formatModifier, modifier, pointBuySpent, rollScore, type Attribute, type Attributes,
+} from "@/lib/attributes";
+
+type Method = "roll" | "pointbuy";
+
+const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+/** Attribute score inputs (form fields named after each attribute, plus "method"). */
+export default function AttributesInput() {
+  const [method, setMethod] = useState<Method>("roll");
+  const [scores, setScores] = useState<Attributes>(defaultAttributes());
+  const pointBuy = method === "pointbuy";
+  const remaining = POINT_BUY_BUDGET - pointBuySpent(scores);
+
+  function switchMethod(m: Method) {
+    setMethod(m);
+    setScores(defaultAttributes(m === "pointbuy" ? 8 : 10));
+  }
+
+  const set = (k: Attribute, v: number) => setScores({ ...scores, [k]: v });
+  const rollAll = () => setScores(Object.fromEntries(ATTRIBUTES.map((k) => [k, rollScore()])) as Attributes);
+
+  return (
+    <fieldset className="fieldset">
+      <legend className="fieldset-legend">Attributes</legend>
+      <input type="hidden" name="method" value={method} />
+      <div className="flex items-center gap-3 mb-2">
+        <div className="join">
+          <button type="button" className={`btn btn-sm join-item ${!pointBuy ? "btn-primary" : ""}`} onClick={() => switchMethod("roll")}>Roll</button>
+          <button type="button" className={`btn btn-sm join-item ${pointBuy ? "btn-primary" : ""}`} onClick={() => switchMethod("pointbuy")}>Point buy</button>
+        </div>
+        {pointBuy ? (
+          <span className={`text-sm ${remaining < 0 ? "text-error" : "opacity-70"}`}>{remaining} of {POINT_BUY_BUDGET} points left</span>
+        ) : (
+          <button type="button" className="btn btn-sm" onClick={rollAll}>Roll all (4d6 drop lowest)</button>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {ATTRIBUTES.map((k) => (
+          <label key={k} className="floating-label">
+            <span>{capitalize(k)} ({formatModifier(modifier(scores[k]))})</span>
+            <input
+              name={k}
+              type="number"
+              required
+              min={pointBuy ? 8 : MIN_SCORE}
+              max={pointBuy ? 15 : MAX_SCORE}
+              value={scores[k]}
+              onChange={(e) => set(k, Number(e.target.value))}
+              className="input"
+            />
+          </label>
+        ))}
+      </div>
+      {pointBuy && remaining < 0 && <p className="text-error text-sm">Over budget by {-remaining} points.</p>}
+    </fieldset>
+  );
+}

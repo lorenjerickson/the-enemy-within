@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CREATURE_TYPES } from "@/lib/creatureTypes";
 import ImagePicker from "../../ImagePicker";
+import AttributesInput from "./AttributesInput";
 import { addCreature } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -27,6 +28,7 @@ export default function CreatureForm() {
           <option key={t} value={t}>{capitalize(t)}</option>
         ))}
       </select>
+      <AttributesInput />
       <button className="btn btn-primary">Save creature</button>
     </form>
   );
