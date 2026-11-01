@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
 import type { ModifierTarget } from "@/lib/modifiers";
-import type { RollMode } from "@/lib/actions";
+import type { DamageType, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -58,7 +58,7 @@ db.exec(`
     roll TEXT NOT NULL DEFAULT 'normal', -- RollMode for the to-hit roll
     attack TEXT,                         -- to-hit modifier, signed number or dice
     damage TEXT,                         -- damage dice
-    damage_type TEXT NOT NULL DEFAULT '',
+    damage_type TEXT NOT NULL DEFAULT '', -- DamageType, '' when no damage
     radius REAL NOT NULL DEFAULT 0,      -- metres around the actor; 0 = single target
     split INTEGER NOT NULL DEFAULT 0     -- 1 = damage divided evenly across everyone in the radius
   );
@@ -406,7 +406,7 @@ export interface Action {
   roll: RollMode;
   attack: string | null;
   damage: string | null;
-  damage_type: string;
+  damage_type: DamageType | "";
   radius: number;
   split: 0 | 1;
 }

@@ -1,4 +1,4 @@
-import { ROLL_MODES } from "@/lib/actions";
+import { DAMAGE_TYPES, ROLL_MODES } from "@/lib/actions";
 import type { Action, ActionOwner } from "@/lib/db";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
@@ -29,7 +29,12 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
       </select>
       <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. -1, 1d4)" defaultValue={initial?.attack ?? ""} className="input input-sm w-full" />
       <input name="damage" pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 3d6)" defaultValue={initial?.damage ?? ""} className="input input-sm w-full" />
-      <input name="damage_type" placeholder="Damage type (e.g. fire)" defaultValue={initial?.damage_type} className="input input-sm w-full" />
+      <select name="damage_type" defaultValue={initial?.damage_type} className="select select-sm w-full">
+        <option value="">Damage type…</option>
+        {DAMAGE_TYPES.map((t) => (
+          <option key={t} value={t}>{capitalize(t)}</option>
+        ))}
+      </select>
       <input name="radius" type="number" min="0" step="any" placeholder="Area radius in metres (0 = single target)" defaultValue={initial?.radius || ""} className="input input-sm w-full" />
       <label className="flex items-center gap-2 text-sm">
         <input name="split" type="checkbox" defaultChecked={!!initial?.split} className="checkbox checkbox-sm" />

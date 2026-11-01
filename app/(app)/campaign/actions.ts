@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import { removeAction, saveAction, type ActionOwner } from "@/lib/db";
 import { generateImage } from "@/lib/images";
-import { ROLL_MODES, type RollMode } from "@/lib/actions";
+import { DAMAGE_TYPES, ROLL_MODES, type DamageType, type RollMode } from "@/lib/actions";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
 export type ArtworkKind = "item" | "creature";
@@ -42,6 +42,8 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
   if (attack && !isModifierFormula(attack)) throw new Error("Invalid to-hit modifier");
   const damage = compact("damage") || null;
   if (damage && !isDiceFormula(damage)) throw new Error("Invalid damage dice");
+  const damage_type = text("damage_type") as DamageType | "";
+  if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
 
   saveAction(actionId, owner, {
     name: text("name"),
@@ -49,7 +51,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     roll,
     attack,
     damage,
-    damage_type: text("damage_type").toLowerCase(),
+    damage_type,
     radius: Math.max(0, Number(formData.get("radius")) || 0),
     split: formData.get("split") === "on" ? 1 : 0,
   });
