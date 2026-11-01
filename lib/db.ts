@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { CREATURE_TYPES, type CreatureType } from "@/lib/creatureTypes";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -50,6 +51,7 @@ addColumn("items", "damage", "TEXT");
 addColumn("items", "attack", "TEXT");
 addColumn("items", "max_stack", "INTEGER");
 addColumn("items", "capacity", "INTEGER");
+addColumn("creatures", "type", "TEXT NOT NULL DEFAULT 'beast'");
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 export default db;
@@ -104,6 +106,7 @@ export function listPlayers(): User[] {
     .all();
 }
 
+export { CREATURE_TYPES, type CreatureType };
 export { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity };
 
 export interface Item {
@@ -147,8 +150,15 @@ export interface Creature {
   name: string;
   description: string;
   image: string | null;
+  type: CreatureType;
 }
 
 export function listCreatures(): Creature[] {
-  return db.prepare<[], Creature>("SELECT id, name, description, image FROM creatures ORDER BY name").all();
+  return db.prepare<[], Creature>("SELECT id, name, description, image, type FROM creatures ORDER BY name").all();
+}
+
+export function createCreature(c: Omit<Creature, "id">): void {
+  db.prepare<Omit<Creature, "id">>(
+    "INSERT INTO creatures (name, description, image, type) VALUES (@name, @description, @image, @type)"
+  ).run(c);
 }

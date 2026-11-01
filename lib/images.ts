@@ -42,3 +42,12 @@ export async function generateImage(prompt: string): Promise<string> {
   const json = (await res.json()) as { data: { b64_json: string }[] };
   return saveImage(Buffer.from(json.data[0].b64_json, "base64"), "image/png");
 }
+
+/** Reads the ImagePicker fields: an uploaded file wins, otherwise a generated image URL. */
+export async function imageFromForm(formData: FormData): Promise<string | null> {
+  const upload = formData.get("upload");
+  if (upload instanceof File && upload.size > 0) {
+    return saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
+  }
+  return String(formData.get("image") ?? "").trim() || null;
+}
