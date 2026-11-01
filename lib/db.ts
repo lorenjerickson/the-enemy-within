@@ -28,10 +28,16 @@ db.exec(`
 `);
 
 // Add columns introduced after a database was first created.
-const userCols = db.prepare<[], { name: string }>("PRAGMA table_info(users)").all().map((c) => c.name);
-if (!userCols.includes("must_change_password")) {
-  db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
+function addColumn(table: string, column: string, definition: string): void {
+  const cols = db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
+addColumn("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
+addColumn("items", "type", "TEXT NOT NULL DEFAULT 'utility'");
+addColumn("items", "weight", "REAL NOT NULL DEFAULT 0");
+addColumn("items", "value", "INTEGER NOT NULL DEFAULT 0");
+addColumn("items", "rarity", "TEXT NOT NULL DEFAULT ''");
+addColumn("items", "durability", "INTEGER NOT NULL DEFAULT 0");
 
 export default db;
 
@@ -85,13 +91,30 @@ export function listPlayers(): User[] {
     .all();
 }
 
+export const ITEM_TYPES = ["consumable", "armor", "weapon", "ingredient", "tool", "utility"] as const;
+export type ItemType = (typeof ITEM_TYPES)[number];
+
 export interface Item {
   id: number;
   name: string;
   description: string;
   image: string | null;
+  type: ItemType;
+  weight: number;
+  value: number;
+  rarity: string;
+  durability: number;
 }
 
+const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability";
+
 export function listItems(): Item[] {
-  return db.prepare<[], Item>("SELECT id, name, description, image FROM items ORDER BY name").all();
+  return db.prepare<[], Item>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all();
+}
+
+export function createItem(item: Omit<Item, "id" | "image">): void {
+  db.prepare<Omit<Item, "id" | "image">>(
+    `INSERT INTO items (name, description, type, weight, value, rarity, durability)
+     VALUES (@name, @description, @type, @weight, @value, @rarity, @durability)`
+  ).run(item);
 }
