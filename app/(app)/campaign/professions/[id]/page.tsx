@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import {
-  getProfession, listAdvancements, listItems, listPrerequisites, listProfessionActions, listProfessionItems,
+  getProfession, listActions, listAdvancements, listItems, listPrerequisites, listProfessionItems,
   listProfessionModifiers, listProfessions, type Profession,
 } from "@/lib/db";
 import { MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
 import { addAdvancement, addGrantedItem, addModifier, deleteModifier, removeAdvancement, removeGrantedItem } from "../actions";
-import ActionsSection from "./ActionsSection";
+import ActionsSection from "../../ActionsSection";
 import ProfessionFields from "../ProfessionFields";
 
 function ProfessionLinks({ professions, onRemove }: { professions: Profession[]; onRemove?: (p: Profession) => () => Promise<void> }) {
@@ -113,7 +113,7 @@ export default async function EditProfession({ params }: { params: Promise<{ id:
         </form>
       </div>
 
-      <ActionsSection professionId={profession.id} actions={listProfessionActions(profession.id)} />
+      <ActionsSection owner={{ profession_id: profession.id }} actions={listActions({ profession_id: profession.id })} />
 
       <div className="space-y-2">
         <h3 className="font-semibold">Prerequisites</h3>

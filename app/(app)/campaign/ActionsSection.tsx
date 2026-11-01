@@ -1,12 +1,12 @@
 import { ROLL_MODES } from "@/lib/actions";
-import type { ProfessionAction } from "@/lib/db";
+import type { Action, ActionOwner } from "@/lib/db";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
-import { deleteAction, submitAction } from "../actions";
+import { deleteAction, submitAction } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** One-line summary, e.g. "disadvantage · to hit -1 · 3d6 fire · split within 3 m". */
-function summary(a: ProfessionAction): string {
+function summary(a: Action): string {
   return [
     a.roll !== "normal" && a.roll,
     a.attack && `to hit ${a.attack}`,
@@ -17,9 +17,9 @@ function summary(a: ProfessionAction): string {
     .join(" · ");
 }
 
-function ActionForm({ professionId, initial }: { professionId: number; initial?: ProfessionAction }) {
+function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }) {
   return (
-    <form action={submitAction.bind(null, professionId, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
+    <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
       <input name="name" placeholder="Action name (e.g. Circle of Flames)" required defaultValue={initial?.name} className="input input-sm col-span-2 w-full" />
       <textarea name="description" placeholder="What the action does" defaultValue={initial?.description} className="textarea textarea-sm col-span-2 w-full" />
       <select name="roll" defaultValue={initial?.roll ?? "normal"} className="select select-sm w-full">
@@ -42,7 +42,8 @@ function ActionForm({ professionId, initial }: { professionId: number; initial?:
   );
 }
 
-export default function ActionsSection({ professionId, actions }: { professionId: number; actions: ProfessionAction[] }) {
+/** Lists, adds and edits the actions an owner (profession or item) grants. */
+export default function ActionsSection({ owner, actions }: { owner: ActionOwner; actions: Action[] }) {
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">Actions</h3>
@@ -55,16 +56,16 @@ export default function ActionsSection({ professionId, actions }: { professionId
               <span className="text-sm opacity-70">{summary(a)}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionForm professionId={professionId} initial={a} />
+            <ActionForm owner={owner} initial={a} />
           </details>
-          <form action={deleteAction.bind(null, professionId, a.id)}>
+          <form action={deleteAction.bind(null, owner, a.id)}>
             <button className="btn btn-ghost btn-xs">Remove</button>
           </form>
         </div>
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionForm professionId={professionId} />
+        <ActionForm owner={owner} />
       </details>
     </div>
   );

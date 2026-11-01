@@ -48,9 +48,11 @@ db.exec(`
     item_id INTEGER NOT NULL REFERENCES items(id),
     PRIMARY KEY (profession_id, item_id)
   );
-  CREATE TABLE IF NOT EXISTS profession_actions (
+  -- An action belongs to exactly one owner: a profession or an item.
+  CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
-    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    profession_id INTEGER REFERENCES professions(id),
+    item_id INTEGER REFERENCES items(id),
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     roll TEXT NOT NULL DEFAULT 'normal', -- RollMode for the to-hit roll
@@ -110,6 +112,15 @@ if (hasRanks) {
     }
     db.exec("DROP TABLE ranks");
   })();
+}
+
+// One-time migration: profession_actions became the shared actions table.
+if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profession_actions'").get()) {
+  db.exec(`
+    INSERT INTO actions (id, profession_id, name, description, roll, attack, damage, damage_type, radius, split)
+      SELECT id, profession_id, name, description, roll, attack, damage, damage_type, radius, split FROM profession_actions;
+    DROP TABLE profession_actions;
+  `);
 }
 
 export default db;
@@ -382,10 +393,14 @@ export function revokeItem(professionId: number, itemId: number): void {
   db.prepare<[number, number]>("DELETE FROM profession_items WHERE profession_id = ? AND item_id = ?").run(professionId, itemId);
 }
 
-/** A declared intent granted by a profession, with its own roll bonuses/penalties. */
-export interface ProfessionAction {
+/** Who grants an action. */
+export type ActionOwner = { profession_id: number } | { item_id: number };
+
+/** A declared intent granted by a profession or item, with its own roll bonuses/penalties. */
+export interface Action {
   id: number;
-  profession_id: number;
+  profession_id: number | null;
+  item_id: number | null;
   name: string;
   description: string;
   roll: RollMode;
@@ -396,29 +411,30 @@ export interface ProfessionAction {
   split: 0 | 1;
 }
 
-const ACTION_COLUMNS = "id, profession_id, name, description, roll, attack, damage, damage_type, radius, split";
+type ActionFields = Omit<Action, "id" | "profession_id" | "item_id">;
 
-export function listProfessionActions(professionId: number): ProfessionAction[] {
-  return db
-    .prepare<[number], ProfessionAction>(`SELECT ${ACTION_COLUMNS} FROM profession_actions WHERE profession_id = ? ORDER BY name`)
-    .all(professionId);
+const ACTION_COLUMNS = "id, profession_id, item_id, name, description, roll, attack, damage, damage_type, radius, split";
+
+export function listActions(owner: ActionOwner): Action[] {
+  const [column, id] = "item_id" in owner ? ["item_id", owner.item_id] : ["profession_id", owner.profession_id];
+  return db.prepare<[number], Action>(`SELECT ${ACTION_COLUMNS} FROM actions WHERE ${column} = ? ORDER BY name`).all(id);
 }
 
 /** Inserts when id is null, otherwise updates. */
-export function saveProfessionAction(id: number | null, a: Omit<ProfessionAction, "id">): void {
+export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
   if (id === null) {
-    db.prepare<Omit<ProfessionAction, "id">>(
-      `INSERT INTO profession_actions (profession_id, name, description, roll, attack, damage, damage_type, radius, split)
-       VALUES (@profession_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
-    ).run(a);
+    db.prepare<ActionFields & { profession_id: number | null; item_id: number | null }>(
+      `INSERT INTO actions (profession_id, item_id, name, description, roll, attack, damage, damage_type, radius, split)
+       VALUES (@profession_id, @item_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
+    ).run({ profession_id: null, item_id: null, ...owner, ...a });
   } else {
-    db.prepare<ProfessionAction>(
-      `UPDATE profession_actions SET name = @name, description = @description, roll = @roll, attack = @attack,
+    db.prepare<ActionFields & { id: number }>(
+      `UPDATE actions SET name = @name, description = @description, roll = @roll, attack = @attack,
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split WHERE id = @id`
     ).run({ ...a, id });
   }
 }
 
-export function removeProfessionAction(id: number): void {
-  db.prepare<[number]>("DELETE FROM profession_actions WHERE id = ?").run(id);
+export function removeAction(id: number): void {
+  db.prepare<[number]>("DELETE FROM actions WHERE id = ?").run(id);
 }
