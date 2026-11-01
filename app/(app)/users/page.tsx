@@ -1,4 +1,4 @@
-import Link from "next/link";
+import FilterableList from "@/app/(app)/FilterableList";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -37,16 +37,10 @@ export default async function Users() {
   return (
     <section className="space-y-3 max-w-xl">
       <h2 className="text-xl font-semibold">Players</h2>
-      <ul className="list bg-base-200 rounded-box">
-        {listPlayers().map((p) => (
-          <li key={p.id}>
-            <Link href={`/users/${p.id}`} className="list-row hover:bg-base-300 rounded-box">
-              <span className="font-medium">{p.name}</span>
-              <span className="opacity-70">{p.contact}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <FilterableList
+        empty="No players yet."
+        entries={listPlayers().map((p) => ({ id: p.id, href: `/users/${p.id}`, name: p.name, description: p.contact }))}
+      />
       <form action={addPlayer} className="flex flex-wrap gap-2">
         <input name="name" placeholder="Name" required className="input" />
         <input name="contact" type="email" placeholder="Email" required className="input" />

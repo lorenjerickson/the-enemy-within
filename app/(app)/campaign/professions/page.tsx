@@ -1,4 +1,5 @@
 import Link from "next/link";
+import FilterableList from "@/app/(app)/FilterableList";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { listPrerequisites, listProfessions } from "@/lib/db";
@@ -17,25 +18,7 @@ export default async function Professions() {
         <h2 className="text-xl font-semibold">Professions</h2>
         <Link href="/campaign/professions/new" className="btn btn-primary btn-sm">Add profession</Link>
       </div>
-      {professions.length === 0 ? (
-        <p className="opacity-70">No professions yet.</p>
-      ) : (
-        <ul className="list bg-base-200 rounded-box">
-          {professions.map((p) => (
-            <li key={p.id}>
-              <Link href={`/campaign/professions/${p.id}`} className="list-row hover:bg-base-300 rounded-box">
-                <div>
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-sm opacity-70">{p.description}</div>
-                </div>
-                <div className="text-xs opacity-60 self-center">
-                  {prerequisiteNames(p.id) || "Starting profession"}
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <FilterableList empty="No professions yet." entries={professions.map((p) => { const from = prerequisiteNames(p.id); return { id: p.id, href: `/campaign/professions/${p.id}`, name: p.name, description: p.description, type: from ? "advancement" : "starting", note: from || undefined }; })} />
     </section>
   );
 }

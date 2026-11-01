@@ -1,4 +1,5 @@
 import Link from "next/link";
+import FilterableList from "@/app/(app)/FilterableList";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { listItems } from "@/lib/db";
@@ -14,27 +15,7 @@ export default async function Items() {
         <h2 className="text-xl font-semibold">Items</h2>
         <Link href="/campaign/items/new" className="btn btn-primary btn-sm">Add item</Link>
       </div>
-      {items.length === 0 ? (
-        <p className="opacity-70">No items yet.</p>
-      ) : (
-        <ul className="list bg-base-200 rounded-box">
-          {items.map((item) => (
-            <li key={item.id}>
-              <Link href={`/campaign/items/${item.id}`} className="list-row hover:bg-base-300 rounded-box">
-              {item.image ? (
-                <img src={item.image} alt="" className="size-12 rounded-box object-cover" />
-              ) : (
-                <div className="size-12 rounded-box bg-base-300" />
-              )}
-              <div>
-                <div className="font-medium">{item.name}</div>
-                <div className="text-sm opacity-70">{item.description}</div>
-              </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <FilterableList empty="No items yet." entries={items.map((i) => ({ id: i.id, href: `/campaign/items/${i.id}`, name: i.name, description: i.description, image: i.image, type: i.type, note: i.rarity }))} />
     </section>
   );
 }
