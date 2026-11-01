@@ -130,7 +130,42 @@ export default function MapView({
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
 
-  // Redraw every visible layer, bottom to top, whenever visibility or the canvas size changes.
+  // View transform: zoom about a point and pan. The map is drawn in "map space" (the canvas size at zoom 1).
+  const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number } | null>(null);
+
+  // Wheel zooms around the cursor (non-passive so the page doesn't scroll).
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      setView((v) => {
+        const zoom = Math.min(8, Math.max(0.25, v.zoom * Math.exp(-e.deltaY * 0.0015)));
+        const k = zoom / v.zoom;
+        return { zoom, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k };
+      });
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    drag.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drag.current) return;
+    const dx = e.clientX - drag.current.x;
+    const dy = e.clientY - drag.current.y;
+    drag.current = { x: e.clientX, y: e.clientY };
+    setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+  };
+  const onPointerUp = () => (drag.current = null);
+
+  // Redraw every visible layer, bottom to top, whenever visibility, the view or the canvas size changes.
   useEffect(() => {
     const canvas = canvasRef.current!;
     const draw = () => {
@@ -141,6 +176,7 @@ export default function MapView({
       const ctx = canvas.getContext("2d")!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
+      ctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.x, dpr * view.y);
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage, mapImage, mapImageEl, grid })(ctx, width, height);
       }
@@ -149,7 +185,7 @@ export default function MapView({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl, grid]);
+  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl, grid, view]);
 
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
@@ -162,7 +198,20 @@ export default function MapView({
     <div className="space-y-2">
       <div className="flex gap-4">
         <div className="flex-1 min-w-0 space-y-3">
-          <canvas ref={canvasRef} className="w-full aspect-video rounded-box bg-base-300" />
+          <div className="relative">
+            <canvas
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              className="w-full aspect-video rounded-box bg-base-300 cursor-grab active:cursor-grabbing touch-none"
+            />
+            <div className="absolute bottom-2 right-2 flex items-center gap-1 text-xs">
+              <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
+              <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
+            </div>
+          </div>
           {selected && (
             <div className="rounded-box bg-base-200 p-3" data-editor={selected}>
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
