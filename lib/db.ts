@@ -66,6 +66,12 @@ db.exec(`
     profession_id INTEGER NOT NULL REFERENCES professions(id),
     PRIMARY KEY (character_id, profession_id)
   );
+  CREATE TABLE IF NOT EXISTS locations (
+    id INTEGER PRIMARY KEY,
+    parent_id INTEGER REFERENCES locations(id), -- null = top level
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+  );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
@@ -535,4 +541,39 @@ export function listProfessionGraph(): (Profession & { prerequisites: number[] }
     ...p,
     prerequisites: links.filter((l) => l.to_id === p.id).map((l) => l.from_id),
   }));
+}
+
+export interface Location {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  description: string;
+}
+
+/** All locations, each with its ancestry path, e.g. "North America › United States › The West". */
+export function listLocations(): (Location & { path: string })[] {
+  const all = db.prepare<[], Location>("SELECT id, parent_id, name, description FROM locations").all();
+  const byId = new Map(all.map((l) => [l.id, l]));
+  const path = (l: Location, seen = new Set<number>()): string[] => {
+    const parent = l.parent_id !== null ? byId.get(l.parent_id) : undefined;
+    if (!parent || seen.has(parent.id)) return [];
+    seen.add(parent.id);
+    return [...path(parent, seen), parent.name];
+  };
+  return all
+    .map((l) => ({ ...l, path: path(l).join(" › ") }))
+    .sort((a, b) => `${a.path} › ${a.name}`.localeCompare(`${b.path} › ${b.name}`));
+}
+
+export function getLocation(id: number): Location | undefined {
+  return db.prepare<[number], Location>("SELECT id, parent_id, name, description FROM locations WHERE id = ?").get(id);
+}
+
+/** Inserts when id is null, otherwise updates. */
+export function saveLocation(id: number | null, l: Omit<Location, "id">): void {
+  if (id === null) {
+    db.prepare<Omit<Location, "id">>("INSERT INTO locations (parent_id, name, description) VALUES (@parent_id, @name, @description)").run(l);
+  } else {
+    db.prepare<Location>("UPDATE locations SET parent_id = @parent_id, name = @name, description = @description WHERE id = @id").run({ ...l, id });
+  }
 }
