@@ -23,3 +23,38 @@ export const pointBuySpent = (a: Attributes) =>
 
 export const defaultAttributes = (score = 10): Attributes =>
   Object.fromEntries(ATTRIBUTES.map((k) => [k, score])) as Attributes;
+
+/** Skills inherit the modifier of their attribute. */
+export const SKILLS_BY_ATTRIBUTE: Record<Attribute, string[]> = {
+  might: ["athletics"],
+  agility: ["acrobatics", "sleight of hand", "stealth", "pilot"],
+  intellect: ["academia", "engineering", "technology", "investigation", "medicine", "nature"],
+  wisdom: ["animal handling", "insight", "perception", "folklore"],
+  fortitude: ["survival", "medicine", "nature"],
+  charisma: ["deception", "etiquette", "intimidation", "persuasion"],
+  sanity: ["psychiatry", "determination"],
+};
+
+export interface SkillModifier {
+  skill: string;
+  attributes: Attribute[];
+  modifier: number;
+}
+
+/** Skill modifiers, alphabetical. A skill under several attributes (medicine, nature) uses the best one. */
+export function skillModifiers(a: Attributes): SkillModifier[] {
+  const skills = new Map<string, SkillModifier>();
+  for (const attr of ATTRIBUTES) {
+    for (const skill of SKILLS_BY_ATTRIBUTE[attr]) {
+      const existing = skills.get(skill);
+      const m = modifier(a[attr]);
+      if (existing) {
+        existing.attributes.push(attr);
+        existing.modifier = Math.max(existing.modifier, m);
+      } else {
+        skills.set(skill, { skill, attributes: [attr], modifier: m });
+      }
+    }
+  }
+  return [...skills.values()].sort((x, y) => x.skill.localeCompare(y.skill));
+}

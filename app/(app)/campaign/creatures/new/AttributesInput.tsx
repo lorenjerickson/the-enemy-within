@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET,
-  defaultAttributes, formatModifier, modifier, pointBuySpent, rollScore, type Attribute, type Attributes,
+  defaultAttributes, formatModifier, modifier, pointBuySpent, rollScore, skillModifiers, type Attribute, type Attributes,
 } from "@/lib/attributes";
 
 type Method = "roll" | "pointbuy";
@@ -66,6 +66,19 @@ export default function AttributesInput({ initial }: { initial?: Attributes }) {
         })}
       </div>
       {pointBuy && remaining < 0 && <p className="text-error text-sm">Over budget by {-remaining} points.</p>}
+      <div className="mt-3">
+        <div className="text-sm font-semibold mb-1">Skills <span className="font-normal opacity-60">(from attributes)</span></div>
+        <div className="grid grid-cols-3 gap-x-6 gap-y-1">
+          {skillModifiers(scores).map(({ skill, attributes, modifier: m }) => (
+            <div key={skill} className="flex items-center justify-between text-sm">
+              <span>
+                {capitalize(skill)} <span className="opacity-50 text-xs">{attributes.map((a) => a.slice(0, 3).toUpperCase()).join("/")}</span>
+              </span>
+              <span className={m > 0 ? "text-success" : m < 0 ? "text-error" : "opacity-60"}>{formatModifier(m)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </fieldset>
   );
 }
