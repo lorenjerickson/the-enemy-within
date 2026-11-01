@@ -61,6 +61,11 @@ db.exec(`
     health TEXT NOT NULL,
     movement TEXT NOT NULL DEFAULT '{}'
   );
+  CREATE TABLE IF NOT EXISTS character_professions (
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    PRIMARY KEY (character_id, profession_id)
+  );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
@@ -333,20 +338,38 @@ export function getCharacter(id: number): Character | undefined {
   return row && { ...row, ...parseCreature(row) };
 }
 
-/** Inserts (based on creatureId) when id is null, otherwise updates. */
-export function saveCharacter(id: number | null, creatureId: number | null, c: Omit<Creature, "id">): void {
+/** Inserts (based on creatureId) when id is null, otherwise updates. Returns the id. */
+export function saveCharacter(id: number | null, creatureId: number | null, c: Omit<Creature, "id">): number {
   const params = toParams(c);
   if (id === null) {
-    db.prepare<Omit<CreatureRow, "id"> & { creature_id: number | null }>(
-      `INSERT INTO characters (creature_id, name, description, image, type, attributes, equipment, health, movement)
-       VALUES (@creature_id, @name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
-    ).run({ ...params, creature_id: creatureId });
+    return Number(
+      db.prepare<Omit<CreatureRow, "id"> & { creature_id: number | null }>(
+        `INSERT INTO characters (creature_id, name, description, image, type, attributes, equipment, health, movement)
+         VALUES (@creature_id, @name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
+      ).run({ ...params, creature_id: creatureId }).lastInsertRowid
+    );
   } else {
     db.prepare<CreatureRow>(
       `UPDATE characters SET name = @name, description = @description, image = @image, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
+    return id;
   }
+}
+
+export function listCharacterProfessionIds(characterId: number): number[] {
+  return db
+    .prepare<[number], { profession_id: number }>("SELECT profession_id FROM character_professions WHERE character_id = ?")
+    .all(characterId)
+    .map((r) => r.profession_id);
+}
+
+export function setCharacterProfessions(characterId: number, professionIds: number[]): void {
+  db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM character_professions WHERE character_id = ?").run(characterId);
+    const insert = db.prepare<[number, number]>("INSERT INTO character_professions (character_id, profession_id) VALUES (?, ?)");
+    for (const pid of professionIds) insert.run(characterId, pid);
+  })();
 }
 
 export interface Profession {
@@ -486,4 +509,13 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
 
 export function removeAction(id: number): void {
   db.prepare<[number]>("DELETE FROM actions WHERE id = ?").run(id);
+}
+
+/** Every profession with the ids of the professions that advance to it. */
+export function listProfessionGraph(): (Profession & { prerequisites: number[] })[] {
+  const links = db.prepare<[], { from_id: number; to_id: number }>("SELECT from_id, to_id FROM profession_advancements").all();
+  return listProfessions().map((p) => ({
+    ...p,
+    prerequisites: links.filter((l) => l.to_id === p.id).map((l) => l.from_id),
+  }));
 }

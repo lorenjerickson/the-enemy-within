@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CREATURE_TYPES, MOVEMENT_TYPES } from "@/lib/creatureTypes";
 import { DICE_PATTERN } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
@@ -18,12 +18,14 @@ export default function CreatureForm({
   action,
   title,
   submitLabel = "Save creature",
+  extra,
 }: {
   items: EquippableItem[];
   initial?: Partial<Creature>;
   action?: (formData: FormData) => Promise<void>;
   title?: string;
   submitLabel?: string;
+  extra?: ReactNode; // additional fields rendered above the submit button
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -61,6 +63,7 @@ export default function CreatureForm({
       </fieldset>
       <AttributesInput initial={initial?.attributes} />
       <EquipmentInput items={items} initial={initial?.equipment} />
+      {extra}
       <button className="btn btn-primary">{submitLabel}</button>
     </form>
   );
