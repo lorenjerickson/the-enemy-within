@@ -1,17 +1,14 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import db, { getGm, hashPassword } from "@/lib/db";
+import { createUser, getGm } from "@/lib/db";
 
-async function createGm(formData) {
+async function createGm(formData: FormData) {
   "use server";
   if (getGm()) redirect("/");
-  db.prepare(
-    "INSERT INTO users (name, username, contact, password_hash, role) VALUES (?, ?, ?, ?, 'gm')"
-  ).run(
-    formData.get("name"),
-    formData.get("username"),
-    formData.get("contact"),
-    hashPassword(formData.get("password"))
+  const field = (k: string) => String(formData.get(k) ?? "").trim();
+  createUser(
+    { name: field("name"), username: field("username"), contact: field("contact") || null, role: "gm" },
+    field("password")
   );
   redirect("/");
 }

@@ -16,6 +16,11 @@
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "tailwindcss": "^4",
-    "daisyui": "^5.7.50"
+    "daisyui": "^5.7.50",
+    "typescript": "^5",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/better-sqlite3": "^7"
   }
 }
