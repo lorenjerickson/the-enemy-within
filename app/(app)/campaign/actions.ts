@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn } from "@/lib/db";
 import { generateImage } from "@/lib/images";
-import { DAMAGE_TYPES, ROLL_MODES, type DamageType, type RollMode } from "@/lib/actions";
+import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type DurationUnit, type RollMode } from "@/lib/actions";
+import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
 export type ArtworkKind = "item" | "creature";
@@ -52,6 +53,20 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
   const damage_type = text("damage_type") as DamageType | "";
   if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
 
+  const values = formData.getAll("boost_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
+  const boosts: Boost[] = formData.getAll("boost_target").flatMap((t, i): Boost[] => {
+    const target = String(t);
+    let value = values[i] ?? "";
+    if (!target || !value) return []; // incomplete rows are dropped
+    if (!isModifierTarget(target)) throw new Error("Invalid boost target");
+    if (!isModifierFormula(value)) throw new Error("Invalid boost value");
+    if (/^\d/.test(value)) value = `+${value}`;
+    return [{ target, value }];
+  });
+  const duration_unit = text("duration_unit") as DurationUnit;
+  if (!DURATION_UNITS.includes(duration_unit)) throw new Error("Invalid duration unit");
+  const duration_amount = Math.max(1, Math.round(Number(formData.get("duration_amount")) || 1));
+
   saveAction(actionId, owner, {
     name: text("name"),
     description: text("description"),
@@ -61,6 +76,9 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     damage_type,
     radius: Math.max(0, Number(formData.get("radius")) || 0),
     split: formData.get("split") === "on" ? 1 : 0,
+    boosts,
+    duration_amount,
+    duration_unit,
   });
   revalidatePath(ownerPath(owner));
 }

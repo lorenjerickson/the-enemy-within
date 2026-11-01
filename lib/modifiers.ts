@@ -9,6 +9,7 @@ export type ModifierTarget =
   | `skill:${string}`
   | "health"
   | "attack"
+  | "damage"
   | "defense"
   | `movement:${MovementType}`;
 
@@ -18,7 +19,7 @@ const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 export const MODIFIER_TARGET_GROUPS: [string, [ModifierTarget, string][]][] = [
   ["Attributes", ATTRIBUTES.map((a) => [`attribute:${a}`, capitalize(a)])],
   ["Skills", SKILLS.map((s) => [`skill:${s}`, capitalize(s)])],
-  ["Combat", [["health", "Health"], ["attack", "Attack"], ["defense", "Defense"]]],
+  ["Combat", [["health", "Health"], ["attack", "Attack (to-hit)"], ["damage", "Damage"], ["defense", "Defense"]]],
   ["Movement", MOVEMENT_TYPES.map((m) => [`movement:${m}`, capitalize(m)])],
 ];
 

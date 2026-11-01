@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
 import type { ModifierTarget } from "@/lib/modifiers";
-import type { DamageType, RollMode } from "@/lib/actions";
+import type { Boost, DamageType, DurationUnit, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -114,6 +114,9 @@ addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equip
 addColumn("creatures", "health", "TEXT NOT NULL DEFAULT '1d8'"); // dice formula for initial health
 addColumn("creatures", "movement", "TEXT NOT NULL DEFAULT '{}'"); // JSON Movement
 addColumn("actions", "creature_id", "INTEGER REFERENCES creatures(id)");
+addColumn("actions", "boosts", "TEXT NOT NULL DEFAULT '[]'"); // JSON Boost[]
+addColumn("actions", "duration_amount", "INTEGER NOT NULL DEFAULT 1");
+addColumn("actions", "duration_unit", "TEXT NOT NULL DEFAULT ''"); // DurationUnit, '' = instant
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 // One-time migration: the old per-profession "ranks" tree becomes linked professions.
@@ -481,29 +484,41 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   damage_type: DamageType | "";
   radius: number;
   split: 0 | 1;
+  boosts: Boost[];
+  duration_amount: number;
+  duration_unit: DurationUnit;
 }
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
+type ActionRow = Omit<Action, "boosts"> & { boosts: string };
 
-const ACTION_COLUMNS = "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split";
+const ACTION_COLUMNS =
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, duration_amount, duration_unit";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
-  return db.prepare<[number], Action>(`SELECT ${ACTION_COLUMNS} FROM actions WHERE ${column} = ? ORDER BY name`).all(id);
+  return db
+    .prepare<[number], ActionRow>(`SELECT ${ACTION_COLUMNS} FROM actions WHERE ${column} = ? ORDER BY name`)
+    .all(id)
+    .map((r) => ({ ...r, boosts: JSON.parse(r.boosts) }));
 }
 
 /** Inserts when id is null, otherwise updates. */
 export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
+  const params = { ...a, boosts: JSON.stringify(a.boosts) };
   if (id === null) {
-    db.prepare<ActionFields & Record<ActionOwnerColumn, number | null>>(
-      `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split)
-       VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
-    ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...a });
+    db.prepare<Omit<ActionRow, "id">>(
+      `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
+         boosts, duration_amount, duration_unit)
+       VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
+         @boosts, @duration_amount, @duration_unit)`
+    ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
-    db.prepare<ActionFields & { id: number }>(
+    db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
       `UPDATE actions SET name = @name, description = @description, roll = @roll, attack = @attack,
-         damage = @damage, damage_type = @damage_type, radius = @radius, split = @split WHERE id = @id`
-    ).run({ ...a, id });
+         damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
+         boosts = @boosts, duration_amount = @duration_amount, duration_unit = @duration_unit WHERE id = @id`
+    ).run({ ...params, id });
   }
 }
 

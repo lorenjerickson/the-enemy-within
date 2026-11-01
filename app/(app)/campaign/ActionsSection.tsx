@@ -1,17 +1,21 @@
-import { DAMAGE_TYPES, ROLL_MODES } from "@/lib/actions";
+import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, formatDuration } from "@/lib/actions";
+import { targetLabel } from "@/lib/modifiers";
+import BoostsInput from "./BoostsInput";
 import type { Action, ActionOwner } from "@/lib/db";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-/** One-line summary, e.g. "disadvantage · to hit -1 · 3d6 fire · split within 3 m". */
+/** One-line summary, e.g. "disadvantage · to hit -1 · 3d6 fire · split within 3 m · +2 Stealth (skill) · 1 hour". */
 function summary(a: Action): string {
   return [
-    a.roll !== "normal" && a.roll,
+    (a.attack || a.damage) && a.roll !== "normal" && a.roll,
     a.attack && `to hit ${a.attack}`,
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.radius > 0 && `${a.split ? "split" : "each"} within ${a.radius} m`,
+    ...a.boosts.map((b) => `${b.value} ${targetLabel(b.target)}`),
+    a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -40,6 +44,20 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
         <input name="split" type="checkbox" defaultChecked={!!initial?.split} className="checkbox checkbox-sm" />
         Split damage evenly across the area
       </label>
+      <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
+      <div className="col-span-2">
+        <BoostsInput initial={initial?.boosts} />
+      </div>
+      <div className="col-span-2 flex items-center gap-2">
+        <span className="text-sm font-semibold">Duration</span>
+        <input name="duration_amount" type="number" min="1" defaultValue={initial?.duration_amount ?? 1} className="input input-sm w-20" />
+        <select name="duration_unit" defaultValue={initial?.duration_unit ?? ""} className="select select-sm">
+          {DURATION_UNITS.map((u) => (
+            <option key={u} value={u}>{u ? `${u}(s)` : "Instant"}</option>
+          ))}
+        </select>
+        <span className="text-xs opacity-60">e.g. 1 long rest = until the next long rest</span>
+      </div>
       <div className="col-span-2">
         <button className="btn btn-primary btn-sm">Save action</button>
       </div>
@@ -47,7 +65,7 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
   );
 }
 
-/** Lists, adds and edits the actions an owner (profession or item) grants. */
+/** Lists, adds and edits the actions an owner (profession, item or creature) grants. */
 export default function ActionsSection({ owner, actions }: { owner: ActionOwner; actions: Action[] }) {
   return (
     <div className="space-y-2">
