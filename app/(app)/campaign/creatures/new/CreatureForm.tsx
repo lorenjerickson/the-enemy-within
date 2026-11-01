@@ -36,8 +36,8 @@ export default function CreatureForm({ items, initial }: { items: EquippableItem
           <input name="health" required pattern={DICE_PATTERN} placeholder="Health dice (e.g. 2d8+4)" defaultValue={initial?.health} className="input w-full" /></label>
       </div>
       <fieldset className="fieldset">
-        <legend className="fieldset-legend">Maximum movement range (metres)</legend>
-        <div className="grid grid-cols-6 gap-2">
+        <legend className="fieldset-legend">Maximum movement range (metres, 0 = none)</legend>
+        <div className="grid grid-cols-7 gap-2">
           {MOVEMENT_TYPES.map((m) => (
             <label key={m} className="floating-label">
               <span>{capitalize(m)}</span>
