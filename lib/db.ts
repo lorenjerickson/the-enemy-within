@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/itemTypes";
+import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
 const db = new Database("data/game.db");
@@ -44,6 +44,7 @@ addColumn("items", "damage", "TEXT");
 addColumn("items", "attack", "TEXT");
 addColumn("items", "max_stack", "INTEGER");
 addColumn("items", "capacity", "INTEGER");
+addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 export default db;
 
@@ -97,7 +98,7 @@ export function listPlayers(): User[] {
     .all();
 }
 
-export { ITEM_TYPES, RARITIES, type ItemType, type Rarity };
+export { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity };
 
 export interface Item {
   id: number;
@@ -114,17 +115,23 @@ export interface Item {
   attack: string | null; // to-hit modifier (dice or flat), weapons only
   max_stack: number | null; // consumables only; 1 = not stackable
   capacity: number | null; // containers only; number of item slots (a stack fills one slot)
+  slots: EquipSlot[]; // slots this item can be equipped in; empty = not equippable
 }
 
-const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity";
+const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots";
+
+type ItemRow = Omit<Item, "slots"> & { slots: string };
 
 export function listItems(): Item[] {
-  return db.prepare<[], Item>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all();
+  return db
+    .prepare<[], ItemRow>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`)
+    .all()
+    .map((row) => ({ ...row, slots: JSON.parse(row.slots) }));
 }
 
 export function createItem(item: Omit<Item, "id">): void {
-  db.prepare<Omit<Item, "id">>(
-    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity)
-     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity)`
-  ).run(item);
+  db.prepare<Omit<ItemRow, "id">>(
+    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots)
+     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots)`
+  ).run({ ...item, slots: JSON.stringify(item.slots) });
 }

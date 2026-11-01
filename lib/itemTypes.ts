@@ -11,3 +11,9 @@ export const isDiceFormula = (s: string) => new RegExp(`^${DICE_PATTERN}$`).test
 /** Signed modifier: a dice formula or flat number, e.g. "1d4", "-1d4", "+2", "-2". */
 export const MODIFIER_PATTERN = `[+\\-]?(${DICE_PATTERN}|\\d+)`;
 export const isModifierFormula = (s: string) => new RegExp(`^${MODIFIER_PATTERN}$`).test(s);
+
+export const EQUIP_SLOTS = [
+  "head", "neck", "shoulders", "back", "arms", "hands", "off hand",
+  "main hand", "legs", "feet", "waist", "finger", "container",
+] as const;
+export type EquipSlot = (typeof EQUIP_SLOTS)[number];

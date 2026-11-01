@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { createItem, ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/db";
+import { createItem, EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/db";
 import { generateImage, saveImage } from "@/lib/images";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
@@ -24,6 +24,8 @@ export async function addItem(formData: FormData) {
   const attack = type === "weapon" ? text("attack").toLowerCase().replace(/\s/g, "") || "0" : null;
   if (attack !== null && !isModifierFormula(attack)) throw new Error("Invalid attack modifier");
   const stackable = formData.get("stackable") === "on";
+  const slots = formData.getAll("slots").map(String) as EquipSlot[];
+  if (!slots.every((slot) => EQUIP_SLOTS.includes(slot))) throw new Error("Invalid equipment slot");
   const capacity = type === "container" ? Math.max(1, Math.round(num("capacity"))) : null;
   const max_stack = type === "consumable" ? (stackable ? Math.max(2, Math.round(num("max_stack"))) : 1) : null;
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
@@ -49,6 +51,7 @@ export async function addItem(formData: FormData) {
     attack,
     max_stack,
     capacity,
+    slots,
   });
   redirect("/campaign/items");
 }

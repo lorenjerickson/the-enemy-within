@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DICE_PATTERN, ITEM_TYPES, MODIFIER_PATTERN, RARITIES } from "@/lib/itemTypes";
+import { DICE_PATTERN, EQUIP_SLOTS, ITEM_TYPES, MODIFIER_PATTERN, RARITIES } from "@/lib/itemTypes";
 import { addItem, generateItemImage } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -124,6 +124,17 @@ export default function ItemForm() {
         <label className="floating-label"><span>Capacity (number of items or stacks)</span>
           <input name="capacity" type="number" min="1" required placeholder="Capacity (number of items or stacks)" className="input w-full" /></label>
       )}
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">Equipment slots (leave empty if not equippable)</legend>
+        <div className="grid grid-cols-4 gap-2">
+          {EQUIP_SLOTS.map((slot) => (
+            <label key={slot} className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" name="slots" value={slot} className="checkbox checkbox-sm" />
+              {capitalize(slot)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <button className="btn btn-primary">Save item</button>
     </form>
   );
