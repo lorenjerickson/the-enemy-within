@@ -15,6 +15,12 @@ db.exec(`
     role TEXT NOT NULL,
     must_change_password INTEGER NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    image TEXT
+  );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id)
@@ -77,4 +83,15 @@ export function listPlayers(): User[] {
   return db
     .prepare<[], User>(`SELECT ${USER_COLUMNS} FROM users WHERE role = 'player' ORDER BY name`)
     .all();
+}
+
+export interface Item {
+  id: number;
+  name: string;
+  description: string;
+  image: string | null;
+}
+
+export function listItems(): Item[] {
+  return db.prepare<[], Item>("SELECT id, name, description, image FROM items ORDER BY name").all();
 }
