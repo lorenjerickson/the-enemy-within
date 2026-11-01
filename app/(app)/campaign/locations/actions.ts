@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveMapImage, setLayerVisible } from "@/lib/db";
+import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, type MapLayer, type Padding, type Perspective } from "@/lib/maps";
 
@@ -63,5 +63,13 @@ export async function submitMapImage(locationId: number, levelId: number, formDa
   const perspective = String(formData.get("perspective")) as Perspective;
   if (!PERSPECTIVES.includes(perspective)) throw new Error("Invalid perspective");
   saveMapImage(levelId, { image: await imageFromForm(formData), perspective });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function submitGrid(locationId: number, levelId: number, formData: FormData) {
+  await requireGm();
+  const color = String(formData.get("color") ?? "");
+  if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Invalid colour");
+  saveGrid(levelId, { size: Math.max(5, Math.round(Number(formData.get("size")) || 50)), color });
   revalidatePath(`/campaign/locations/${locationId}`);
 }

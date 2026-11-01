@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { MAP_LAYERS, type MapBackground, type MapImage, type MapLayer } from "@/lib/maps";
+import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer } from "@/lib/maps";
+import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
 import { toggleLayer } from "../actions";
@@ -25,6 +26,7 @@ interface MapState {
   backgroundImage: HTMLImageElement | null;
   mapImage: MapImage;
   mapImageEl: HTMLImageElement | null;
+  grid: MapGrid;
 }
 
 /** Loads an image URL into an element (null until loaded, or when there's no URL). */
@@ -39,9 +41,6 @@ function useImage(url: string | null): HTMLImageElement | null {
   }, [url]);
   return img;
 }
-
-/** Grid square size in canvas pixels. */
-const GRID_SIZE = 50;
 
 /** Where the map image is drawn: fitted inside the background's padded region, centred, aspect ratio preserved. */
 function mapRect({ background: { padding: p }, mapImageEl: img }: MapState, w: number, h: number) {
@@ -75,16 +74,23 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     const r = mapRect(state, w, h);
     if (r && state.mapImageEl) ctx.drawImage(state.mapImageEl, r.x, r.y, r.w, r.h);
   },
-  // Square grid over the map image (or the padded region when there's no image yet).
+  // Over the map image (or the padded region when there's no image yet): squares for overhead maps,
+  // columns (horizontal movement distance) for portrait maps, nothing for scenic maps.
   grid: (state) => (ctx, w, h) => {
+    const perspective = state.mapImage.perspective;
+    if (perspective === "scenic") return;
+    const { size, color } = state.grid;
     const p = state.background.padding;
     const r = mapRect(state, w, h) ?? { x: p.left, y: p.top, w: w - p.left - p.right, h: h - p.top - p.bottom };
     ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = r.x; x <= r.x + r.w + 0.5; x += GRID_SIZE) { ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); }
-    for (let y = r.y; y <= r.y + r.h + 0.5; y += GRID_SIZE) { ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); }
+    for (let x = r.x; x <= r.x + r.w + 0.5; x += size) { ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); }
+    if (perspective === "overhead") {
+      for (let y = r.y; y <= r.y + r.h + 0.5; y += size) { ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); }
+    }
     ctx.stroke();
     ctx.restore();
   },
@@ -100,12 +106,14 @@ export default function MapView({
   hidden,
   background,
   mapImage,
+  grid,
 }: {
   locationId: number;
   levelId: number;
   hidden: MapLayer[];
   background: MapBackground;
   mapImage: MapImage;
+  grid: MapGrid;
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -134,14 +142,14 @@ export default function MapView({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       for (const layer of MAP_LAYERS) {
-        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage, mapImage, mapImageEl })(ctx, width, height);
+        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage, mapImage, mapImageEl, grid })(ctx, width, height);
       }
     };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl]);
+  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl, grid]);
 
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
@@ -160,6 +168,8 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "grid" ? (
+                <GridEditor key={JSON.stringify(grid)} locationId={locationId} levelId={levelId} grid={grid} perspective={mapImage.perspective} />
               ) : selected === "map" ? (
                 <MapImageEditor key={JSON.stringify(mapImage)} locationId={locationId} levelId={levelId} mapImage={mapImage} />
               ) : (

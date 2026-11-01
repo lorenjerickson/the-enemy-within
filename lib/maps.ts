@@ -45,3 +45,11 @@ export interface MapImage {
 }
 
 export const DEFAULT_MAP_IMAGE: MapImage = { image: null, perspective: "overhead" };
+
+/** Grid layer settings. Overhead maps get square cells; portrait maps get columns (horizontal movement distance). */
+export interface MapGrid {
+  size: number; // canvas pixels per square / column
+  color: string; // #rrggbb
+}
+
+export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff" };
