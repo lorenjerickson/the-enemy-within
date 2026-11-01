@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import db, { type User, verifyPassword } from "@/lib/db";
+import db, { type User, USER_COLUMNS, verifyPassword } from "@/lib/db";
 
 const COOKIE = "session";
 
@@ -24,8 +24,8 @@ export async function currentUser(): Promise<User | undefined> {
   if (!token) return undefined;
   return db
     .prepare<[string], User>(
-      `SELECT u.id, u.name, u.username, u.contact, u.role
-       FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
+      `SELECT ${USER_COLUMNS} FROM users
+       WHERE id = (SELECT user_id FROM sessions WHERE token = ?)`
     )
     .get(token);
 }
@@ -34,5 +34,6 @@ export async function currentUser(): Promise<User | undefined> {
 export async function requireUser(): Promise<User> {
   const user = await currentUser();
   if (!user) redirect("/login");
+  if (user.must_change_password) redirect("/change-password");
   return user;
 }
