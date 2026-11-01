@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ITEM_TYPES } from "@/lib/itemTypes";
+import { ITEM_TYPES, RARITIES } from "@/lib/itemTypes";
 import { addItem, generateItemImage } from "./actions";
+
+const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 export default function ItemForm() {
   const [name, setName] = useState("");
@@ -68,21 +70,28 @@ export default function ItemForm() {
         </div>
       </div>
       {error && <div className="alert alert-error text-sm">{error}</div>}
-      <select name="type" required defaultValue="" className="select w-full">
-        <option value="" disabled>Type</option>
-        {ITEM_TYPES.map((t) => (
-          <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>
-        ))}
-      </select>
+      <div className="grid grid-cols-2 gap-2">
+        <select name="type" required defaultValue="" className="select w-full">
+          <option value="" disabled>Type</option>
+          {ITEM_TYPES.map((t) => (
+            <option key={t} value={t}>{capitalize(t)}</option>
+          ))}
+        </select>
+        <select name="rarity" required defaultValue="" className="select w-full">
+          <option value="" disabled>Rarity</option>
+          {RARITIES.map((r) => (
+            <option key={r} value={r}>{capitalize(r)}</option>
+          ))}
+        </select>
+      </div>
       <div className="grid grid-cols-3 gap-2">
-        <label className="floating-label"><span>Weight</span>
-          <input name="weight" type="number" step="any" min="0" placeholder="Weight" className="input" /></label>
+        <label className="floating-label"><span>Weight (kg)</span>
+          <input name="weight" type="number" step="any" min="0" placeholder="Weight (kg)" className="input" /></label>
         <label className="floating-label"><span>Value</span>
           <input name="value" type="number" min="0" placeholder="Value" className="input" /></label>
-        <label className="floating-label"><span>Durability</span>
-          <input name="durability" type="number" min="0" placeholder="Durability" className="input" /></label>
+        <label className="floating-label"><span>Durability (1–100)</span>
+          <input name="durability" type="number" min="1" max="100" required placeholder="Durability (1–100)" className="input" /></label>
       </div>
-      <input name="rarity" placeholder="Rarity" className="input w-full" />
       <button className="btn btn-primary">Save item</button>
     </form>
   );

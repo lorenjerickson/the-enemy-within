@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { createItem, ITEM_TYPES, type ItemType } from "@/lib/db";
+import { createItem, ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/db";
 import { generateImage, saveImage } from "@/lib/images";
 
 export async function addItem(formData: FormData) {
@@ -11,6 +11,9 @@ export async function addItem(formData: FormData) {
   const num = (k: string) => Number(formData.get(k)) || 0;
   const type = text("type") as ItemType;
   if (!ITEM_TYPES.includes(type)) throw new Error("Invalid item type");
+  const rarity = text("rarity") as Rarity;
+  if (!RARITIES.includes(rarity)) throw new Error("Invalid rarity");
+  const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
   // An uploaded file wins; otherwise use a previously generated image URL.
   const upload = formData.get("upload");
@@ -26,8 +29,8 @@ export async function addItem(formData: FormData) {
     type,
     weight: num("weight"),
     value: num("value"),
-    rarity: text("rarity"),
-    durability: num("durability"),
+    rarity,
+    durability,
   });
   redirect("/campaign/items");
 }

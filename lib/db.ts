@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { ITEM_TYPES, type ItemType } from "@/lib/itemTypes";
+import { ITEM_TYPES, RARITIES, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
 const db = new Database("data/game.db");
@@ -92,7 +92,7 @@ export function listPlayers(): User[] {
     .all();
 }
 
-export { ITEM_TYPES, type ItemType };
+export { ITEM_TYPES, RARITIES, type ItemType, type Rarity };
 
 export interface Item {
   id: number;
@@ -100,10 +100,10 @@ export interface Item {
   description: string;
   image: string | null;
   type: ItemType;
-  weight: number;
+  weight: number; // kg
   value: number;
-  rarity: string;
-  durability: number;
+  rarity: Rarity;
+  durability: number; // 1-100
 }
 
 const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability";
