@@ -13,7 +13,7 @@ export type ArtworkKind = "item" | "creature" | "texture" | "map";
 const PROMPTS: Record<ArtworkKind, string> = {
   item: "Illustration of a single item for a dark fantasy roleplaying game, centered on a plain background.",
   creature: "Illustration of a creature for a dark fantasy roleplaying game, full body, dramatic lighting.",
-  map: "Top-down tabletop battle map for a dark fantasy roleplaying game, orthographic view, no grid, no text.",
+  map: "Map artwork for a location in a dark fantasy roleplaying game, no text.",
   texture: "Seamless, tileable top-down texture for a tabletop battle map, evenly lit, no objects or borders.",
 };
 

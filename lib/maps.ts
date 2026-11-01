@@ -28,9 +28,20 @@ export const DEFAULT_BACKGROUND: MapBackground = {
   padding: { top: 0, right: 0, bottom: 0, left: 0 },
 };
 
-/** Map layer settings: the map image, centred in the background's padded region with its aspect ratio kept. */
+export const PERSPECTIVES = ["overhead", "scenic", "portrait"] as const;
+export type Perspective = (typeof PERSPECTIVES)[number];
+
+/** How each perspective is described when generating a map image. */
+export const PERSPECTIVE_PROMPTS: Record<Perspective, string> = {
+  overhead: "Top-down orthographic battle map, no grid.",
+  scenic: "Wide scenic establishing view of the place.",
+  portrait: "Portrait-orientation scene, as if seen from where a character stands.",
+};
+
+/** Map layer settings: the map image (centred in the background's padded region, aspect ratio kept) and its perspective. */
 export interface MapImage {
   image: string | null;
+  perspective: Perspective;
 }
 
-export const DEFAULT_MAP_IMAGE: MapImage = { image: null };
+export const DEFAULT_MAP_IMAGE: MapImage = { image: null, perspective: "overhead" };
