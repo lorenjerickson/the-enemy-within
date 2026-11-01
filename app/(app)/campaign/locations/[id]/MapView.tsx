@@ -44,6 +44,8 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selected, setSelected] = useState<MapLayer | null>(null);
+  // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
+  const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
 
   // Redraw every visible layer, bottom to top, whenever visibility or the canvas size changes.
   useEffect(() => {
@@ -96,7 +98,7 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
                   aria-pressed={!hiddenSet.has(layer)}
                   title={hiddenSet.has(layer) ? `Show ${layer}` : `Hide ${layer}`}
                   onClick={() => onToggle(layer, hiddenSet.has(layer))}
-                  className={`p-1 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
+                  className={`p-1 rounded ${hoverBg(layer)} ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
                 >
                   <EyeIcon />
                 </button>
@@ -104,7 +106,7 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
                   type="button"
                   aria-current={selected === layer}
                   onClick={() => setSelected(layer)}
-                  className={`flex-1 text-left px-1 py-0.5 rounded hover:bg-base-300 ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
+                  className={`flex-1 text-left px-1 py-0.5 rounded ${hoverBg(layer)} ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
                 >
                   {capitalize(layer)}
                 </button>
