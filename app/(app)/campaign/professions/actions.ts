@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { addRank, saveProfession, updateRank } from "@/lib/db";
+import { linkAdvancement, saveProfession, unlinkAdvancement } from "@/lib/db";
 
 const text = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -13,14 +13,17 @@ export async function submitProfession(id: number | null, formData: FormData) {
   redirect(`/campaign/professions/${saved}`);
 }
 
-export async function submitNewRank(professionId: number, parentId: number | null, formData: FormData) {
+/** Links an existing profession, or creates a new one by name, as an advancement of fromId. */
+export async function addAdvancement(fromId: number, formData: FormData) {
   await requireGm();
-  addRank({ profession_id: professionId, parent_id: parentId, name: text(formData, "name"), description: text(formData, "description") });
-  revalidatePath(`/campaign/professions/${professionId}`);
+  const newName = text(formData, "new_name");
+  const toId = newName ? saveProfession(null, { name: newName, description: "" }) : Number(formData.get("to_id"));
+  if (toId) linkAdvancement(fromId, toId);
+  revalidatePath(`/campaign/professions/${fromId}`);
 }
 
-export async function submitRank(professionId: number, rankId: number, formData: FormData) {
+export async function removeAdvancement(fromId: number, toId: number) {
   await requireGm();
-  updateRank(rankId, text(formData, "name"), text(formData, "description"));
-  revalidatePath(`/campaign/professions/${professionId}`);
+  unlinkAdvancement(fromId, toId);
+  revalidatePath(`/campaign/professions/${fromId}`);
 }

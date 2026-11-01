@@ -1,49 +1,27 @@
-import type { ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getProfession, listRanks, type Rank } from "@/lib/db";
-import { submitNewRank, submitRank } from "../actions";
+import { getProfession, listAdvancements, listPrerequisites, listProfessions, type Profession } from "@/lib/db";
+import { addAdvancement, removeAdvancement } from "../actions";
 import ProfessionFields from "../ProfessionFields";
 
-/** Small inline name + description form, hidden behind a toggle. */
-function RankForm({ label, action, initial }: { label: ReactNode; action: (f: FormData) => Promise<void>; initial?: Rank }) {
+function ProfessionLinks({ professions, onRemove }: { professions: Profession[]; onRemove?: (p: Profession) => () => Promise<void> }) {
+  if (professions.length === 0) return <p className="text-sm opacity-60">None</p>;
   return (
-    <details>
-      <summary className={initial ? "link link-hover list-none" : "btn btn-ghost btn-xs"}>{label}</summary>
-      <form action={action} className="flex flex-wrap gap-2 mt-2">
-        <input name="name" placeholder="Name (e.g. Sergeant)" required defaultValue={initial?.name} className="input input-sm" />
-        <input name="description" placeholder="Description" defaultValue={initial?.description} className="input input-sm flex-1" />
-        <button className="btn btn-primary btn-sm">Save</button>
-      </form>
-    </details>
-  );
-}
-
-function Advancements({ professionId, parentId, ranks }: { professionId: number; parentId: number | null; ranks: Rank[] }) {
-  const children = ranks.filter((r) => r.parent_id === parentId);
-  return (
-    <div className="ml-6 border-l border-base-300 pl-4 space-y-2">
-      {children.length > 1 && <div className="text-xs opacity-60">Choose one of:</div>}
-      {children.map((r) => (
-        <div key={r.id} className="space-y-1">
-          <RankForm
-            key={`${r.name}|${r.description}`}
-            label={
-              <span className="inline-flex items-baseline gap-2">
-                <span className="font-medium">{r.name}</span>
-                <span className="text-sm opacity-70">{r.description}</span>
-              </span>
-            }
-            action={submitRank.bind(null, professionId, r.id)}
-            initial={r}
-          />
-          <Advancements professionId={professionId} parentId={r.id} ranks={ranks} />
-        </div>
+    <ul className="space-y-1">
+      {professions.map((p) => (
+        <li key={p.id} className="flex items-center gap-2">
+          <Link href={`/campaign/professions/${p.id}`} className="link link-hover font-medium">{p.name}</Link>
+          <span className="text-sm opacity-70">{p.description}</span>
+          {onRemove && (
+            <form action={onRemove(p)}>
+              <button className="btn btn-ghost btn-xs">Remove</button>
+            </form>
+          )}
+        </li>
       ))}
-      {/* key changes after each save so the toggle closes again */}
-      <RankForm key={ranks.length} label="+ Add advancement option" action={submitNewRank.bind(null, professionId, parentId)} />
-    </div>
+    </ul>
   );
 }
 
@@ -52,18 +30,38 @@ export default async function EditProfession({ params }: { params: Promise<{ id:
   await requireGm();
   const profession = getProfession(Number((await params).id));
   if (!profession) notFound();
-  const ranks = listRanks(profession.id);
+  const advancements = listAdvancements(profession.id);
+  const linked = new Set([profession.id, ...advancements.map((a) => a.id)]);
+  const candidates = listProfessions().filter((p) => !linked.has(p.id));
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-6 max-w-2xl">
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">Edit profession</h2>
         <ProfessionFields initial={profession} />
       </div>
+
       <div className="space-y-2">
-        <h3 className="font-semibold">Advancement</h3>
-        <div className="font-medium">{profession.name} <span className="text-xs opacity-60">(starting level)</span></div>
-        <Advancements professionId={profession.id} parentId={null} ranks={ranks} />
+        <h3 className="font-semibold">Prerequisites</h3>
+        <p className="text-xs opacity-60">Professions that advance to this one.</p>
+        <ProfessionLinks professions={listPrerequisites(profession.id)} />
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="font-semibold">Advances to</h3>
+        {advancements.length > 1 && <p className="text-xs opacity-60">Choose one of:</p>}
+        <ProfessionLinks professions={advancements} onRemove={(p) => removeAdvancement.bind(null, profession.id, p.id)} />
+        <form key={advancements.length} action={addAdvancement.bind(null, profession.id)} className="flex flex-wrap items-center gap-2 pt-2">
+          <select name="to_id" defaultValue="" className="select select-sm">
+            <option value="">Link existing profession…</option>
+            {candidates.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <span className="text-sm opacity-60">or</span>
+          <input name="new_name" placeholder="New profession name" className="input input-sm" />
+          <button className="btn btn-primary btn-sm">Add advancement</button>
+        </form>
       </div>
     </section>
   );

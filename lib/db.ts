@@ -35,12 +35,11 @@ db.exec(`
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT ''
   );
-  CREATE TABLE IF NOT EXISTS ranks (
-    id INTEGER PRIMARY KEY,
-    profession_id INTEGER NOT NULL REFERENCES professions(id),
-    parent_id INTEGER REFERENCES ranks(id), -- null = first advancement from the base profession
-    name TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT ''
+  -- from_id advances to to_id; to_id's prerequisites are all its from_ids.
+  CREATE TABLE IF NOT EXISTS profession_advancements (
+    from_id INTEGER NOT NULL REFERENCES professions(id),
+    to_id INTEGER NOT NULL REFERENCES professions(id),
+    PRIMARY KEY (from_id, to_id)
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -70,6 +69,23 @@ addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equip
 addColumn("creatures", "health", "TEXT NOT NULL DEFAULT '1d8'"); // dice formula for initial health
 addColumn("creatures", "movement", "TEXT NOT NULL DEFAULT '{}'"); // JSON Movement
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
+
+// One-time migration: the old per-profession "ranks" tree becomes linked professions.
+const hasRanks = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ranks'").get();
+if (hasRanks) {
+  db.transaction(() => {
+    type OldRank = { id: number; profession_id: number; parent_id: number | null; name: string; description: string };
+    const ranks = db.prepare<[], OldRank>("SELECT * FROM ranks ORDER BY id").all();
+    const newId = new Map<number, number>();
+    for (const r of ranks) {
+      const id = Number(db.prepare("INSERT INTO professions (name, description) VALUES (?, ?)").run(r.name, r.description).lastInsertRowid);
+      newId.set(r.id, id);
+      const from = r.parent_id === null ? r.profession_id : newId.get(r.parent_id)!;
+      db.prepare("INSERT INTO profession_advancements (from_id, to_id) VALUES (?, ?)").run(from, id);
+    }
+    db.exec("DROP TABLE ranks");
+  })();
+}
 
 export default db;
 
@@ -254,15 +270,6 @@ export interface Profession {
   description: string;
 }
 
-/** An advancement option. Siblings under the same parent are alternative choices at that level. */
-export interface Rank {
-  id: number;
-  profession_id: number;
-  parent_id: number | null;
-  name: string;
-  description: string;
-}
-
 export function listProfessions(): Profession[] {
   return db.prepare<[], Profession>("SELECT id, name, description FROM professions ORDER BY name").all();
 }
@@ -280,18 +287,31 @@ export function saveProfession(id: number | null, p: Omit<Profession, "id">): nu
   return id;
 }
 
-export function listRanks(professionId: number): Rank[] {
+/** Professions this one advances to (its next-level advancements). */
+export function listAdvancements(professionId: number): Profession[] {
   return db
-    .prepare<[number], Rank>("SELECT id, profession_id, parent_id, name, description FROM ranks WHERE profession_id = ? ORDER BY id")
+    .prepare<[number], Profession>(
+      `SELECT p.id, p.name, p.description FROM profession_advancements a
+       JOIN professions p ON p.id = a.to_id WHERE a.from_id = ? ORDER BY p.name`
+    )
     .all(professionId);
 }
 
-export function addRank(r: Omit<Rank, "id">): void {
-  db.prepare<Omit<Rank, "id">>(
-    "INSERT INTO ranks (profession_id, parent_id, name, description) VALUES (@profession_id, @parent_id, @name, @description)"
-  ).run(r);
+/** Professions that advance to this one. */
+export function listPrerequisites(professionId: number): Profession[] {
+  return db
+    .prepare<[number], Profession>(
+      `SELECT p.id, p.name, p.description FROM profession_advancements a
+       JOIN professions p ON p.id = a.from_id WHERE a.to_id = ? ORDER BY p.name`
+    )
+    .all(professionId);
 }
 
-export function updateRank(id: number, name: string, description: string): void {
-  db.prepare<[string, string, number]>("UPDATE ranks SET name = ?, description = ? WHERE id = ?").run(name, description, id);
+export function linkAdvancement(fromId: number, toId: number): void {
+  if (fromId === toId) return;
+  db.prepare<[number, number]>("INSERT OR IGNORE INTO profession_advancements (from_id, to_id) VALUES (?, ?)").run(fromId, toId);
+}
+
+export function unlinkAdvancement(fromId: number, toId: number): void {
+  db.prepare<[number, number]>("DELETE FROM profession_advancements WHERE from_id = ? AND to_id = ?").run(fromId, toId);
 }

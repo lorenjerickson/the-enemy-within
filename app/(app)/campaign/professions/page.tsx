@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listProfessions } from "@/lib/db";
+import { listPrerequisites, listProfessions } from "@/lib/db";
+
+const prerequisiteNames = (id: number) =>
+  listPrerequisites(id).map((p) => `from ${p.name}`).join(", ");
 
 export default async function Professions() {
   await connection();
@@ -24,6 +27,9 @@ export default async function Professions() {
                 <div>
                   <div className="font-medium">{p.name}</div>
                   <div className="text-sm opacity-70">{p.description}</div>
+                </div>
+                <div className="text-xs opacity-60 self-center">
+                  {prerequisiteNames(p.id) || "Starting profession"}
                 </div>
               </Link>
             </li>
