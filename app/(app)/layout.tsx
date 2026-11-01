@@ -3,7 +3,13 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { getGm } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { logout, requireUser } from "@/lib/auth";
+
+async function doLogout() {
+  "use server";
+  await logout();
+  redirect("/login");
+}
 
 const GM_NAV = [
   { href: "/users", label: "Users" },
@@ -29,7 +35,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </ul>
           </nav>
         )}
-        <span className="ml-auto text-sm opacity-70">{user.name}</span>
+        <details className="dropdown dropdown-end ml-auto">
+          <summary className="btn btn-ghost btn-sm">{user.name}</summary>
+          <ul className="menu dropdown-content bg-base-100 rounded-box z-10 w-40 p-2 shadow">
+            <li>
+              <form action={doLogout}>
+                <button className="w-full text-left">Log out</button>
+              </form>
+            </li>
+          </ul>
+        </details>
       </header>
       <main className="p-8">{children}</main>
     </>

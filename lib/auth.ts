@@ -37,3 +37,10 @@ export async function requireUser(): Promise<User> {
   if (user.must_change_password) redirect("/change-password");
   return user;
 }
+
+export async function logout(): Promise<void> {
+  const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+  if (token) db.prepare<[string]>("DELETE FROM sessions WHERE token = ?").run(token);
+  jar.delete(COOKIE);
+}
