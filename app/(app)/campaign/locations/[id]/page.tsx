@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { getLocation, listLevels } from "@/lib/db";
-import { deleteLevel, submitLevel, submitLevelName } from "../actions";
 import LocationForm from "../LocationForm";
+import LevelBar from "./LevelBar";
 import MapView from "./MapView";
 
 export default async function EditLocation({
@@ -27,35 +26,7 @@ export default async function EditLocation({
       <LocationForm initial={location} />
       <div className="max-w-4xl space-y-3">
         <h3 className="font-semibold">Map</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <div role="tablist" className="tabs tabs-box tabs-sm">
-            {levels.map((l) => (
-              <Link
-                key={l.id}
-                role="tab"
-                href={`/campaign/locations/${location.id}?level=${l.id}`}
-                className={`tab ${l.id === level.id ? "tab-active" : ""}`}
-              >
-                {l.name}
-              </Link>
-            ))}
-          </div>
-          <form key={levels.length} action={submitLevel.bind(null, location.id)} className="flex gap-1">
-            <input name="name" placeholder="New level name" className="input input-sm w-40" />
-            <button className="btn btn-sm">+ Add level</button>
-          </form>
-        </div>
-        <div className="flex items-center gap-2">
-          <form key={`${level.id}:${level.name}`} action={submitLevelName.bind(null, location.id, level.id)} className="flex gap-1">
-            <input name="name" defaultValue={level.name} required className="input input-sm w-48" aria-label="Level name" />
-            <button className="btn btn-sm">Rename</button>
-          </form>
-          {levels.length > 1 && (
-            <form action={deleteLevel.bind(null, location.id, level.id)}>
-              <button className="btn btn-sm btn-ghost text-error">Remove level</button>
-            </form>
-          )}
-        </div>
+        <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
         <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} />
       </div>
     </div>

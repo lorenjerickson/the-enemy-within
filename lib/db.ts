@@ -137,6 +137,8 @@ addColumn("actions", "creature_id", "INTEGER REFERENCES creatures(id)");
 addColumn("actions", "boosts", "TEXT NOT NULL DEFAULT '[]'"); // JSON Boost[]
 addColumn("actions", "duration_amount", "INTEGER NOT NULL DEFAULT 1");
 addColumn("actions", "duration_unit", "TEXT NOT NULL DEFAULT ''"); // DurationUnit, '' = instant
+addColumn("map_levels", "position", "REAL NOT NULL DEFAULT 0"); // higher = further up
+db.exec("UPDATE map_levels SET position = id WHERE position = 0");
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
@@ -613,15 +615,16 @@ export interface MapLevel {
   id: number;
   location_id: number;
   name: string;
+  position: number; // higher = further up
   background: MapBackground;
   hidden: MapLayer[];
 }
 
-/** A location's levels in creation order; a location always has at least one. */
+/** A location's levels, top level first; a location always has at least one. */
 export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
-    db.prepare<[number], { id: number; location_id: number; name: string; background: string | null }>(
-      "SELECT id, location_id, name, background FROM map_levels WHERE location_id = ? ORDER BY id"
+    db.prepare<[number], { id: number; location_id: number; name: string; position: number; background: string | null }>(
+      "SELECT id, location_id, name, position, background FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
@@ -638,12 +641,22 @@ export function listLevels(locationId: number): MapLevel[] {
   }));
 }
 
-export function addLevel(locationId: number, name: string): number {
-  return Number(db.prepare<[number, string]>("INSERT INTO map_levels (location_id, name) VALUES (?, ?)").run(locationId, name).lastInsertRowid);
-}
-
-export function renameLevel(levelId: number, name: string): void {
-  db.prepare<[string, number]>("UPDATE map_levels SET name = ? WHERE id = ?").run(name, levelId);
+/** Adds a level directly above or below `relativeTo` (or at the top when there is none yet). */
+export function addLevel(locationId: number, name: string, relativeTo?: { levelId: number; where: "above" | "below" }): number {
+  const positions = db
+    .prepare<[number], { id: number; position: number }>("SELECT id, position FROM map_levels WHERE location_id = ? ORDER BY position")
+    .all(locationId);
+  let position = (positions.at(-1)?.position ?? 0) + 1;
+  const i = relativeTo ? positions.findIndex((p) => p.id === relativeTo.levelId) : -1;
+  if (i >= 0) {
+    const here = positions[i].position;
+    const neighbour = relativeTo!.where === "above" ? positions[i + 1]?.position ?? here + 2 : positions[i - 1]?.position ?? here - 2;
+    position = (here + neighbour) / 2;
+  }
+  return Number(
+    db.prepare<[number, string, number]>("INSERT INTO map_levels (location_id, name, position) VALUES (?, ?, ?)").run(locationId, name, position)
+      .lastInsertRowid
+  );
 }
 
 export function removeLevel(levelId: number): void {

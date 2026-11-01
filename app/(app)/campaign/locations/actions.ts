@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addLevel, listLevels, listLocations, removeLevel, renameLevel, saveBackground, saveLocation, setLayerVisible } from "@/lib/db";
+import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { MAP_LAYERS, type MapLayer } from "@/lib/maps";
 
@@ -24,16 +24,13 @@ export async function toggleLayer(locationId: number, levelId: number, layer: Ma
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
-export async function submitLevel(locationId: number, formData: FormData) {
+/** Adds a named level above or below the current one. */
+export async function submitLevel(locationId: number, currentLevelId: number, formData: FormData) {
   await requireGm();
-  const id = addLevel(locationId, String(formData.get("name") ?? "").trim() || "New level");
+  const where = formData.get("where") === "below" ? "below" : "above";
+  const name = String(formData.get("name") ?? "").trim() || "New level";
+  const id = addLevel(locationId, name, { levelId: currentLevelId, where });
   redirect(`/campaign/locations/${locationId}?level=${id}`);
-}
-
-export async function submitLevelName(locationId: number, levelId: number, formData: FormData) {
-  await requireGm();
-  renameLevel(levelId, String(formData.get("name") ?? "").trim() || "Unnamed level");
-  revalidatePath(`/campaign/locations/${locationId}`);
 }
 
 export async function deleteLevel(locationId: number, levelId: number) {
