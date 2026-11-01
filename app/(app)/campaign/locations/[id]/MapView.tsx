@@ -40,6 +40,20 @@ function useImage(url: string | null): HTMLImageElement | null {
   return img;
 }
 
+/** Grid square size in canvas pixels. */
+const GRID_SIZE = 50;
+
+/** Where the map image is drawn: fitted inside the background's padded region, centred, aspect ratio preserved. */
+function mapRect({ background: { padding: p }, mapImageEl: img }: MapState, w: number, h: number) {
+  if (!img) return null;
+  const innerW = Math.max(0, w - p.left - p.right);
+  const innerH = Math.max(0, h - p.top - p.bottom);
+  const scale = Math.min(innerW / img.naturalWidth, innerH / img.naturalHeight);
+  const drawW = img.naturalWidth * scale;
+  const drawH = img.naturalHeight * scale;
+  return { x: p.left + (innerW - drawW) / 2, y: p.top + (innerH - drawH) / 2, w: drawW, h: drawH };
+}
+
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
 const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -57,15 +71,22 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       ctx.drawImage(img, 0, 0, w, h);
     }
   },
-  // The map image is fitted inside the background's padded region, centred, aspect ratio preserved.
-  map: ({ background: { padding: p }, mapImageEl: img }) => (ctx, w, h) => {
-    if (!img) return;
-    const innerW = Math.max(0, w - p.left - p.right);
-    const innerH = Math.max(0, h - p.top - p.bottom);
-    const scale = Math.min(innerW / img.naturalWidth, innerH / img.naturalHeight);
-    const drawW = img.naturalWidth * scale;
-    const drawH = img.naturalHeight * scale;
-    ctx.drawImage(img, p.left + (innerW - drawW) / 2, p.top + (innerH - drawH) / 2, drawW, drawH);
+  map: (state) => (ctx, w, h) => {
+    const r = mapRect(state, w, h);
+    if (r && state.mapImageEl) ctx.drawImage(state.mapImageEl, r.x, r.y, r.w, r.h);
+  },
+  // Square grid over the map image (or the padded region when there's no image yet).
+  grid: (state) => (ctx, w, h) => {
+    const p = state.background.padding;
+    const r = mapRect(state, w, h) ?? { x: p.left, y: p.top, w: w - p.left - p.right, h: h - p.top - p.bottom };
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = r.x; x <= r.x + r.w + 0.5; x += GRID_SIZE) { ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); }
+    for (let y = r.y; y <= r.y + r.h + 0.5; y += GRID_SIZE) { ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); }
+    ctx.stroke();
+    ctx.restore();
   },
 };
 
