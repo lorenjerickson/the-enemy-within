@@ -4,7 +4,7 @@ import { listItems, listProfessionGraph } from "@/lib/db";
 export const equippableItems = () =>
   listItems()
     .filter((i) => i.slots.length > 0)
-    .map(({ id, name, slots }) => ({ id, name, slots }));
+    .map(({ id, name, slots, defense }) => ({ id, name, slots, defense }));
 
 /** Profession graph trimmed for the client picker. */
 export const professionNodes = () => listProfessionGraph().map(({ id, name, prerequisites }) => ({ id, name, prerequisites }));

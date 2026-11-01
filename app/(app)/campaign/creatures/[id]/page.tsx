@@ -12,7 +12,7 @@ export default async function EditCreature({ params }: { params: Promise<{ id: s
   if (!creature) notFound();
   const items = listItems()
     .filter((i) => i.slots.length > 0)
-    .map(({ id, name, slots }) => ({ id, name, slots }));
+    .map(({ id, name, slots, defense }) => ({ id, name, slots, defense }));
   return (
     <div className="space-y-8">
       <CreatureForm items={items} initial={creature} />

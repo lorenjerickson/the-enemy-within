@@ -8,6 +8,6 @@ export default async function NewCreature() {
   await requireGm();
   const items = listItems()
     .filter((i) => i.slots.length > 0)
-    .map(({ id, name, slots }) => ({ id, name, slots }));
+    .map(({ id, name, slots, defense }) => ({ id, name, slots, defense }));
   return <CreatureForm items={items} />;
 }
