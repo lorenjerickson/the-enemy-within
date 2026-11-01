@@ -14,6 +14,7 @@ export default function ItemForm() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [type, setType] = useState("");
+  const [stackable, setStackable] = useState(false);
   const canPickImage = name.trim() !== "" && description.trim() !== "";
 
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -103,6 +104,20 @@ export default function ItemForm() {
             <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" className="input w-full" /></label>
           <label className="floating-label"><span>To-hit modifier (e.g. 1d4 or -2)</span>
             <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. 1d4 or -2)" className="input w-full" /></label>
+        </div>
+      )}
+      {type === "consumable" && (
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input name="stackable" type="checkbox" className="checkbox" checked={stackable} onChange={(e) => setStackable(e.target.checked)} />
+            Stackable
+          </label>
+          {stackable && (
+            <div className="flex-1">
+              <label className="floating-label"><span>Max stack size</span>
+                <input name="max_stack" type="number" min="2" required placeholder="Max stack size" className="input w-full" /></label>
+            </div>
+          )}
         </div>
       )}
       <button className="btn btn-primary">Save item</button>
