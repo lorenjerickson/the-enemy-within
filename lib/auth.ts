@@ -44,3 +44,9 @@ export async function logout(): Promise<void> {
   if (token) db.prepare<[string]>("DELETE FROM sessions WHERE token = ?").run(token);
   jar.delete(COOKIE);
 }
+
+export async function requireGm(): Promise<User> {
+  const user = await requireUser();
+  if (user.role !== "gm") redirect("/");
+  return user;
+}

@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireGm } from "@/lib/auth";
 
-export default async function Campaign() {
+export default async function CampaignOverview() {
   await connection();
-  const user = await requireUser();
-  if (user.role !== "gm") redirect("/");
-  return <h2 className="text-xl font-semibold">Campaign</h2>;
+  await requireGm();
+  return <h2 className="text-xl font-semibold">Overview</h2>;
 }
