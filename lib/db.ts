@@ -55,3 +55,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   const test = crypto.scryptSync(password, salt, 64);
   return crypto.timingSafeEqual(test, Buffer.from(hash, "hex"));
 }
+
+export function listPlayers(): User[] {
+  return db
+    .prepare<[], User>("SELECT id, name, username, contact, role FROM users WHERE role = 'player' ORDER BY name")
+    .all();
+}
