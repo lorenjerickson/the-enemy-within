@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { listLocations, saveLocation } from "@/lib/db";
+import { revalidatePath } from "next/cache";
+import { listLocations, saveLocation, setLayerVisible } from "@/lib/db";
+import { MAP_LAYERS, type MapLayer } from "@/lib/maps";
 
 export async function submitLocation(id: number | null, formData: FormData) {
   await requireGm();
@@ -12,4 +14,11 @@ export async function submitLocation(id: number | null, formData: FormData) {
   if (parent_id !== null && parent_id === id) throw new Error("A location cannot be inside itself");
   saveLocation(id, { parent_id, name: text("name"), description: text("description") });
   redirect("/campaign/locations");
+}
+
+export async function toggleLayer(locationId: number, layer: MapLayer, visible: boolean) {
+  await requireGm();
+  if (!MAP_LAYERS.includes(layer)) throw new Error("Invalid layer");
+  setLayerVisible(locationId, layer, visible);
+  revalidatePath(`/campaign/locations/${locationId}`);
 }

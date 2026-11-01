@@ -3,6 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
+import type { MapLayer } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
@@ -71,6 +72,12 @@ db.exec(`
     parent_id INTEGER REFERENCES locations(id), -- null = top level
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT ''
+  );
+  -- Map layers the GM has hidden on a location's map (all layers are visible by default).
+  CREATE TABLE IF NOT EXISTS location_hidden_layers (
+    location_id INTEGER NOT NULL REFERENCES locations(id),
+    layer TEXT NOT NULL, -- MapLayer
+    PRIMARY KEY (location_id, layer)
   );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
@@ -575,5 +582,20 @@ export function saveLocation(id: number | null, l: Omit<Location, "id">): void {
     db.prepare<Omit<Location, "id">>("INSERT INTO locations (parent_id, name, description) VALUES (@parent_id, @name, @description)").run(l);
   } else {
     db.prepare<Location>("UPDATE locations SET parent_id = @parent_id, name = @name, description = @description WHERE id = @id").run({ ...l, id });
+  }
+}
+
+export function listHiddenLayers(locationId: number): MapLayer[] {
+  return db
+    .prepare<[number], { layer: MapLayer }>("SELECT layer FROM location_hidden_layers WHERE location_id = ?")
+    .all(locationId)
+    .map((r) => r.layer);
+}
+
+export function setLayerVisible(locationId: number, layer: MapLayer, visible: boolean): void {
+  if (visible) {
+    db.prepare<[number, string]>("DELETE FROM location_hidden_layers WHERE location_id = ? AND layer = ?").run(locationId, layer);
+  } else {
+    db.prepare<[number, string]>("INSERT OR IGNORE INTO location_hidden_layers (location_id, layer) VALUES (?, ?)").run(locationId, layer);
   }
 }
