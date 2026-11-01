@@ -2,10 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getProfession, listAdvancements, listPrerequisites, listProfessionModifiers, listProfessions, type Profession } from "@/lib/db";
+import {
+  getProfession, listAdvancements, listItems, listPrerequisites, listProfessionActions, listProfessionItems,
+  listProfessionModifiers, listProfessions, type Profession,
+} from "@/lib/db";
 import { MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
-import { addAdvancement, addModifier, deleteModifier, removeAdvancement } from "../actions";
+import { addAdvancement, addGrantedItem, addModifier, deleteModifier, removeAdvancement, removeGrantedItem } from "../actions";
+import ActionsSection from "./ActionsSection";
 import ProfessionFields from "../ProfessionFields";
 
 function ProfessionLinks({ professions, onRemove }: { professions: Profession[]; onRemove?: (p: Profession) => () => Promise<void> }) {
@@ -36,6 +40,9 @@ export default async function EditProfession({ params }: { params: Promise<{ id:
   const linked = new Set([profession.id, ...advancements.map((a) => a.id)]);
   const candidates = listProfessions().filter((p) => !linked.has(p.id));
   const modifiers = listProfessionModifiers(profession.id);
+  const grantedItems = listProfessionItems(profession.id);
+  const grantedIds = new Set(grantedItems.map((i) => i.id));
+  const itemCandidates = listItems().filter((i) => !grantedIds.has(i.id));
 
   return (
     <section className="space-y-6 max-w-2xl">
@@ -77,6 +84,36 @@ export default async function EditProfession({ params }: { params: Promise<{ id:
           <button className="btn btn-primary btn-sm">Add modifier</button>
         </form>
       </div>
+
+      <div className="space-y-2">
+        <h3 className="font-semibold">Granted items</h3>
+        {grantedItems.length === 0 ? (
+          <p className="text-sm opacity-60">None</p>
+        ) : (
+          <ul className="space-y-1">
+            {grantedItems.map((i) => (
+              <li key={i.id} className="flex items-center gap-2">
+                <Link href={`/campaign/items/${i.id}`} className="link link-hover font-medium">{i.name}</Link>
+                <span className="text-sm opacity-70">{i.description}</span>
+                <form action={removeGrantedItem.bind(null, profession.id, i.id)}>
+                  <button className="btn btn-ghost btn-xs">Remove</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form key={grantedItems.length} action={addGrantedItem.bind(null, profession.id)} className="flex items-center gap-2 pt-2">
+          <select name="item_id" required defaultValue="" className="select select-sm">
+            <option value="" disabled>Grant item…</option>
+            {itemCandidates.map((i) => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary btn-sm">Grant item</button>
+        </form>
+      </div>
+
+      <ActionsSection professionId={profession.id} actions={listProfessionActions(profession.id)} />
 
       <div className="space-y-2">
         <h3 className="font-semibold">Prerequisites</h3>

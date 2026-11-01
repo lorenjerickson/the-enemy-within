@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
 import type { ModifierTarget } from "@/lib/modifiers";
+import type { RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -41,6 +42,23 @@ db.exec(`
     profession_id INTEGER NOT NULL REFERENCES professions(id),
     target TEXT NOT NULL, -- ModifierTarget, e.g. "attribute:might", "skill:stealth", "health"
     value TEXT NOT NULL   -- signed number or dice expression, e.g. "+1", "-2", "1d4"
+  );
+  CREATE TABLE IF NOT EXISTS profession_items (
+    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    item_id INTEGER NOT NULL REFERENCES items(id),
+    PRIMARY KEY (profession_id, item_id)
+  );
+  CREATE TABLE IF NOT EXISTS profession_actions (
+    id INTEGER PRIMARY KEY,
+    profession_id INTEGER NOT NULL REFERENCES professions(id),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    roll TEXT NOT NULL DEFAULT 'normal', -- RollMode for the to-hit roll
+    attack TEXT,                         -- to-hit modifier, signed number or dice
+    damage TEXT,                         -- damage dice
+    damage_type TEXT NOT NULL DEFAULT '',
+    radius REAL NOT NULL DEFAULT 0,      -- metres around the actor; 0 = single target
+    split INTEGER NOT NULL DEFAULT 0     -- 1 = damage divided evenly across everyone in the radius
   );
   -- from_id advances to to_id; to_id's prerequisites are all its from_ids.
   CREATE TABLE IF NOT EXISTS profession_advancements (
@@ -344,4 +362,63 @@ export function addProfessionModifier(m: Omit<ProfessionModifier, "id">): void {
 
 export function removeProfessionModifier(id: number): void {
   db.prepare<[number]>("DELETE FROM profession_modifiers WHERE id = ?").run(id);
+}
+
+/** Items handed to whoever takes this profession. */
+export function listProfessionItems(professionId: number): Item[] {
+  return db
+    .prepare<[number], ItemRow>(
+      `SELECT ${ITEM_COLUMNS} FROM items WHERE id IN (SELECT item_id FROM profession_items WHERE profession_id = ?) ORDER BY name`
+    )
+    .all(professionId)
+    .map(parseItem);
+}
+
+export function grantItem(professionId: number, itemId: number): void {
+  db.prepare<[number, number]>("INSERT OR IGNORE INTO profession_items (profession_id, item_id) VALUES (?, ?)").run(professionId, itemId);
+}
+
+export function revokeItem(professionId: number, itemId: number): void {
+  db.prepare<[number, number]>("DELETE FROM profession_items WHERE profession_id = ? AND item_id = ?").run(professionId, itemId);
+}
+
+/** A declared intent granted by a profession, with its own roll bonuses/penalties. */
+export interface ProfessionAction {
+  id: number;
+  profession_id: number;
+  name: string;
+  description: string;
+  roll: RollMode;
+  attack: string | null;
+  damage: string | null;
+  damage_type: string;
+  radius: number;
+  split: 0 | 1;
+}
+
+const ACTION_COLUMNS = "id, profession_id, name, description, roll, attack, damage, damage_type, radius, split";
+
+export function listProfessionActions(professionId: number): ProfessionAction[] {
+  return db
+    .prepare<[number], ProfessionAction>(`SELECT ${ACTION_COLUMNS} FROM profession_actions WHERE profession_id = ? ORDER BY name`)
+    .all(professionId);
+}
+
+/** Inserts when id is null, otherwise updates. */
+export function saveProfessionAction(id: number | null, a: Omit<ProfessionAction, "id">): void {
+  if (id === null) {
+    db.prepare<Omit<ProfessionAction, "id">>(
+      `INSERT INTO profession_actions (profession_id, name, description, roll, attack, damage, damage_type, radius, split)
+       VALUES (@profession_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split)`
+    ).run(a);
+  } else {
+    db.prepare<ProfessionAction>(
+      `UPDATE profession_actions SET name = @name, description = @description, roll = @roll, attack = @attack,
+         damage = @damage, damage_type = @damage_type, radius = @radius, split = @split WHERE id = @id`
+    ).run({ ...a, id });
+  }
+}
+
+export function removeProfessionAction(id: number): void {
+  db.prepare<[number]>("DELETE FROM profession_actions WHERE id = ?").run(id);
 }

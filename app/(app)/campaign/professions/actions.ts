@@ -3,8 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { addProfessionModifier, linkAdvancement, removeProfessionModifier, saveProfession, unlinkAdvancement } from "@/lib/db";
-import { isModifierFormula } from "@/lib/itemTypes";
+import {
+  addProfessionModifier, grantItem, linkAdvancement, removeProfessionAction, removeProfessionModifier,
+  revokeItem, saveProfession, saveProfessionAction, unlinkAdvancement,
+} from "@/lib/db";
+import { ROLL_MODES, type RollMode } from "@/lib/actions";
+import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 import { isModifierTarget } from "@/lib/modifiers";
 
 const text = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -44,5 +48,49 @@ export async function addModifier(professionId: number, formData: FormData) {
 export async function deleteModifier(professionId: number, modifierId: number) {
   await requireGm();
   removeProfessionModifier(modifierId);
+  revalidatePath(`/campaign/professions/${professionId}`);
+}
+
+export async function addGrantedItem(professionId: number, formData: FormData) {
+  await requireGm();
+  const itemId = Number(formData.get("item_id"));
+  if (itemId) grantItem(professionId, itemId);
+  revalidatePath(`/campaign/professions/${professionId}`);
+}
+
+export async function removeGrantedItem(professionId: number, itemId: number) {
+  await requireGm();
+  revokeItem(professionId, itemId);
+  revalidatePath(`/campaign/professions/${professionId}`);
+}
+
+/** Creates the action when actionId is null, otherwise updates it. */
+export async function submitAction(professionId: number, actionId: number | null, formData: FormData) {
+  await requireGm();
+  const compact = (k: string) => text(formData, k).toLowerCase().replace(/\s/g, "");
+  const roll = text(formData, "roll") as RollMode;
+  if (!ROLL_MODES.includes(roll)) throw new Error("Invalid roll mode");
+  const attack = compact("attack") || null;
+  if (attack && !isModifierFormula(attack)) throw new Error("Invalid to-hit modifier");
+  const damage = compact("damage") || null;
+  if (damage && !isDiceFormula(damage)) throw new Error("Invalid damage dice");
+
+  saveProfessionAction(actionId, {
+    profession_id: professionId,
+    name: text(formData, "name"),
+    description: text(formData, "description"),
+    roll,
+    attack,
+    damage,
+    damage_type: text(formData, "damage_type").toLowerCase(),
+    radius: Math.max(0, Number(formData.get("radius")) || 0),
+    split: formData.get("split") === "on" ? 1 : 0,
+  });
+  revalidatePath(`/campaign/professions/${professionId}`);
+}
+
+export async function deleteAction(professionId: number, actionId: number) {
+  await requireGm();
+  removeProfessionAction(actionId);
   revalidatePath(`/campaign/professions/${professionId}`);
 }
