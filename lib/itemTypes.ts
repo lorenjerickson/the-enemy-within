@@ -13,7 +13,7 @@ export const MODIFIER_PATTERN = `[+\\-]?(${DICE_PATTERN}|\\d+)`;
 export const isModifierFormula = (s: string) => new RegExp(`^${MODIFIER_PATTERN}$`).test(s);
 
 export const EQUIP_SLOTS = [
-  "head", "neck", "shoulders", "back", "arms", "hands", "off hand",
+  "head", "neck", "shoulders", "back", "chest", "arms", "hands", "off hand",
   "main hand", "legs", "feet", "waist", "finger", "container",
 ] as const;
 export type EquipSlot = (typeof EQUIP_SLOTS)[number];
