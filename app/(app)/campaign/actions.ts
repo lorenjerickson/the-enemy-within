@@ -8,11 +8,12 @@ import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, 
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
-export type ArtworkKind = "item" | "creature" | "texture";
+export type ArtworkKind = "item" | "creature" | "texture" | "map";
 
 const PROMPTS: Record<ArtworkKind, string> = {
   item: "Illustration of a single item for a dark fantasy roleplaying game, centered on a plain background.",
   creature: "Illustration of a creature for a dark fantasy roleplaying game, full body, dramatic lighting.",
+  map: "Top-down tabletop battle map for a dark fantasy roleplaying game, orthographic view, no grid, no text.",
   texture: "Seamless, tileable top-down texture for a tabletop battle map, evenly lit, no objects or borders.",
 };
 

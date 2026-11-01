@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { MAP_LAYERS, type MapBackground, type MapLayer } from "@/lib/maps";
+import { MAP_LAYERS, type MapBackground, type MapImage, type MapLayer } from "@/lib/maps";
 import BackgroundEditor from "./BackgroundEditor";
+import MapImageEditor from "./MapImageEditor";
 import { toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -22,6 +23,21 @@ type Draw = (ctx: CanvasRenderingContext2D, width: number, height: number) => vo
 interface MapState {
   background: MapBackground;
   backgroundImage: HTMLImageElement | null;
+  mapImage: MapImage;
+  mapImageEl: HTMLImageElement | null;
+}
+
+/** Loads an image URL into an element (null until loaded, or when there's no URL). */
+function useImage(url: string | null): HTMLImageElement | null {
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    setImg(null);
+    if (!url) return;
+    const el = new Image();
+    el.onload = () => setImg(el);
+    el.src = url;
+  }, [url]);
+  return img;
 }
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
@@ -41,6 +57,16 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       ctx.drawImage(img, 0, 0, w, h);
     }
   },
+  // The map image plus its padding is scaled to fit the canvas, centred; padding shows the layers beneath.
+  map: ({ mapImage: { padding: p }, mapImageEl: img }) => (ctx, w, h) => {
+    if (!img) return;
+    const worldW = p.left + img.naturalWidth + p.right;
+    const worldH = p.top + img.naturalHeight + p.bottom;
+    const scale = Math.min(w / worldW, h / worldH);
+    const x = (w - worldW * scale) / 2 + p.left * scale;
+    const y = (h - worldH * scale) / 2 + p.top * scale;
+    ctx.drawImage(img, x, y, img.naturalWidth * scale, img.naturalHeight * scale);
+  },
 };
 
 /**
@@ -52,11 +78,13 @@ export default function MapView({
   levelId,
   hidden,
   background,
+  mapImage,
 }: {
   locationId: number;
   levelId: number;
   hidden: MapLayer[];
   background: MapBackground;
+  mapImage: MapImage;
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -67,14 +95,8 @@ export default function MapView({
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
-
-  useEffect(() => {
-    if (background.mode !== "texture" || !background.image) return setBackgroundImage(null);
-    const img = new Image();
-    img.onload = () => setBackgroundImage(img);
-    img.src = background.image;
-  }, [background.mode, background.image]);
+  const backgroundImage = useImage(background.mode === "texture" ? background.image : null);
+  const mapImageEl = useImage(mapImage.image);
   const [selected, setSelected] = useState<MapLayer | null>(null);
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
@@ -91,14 +113,14 @@ export default function MapView({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       for (const layer of MAP_LAYERS) {
-        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage })(ctx, width, height);
+        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage, mapImage, mapImageEl })(ctx, width, height);
       }
     };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [hiddenSet, background, backgroundImage]);
+  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl]);
 
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
@@ -117,6 +139,8 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "map" ? (
+                <MapImageEditor key={JSON.stringify(mapImage)} locationId={locationId} levelId={levelId} mapImage={mapImage} />
               ) : (
                 <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
               )}

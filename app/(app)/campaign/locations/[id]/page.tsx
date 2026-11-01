@@ -27,7 +27,7 @@ export default async function EditLocation({
       <div className="max-w-4xl space-y-3">
         <h3 className="font-semibold">Map</h3>
         <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
-        <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} />
+        <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} />
       </div>
     </div>
   );

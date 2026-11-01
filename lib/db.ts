@@ -3,7 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
-import { DEFAULT_BACKGROUND, type MapBackground, type MapLayer } from "@/lib/maps";
+import { DEFAULT_BACKGROUND, DEFAULT_MAP_IMAGE, type MapBackground, type MapImage, type MapLayer } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
@@ -139,6 +139,7 @@ addColumn("actions", "duration_amount", "INTEGER NOT NULL DEFAULT 1");
 addColumn("actions", "duration_unit", "TEXT NOT NULL DEFAULT ''"); // DurationUnit, '' = instant
 addColumn("map_levels", "position", "REAL NOT NULL DEFAULT 0"); // higher = further up
 db.exec("UPDATE map_levels SET position = id WHERE position = 0");
+addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
@@ -617,23 +618,27 @@ export interface MapLevel {
   name: string;
   position: number; // higher = further up
   background: MapBackground;
+  mapImage: MapImage;
   hidden: MapLayer[];
 }
 
 /** A location's levels, top level first; a location always has at least one. */
 export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
-    db.prepare<[number], { id: number; location_id: number; name: string; position: number; background: string | null }>(
-      "SELECT id, location_id, name, position, background FROM map_levels WHERE location_id = ? ORDER BY position DESC"
+    db.prepare<
+      [number],
+      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null }
+    >("SELECT id, location_id, name, position, background, map_image FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
     addLevel(locationId, "Ground");
     rows = select();
   }
-  return rows.map((r) => ({
+  return rows.map(({ map_image, ...r }) => ({
     ...r,
     background: r.background ? { ...DEFAULT_BACKGROUND, ...JSON.parse(r.background) } : DEFAULT_BACKGROUND,
+    mapImage: map_image ? { ...DEFAULT_MAP_IMAGE, ...JSON.parse(map_image) } : DEFAULT_MAP_IMAGE,
     hidden: db
       .prepare<[number], { layer: MapLayer }>("SELECT layer FROM level_hidden_layers WHERE level_id = ?")
       .all(r.id)
@@ -676,4 +681,8 @@ export function setLayerVisible(levelId: number, layer: MapLayer, visible: boole
 
 export function saveBackground(levelId: number, background: MapBackground): void {
   db.prepare<[string, number]>("UPDATE map_levels SET background = ? WHERE id = ?").run(JSON.stringify(background), levelId);
+}
+
+export function saveMapImage(levelId: number, mapImage: MapImage): void {
+  db.prepare<[string, number]>("UPDATE map_levels SET map_image = ? WHERE id = ?").run(JSON.stringify(mapImage), levelId);
 }

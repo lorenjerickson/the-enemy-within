@@ -14,3 +14,12 @@ export interface MapBackground {
 }
 
 export const DEFAULT_BACKGROUND: MapBackground = { mode: "color", color: "#2a303c", image: null, fit: "fill" };
+
+/** Map layer settings: the map image and padding (in image pixels) added around each edge. */
+export interface MapImage {
+  image: string | null;
+  padding: { top: number; right: number; bottom: number; left: number };
+}
+
+export const DEFAULT_MAP_IMAGE: MapImage = { image: null, padding: { top: 0, right: 0, bottom: 0, left: 0 } };
+export const EDGES = ["top", "right", "bottom", "left"] as const;
