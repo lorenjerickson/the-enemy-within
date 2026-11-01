@@ -120,6 +120,10 @@ export default function ItemForm() {
           )}
         </div>
       )}
+      {type === "container" && (
+        <label className="floating-label"><span>Capacity (number of items or stacks)</span>
+          <input name="capacity" type="number" min="1" required placeholder="Capacity (number of items or stacks)" className="input w-full" /></label>
+      )}
       <button className="btn btn-primary">Save item</button>
     </form>
   );

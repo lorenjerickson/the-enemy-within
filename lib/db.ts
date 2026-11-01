@@ -43,6 +43,7 @@ addColumn("items", "defense", "TEXT");
 addColumn("items", "damage", "TEXT");
 addColumn("items", "attack", "TEXT");
 addColumn("items", "max_stack", "INTEGER");
+addColumn("items", "capacity", "INTEGER");
 
 export default db;
 
@@ -112,9 +113,10 @@ export interface Item {
   damage: string | null; // dice formula, weapons only
   attack: string | null; // to-hit modifier (dice or flat), weapons only
   max_stack: number | null; // consumables only; 1 = not stackable
+  capacity: number | null; // containers only; number of item slots (a stack fills one slot)
 }
 
-const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack";
+const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity";
 
 export function listItems(): Item[] {
   return db.prepare<[], Item>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all();
@@ -122,7 +124,7 @@ export function listItems(): Item[] {
 
 export function createItem(item: Omit<Item, "id">): void {
   db.prepare<Omit<Item, "id">>(
-    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack)
-     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack)`
+    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity)
+     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity)`
   ).run(item);
 }

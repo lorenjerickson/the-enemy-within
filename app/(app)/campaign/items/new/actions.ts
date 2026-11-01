@@ -24,6 +24,7 @@ export async function addItem(formData: FormData) {
   const attack = type === "weapon" ? text("attack").toLowerCase().replace(/\s/g, "") || "0" : null;
   if (attack !== null && !isModifierFormula(attack)) throw new Error("Invalid attack modifier");
   const stackable = formData.get("stackable") === "on";
+  const capacity = type === "container" ? Math.max(1, Math.round(num("capacity"))) : null;
   const max_stack = type === "consumable" ? (stackable ? Math.max(2, Math.round(num("max_stack"))) : 1) : null;
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
@@ -47,6 +48,7 @@ export async function addItem(formData: FormData) {
     damage,
     attack,
     max_stack,
+    capacity,
   });
   redirect("/campaign/items");
 }
