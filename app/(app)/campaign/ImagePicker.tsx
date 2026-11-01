@@ -12,11 +12,13 @@ export default function ImagePicker({
   name,
   description,
   initial = null,
+  freeUpload = false,
 }: {
   kind: ArtworkKind;
   name: string;
   description: string;
   initial?: string | null;
+  freeUpload?: boolean; // allow upload before name/description are filled (they're only needed to generate)
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(initial);
@@ -24,6 +26,7 @@ export default function ImagePicker({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const enabled = name.trim() !== "" && description.trim() !== "";
+  const uploadEnabled = freeUpload || enabled;
 
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -57,9 +60,9 @@ export default function ImagePicker({
           </span>
         )}
       </div>
-      <label className={`btn btn-sm w-full ${enabled ? "" : "btn-disabled"}`}>
+      <label className={`btn btn-sm w-full ${uploadEnabled ? "" : "btn-disabled"}`}>
         Upload
-        <input ref={fileInput} name="upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={onUpload} disabled={!enabled} />
+        <input ref={fileInput} name="upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={onUpload} disabled={!uploadEnabled} />
       </label>
       <button type="button" className="btn btn-sm w-full" disabled={!enabled || generating} onClick={onGenerate}>
         Generate

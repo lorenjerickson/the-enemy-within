@@ -3,7 +3,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
-import type { MapLayer } from "@/lib/maps";
+import { DEFAULT_BACKGROUND, type MapBackground, type MapLayer } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
@@ -130,6 +130,7 @@ addColumn("actions", "creature_id", "INTEGER REFERENCES creatures(id)");
 addColumn("actions", "boosts", "TEXT NOT NULL DEFAULT '[]'"); // JSON Boost[]
 addColumn("actions", "duration_amount", "INTEGER NOT NULL DEFAULT 1");
 addColumn("actions", "duration_unit", "TEXT NOT NULL DEFAULT ''"); // DurationUnit, '' = instant
+addColumn("locations", "background", "TEXT"); // JSON MapBackground
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
@@ -598,4 +599,13 @@ export function setLayerVisible(locationId: number, layer: MapLayer, visible: bo
   } else {
     db.prepare<[number, string]>("INSERT OR IGNORE INTO location_hidden_layers (location_id, layer) VALUES (?, ?)").run(locationId, layer);
   }
+}
+
+export function getBackground(locationId: number): MapBackground {
+  const row = db.prepare<[number], { background: string | null }>("SELECT background FROM locations WHERE id = ?").get(locationId);
+  return row?.background ? { ...DEFAULT_BACKGROUND, ...JSON.parse(row.background) } : DEFAULT_BACKGROUND;
+}
+
+export function saveBackground(locationId: number, background: MapBackground): void {
+  db.prepare<[string, number]>("UPDATE locations SET background = ? WHERE id = ?").run(JSON.stringify(background), locationId);
 }

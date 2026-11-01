@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { MAP_LAYERS, type MapLayer } from "@/lib/maps";
+import { MAP_LAYERS, type MapBackground, type MapLayer } from "@/lib/maps";
+import BackgroundEditor from "./BackgroundEditor";
 import { toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -17,15 +18,28 @@ function EyeIcon() {
 
 type Draw = (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
 
+/** Everything layers draw from: the location's settings plus any images already loaded. */
+interface MapState {
+  background: MapBackground;
+  backgroundImage: HTMLImageElement | null;
+}
+
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
-const LAYER_RENDERERS: Partial<Record<MapLayer, Draw>> = {
-  base: (ctx, w, h) => {
+const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
+  base: () => (ctx, w, h) => {
     ctx.fillStyle = "#15191e";
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.font = "14px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("All layers are empty", w / 2, h / 2);
+  },
+  background: ({ background, backgroundImage: img }) => (ctx, w, h) => {
+    if (background.mode === "color" || !img) {
+      ctx.fillStyle = background.color;
+      ctx.fillRect(0, 0, w, h);
+    } else if (background.fit === "tile") {
+      ctx.fillStyle = ctx.createPattern(img, "repeat")!;
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      ctx.drawImage(img, 0, 0, w, h);
+    }
   },
 };
 
@@ -33,7 +47,15 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, Draw>> = {
  * The location's map, drawn on a single canvas layer by layer (base first, controls last),
  * with a panel to show or hide each layer. Layer contents come later.
  */
-export default function MapView({ locationId, hidden }: { locationId: number; hidden: MapLayer[] }) {
+export default function MapView({
+  locationId,
+  hidden,
+  background,
+}: {
+  locationId: number;
+  hidden: MapLayer[];
+  background: MapBackground;
+}) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
     const next = new Set(set);
@@ -43,6 +65,14 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (background.mode !== "texture" || !background.image) return setBackgroundImage(null);
+    const img = new Image();
+    img.onload = () => setBackgroundImage(img);
+    img.src = background.image;
+  }, [background.mode, background.image]);
   const [selected, setSelected] = useState<MapLayer | null>(null);
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
@@ -59,14 +89,14 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
       for (const layer of MAP_LAYERS) {
-        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(ctx, width, height);
+        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage })(ctx, width, height);
       }
     };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [hiddenSet]);
+  }, [hiddenSet, background, backgroundImage]);
 
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
@@ -83,8 +113,12 @@ export default function MapView({ locationId, hidden }: { locationId: number; hi
           <canvas ref={canvasRef} className="w-full aspect-video rounded-box bg-base-300" />
           {selected && (
             <div className="rounded-box bg-base-200 p-3" data-editor={selected}>
-              <div className="font-semibold">{capitalize(selected)} layer</div>
-              <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
+              <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
+              {selected === "background" ? (
+                <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} background={background} />
+              ) : (
+                <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
+              )}
             </div>
           )}
         </div>

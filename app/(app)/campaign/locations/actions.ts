@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { listLocations, saveLocation, setLayerVisible } from "@/lib/db";
+import { listLocations, saveBackground, saveLocation, setLayerVisible } from "@/lib/db";
+import { imageFromForm } from "@/lib/images";
 import { MAP_LAYERS, type MapLayer } from "@/lib/maps";
 
 export async function submitLocation(id: number | null, formData: FormData) {
@@ -20,5 +21,19 @@ export async function toggleLayer(locationId: number, layer: MapLayer, visible: 
   await requireGm();
   if (!MAP_LAYERS.includes(layer)) throw new Error("Invalid layer");
   setLayerVisible(locationId, layer, visible);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function submitBackground(locationId: number, formData: FormData) {
+  await requireGm();
+  const mode = formData.get("mode") === "texture" ? "texture" : "color";
+  const color = String(formData.get("color") ?? "");
+  if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Invalid colour");
+  saveBackground(locationId, {
+    mode,
+    color,
+    image: await imageFromForm(formData),
+    fit: formData.get("fit") === "tile" ? "tile" : "fill",
+  });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
