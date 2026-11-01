@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
@@ -6,10 +7,10 @@ import { submitNewRank, submitRank } from "../actions";
 import ProfessionFields from "../ProfessionFields";
 
 /** Small inline name + description form, hidden behind a toggle. */
-function RankForm({ label, action, initial }: { label: string; action: (f: FormData) => Promise<void>; initial?: Rank }) {
+function RankForm({ label, action, initial }: { label: ReactNode; action: (f: FormData) => Promise<void>; initial?: Rank }) {
   return (
     <details>
-      <summary className="btn btn-ghost btn-xs">{label}</summary>
+      <summary className={initial ? "link link-hover list-none" : "btn btn-ghost btn-xs"}>{label}</summary>
       <form action={action} className="flex flex-wrap gap-2 mt-2">
         <input name="name" placeholder="Name (e.g. Sergeant)" required defaultValue={initial?.name} className="input input-sm" />
         <input name="description" placeholder="Description" defaultValue={initial?.description} className="input input-sm flex-1" />
@@ -26,11 +27,17 @@ function Advancements({ professionId, parentId, ranks }: { professionId: number;
       {children.length > 1 && <div className="text-xs opacity-60">Choose one of:</div>}
       {children.map((r) => (
         <div key={r.id} className="space-y-1">
-          <div className="flex items-baseline gap-2">
-            <span className="font-medium">{r.name}</span>
-            <span className="text-sm opacity-70">{r.description}</span>
-          </div>
-          <RankForm key={`${r.name}|${r.description}`} label="Edit" action={submitRank.bind(null, professionId, r.id)} initial={r} />
+          <RankForm
+            key={`${r.name}|${r.description}`}
+            label={
+              <span className="inline-flex items-baseline gap-2">
+                <span className="font-medium">{r.name}</span>
+                <span className="text-sm opacity-70">{r.description}</span>
+              </span>
+            }
+            action={submitRank.bind(null, professionId, r.id)}
+            initial={r}
+          />
           <Advancements professionId={professionId} parentId={r.id} ranks={ranks} />
         </div>
       ))}
