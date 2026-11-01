@@ -1,4 +1,5 @@
-import type { ModifierTarget } from "@/lib/modifiers";
+import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
+import { SKILLS, type ModifierTarget } from "@/lib/modifiers";
 
 export const ROLL_MODES = ["normal", "advantage", "disadvantage"] as const;
 export type RollMode = (typeof ROLL_MODES)[number];
@@ -24,4 +25,24 @@ export function formatDuration(amount: number, unit: DurationUnit): string {
   if (!unit) return "instant";
   if (["turn", "round", "short rest", "long rest"].includes(unit) && amount <= 1) return `until next ${unit}`;
   return `${amount} ${unit}${amount === 1 ? "" : "s"}`;
+}
+
+/** Rolls an action can give advantage/disadvantage on. */
+export type RollKind = `save:${Attribute}` | `check:${Attribute}` | `skill:${string}`;
+
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+export const ROLL_KIND_GROUPS: [string, [RollKind, string][]][] = [
+  ["Saving throws", ATTRIBUTES.map((a) => [`save:${a}`, `${cap(a)} save`])],
+  ["Ability checks", ATTRIBUTES.map((a) => [`check:${a}`, `${cap(a)} check`])],
+  ["Skill checks", SKILLS.map((s) => [`skill:${s}`, `${cap(s)} check`])],
+];
+const ROLL_KIND_LABELS = new Map(ROLL_KIND_GROUPS.flatMap(([, opts]) => opts));
+export const isRollKind = (s: string): s is RollKind => ROLL_KIND_LABELS.has(s as RollKind);
+export const rollKindLabel = (k: RollKind) => ROLL_KIND_LABELS.get(k) ?? k;
+
+/** Advantage or disadvantage an action grants on a kind of roll. */
+export interface RollGrant {
+  roll: RollKind;
+  mode: "advantage" | "disadvantage";
 }

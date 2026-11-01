@@ -1,6 +1,6 @@
-import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, formatDuration } from "@/lib/actions";
-import { targetLabel } from "@/lib/modifiers";
-import BoostsInput from "./BoostsInput";
+import { DAMAGE_TYPES, DURATION_UNITS, ROLL_KIND_GROUPS, ROLL_MODES, formatDuration, rollKindLabel } from "@/lib/actions";
+import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
+import PairListInput from "./PairListInput";
 import type { Action, ActionOwner } from "@/lib/db";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
@@ -15,6 +15,7 @@ function summary(a: Action): string {
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.radius > 0 && `${a.split ? "split" : "each"} within ${a.radius} m`,
     ...a.boosts.map((b) => `${b.value} ${targetLabel(b.target)}`),
+    ...a.roll_grants.map((g) => `${g.mode} on ${rollKindLabel(g.roll)}`),
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
   ]
     .filter(Boolean)
@@ -46,7 +47,29 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
       </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       <div className="col-span-2">
-        <BoostsInput initial={initial?.boosts} />
+        <PairListInput
+          title="Temporary boosts"
+          addLabel="+ Add boost"
+          firstName="boost_target"
+          firstPlaceholder="Boosts…"
+          groups={MODIFIER_TARGET_GROUPS}
+          secondName="boost_value"
+          secondPattern={MODIFIER_PATTERN}
+          secondPlaceholder="+2 or 1d4"
+          initial={initial?.boosts.map((b) => [b.target, b.value])}
+        />
+      </div>
+      <div className="col-span-2">
+        <PairListInput
+          title="Advantage / disadvantage on rolls"
+          addLabel="+ Add roll effect"
+          firstName="grant_roll"
+          firstPlaceholder="Roll…"
+          groups={ROLL_KIND_GROUPS}
+          secondName="grant_mode"
+          secondOptions={["advantage", "disadvantage"]}
+          initial={initial?.roll_grants.map((g) => [g.roll, g.mode])}
+        />
       </div>
       <div className="col-span-2 flex items-center gap-2">
         <span className="text-sm font-semibold">Duration</span>

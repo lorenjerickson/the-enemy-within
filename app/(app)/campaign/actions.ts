@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn } from "@/lib/db";
 import { generateImage } from "@/lib/images";
-import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type DurationUnit, type RollMode } from "@/lib/actions";
+import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
@@ -63,6 +63,15 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     if (/^\d/.test(value)) value = `+${value}`;
     return [{ target, value }];
   });
+  const modes = formData.getAll("grant_mode").map(String);
+  const roll_grants: RollGrant[] = formData.getAll("grant_roll").flatMap((r, i): RollGrant[] => {
+    const roll = String(r);
+    const mode = modes[i];
+    if (!roll || !mode) return [];
+    if (!isRollKind(roll)) throw new Error("Invalid roll kind");
+    if (mode !== "advantage" && mode !== "disadvantage") throw new Error("Invalid roll mode");
+    return [{ roll, mode }];
+  });
   const duration_unit = text("duration_unit") as DurationUnit;
   if (!DURATION_UNITS.includes(duration_unit)) throw new Error("Invalid duration unit");
   const duration_amount = Math.max(1, Math.round(Number(formData.get("duration_amount")) || 1));
@@ -77,6 +86,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     radius: Math.max(0, Number(formData.get("radius")) || 0),
     split: formData.get("split") === "on" ? 1 : 0,
     boosts,
+    roll_grants,
     duration_amount,
     duration_unit,
   });
