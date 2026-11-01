@@ -14,8 +14,13 @@ export async function addItem(formData: FormData) {
   if (!ITEM_TYPES.includes(type)) throw new Error("Invalid item type");
   const rarity = text("rarity") as Rarity;
   if (!RARITIES.includes(rarity)) throw new Error("Invalid rarity");
-  const defense = type === "armor" ? text("defense").toLowerCase().replace(/\s/g, "") : null;
-  if (defense !== null && !isDiceFormula(defense)) throw new Error("Invalid defense dice formula");
+  const dice = (k: string) => {
+    const f = text(k).toLowerCase().replace(/\s/g, "");
+    if (!isDiceFormula(f)) throw new Error(`Invalid ${k} dice formula`);
+    return f;
+  };
+  const defense = type === "armor" ? dice("defense") : null;
+  const damage = type === "weapon" ? dice("damage") : null;
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
   // An uploaded file wins; otherwise use a previously generated image URL.
@@ -35,6 +40,7 @@ export async function addItem(formData: FormData) {
     rarity,
     durability,
     defense,
+    damage,
   });
   redirect("/campaign/items");
 }

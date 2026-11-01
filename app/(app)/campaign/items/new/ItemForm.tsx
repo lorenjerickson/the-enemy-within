@@ -97,6 +97,10 @@ export default function ItemForm() {
         <label className="floating-label"><span>Defense dice (e.g. 1d4)</span>
           <input name="defense" required pattern={DICE_PATTERN} placeholder="Defense dice (e.g. 1d4)" className="input w-full" /></label>
       )}
+      {type === "weapon" && (
+        <label className="floating-label"><span>Damage dice (e.g. 2d6)</span>
+          <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" className="input w-full" /></label>
+      )}
       <button className="btn btn-primary">Save item</button>
     </form>
   );
