@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { ITEM_TYPES, type ItemType } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
 const db = new Database("data/game.db");
@@ -91,8 +92,7 @@ export function listPlayers(): User[] {
     .all();
 }
 
-export const ITEM_TYPES = ["consumable", "armor", "weapon", "ingredient", "tool", "utility"] as const;
-export type ItemType = (typeof ITEM_TYPES)[number];
+export { ITEM_TYPES, type ItemType };
 
 export interface Item {
   id: number;
@@ -112,9 +112,9 @@ export function listItems(): Item[] {
   return db.prepare<[], Item>(`SELECT ${ITEM_COLUMNS} FROM items ORDER BY name`).all();
 }
 
-export function createItem(item: Omit<Item, "id" | "image">): void {
-  db.prepare<Omit<Item, "id" | "image">>(
-    `INSERT INTO items (name, description, type, weight, value, rarity, durability)
-     VALUES (@name, @description, @type, @weight, @value, @rarity, @durability)`
+export function createItem(item: Omit<Item, "id">): void {
+  db.prepare<Omit<Item, "id">>(
+    `INSERT INTO items (name, description, image, type, weight, value, rarity, durability)
+     VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability)`
   ).run(item);
 }
