@@ -5,6 +5,7 @@ import { requireGm } from "@/lib/auth";
 import { saveCreature, CREATURE_TYPES, EQUIP_SLOTS, listItems, type CreatureType, type Equipment } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { isDiceFormula } from "@/lib/itemTypes";
+import { MOVEMENT_TYPES, type Movement } from "@/lib/creatureTypes";
 import { ATTRIBUTES, MAX_SCORE, MIN_SCORE, POINT_BUY_BUDGET, pointBuySpent, type Attributes } from "@/lib/attributes";
 
 /** Creates the creature when id is null, otherwise updates it. */
@@ -25,6 +26,10 @@ export async function submitCreature(id: number | null, formData: FormData) {
     throw new Error("Point buy budget exceeded");
   }
 
+  const movement = Object.fromEntries(
+    MOVEMENT_TYPES.map((m) => [m, Math.max(0, Number(formData.get(`move:${m}`)) || 0)])
+  ) as Movement;
+
   const items = new Map(listItems().map((i) => [i.id, i]));
   const equipment: Equipment = {};
   for (const slot of EQUIP_SLOTS) {
@@ -44,6 +49,7 @@ export async function submitCreature(id: number | null, formData: FormData) {
     attributes,
     equipment,
     health,
+    movement,
   });
   redirect("/campaign/creatures");
 }

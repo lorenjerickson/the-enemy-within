@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { CREATURE_TYPES, type CreatureType } from "@/lib/creatureTypes";
+import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
@@ -68,6 +68,7 @@ addColumn("creatures", "type", "TEXT NOT NULL DEFAULT 'beast'");
 addColumn("creatures", "attributes", "TEXT NOT NULL DEFAULT '{}'"); // JSON Attributes
 addColumn("creatures", "equipment", "TEXT NOT NULL DEFAULT '{}'"); // JSON Equipment
 addColumn("creatures", "health", "TEXT NOT NULL DEFAULT '1d8'"); // dice formula for initial health
+addColumn("creatures", "movement", "TEXT NOT NULL DEFAULT '{}'"); // JSON Movement
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 
 export default db;
@@ -196,19 +197,25 @@ export interface Creature {
   attributes: Attributes;
   equipment: Equipment;
   health: string; // dice formula rolled for initial health
+  movement: Movement;
 }
 
 /** Enabled equipment slots; each holds an item id, or null when empty. */
 export type Equipment = Partial<Record<EquipSlot, number | null>>;
 
-type CreatureRow = Omit<Creature, "attributes" | "equipment"> & { attributes: string; equipment: string };
+type CreatureRow = Omit<Creature, "attributes" | "equipment" | "movement"> & {
+  attributes: string;
+  equipment: string;
+  movement: string;
+};
 
-const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment, health";
+const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment, health, movement";
 
 const parseCreature = (row: CreatureRow): Creature => ({
   ...row,
   attributes: JSON.parse(row.attributes),
   equipment: JSON.parse(row.equipment),
+  movement: JSON.parse(row.movement),
 });
 
 export function listCreatures(): Creature[] {
@@ -222,16 +229,21 @@ export function getCreature(id: number): Creature | undefined {
 
 /** Inserts when id is null, otherwise updates. */
 export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
-  const params = { ...c, attributes: JSON.stringify(c.attributes), equipment: JSON.stringify(c.equipment) };
+  const params = {
+    ...c,
+    attributes: JSON.stringify(c.attributes),
+    equipment: JSON.stringify(c.equipment),
+    movement: JSON.stringify(c.movement),
+  };
   if (id === null) {
     db.prepare<Omit<CreatureRow, "id">>(
-      `INSERT INTO creatures (name, description, image, type, attributes, equipment, health)
-       VALUES (@name, @description, @image, @type, @attributes, @equipment, @health)`
+      `INSERT INTO creatures (name, description, image, type, attributes, equipment, health, movement)
+       VALUES (@name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
     ).run(params);
   } else {
     db.prepare<CreatureRow>(
       `UPDATE creatures SET name = @name, description = @description, image = @image, type = @type,
-         attributes = @attributes, equipment = @equipment, health = @health WHERE id = @id`
+         attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
   }
 }
