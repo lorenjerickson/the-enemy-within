@@ -1,9 +1,11 @@
 "use client";
 
+import { useRef, useState } from "react";
 import type { AmbientSound, Asset } from "@/lib/db";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
 import { playOnce, playSequence, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
-import { changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientClip, submitAmbientSound } from "../actions";
+import { addClipToSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
+import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 
 /** Sounds layer editor: ambient sounds made of clip playlists, with GM playback (one ambient sound at a time). */
 export default function SoundsEditor({
@@ -18,6 +20,10 @@ export default function SoundsEditor({
   audioAssets: Asset[];
 }) {
   const now = useAmbientNow();
+  // One media library (audio · ambient) shared by every sound; remembers which sound/mode asked for a clip.
+  const library = useRef<MediaLibraryHandle>(null);
+  const [adding, setAdding] = useState<{ soundId: number; mode: ClipMode } | null>(null);
+  const [modes, setModes] = useState<Record<number, ClipMode>>({});
 
   return (
     <div className="space-y-4">
@@ -67,25 +73,40 @@ export default function SoundsEditor({
               ))}
             </ol>
 
-            <form key={s.clips.length} action={submitAmbientClip.bind(null, locationId, s.id)} className="flex flex-wrap items-center gap-2 text-sm">
-              <select name="asset_id" defaultValue="" className="select select-xs w-44">
-                <option value="">Library clip…</option>
-                {audioAssets.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-              <span className="opacity-60">or</span>
-              <input name="audio" type="file" accept="audio/mpeg,audio/ogg,audio/wav" className="file-input file-input-xs w-56" />
-              <select name="mode" defaultValue="loop" className="select select-xs w-44">
+            <div className="flex items-center gap-2 text-sm">
+              <select
+                aria-label="New clip mode"
+                value={modes[s.id] ?? "loop"}
+                onChange={(e) => setModes({ ...modes, [s.id]: e.target.value as ClipMode })}
+                className="select select-xs w-48"
+              >
                 {CLIP_MODES.map((m) => (
                   <option key={m} value={m}>{CLIP_MODE_LABELS[m]}</option>
                 ))}
               </select>
-              <button className="btn btn-xs">Add clip</button>
-            </form>
+              <button
+                type="button"
+                className="btn btn-xs"
+                onClick={() => {
+                  setAdding({ soundId: s.id, mode: modes[s.id] ?? "loop" });
+                  library.current?.open();
+                }}
+              >
+                Add clip from media library…
+              </button>
+            </div>
           </div>
         );
       })}
+
+      <MediaLibrary
+        ref={library}
+        type="audio"
+        usage="ambient"
+        assets={audioAssets}
+        onSelect={(a) => adding && addClipToSound(locationId, adding.soundId, a.id, adding.mode)}
+        upload={uploadAudioAsset.bind(null, locationId)}
+      />
 
       <form key={sounds.length} action={submitAmbientSound.bind(null, locationId, levelId)} className="flex items-center gap-2">
         <input name="name" required placeholder="New ambient sound (e.g. Dripping cellar)" className="input input-sm w-72" />

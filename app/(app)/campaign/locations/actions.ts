@@ -194,14 +194,18 @@ export async function removeAmbientSound(locationId: number, soundId: number) {
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
-/** Adds a clip to a sound's playlist: an existing audio asset, or a newly uploaded file. */
-export async function submitAmbientClip(locationId: number, soundId: number, formData: FormData) {
+/** Uploads an audio file into the media library (audio · ambient). */
+export async function uploadAudioAsset(locationId: number, formData: FormData) {
   await requireGm();
-  const mode = String(formData.get("mode")) as ClipMode;
+  const url = await audioFromForm(formData, String(formData.get("name") ?? "").trim());
+  if (!url) throw new Error("Choose an audio file to upload");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Adds an audio asset from the media library to a sound's playlist. */
+export async function addClipToSound(locationId: number, soundId: number, assetId: number, mode: ClipMode) {
+  await requireGm();
   if (!CLIP_MODES.includes(mode)) throw new Error("Invalid clip mode");
-  const uploaded = await audioFromForm(formData);
-  const assetId = uploaded ? getAssetIdByUrl(uploaded) : Number(formData.get("asset_id")) || undefined;
-  if (!assetId) throw new Error("Choose an audio clip or upload one");
   addAmbientClip(soundId, assetId, mode);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
