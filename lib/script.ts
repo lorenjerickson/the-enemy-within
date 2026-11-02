@@ -82,7 +82,7 @@ type Expr =
 type Stmt = { line: number } & (
   | { k: "expr"; e: Expr }
   | { k: "assign"; target: Expr; op: string; value?: Expr }
-  | { k: "with"; e: Expr; as?: string; body?: Stmt[] }
+  | { k: "with"; e: Expr; as?: string; body: Stmt[] }
   | { k: "if"; c: Expr; then: Stmt[]; else?: Stmt[] }
 );
 
@@ -128,8 +128,8 @@ function parse(source: string): Stmt[] {
       if (eatKw("as")) as = peek().t === "id" ? next().v : fail("expected a name after AS");
       if (peek().t !== "nl") fail("expected the end of the line after WITH");
       p++;
-      // Without an indented block, the WITH applies to the rest of the enclosing block.
-      return { k: "with", e, as, body: peek().t === "indent" ? block() : undefined, line };
+      if (peek().t !== "indent") throw new ScriptError(`Line ${line}: WITH needs an indented block below it`);
+      return { k: "with", e, as, body: block(), line };
     }
     if (eatKw("if")) {
       const c = expr();
@@ -374,17 +374,14 @@ function assignTarget(t: Expr, scopes: Scope[]): [unknown, string] {
   throw new ScriptError("can only assign to a property");
 }
 
-function execute(stmts: Stmt[], outer: Scope[]): unknown {
-  let scopes = outer;
+function execute(stmts: Stmt[], scopes: Scope[]): unknown {
   let last: unknown = null;
   for (const s of stmts) {
     try {
       if (s.k === "expr") last = evaluate(s.e, scopes);
       else if (s.k === "with") {
         const v = evaluate(s.e, scopes);
-        const inner: Scope[] = [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }];
-        if (s.body) last = execute(s.body, inner);
-        else scopes = inner;
+        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }]);
       } else if (s.k === "if") {
         last = evaluate(s.c, scopes) ? execute(s.then, scopes) : s.else ? execute(s.else, scopes) : null;
       } else {

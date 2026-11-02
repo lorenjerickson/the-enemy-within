@@ -26,8 +26,8 @@ with game.players as P                     # WITH ... AS name: a short name
       IF attributes.might > 12
          THEN health += roll('1d6')
 
-WITH game.players.each.health as H         # a WITH with no indented block applies
-IF sum(H) < 20 THEN game.vars.retreat = true   # to the rest of the lines around it
+WITH game.players.each.health as H
+   IF sum(H) < 20 THEN game.vars.retreat = true
 ```
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
