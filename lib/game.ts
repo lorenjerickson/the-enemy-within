@@ -1,7 +1,7 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  addCreatureToken, getLevelPlace, getVars, listCharacterStates, listCreatures, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, getLevelPlace, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
@@ -27,9 +27,13 @@ export interface Actor {
   position: { col: number; row: number } | null;
 }
 
-/** The map level a script runs on (a map button's level). */
-export interface CurrentLocation {
+export interface GameLocation {
+  id: number;
   name: string;
+}
+
+/** The location a script runs on (a map button's), with what's on that button's map level. */
+export interface CurrentLocation extends GameLocation {
   level: string;
   actors: Collection<Actor>;
   creatures: Collection<Actor>;
@@ -38,7 +42,8 @@ export interface CurrentLocation {
 export interface Game {
   players: Collection<Player>;
   vars: Record<string, VarValue>;
-  currentLocation: CurrentLocation | null;
+  /** All locations; `.current` is the one the script runs on. */
+  locations: Collection<GameLocation>;
 }
 
 /** Bookkeeping for saving actors: the level, creatures added by the script, and where actors started. */
@@ -72,7 +77,7 @@ function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
     return count === 1 ? added[0] : new Collection("creature", added);
   });
   const actorsColl = new Collection("actor", actors);
-  return [{ name: place.location, level: place.level, actors: actorsColl, creatures }, changes];
+  return [{ id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures }, changes];
 }
 
 function saveActors(changes: ActorChanges, location: CurrentLocation): void {
@@ -99,8 +104,13 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   }));
   const vars = Object.assign(Object.create(null), getVars());
   FREEFORM.add(vars);
-  const [currentLocation, changes] = levelId === undefined ? [null, null] : loadLocation(levelId);
-  return [{ players: new Collection("player", players), vars, currentLocation }, changes];
+  const [current, changes] = levelId === undefined ? [null, null] : loadLocation(levelId);
+  const locations = new Collection<GameLocation>(
+    "location",
+    listLocations().map((l) => (l.id === current?.id ? current : { id: l.id, name: l.name }))
+  );
+  if (current) locations.current = current;
+  return [{ players: new Collection("player", players), vars, locations }, changes];
 }
 
 function saveGame(game: Game, changes: ActorChanges | null): void {
@@ -111,7 +121,7 @@ function saveGame(game: Game, changes: ActorChanges | null): void {
       saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health), conditions: [...p.conditions.set] });
     }
     saveVars({ ...game.vars });
-    if (changes && game.currentLocation) saveActors(changes, game.currentLocation);
+    if (changes && game.locations.current) saveActors(changes, game.locations.current as CurrentLocation);
   });
 }
 
@@ -146,7 +156,10 @@ function asCell(v: unknown, what: string): Cell {
 
 /** Helpers that need the game: placing actors on the current level. */
 function mapHelpers(game: Game) {
-  const location = () => game.currentLocation ?? (() => { throw new ScriptError("There's no current location; run this from a map button"); })();
+  const location = () => {
+    if (!game.locations.current) throw new ScriptError("There's no current location; run this from a map button");
+    return game.locations.current as CurrentLocation;
+  };
   const taken = () => new Set(location().actors.items.flatMap((a) => (a.position ? [`${a.position.col},${a.position.row}`] : [])));
   /** A random free cell next to a cell, widening the search until one is found. */
   const freeNear = ({ col, row }: Cell): Cell => {
@@ -205,7 +218,7 @@ const HELPERS = {
 
 /**
  * Runs a script against the current game state and saves what it changed. Returns the last value.
- * `levelId` is the map level the script runs on (game.currentLocation); none for the Session console.
+ * `levelId` is the map level the script runs on (game.locations.current); none for the Session console.
  */
 export function runGameScript(source: string, levelId?: number): unknown {
   const [game, changes] = loadGame(levelId);

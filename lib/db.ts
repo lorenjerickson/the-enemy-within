@@ -953,10 +953,10 @@ export function addCreatureToken(levelId: number, creatureId: number, col: numbe
 }
 
 /** The location a map level belongs to, with the level's name. */
-export function getLevelPlace(levelId: number): { location: string; level: string } | undefined {
+export function getLevelPlace(levelId: number): { location_id: number; location: string; level: string } | undefined {
   return db
-    .prepare<[number], { location: string; level: string }>(
-      "SELECT l.name AS location, m.name AS level FROM map_levels m JOIN locations l ON l.id = m.location_id WHERE m.id = ?"
+    .prepare<[number], { location_id: number; location: string; level: string }>(
+      "SELECT l.id AS location_id, l.name AS location, m.name AS level FROM map_levels m JOIN locations l ON l.id = m.location_id WHERE m.id = ?"
     )
     .get(levelId);
 }

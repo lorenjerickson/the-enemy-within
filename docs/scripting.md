@@ -10,7 +10,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
-- `game.currentLocation` (map button scripts only): `name`, `level`, `actors` (everything on the level) and `creatures`.
+- `game.locations`: every location by name. `game.locations.current` (map button scripts only) is the button's location, with `level`, `actors` (everything on that level) and `creatures`.
   Each actor has `name`, `type` and `position` (`{col, row}`). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
 - `coll.random` picks one item at random; `coll.find('name')` is the first with that name.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).

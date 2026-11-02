@@ -8,9 +8,10 @@
 
 /**
  * Named records, reachable as coll['annis'], coll.annis, coll.find('annis'), coll.random or coll.all.<property>;
- * coll.add(name, count) when `adder` is given.
+ * coll.add(name, count) when `adder` is given, and coll.current when there is one (e.g. the location a map button is on).
  */
 export class Collection<T extends { id: number; name: string }> {
+  current?: T;
   constructor(public kind: string, public items: T[], public adder?: (name: string, count: number) => unknown) {}
 }
 /** A set of words, e.g. conditions: add, remove, has, count. */
@@ -261,6 +262,10 @@ function getKey(obj: unknown, key: string): unknown {
   if (obj instanceof Broadcast) return new Broadcast(obj.values.map((v) => getKey(v, key)));
   if (obj instanceof Collection) {
     if (key === "all" || key === "each") return new Broadcast(obj.items);
+    if (key === "current") {
+      if (!obj.current) throw new ScriptError(`There's no current ${obj.kind}${obj.kind === "location" ? "; run this from a map button" : ""}`);
+      return obj.current;
+    }
     if (key === "random") {
       if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s to pick from`);
       return obj.items[Math.floor(Math.random() * obj.items.length)];
