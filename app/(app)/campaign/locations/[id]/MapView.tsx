@@ -152,7 +152,9 @@ export default function MapView({
     return () => canvas.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 2) return;
     drag.current = { x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -205,9 +207,11 @@ export default function MapView({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              className="w-full aspect-video rounded-box bg-base-300 cursor-grab active:cursor-grabbing touch-none"
+              onContextMenu={(e) => e.preventDefault()}
+              className="w-full aspect-video rounded-box bg-base-300 touch-none"
             />
             <div className="absolute bottom-2 right-2 flex items-center gap-1 text-xs">
+              <span className="opacity-60 mr-1">Scroll to zoom · right-drag to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
             </div>
