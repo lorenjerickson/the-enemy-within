@@ -8,15 +8,16 @@ import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, 
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
-export type ArtworkKind = "item" | "creature" | "texture" | "map";
+export type ArtworkKind = "item" | "creature" | "texture" | "map" | "tile";
 
 /** Asset library usage that each kind of generated artwork is filed under. */
-const USAGE: Record<ArtworkKind, AssetUsage> = { item: "item", creature: "creature", texture: "background", map: "map" };
+const USAGE: Record<ArtworkKind, AssetUsage> = { item: "item", creature: "creature", texture: "background", map: "map", tile: "tile" };
 
 const PROMPTS: Record<ArtworkKind, string> = {
   item: "Illustration of a single item for a dark fantasy roleplaying game, centered on a plain background.",
   creature: "Illustration of a creature for a dark fantasy roleplaying game, full body, dramatic lighting.",
   map: "Map artwork for a location in a dark fantasy roleplaying game, no text.",
+  tile: "Single square top-down map tile for a tabletop battle map, fills the whole frame, no border, no text.",
   texture: "Seamless, tileable top-down texture for a tabletop battle map, evenly lit, no objects or borders.",
 };
 
@@ -28,7 +29,7 @@ export async function generateArtwork(
   await requireGm();
   try {
     const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`);
-    addAsset({ name: kind === "item" || kind === "creature" ? name : description.slice(0, 60), type: "image", usage: USAGE[kind], url });
+    addAsset({ name: kind === "texture" || kind === "map" ? description.slice(0, 60) : name, type: "image", usage: USAGE[kind], url });
     return { url };
   } catch (e) {
     return { error: (e as Error).message };

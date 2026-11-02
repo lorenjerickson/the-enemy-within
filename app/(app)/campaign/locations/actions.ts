@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -93,4 +93,12 @@ export async function uploadTileAsset(locationId: number, formData: FormData) {
   const url = await imageFromForm(formData, "tile", String(formData.get("name") ?? "").trim());
   if (!url) throw new Error("Choose an image to upload");
   revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Adds the tile from the ImagePicker fields (upload, or an already generated image) and returns its asset id. */
+export async function addTileAsset(locationId: number, formData: FormData): Promise<number | null> {
+  await requireGm();
+  const url = await imageFromForm(formData, "tile", String(formData.get("name") ?? "").trim());
+  revalidatePath(`/campaign/locations/${locationId}`);
+  return url ? getAssetIdByUrl(url) ?? null : null;
 }

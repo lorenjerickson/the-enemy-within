@@ -747,3 +747,7 @@ export function listAssets(filter: { type: AssetType; usage: AssetUsage }): Asse
 export function addAsset(a: Omit<Asset, "id">): void {
   db.prepare<Omit<Asset, "id">>("INSERT INTO assets (name, type, usage, url) VALUES (@name, @type, @usage, @url)").run(a);
 }
+
+export function getAssetIdByUrl(url: string): number | undefined {
+  return db.prepare<[string], { id: number }>("SELECT id FROM assets WHERE url = ?").get(url)?.id;
+}
