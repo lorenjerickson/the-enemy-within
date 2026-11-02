@@ -58,14 +58,18 @@ function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
     return a;
   });
   let nextId = -1;
-  const creatures = new Collection("creature", actors.filter((a) => a.type === "creature"), (name) => {
+  // add('giant rat') returns the new creature; add('giant rat', 3) returns a group of them.
+  const creatures = new Collection("creature", actors.filter((a) => a.type === "creature"), (name, count) => {
     const template = listCreatures().find((c) => c.name.toLowerCase() === name.toLowerCase());
     if (!template) throw new ScriptError(`No creature named "${name}" (see Campaign › Creatures)`);
-    const a: Actor = { id: nextId--, name: template.name, type: "creature", position: null };
-    changes.added.set(a, template.id);
-    creatures.items.push(a);
-    actorsColl.items.push(a);
-    return a;
+    const added = Array.from({ length: count }, (): Actor => {
+      const a: Actor = { id: nextId--, name: template.name, type: "creature", position: null };
+      changes.added.set(a, template.id);
+      creatures.items.push(a);
+      actorsColl.items.push(a);
+      return a;
+    });
+    return count === 1 ? added[0] : new Collection("creature", added);
   });
   const actorsColl = new Collection("actor", actors);
   return [{ name: place.location, level: place.level, actors: actorsColl, creatures }, changes];
@@ -121,7 +125,18 @@ function numbers(args: unknown[]): number[] {
 
 type Cell = { col: number; row: number };
 
+/** A position from a position, an actor, or a group of actors (the first one that's placed). */
 function asCell(v: unknown, what: string): Cell {
+  if (v instanceof Collection) {
+    const placed = (v.items as Actor[]).find((a) => a.position);
+    if (!placed) throw new ScriptError(`${what}: none of those are placed on the map`);
+    return placed.position!;
+  }
+  if (v && typeof v === "object" && "position" in v) {
+    const a = v as Actor;
+    if (!a.position) throw new ScriptError(`${what}: ${a.name} isn't placed on the map`);
+    return a.position;
+  }
   const c = v as Cell | null;
   if (!c || typeof c !== "object" || typeof c.col !== "number" || typeof c.row !== "number") {
     throw new ScriptError(`${what} needs a position, like actor.position or near(...)`);
@@ -132,29 +147,38 @@ function asCell(v: unknown, what: string): Cell {
 /** Helpers that need the game: placing actors on the current level. */
 function mapHelpers(game: Game) {
   const location = () => game.currentLocation ?? (() => { throw new ScriptError("There's no current location; run this from a map button"); })();
+  const taken = () => new Set(location().actors.items.flatMap((a) => (a.position ? [`${a.position.col},${a.position.row}`] : [])));
+  /** A random free cell next to a cell, widening the search until one is found. */
+  const freeNear = ({ col, row }: Cell): Cell => {
+    const used = taken();
+    for (let r = 1; r <= 20; r++) {
+      const free: Cell[] = [];
+      for (let dc = -r; dc <= r; dc++)
+        for (let dr = -r; dr <= r; dr++) {
+          const c = { col: col + dc, row: row + dr };
+          if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !used.has(`${c.col},${c.row}`)) free.push(c);
+        }
+      if (free.length) return free[Math.floor(Math.random() * free.length)];
+    }
+    throw new ScriptError("No free cell near that position");
+  };
   return {
-    /** A random free cell next to a position, widening the search until one is found. */
-    near: new Method((pos) => {
-      const { col, row } = asCell(pos, "near()");
-      const taken = new Set(location().actors.items.flatMap((a) => (a.position ? [`${a.position.col},${a.position.row}`] : [])));
-      for (let r = 1; r <= 20; r++) {
-        const free: Cell[] = [];
-        for (let dc = -r; dc <= r; dc++)
-          for (let dr = -r; dr <= r; dr++) {
-            const c = { col: col + dc, row: row + dr };
-            if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !taken.has(`${c.col},${c.row}`)) free.push(c);
-          }
-        if (free.length) return free[Math.floor(Math.random() * free.length)];
+    /** A random free cell next to a position, actor or group. */
+    near: new Method((pos) => freeNear(asCell(pos, "near()"))),
+    /**
+     * Moves an actor, or each of a group, to a position. The first goes there if it's free;
+     * the rest (or all, if it's taken) go to free cells around it.
+     */
+    place: new Method((target, pos) => {
+      const members = target instanceof Collection ? (target.items as Actor[]) : [target as Actor];
+      for (const a of members) if (!location().actors.items.includes(a)) throw new ScriptError("place() needs actors on the current map");
+      const at = asCell(pos, "place()");
+      const cell = { col: Math.round(at.col), row: Math.round(at.row) };
+      for (const a of members) {
+        a.position = null;
+        a.position = taken().has(`${cell.col},${cell.row}`) ? freeNear(cell) : cell;
       }
-      throw new ScriptError("No free cell near that position");
-    }),
-    /** Moves an actor (or a just-added creature) to a position. */
-    place: new Method((actor, pos) => {
-      const a = actor as Actor;
-      if (!location().actors.items.includes(a)) throw new ScriptError("place() needs an actor on the current map");
-      const { col, row } = asCell(pos, "place()");
-      a.position = { col: Math.round(col), row: Math.round(row) };
-      return a;
+      return target;
     }),
   };
 }

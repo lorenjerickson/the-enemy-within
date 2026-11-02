@@ -6,9 +6,12 @@
 
 // ---------- Values the interpreter understands besides plain data ----------
 
-/** Named records, reachable as coll['annis'], coll.annis, coll.random or coll.all.<property>; coll.add(name) when `adder` is given. */
+/**
+ * Named records, reachable as coll['annis'], coll.annis, coll.find('annis'), coll.random or coll.all.<property>;
+ * coll.add(name, count) when `adder` is given.
+ */
 export class Collection<T extends { id: number; name: string }> {
-  constructor(public kind: string, public items: T[], public adder?: (name: string) => T) {}
+  constructor(public kind: string, public items: T[], public adder?: (name: string, count: number) => unknown) {}
 }
 /** A set of words, e.g. conditions: add, remove, has, count. */
 export class Tags {
@@ -264,7 +267,17 @@ function getKey(obj: unknown, key: string): unknown {
     }
     if (key === "add" && obj.adder) {
       const adder = obj.adder;
-      return new Method((name) => adder(String(name)));
+      return new Method((name, count = 1) => {
+        if (typeof count !== "number" || count < 1 || count > 100 || !Number.isInteger(count)) throw new ScriptError("add() count must be a whole number from 1 to 100");
+        return adder(String(name), count);
+      });
+    }
+    if (key === "find") {
+      return new Method((name) => {
+        const found = obj.items.find((it) => it.name.toLowerCase() === String(name).toLowerCase());
+        if (!found) throw new ScriptError(`No ${obj.kind} named "${name}"`);
+        return found;
+      });
     }
     if (key === "count") return obj.items.length;
     const found = obj.items.find((it) => it.name.toLowerCase() === key.toLowerCase() || String(it.id) === key);
