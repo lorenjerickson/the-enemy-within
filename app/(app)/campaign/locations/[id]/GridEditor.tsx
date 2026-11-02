@@ -7,7 +7,7 @@ const HINTS: Record<Perspective, string> = {
   scenic: "Scenic map: no grid is drawn.",
 };
 
-/** Grid layer editor: cell (or column) size and line colour. */
+/** Grid layer editor: cell (or column) size, optional offsets and line colour. */
 export default function GridEditor({
   locationId,
   levelId,
@@ -25,6 +25,14 @@ export default function GridEditor({
         <label className="flex items-center gap-2">
           Size (pixels)
           <input name="size" type="number" min="5" defaultValue={grid.size} className="input input-sm w-24" />
+        </label>
+        <label className="flex items-center gap-2">
+          Offset X
+          <input name="offsetX" type="number" defaultValue={grid.offsetX || ""} placeholder="0" className="input input-sm w-20" />
+        </label>
+        <label className="flex items-center gap-2">
+          Y
+          <input name="offsetY" type="number" defaultValue={grid.offsetY || ""} placeholder="0" className="input input-sm w-20" />
         </label>
         <label className="flex items-center gap-2">
           Colour

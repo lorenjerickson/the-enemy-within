@@ -70,6 +70,11 @@ export async function submitGrid(locationId: number, levelId: number, formData: 
   await requireGm();
   const color = String(formData.get("color") ?? "");
   if (!/^#[0-9a-f]{6}$/i.test(color)) throw new Error("Invalid colour");
-  saveGrid(levelId, { size: Math.max(5, Math.round(Number(formData.get("size")) || 50)), color });
+  saveGrid(levelId, {
+    size: Math.max(5, Math.round(Number(formData.get("size")) || 50)),
+    color,
+    offsetX: Math.round(Number(formData.get("offsetX")) || 0),
+    offsetY: Math.round(Number(formData.get("offsetY")) || 0),
+  });
   revalidatePath(`/campaign/locations/${locationId}`);
 }

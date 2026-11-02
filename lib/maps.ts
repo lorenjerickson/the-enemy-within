@@ -50,6 +50,8 @@ export const DEFAULT_MAP_IMAGE: MapImage = { image: null, perspective: "overhead
 export interface MapGrid {
   size: number; // canvas pixels per square / column
   color: string; // #rrggbb
+  offsetX: number; // shifts lines right (pixels)
+  offsetY: number; // shifts lines down (pixels)
 }
 
-export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff" };
+export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff", offsetX: 0, offsetY: 0 };

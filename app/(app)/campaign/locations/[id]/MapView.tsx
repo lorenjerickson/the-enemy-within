@@ -79,7 +79,8 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   grid: (state) => (ctx, w, h) => {
     const perspective = state.mapImage.perspective;
     if (perspective === "scenic") return;
-    const { size, color } = state.grid;
+    const { size, color, offsetX, offsetY } = state.grid;
+    const first = (start: number, offset: number) => start + (((offset % size) + size) % size);
     const p = state.background.padding;
     const r = mapRect(state, w, h) ?? { x: p.left, y: p.top, w: w - p.left - p.right, h: h - p.top - p.bottom };
     ctx.save();
@@ -87,9 +88,9 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = r.x; x <= r.x + r.w + 0.5; x += size) { ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); }
+    for (let x = first(r.x, offsetX); x <= r.x + r.w + 0.5; x += size) { ctx.moveTo(x, r.y); ctx.lineTo(x, r.y + r.h); }
     if (perspective === "overhead") {
-      for (let y = r.y; y <= r.y + r.h + 0.5; y += size) { ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); }
+      for (let y = first(r.y, offsetY); y <= r.y + r.h + 0.5; y += size) { ctx.moveTo(r.x, y); ctx.lineTo(r.x + r.w, y); }
     }
     ctx.stroke();
     ctx.restore();
