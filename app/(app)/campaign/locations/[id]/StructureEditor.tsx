@@ -19,6 +19,7 @@ export default function StructureEditor({
   selectedId,
   onSelect,
   onDelete,
+  onToggleDoor,
 }: {
   tool: StructureTool;
   onToolChange: (tool: StructureTool) => void;
@@ -27,6 +28,7 @@ export default function StructureEditor({
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  onToggleDoor: (id: number, open: boolean) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -63,7 +65,8 @@ export default function StructureEditor({
           ? levels.length === 0
             ? "Add another level first — a staircase leads from this level to another."
             : "Click a grid cell to place a staircase to the chosen level."
-          : `Click and drag between grid corners to draw a ${tool.kind}.`}
+          : `Click and drag between grid corners to draw a ${tool.kind}.`}{" "}
+        Walls and closed doors block light.
       </p>
 
       <div className="space-y-1">
@@ -75,13 +78,18 @@ export default function StructureEditor({
             {pieces.map((s) => (
               <li key={s.id} className={`flex items-center gap-2 px-2 py-1 ${s.id === selectedId ? "bg-primary/20" : ""}`}>
                 <button type="button" data-structure={s.id} onClick={() => onSelect(s.id)} className="flex flex-1 items-center gap-2 text-left">
-                  <span>{capitalize(s.kind)}</span>
+                  <span>{capitalize(s.kind)}{s.kind === "door" && (s.open ? " (open)" : " (closed)")}</span>
                   <span className="text-xs opacity-60">
                     {s.kind === "staircase"
                       ? `cell ${s.x1}, ${s.y1} → ${s.target_name ?? "(missing level)"}`
                       : `(${s.x1}, ${s.y1}) – (${s.x2}, ${s.y2})`}
                   </span>
                 </button>
+                {s.kind === "door" && (
+                  <button type="button" className="btn btn-xs" onClick={() => onToggleDoor(s.id, !s.open)}>
+                    {s.open ? "Close" : "Open"}
+                  </button>
+                )}
                 {s.id === selectedId && (
                   <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onDelete(s.id)}>
                     Delete

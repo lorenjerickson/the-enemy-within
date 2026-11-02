@@ -4,6 +4,7 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
+import { visibilityPolygon, type Segment } from "@/lib/visibility";
 import type { AmbientSound, Asset, LightSource, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
@@ -12,7 +13,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -135,6 +136,8 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         const style = STRUCTURE_STYLES[s.kind];
         ctx.strokeStyle = style.color;
         ctx.lineWidth = style.width;
+        ctx.setLineDash(s.kind === "door" && s.open ? [style.width, style.width * 1.5] : []); // open doors are dashed
+        ctx.globalAlpha = s.kind === "door" && s.open ? 0.6 : 1;
         ctx.beginPath();
         ctx.moveTo(x0 + s.x1 * size, y0 + s.y1 * size);
         ctx.lineTo(x0 + s.x2 * size, y0 + s.y2 * size);
@@ -149,15 +152,28 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   lighting: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     const darkness = 1 - state.illumination;
+    // Walls and closed doors block light.
+    const blockers: Segment[] = state.structures
+      .filter((s) => s.kind === "wall" || (s.kind === "door" && !s.open))
+      .map((s) => ({ a: { x: x0 + s.x1 * size, y: y0 + s.y1 * size }, b: { x: x0 + s.x2 * size, y: y0 + s.y2 * size } }));
     const light = (l: LightSource) => {
       const cx = x0 + l.x * size, cy = y0 + l.y * size;
       const r = l.radius * size * (l.flicker ? 0.9 + Math.random() * 0.15 : 1);
       const half = (l.spread * Math.PI) / 360, dir = (l.angle * Math.PI) / 180;
-      return { cx, cy, r, path: (c: CanvasRenderingContext2D) => {
-        c.beginPath();
-        if (l.kind === "point" || l.spread >= 360) c.arc(cx, cy, r, 0, Math.PI * 2);
-        else { c.moveTo(cx, cy); c.arc(cx, cy, r, dir - half, dir + half); c.closePath(); }
-      } };
+      const seen = visibilityPolygon({ x: cx, y: cy }, r, blockers);
+      return {
+        cx, cy, r,
+        // The light's shape (circle or cone), clipped to what it can see past walls.
+        path: (c: CanvasRenderingContext2D) => {
+          c.beginPath();
+          seen.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
+          c.closePath();
+          c.clip();
+          c.beginPath();
+          if (l.kind === "point" || l.spread >= 360) c.arc(cx, cy, r, 0, Math.PI * 2);
+          else { c.moveTo(cx, cy); c.arc(cx, cy, r, dir - half, dir + half); c.closePath(); }
+        },
+      };
     };
     if (darkness > 0) {
       const off = document.createElement("canvas");
@@ -174,9 +190,11 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         g.addColorStop(0, "rgba(0,0,0,1)");
         g.addColorStop(0.6, "rgba(0,0,0,0.8)");
         g.addColorStop(1, "rgba(0,0,0,0)");
+        o.save();
         o.fillStyle = g;
         path(o);
         o.fill();
+        o.restore();
       }
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -195,13 +213,16 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.strokeStyle = "rgba(253,224,71,0.7)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
-        ctx.setLineDash([]);
+      }
+      ctx.restore();
+      if (state.showLightAreas) {
+        ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, size * 0.2, 0, Math.PI * 2);
         ctx.fillStyle = "#facc15";
         ctx.fill();
+        ctx.restore();
       }
-      ctx.restore();
     }
   },
   // Positional sounds: a speaker icon with a faint circle showing the effective range.
@@ -539,7 +560,7 @@ export default function MapView({
         const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
         const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
         startTransition(async () => {
-          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name } });
+          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0 } });
           await placeStructure(locationId, levelId, piece);
         });
       } else {
@@ -616,7 +637,7 @@ export default function MapView({
       if (start.x === end.x && start.y === end.y) return; // a click without a drag draws nothing
       const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: end.y, target_level_id: null };
       startTransition(async () => {
-        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null } });
+        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0 } });
         await placeStructure(locationId, levelId, piece);
       });
       return;
@@ -838,6 +859,7 @@ export default function MapView({
                   pieces={optimisticStructures}
                   selectedId={selectedStructureId}
                   onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
+                  onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}
                   onDelete={(id) =>
                     startTransition(async () => {
                       changeStructures({ remove: id });

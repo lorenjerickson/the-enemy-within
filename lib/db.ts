@@ -218,6 +218,7 @@ db.exec("UPDATE map_levels SET position = id WHERE position = 0");
 addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("map_levels", "grid", "TEXT"); // JSON MapGrid
 addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
+addColumn("map_structures", "open", "INTEGER NOT NULL DEFAULT 0"); // doors only: 1 = open
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -873,19 +874,20 @@ export interface MapStructure {
   y2: number;
   target_level_id: number | null;
   target_name: string | null;
+  open: 0 | 1; // doors only
 }
 
 export function listStructures(levelId: number): MapStructure[] {
   return db
     .prepare<[number], MapStructure>(
-      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name
+      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name, s.open
        FROM map_structures s LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE s.level_id = ? ORDER BY s.id`
     )
     .all(levelId);
 }
 
-export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name">): void {
-  db.prepare<Omit<MapStructure, "id" | "target_name"> & { level_id: number }>(
+export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name" | "open">): void {
+  db.prepare<Omit<MapStructure, "id" | "target_name" | "open"> & { level_id: number }>(
     `INSERT INTO map_structures (level_id, kind, x1, y1, x2, y2, target_level_id)
      VALUES (@level_id, @kind, @x1, @y1, @x2, @y2, @target_level_id)`
   ).run({ ...s, level_id: levelId });
@@ -1050,4 +1052,8 @@ export function addLight(levelId: number, l: Omit<LightSource, "id">): void {
 
 export function deleteLight(id: number): void {
   db.prepare<[number]>("DELETE FROM light_sources WHERE id = ?").run(id);
+}
+
+export function setDoorOpen(id: number, open: boolean): void {
+  db.prepare<[number, number]>("UPDATE map_structures SET open = ? WHERE id = ? AND kind = 'door'").run(open ? 1 : 0, id);
 }
