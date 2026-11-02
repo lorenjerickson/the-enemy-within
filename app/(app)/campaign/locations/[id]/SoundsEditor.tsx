@@ -42,6 +42,23 @@ export default function SoundsEditor({
   const [adding, setAdding] = useState<{ soundId: number; mode: ClipMode } | "positional" | null>(null);
   const [modes, setModes] = useState<Record<number, ClipMode>>({});
 
+  // Manual playback of a positional sound, separate from the ambient player so it doesn't interrupt ambience.
+  const positionalAudio = useRef<HTMLAudioElement | null>(null);
+  const [playingPositionalId, setPlayingPositionalId] = useState<number | null>(null);
+  function togglePositional(p: PositionalSound) {
+    positionalAudio.current ??= new Audio();
+    const a = positionalAudio.current;
+    if (playingPositionalId === p.id) {
+      a.pause();
+      setPlayingPositionalId(null);
+      return;
+    }
+    a.src = p.url;
+    a.onended = () => setPlayingPositionalId(null);
+    void a.play().catch(() => setPlayingPositionalId(null));
+    setPlayingPositionalId(p.id);
+  }
+
   return (
     <div className="space-y-4">
       <div className="text-sm font-semibold">Ambient sounds</div>
@@ -181,6 +198,14 @@ export default function SoundsEditor({
                     className="input input-xs w-16"
                   />
                 </label>
+                <button
+                  type="button"
+                  title={playingPositionalId === p.id ? "Stop" : "Play this sound now"}
+                  className="btn btn-xs"
+                  onClick={() => togglePositional(p)}
+                >
+                  {playingPositionalId === p.id ? "■" : "▶"}
+                </button>
                 <button
                   type="button"
                   title="Remove this positional sound"
