@@ -929,7 +929,7 @@ export default function MapView({
             <div className="relative overflow-hidden rounded-box">
             {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
             {!hiddenSet.has("controls") && (
-              <ControlButtons controls={controls} size={canvasSize} view={view} />
+              <ControlButtons controls={controls} size={canvasSize} padding={background.padding} view={view} />
             )}
             <canvas
               ref={canvasRef}
@@ -1092,16 +1092,19 @@ export default function MapView({
 }
 
 /**
- * Icon buttons along each edge of the scene: 12px in from the edge, 8px apart, each edge's buttons
- * centred along it. Positions are in scene space, then placed through the current zoom/pan.
+ * Icon buttons on the background's padding band, one row per edge: centred across the band (at least
+ * 12px in from the outer edge) and centred along the padded region. Positions are in scene space,
+ * then placed through the current zoom/pan.
  */
 function ControlButtons({
   controls,
   size,
+  padding: p,
   view,
 }: {
   controls: MapControl[];
   size: { w: number; h: number };
+  padding: { top: number; right: number; bottom: number; left: number };
   view: { zoom: number; x: number; y: number };
 }) {
   const MARGIN = 12, GAP = 6, B = 26;
@@ -1109,11 +1112,13 @@ function ControlButtons({
     const row = controls.filter((c) => c.edge === edge);
     const horizontal = edge === "top" || edge === "bottom";
     const total = row.length * B + Math.max(0, row.length - 1) * GAP;
-    const start = ((horizontal ? size.w : size.h) - total) / 2;
+    const inner = horizontal ? size.w - p.left - p.right : size.h - p.top - p.bottom;
+    const start = (horizontal ? p.left : p.top) + (inner - total) / 2;
+    const inset = Math.max(MARGIN, (p[edge] - B) / 2);
     return row.map((c, i) => {
       const along = start + i * (B + GAP);
-      const x = horizontal ? along : edge === "left" ? MARGIN : size.w - MARGIN - B;
-      const y = horizontal ? (edge === "top" ? MARGIN : size.h - MARGIN - B) : along;
+      const x = horizontal ? along : edge === "left" ? inset : size.w - inset - B;
+      const y = horizontal ? (edge === "top" ? inset : size.h - inset - B) : along;
       return { c, x, y, edge };
     });
   });
