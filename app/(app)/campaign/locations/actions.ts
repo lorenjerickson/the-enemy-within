@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addControl, deleteControl, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { CLIP_MODES, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
+import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -305,5 +305,19 @@ export async function removeNote(locationId: number, id: number) {
 export async function changeNoteSize(locationId: number, id: number, w: number, h: number) {
   await requireGm();
   resizeNote(id, Math.max(0.6, Number(w) || 1.6), Math.max(0.6, Number(h) || 1.6));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function submitControl(locationId: number, levelId: number, formData: FormData) {
+  await requireGm();
+  const edge = String(formData.get("edge")) as ControlEdge;
+  if (!CONTROL_EDGES.includes(edge)) throw new Error("Invalid edge");
+  addControl(levelId, edge, String(formData.get("label") ?? "").trim() || "Button");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeControl(locationId: number, id: number) {
+  await requireGm();
+  deleteControl(id);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

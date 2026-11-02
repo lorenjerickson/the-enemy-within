@@ -89,3 +89,7 @@ export const CLIP_MODE_LABELS: Record<ClipMode, string> = {
 /** Light sources: a point light shines all round; a directional light shines in a cone. */
 export const LIGHT_KINDS = ["point", "directional"] as const;
 export type LightKind = (typeof LIGHT_KINDS)[number];
+
+/** Edges of the scene that control buttons can sit along. */
+export const CONTROL_EDGES = ["top", "right", "bottom", "left"] as const;
+export type ControlEdge = (typeof CONTROL_EDGES)[number];

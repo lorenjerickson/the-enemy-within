@@ -5,7 +5,7 @@ import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creature
 import type { Attributes } from "@/lib/attributes";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
-  type ClipMode, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
+  type ClipMode, type ControlEdge, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
 } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
@@ -161,6 +161,13 @@ db.exec(`
     x REAL NOT NULL,
     y REAL NOT NULL,
     text TEXT NOT NULL
+  );
+  -- GM control buttons along an edge of a level's scene, in the order added.
+  CREATE TABLE IF NOT EXISTS map_controls (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    edge TEXT NOT NULL, -- ControlEdge
+    label TEXT NOT NULL
   );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
@@ -785,6 +792,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM positional_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_controls WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -1100,4 +1108,23 @@ export function deleteNote(id: number): void {
 
 export function resizeNote(id: number, w: number, h: number): void {
   db.prepare<[number, number, number]>("UPDATE map_notes SET w = ?, h = ? WHERE id = ?").run(w, h, id);
+}
+
+/** A GM button floating along an edge of the scene. */
+export interface MapControl {
+  id: number;
+  edge: ControlEdge;
+  label: string;
+}
+
+export function listControls(levelId: number): MapControl[] {
+  return db.prepare<[number], MapControl>("SELECT id, edge, label FROM map_controls WHERE level_id = ? ORDER BY id").all(levelId);
+}
+
+export function addControl(levelId: number, edge: ControlEdge, label: string): void {
+  db.prepare<[number, string, string]>("INSERT INTO map_controls (level_id, edge, label) VALUES (?, ?, ?)").run(levelId, edge, label);
+}
+
+export function deleteControl(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_controls WHERE id = ?").run(id);
 }
