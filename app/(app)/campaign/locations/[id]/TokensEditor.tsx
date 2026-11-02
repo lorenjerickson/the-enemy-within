@@ -42,7 +42,9 @@ export default function TokensEditor({
           Select creature…
         </button>
       </div>
-      {creature && <p className="text-xs opacity-60">Click a grid cell to place a {creature.name} token.</p>}
+      <p className="text-xs opacity-60">
+        {creature ? `Click an empty grid cell to place a ${creature.name} token. ` : ""}Drag any token to move it.
+      </p>
 
       <dialog ref={dialog} className="modal">
         <div className="modal-box max-w-3xl space-y-3">

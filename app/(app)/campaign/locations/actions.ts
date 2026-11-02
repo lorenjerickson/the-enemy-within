@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addCreatureToken, addStructure, addTile, deleteToken, getCreature, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -173,5 +173,11 @@ export async function placeCreatureToken(locationId: number, levelId: number, cr
 export async function removeToken(locationId: number, id: number) {
   await requireGm();
   deleteToken(id);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function moveTokenTo(locationId: number, id: number, col: number, row: number) {
+  await requireGm();
+  moveToken(id, Math.round(col), Math.round(row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }

@@ -10,7 +10,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { moveTileTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -286,15 +286,24 @@ export default function MapView({
   // Token placement: pick a creature, then click a cell.
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
-  type TokenChange = { add: MapToken } | { remove: number };
+  type TokenChange = { add: MapToken } | { move: { id: number; col: number; row: number } } | { remove: number };
   const [optimisticTokens, changeTokens] = useOptimistic(tokens, (ts: MapToken[], c: TokenChange) =>
-    "add" in c ? [...ts, c.add] : ts.filter((t) => t.id !== c.remove)
+    "add" in c
+      ? [...ts, c.add]
+      : "move" in c
+        ? ts.map((t) => (t.id === c.move.id ? { ...t, col: c.move.col, row: c.move.row } : t))
+        : ts.filter((t) => t.id !== c.remove)
   );
+  // Dragging a token: which one, and the cell it's currently over.
+  const [draggingToken, setDraggingToken] = useState<{ id: number; col: number; row: number } | null>(null);
+  const drawnTokens = draggingToken
+    ? optimisticTokens.map((t) => (t.id === draggingToken.id ? { ...t, col: draggingToken.col, row: draggingToken.row } : t))
+    : optimisticTokens;
 
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
-    tokens: optimisticTokens, tokenImages: loadedTileImages,
+    tokens: drawnTokens, tokenImages: loadedTileImages,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -351,8 +360,16 @@ export default function MapView({
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 0 && selected === "tokens") {
-      if (!tokenCreature) return;
       const { col, row } = cellAt(e);
+      // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
+      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && t.row === row);
+      if (hit) {
+        setSelectedTokenId(hit.id);
+        setDraggingToken({ id: hit.id, col, row });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (!tokenCreature) return;
       const c = tokenCreature;
       startTransition(async () => {
         changeTokens({ add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, col, row } });
@@ -397,6 +414,11 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (draggingToken) {
+      const { col, row } = cellAt(e);
+      if (col !== draggingToken.col || row !== draggingToken.row) setDraggingToken({ ...draggingToken, col, row });
+      return;
+    }
     if (drawingLine) {
       const corner = cornerAt(e);
       if (corner.x !== drawingLine.end.x || corner.y !== drawingLine.end.y) setDrawingLine({ ...drawingLine, end: corner });
@@ -421,6 +443,18 @@ export default function MapView({
   };
   const onPointerUp = () => {
     drag.current = null;
+    if (draggingToken) {
+      const { id, col, row } = draggingToken;
+      const before = optimisticTokens.find((t) => t.id === id);
+      setDraggingToken(null);
+      if (before && (before.col !== col || before.row !== row)) {
+        startTransition(async () => {
+          changeTokens({ move: { id, col, row } });
+          await moveTokenTo(locationId, id, col, row);
+        });
+      }
+      return;
+    }
     if (drawingLine) {
       const { start, end } = drawingLine;
       setDrawingLine(null);
@@ -481,7 +515,7 @@ export default function MapView({
         ctx.restore();
       }
       // Highlight the token picked in the editor.
-      const token = optimisticTokens.find((t) => t.id === selectedTokenId);
+      const token = drawnTokens.find((t) => t.id === selectedTokenId);
       if (token && selected === "tokens") {
         const r = cellToRect(state, width, height, { col: token.col, row: token.row, cols: 1, rows: 1 });
         ctx.save();

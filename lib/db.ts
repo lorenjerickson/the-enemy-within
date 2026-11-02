@@ -885,3 +885,7 @@ export function addCreatureToken(levelId: number, creatureId: number, col: numbe
 export function deleteToken(id: number): void {
   db.prepare<[number]>("DELETE FROM map_tokens WHERE id = ?").run(id);
 }
+
+export function moveToken(id: number, col: number, row: number): void {
+  db.prepare<[number, number, number]>("UPDATE map_tokens SET col = ?, row = ? WHERE id = ?").run(col, row, id);
+}
