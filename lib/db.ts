@@ -3,7 +3,10 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
-import { DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, type MapBackground, type MapGrid, type MapImage, type MapLayer } from "@/lib/maps";
+import {
+  DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
+  type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors,
+} from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
@@ -141,6 +144,7 @@ addColumn("map_levels", "position", "REAL NOT NULL DEFAULT 0"); // higher = furt
 db.exec("UPDATE map_levels SET position = id WHERE position = 0");
 addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("map_levels", "grid", "TEXT"); // JSON MapGrid
+addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
 db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls'"); // layer renamed
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
@@ -622,6 +626,7 @@ export interface MapLevel {
   background: MapBackground;
   mapImage: MapImage;
   grid: MapGrid;
+  templateColors: TemplateColors;
   hidden: MapLayer[];
 }
 
@@ -630,16 +635,17 @@ export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
     db.prepare<
       [number],
-      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null }
-    >("SELECT id, location_id, name, position, background, map_image, grid FROM map_levels WHERE location_id = ? ORDER BY position DESC"
+      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null }
+    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
     addLevel(locationId, "Ground");
     rows = select();
   }
-  return rows.map(({ map_image, grid, ...r }) => ({
+  return rows.map(({ map_image, grid, template_colors, ...r }) => ({
     ...r,
+    templateColors: { ...DEFAULT_TEMPLATE_COLORS, ...(template_colors ? JSON.parse(template_colors) : {}) },
     grid: grid ? { ...DEFAULT_GRID, ...JSON.parse(grid) } : DEFAULT_GRID,
     background: r.background ? { ...DEFAULT_BACKGROUND, ...JSON.parse(r.background) } : DEFAULT_BACKGROUND,
     mapImage: map_image ? { ...DEFAULT_MAP_IMAGE, ...JSON.parse(map_image) } : DEFAULT_MAP_IMAGE,
@@ -693,4 +699,8 @@ export function saveMapImage(levelId: number, mapImage: MapImage): void {
 
 export function saveGrid(levelId: number, grid: MapGrid): void {
   db.prepare<[string, number]>("UPDATE map_levels SET grid = ? WHERE id = ?").run(JSON.stringify(grid), levelId);
+}
+
+export function saveTemplateColors(levelId: number, colors: TemplateColors): void {
+  db.prepare<[string, number]>("UPDATE map_levels SET template_colors = ? WHERE id = ?").run(JSON.stringify(colors), levelId);
 }

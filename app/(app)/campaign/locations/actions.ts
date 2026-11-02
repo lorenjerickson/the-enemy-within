@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, setLayerVisible } from "@/lib/db";
+import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
-import { EDGES, MAP_LAYERS, PERSPECTIVES, type MapLayer, type Padding, type Perspective } from "@/lib/maps";
+import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -76,5 +76,13 @@ export async function submitGrid(locationId: number, levelId: number, formData: 
     offsetX: Math.round(Number(formData.get("offsetX")) || 0),
     offsetY: Math.round(Number(formData.get("offsetY")) || 0),
   });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function submitTemplateColors(locationId: number, levelId: number, formData: FormData) {
+  await requireGm();
+  const colors = Object.fromEntries(TEMPLATE_KINDS.map((k) => [k, String(formData.get(k) ?? "")])) as TemplateColors;
+  if (!Object.values(colors).every((c) => /^#[0-9a-f]{6}$/i.test(c))) throw new Error("Invalid colour");
+  saveTemplateColors(levelId, colors);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

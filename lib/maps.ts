@@ -55,3 +55,14 @@ export interface MapGrid {
 }
 
 export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff", offsetX: 0, offsetY: 0 };
+
+/** Templates layer settings: the colour used to draw each kind of template. */
+export const TEMPLATE_KINDS = ["movement", "aoe", "vision"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export type TemplateColors = Record<TemplateKind, string>; // #rrggbb
+
+export const TEMPLATE_LABELS: Record<TemplateKind, string> = { movement: "Movement", aoe: "Action AoE", vision: "Vision" };
+/** Templates are drawn very dim so the map stays readable underneath. */
+export const TEMPLATE_OPACITY = 0.15;
+
+export const DEFAULT_TEMPLATE_COLORS: TemplateColors = { movement: "#3b82f6", aoe: "#ef4444", vision: "#facc15" };
