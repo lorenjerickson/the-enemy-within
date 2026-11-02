@@ -89,6 +89,14 @@ db.exec(`
     layer TEXT NOT NULL, -- MapLayer
     PRIMARY KEY (level_id, layer)
   );
+  -- Reusable media for maps, e.g. tile images.
+  CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,  -- AssetType, e.g. 'image'
+    usage TEXT NOT NULL, -- AssetUsage, e.g. 'tile'
+    url TEXT NOT NULL
+  );
   -- An action belongs to exactly one owner: a profession or an item.
   CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY,
@@ -703,4 +711,25 @@ export function saveGrid(levelId: number, grid: MapGrid): void {
 
 export function saveTemplateColors(levelId: number, colors: TemplateColors): void {
   db.prepare<[string, number]>("UPDATE map_levels SET template_colors = ? WHERE id = ?").run(JSON.stringify(colors), levelId);
+}
+
+export type AssetType = "image";
+export type AssetUsage = "tile";
+
+export interface Asset {
+  id: number;
+  name: string;
+  type: AssetType;
+  usage: AssetUsage;
+  url: string;
+}
+
+export function listAssets(filter: { type: AssetType; usage: AssetUsage }): Asset[] {
+  return db
+    .prepare<[string, string], Asset>("SELECT id, name, type, usage, url FROM assets WHERE type = ? AND usage = ? ORDER BY name")
+    .all(filter.type, filter.usage);
+}
+
+export function addAsset(a: Omit<Asset, "id">): void {
+  db.prepare<Omit<Asset, "id">>("INSERT INTO assets (name, type, usage, url) VALUES (@name, @type, @usage, @url)").run(a);
 }

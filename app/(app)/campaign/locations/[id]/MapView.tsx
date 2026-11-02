@@ -3,6 +3,8 @@
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
+import TilesEditor from "./TilesEditor";
+import type { Asset } from "@/lib/db";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
@@ -110,6 +112,7 @@ export default function MapView({
   mapImage,
   grid,
   templateColors,
+  tileAssets,
 }: {
   locationId: number;
   levelId: number;
@@ -118,6 +121,7 @@ export default function MapView({
   mapImage: MapImage;
   grid: MapGrid;
   templateColors: TemplateColors;
+  tileAssets: Asset[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -225,6 +229,8 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "tiles" ? (
+                <TilesEditor locationId={locationId} assets={tileAssets} />
               ) : selected === "templates" ? (
                 <TemplatesEditor key={JSON.stringify(templateColors)} locationId={locationId} levelId={levelId} colors={templateColors} />
               ) : selected === "grid" ? (

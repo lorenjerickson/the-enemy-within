@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getLocation, listLevels } from "@/lib/db";
+import { getLocation, listAssets, listLevels } from "@/lib/db";
 import LocationForm from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
@@ -27,7 +27,9 @@ export default async function EditLocation({
       <div className="max-w-4xl space-y-3">
         <h3 className="font-semibold">Map</h3>
         <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
-        <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors} />
+        <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+          tileAssets={listAssets({ type: "image", usage: "tile" })}
+        />
       </div>
     </div>
   );

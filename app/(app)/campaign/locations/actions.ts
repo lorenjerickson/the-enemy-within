@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addAsset, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -84,5 +84,14 @@ export async function submitTemplateColors(locationId: number, levelId: number, 
   const colors = Object.fromEntries(TEMPLATE_KINDS.map((k) => [k, String(formData.get(k) ?? "")])) as TemplateColors;
   if (!Object.values(colors).every((c) => /^#[0-9a-f]{6}$/i.test(c))) throw new Error("Invalid colour");
   saveTemplateColors(levelId, colors);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Uploads an image into the asset library as a tile. */
+export async function uploadTileAsset(locationId: number, formData: FormData) {
+  await requireGm();
+  const url = await imageFromForm(formData);
+  if (!url) throw new Error("Choose an image to upload");
+  addAsset({ name: String(formData.get("name") ?? "").trim() || "Untitled tile", type: "image", usage: "tile", url });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
