@@ -1,8 +1,9 @@
 import type { MapStructure } from "./db";
 
 /**
- * Gravity on portrait (side-on) maps. Floors are the horizontal walls, windows and closed doors you've
- * drawn (an open door is a trapdoor), at any height, plus stairs: sloped flights you stand on part way down. Positions are in grid units: x is a column line,
+ * Gravity on portrait (side-on) maps. Floors are the walls, windows and closed doors you've drawn that run
+ * more across than up and down (hand-drawn floors are rarely perfectly level), at any height; an open door
+ * is a trapdoor. Stairs are sloped flights you stand on part way down. Positions are in grid units: x is a column line,
  * y can be fractional. An actor at (col, row) fills x col..col+1 and y row..row+1, so it stands on a
  * floor at y = row + 1. Falling starts from the actor's middle, so a token dropped just above a floor
  * lands on it.
@@ -10,17 +11,15 @@ import type { MapStructure } from "./db";
 type Piece = Pick<MapStructure, "kind" | "x1" | "y1" | "x2" | "y2" | "open">;
 
 const isFloor = (s: Piece) =>
-  (s.kind === "stairs" && s.x1 !== s.x2) ||
-  (s.y1 === s.y2 && s.x1 !== s.x2 && (s.kind === "wall" || s.kind === "window" || (s.kind === "door" && !s.open)));
+  s.x1 !== s.x2 &&
+  (s.kind === "stairs" ||
+    (Math.abs(s.y2 - s.y1) < Math.abs(s.x2 - s.x1) && (s.kind === "wall" || s.kind === "window" || (s.kind === "door" && !s.open))));
 
-/** A flat floor must span the whole column; a flight only needs to pass the column's middle. */
-const under = (s: Piece, col: number) =>
-  s.kind === "stairs"
-    ? Math.min(s.x1, s.x2) <= col + 0.5 && Math.max(s.x1, s.x2) >= col + 0.5
-    : Math.min(s.x1, s.x2) <= col && Math.max(s.x1, s.x2) >= col + 1;
+/** Whether a surface passes over the column's middle. */
+const under = (s: Piece, col: number) => Math.min(s.x1, s.x2) <= col + 0.5 && Math.max(s.x1, s.x2) >= col + 0.5;
 
-/** A surface's height in a column: a flight's height at the column's middle, or the floor's height. */
-const heightAt = (s: Piece, col: number) => (s.kind === "stairs" ? s.y1 + ((col + 0.5 - s.x1) * (s.y2 - s.y1)) / (s.x2 - s.x1) : s.y1);
+/** A surface's height at the column's middle (floors that aren't quite level, and stairs, slope). */
+const heightAt = (s: Piece, col: number) => s.y1 + ((col + 0.5 - s.x1) * (s.y2 - s.y1)) / (s.x2 - s.x1);
 
 /** The row something here comes to rest at: the first floor below its middle. With no floor below, it stays. */
 export function landingRow(structures: Piece[], col: number, row: number): number {

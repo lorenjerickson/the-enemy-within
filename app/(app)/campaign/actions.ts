@@ -22,9 +22,9 @@ const PROMPTS: Record<ArtworkKind, string> = {
   tile: "Single square top-down map tile for a tabletop battle map, fills the whole frame, no border, no text.",
   texture: "Seamless, tileable top-down texture for a tabletop battle map, evenly lit, no objects or borders.",
   "overhead token":
-    "Round token for a tabletop battle map: one creature seen directly from above, centred and filling a circle, plain dark background, no text.",
+    "Round token for a tabletop battle map: one creature seen directly from above, centred and filling a circle, transparent background, no text.",
   "side token":
-    "Side-on full-body figure of one creature for a side-view game map, standing, facing right, feet at the bottom edge, plain background, no text.",
+    "Side-on full-body figure of one creature for a side-view game map, standing, facing right, feet at the bottom edge, transparent background, no text.",
 };
 
 export async function generateArtwork(
@@ -34,7 +34,9 @@ export async function generateArtwork(
 ): Promise<{ url?: string; error?: string }> {
   await requireGm();
   try {
-    const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`);
+    const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`, {
+      token: kind.endsWith("token"),
+    });
     const assetName = kind === "texture" || kind === "map" ? description.slice(0, 60) : kind.endsWith("token") ? `${name} (${kind})` : name;
     addAsset({ name: assetName, type: "image", usage: USAGE[kind], url });
     return { url };

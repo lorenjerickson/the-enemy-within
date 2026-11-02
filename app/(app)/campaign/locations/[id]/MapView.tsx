@@ -803,7 +803,9 @@ export default function MapView({
       const { start, end } = drawingLine;
       setDrawingLine(null);
       if (start.x === end.x && start.y === end.y) return; // a click without a drag draws nothing
-      const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: end.y, target_level_id: null };
+      // On portrait maps a nearly level wall, window or door is drawn level (a floor), so hand-drawn floors come out flat.
+      const level = portrait && structureTool.kind !== "stairs" && start.x !== end.x && Math.abs(end.y - start.y) <= 0.25;
+      const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: level ? start.y : end.y, target_level_id: null };
       startTransition(async () => {
         changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0 } });
         await placeStructure(locationId, levelId, piece);

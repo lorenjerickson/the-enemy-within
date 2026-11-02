@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { addAsset, type AssetUsage } from "@/lib/db";
+import { transparentToken } from "@/lib/tokenArt";
 
 // Uploaded media (images and audio) live in data/images and are served by app/images/[file]/route.ts.
 export const IMAGE_DIR = path.join("data", "images");
@@ -32,23 +33,27 @@ export function saveImage(bytes: Buffer, contentType: string): string {
   return `/images/${file}`;
 }
 
-/** Generates an image with OpenAI. Needs OPENAI_API_KEY in .env.local. */
-export async function generateImage(prompt: string): Promise<string> {
+/** Generates an image with OpenAI. Needs OPENAI_API_KEY in .env.local. Token art comes back with a transparent background. */
+export async function generateImage(prompt: string, { token = false } = {}): Promise<string> {
+  const model = process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1";
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY is not set");
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
+      model,
       prompt,
+      ...(token && model.startsWith("gpt-image") ? { background: "transparent", output_format: "png" } : {}),
       size: "1024x1024",
       n: 1,
     }),
   });
   if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { data: { b64_json: string }[] };
-  return saveImage(Buffer.from(json.data[0].b64_json, "base64"), "image/png");
+  const bytes = Buffer.from(json.data[0].b64_json, "base64");
+  // Also cut the background away ourselves, in case the model painted one anyway.
+  return saveImage(token ? await transparentToken(bytes) : bytes, "image/png");
 }
 
 /**
@@ -59,7 +64,9 @@ export async function imageFromForm(formData: FormData, usage: AssetUsage, name?
   // The default ImagePicker submits "upload" + "image"; one with another field name submits "<field>Upload" + "<field>".
   const upload = formData.get(field === "image" ? "upload" : `${field}Upload`);
   if (upload instanceof File && upload.size > 0) {
-    const url = saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
+    const bytes = Buffer.from(await upload.arrayBuffer());
+    // Tokens always get a transparent background (and so are stored as PNG).
+    const url = usage === "token" ? saveImage(await transparentToken(bytes), "image/png") : saveImage(bytes, upload.type);
     addAsset({ name: name || upload.name.replace(/\.[^.]+$/, "") || "Untitled", type: "image", usage, url });
     return url;
   }
