@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addTile, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -118,5 +118,17 @@ export async function placeTile(
     cols: Math.max(1, int(tile.cols)),
     rows: Math.max(1, int(tile.rows)),
   });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function moveTileTo(locationId: number, tileId: number, col: number, row: number) {
+  await requireGm();
+  moveTile(tileId, Math.round(col), Math.round(row));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeTile(locationId: number, tileId: number) {
+  await requireGm();
+  deleteTile(tileId);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

@@ -8,7 +8,7 @@ import type { Asset, MapTile } from "@/lib/db";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeTile, toggleLayer } from "../actions";
+import { moveTileTo, placeTile, removeTile, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -179,8 +179,23 @@ export default function MapView({
   // Tile placement: with the Tiles layer selected and an asset chosen, left click / drag covers grid cells.
   const [tileAsset, setTileAsset] = useState<Asset | null>(null);
   const [placing, setPlacing] = useState<{ start: { col: number; row: number }; end: { col: number; row: number } } | null>(null);
-  const [optimisticTiles, addOptimisticTile] = useOptimistic(tiles, (ts: MapTile[], t: MapTile) => [...ts, t]);
-  const state: MapState = { background, backgroundImage, mapImage, mapImageEl, grid, tiles: optimisticTiles, tileImages: loadedTileImages };
+  type TileChange = { add: MapTile } | { move: { id: number; col: number; row: number } } | { remove: number };
+  const [optimisticTiles, changeTiles] = useOptimistic(tiles, (ts: MapTile[], c: TileChange) =>
+    "add" in c
+      ? [...ts, c.add]
+      : "move" in c
+        ? ts.map((t) => (t.id === c.move.id ? { ...t, col: c.move.col, row: c.move.row } : t))
+        : ts.filter((t) => t.id !== c.remove)
+  );
+  // A placed tile picked in the editor: highlighted on the map, draggable to move.
+  const [selectedTileId, setSelectedTileId] = useState<number | null>(null);
+  const [moving, setMoving] = useState<{ grab: { col: number; row: number }; delta: { col: number; row: number } } | null>(null);
+  const selectedTile = optimisticTiles.find((t) => t.id === selectedTileId) ?? null;
+  // While moving, draw the selected tile at its dragged position.
+  const drawnTiles = moving
+    ? optimisticTiles.map((t) => (t.id === selectedTileId ? { ...t, col: t.col + moving.delta.col, row: t.row + moving.delta.row } : t))
+    : optimisticTiles;
+  const state: MapState = { background, backgroundImage, mapImage, mapImageEl, grid, tiles: drawnTiles, tileImages: loadedTileImages };
 
   /** Grid cell under a pointer event, accounting for zoom and pan. */
   function cellAt(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -225,6 +240,15 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "tiles" && selectedTile) {
+      const cell = cellAt(e);
+      const t = selectedTile;
+      if (cell.col >= t.col && cell.col < t.col + t.cols && cell.row >= t.row && cell.row < t.row + t.rows) {
+        setMoving({ grab: cell, delta: { col: 0, row: 0 } });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
     if (e.button === 0 && selected === "tiles" && tileAsset) {
       const cell = cellAt(e);
       setPlacing({ start: cell, end: cell });
@@ -236,6 +260,12 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (moving) {
+      const cell = cellAt(e);
+      const delta = { col: cell.col - moving.grab.col, row: cell.row - moving.grab.row };
+      if (delta.col !== moving.delta.col || delta.row !== moving.delta.row) setMoving({ ...moving, delta });
+      return;
+    }
     if (placing) {
       const cell = cellAt(e);
       if (cell.col !== placing.end.col || cell.row !== placing.end.row) setPlacing({ ...placing, end: cell });
@@ -249,11 +279,23 @@ export default function MapView({
   };
   const onPointerUp = () => {
     drag.current = null;
+    if (moving && selectedTile) {
+      const { col, row } = { col: selectedTile.col + moving.delta.col, row: selectedTile.row + moving.delta.row };
+      const id = selectedTile.id;
+      setMoving(null);
+      if (col !== selectedTile.col || row !== selectedTile.row) {
+        startTransition(async () => {
+          changeTiles({ move: { id, col, row } });
+          await moveTileTo(locationId, id, col, row);
+        });
+      }
+      return;
+    }
     if (placing && tileAsset) {
       const span = spanOf(placing);
       setPlacing(null);
       startTransition(async () => {
-        addOptimisticTile({ id: -Date.now(), asset_id: tileAsset.id, url: tileAsset.url, ...span });
+        changeTiles({ add: { id: -Date.now(), asset_id: tileAsset.id, name: tileAsset.name, url: tileAsset.url, ...span } });
         await placeTile(locationId, levelId, { asset_id: tileAsset.id, ...span });
       });
     }
@@ -273,6 +315,17 @@ export default function MapView({
       ctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.x, dpr * view.y);
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, width, height);
+      }
+      // Highlight the tile picked in the editor.
+      const highlighted = drawnTiles.find((t) => t.id === selectedTileId);
+      if (highlighted && selected === "tiles") {
+        const r = cellToRect(state, width, height, highlighted);
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.restore();
       }
       // Placement preview: outline of the cells the tile will cover.
       if (placing) {
@@ -325,7 +378,22 @@ export default function MapView({
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
               ) : selected === "tiles" ? (
-                <TilesEditor locationId={locationId} assets={tileAssets} asset={tileAsset} onAssetChange={setTileAsset} />
+                <TilesEditor
+                  locationId={locationId}
+                  assets={tileAssets}
+                  asset={tileAsset}
+                  onAssetChange={setTileAsset}
+                  tiles={optimisticTiles}
+                  selectedTileId={selectedTileId}
+                  onSelectTile={(id) => setSelectedTileId(id === selectedTileId ? null : id)}
+                  onDeleteTile={(id) =>
+                    startTransition(async () => {
+                      changeTiles({ remove: id });
+                      setSelectedTileId(null);
+                      await removeTile(locationId, id);
+                    })
+                  }
+                />
               ) : selected === "templates" ? (
                 <TemplatesEditor key={JSON.stringify(templateColors)} locationId={locationId} levelId={levelId} colors={templateColors} />
               ) : selected === "grid" ? (

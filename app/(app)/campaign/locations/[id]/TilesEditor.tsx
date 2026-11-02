@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Asset } from "@/lib/db";
+import type { Asset, MapTile } from "@/lib/db";
 import ImagePicker from "../../ImagePicker";
 import { addTileAsset } from "../actions";
 import AssetPicker from "./AssetPicker";
@@ -12,11 +12,19 @@ export default function TilesEditor({
   assets,
   asset,
   onAssetChange: setAsset,
+  tiles,
+  selectedTileId,
+  onSelectTile,
+  onDeleteTile,
 }: {
   locationId: number;
   assets: Asset[];
   asset: Asset | null;
   onAssetChange: (asset: Asset) => void;
+  tiles: MapTile[];
+  selectedTileId: number | null;
+  onSelectTile: (id: number) => void;
+  onDeleteTile: (id: number) => void;
 }) {
   const [newId, setNewId] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -59,6 +67,34 @@ export default function TilesEditor({
       </details>
 
       {asset && <p className="text-xs opacity-60">Click a grid cell to place it, or click and drag to cover several cells.</p>}
+
+      <div className="space-y-1">
+        <div className="text-sm font-semibold">Placed tiles</div>
+        {tiles.length === 0 ? (
+          <p className="text-xs opacity-60">None yet.</p>
+        ) : (
+          <ul className="max-h-48 overflow-y-auto rounded-box bg-base-100 text-sm">
+            {tiles.map((t) => (
+              <li key={t.id} className={`flex items-center gap-2 px-2 py-1 ${t.id === selectedTileId ? "bg-primary/20" : ""}`}>
+                <button type="button" data-tile={t.id} onClick={() => onSelectTile(t.id)} className="flex flex-1 items-center gap-2 text-left">
+                  <img src={t.url} alt="" className="size-6 rounded object-cover" />
+                  <span>{t.name}</span>
+                  <span className="text-xs opacity-60">
+                    col {t.col}, row {t.row}
+                    {(t.cols > 1 || t.rows > 1) && ` · ${t.cols}×${t.rows}`}
+                  </span>
+                </button>
+                {t.id === selectedTileId && (
+                  <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onDeleteTile(t.id)}>
+                    Delete
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {selectedTileId !== null && <p className="text-xs opacity-60">Drag the highlighted tile on the map to move it.</p>}
+      </div>
     </div>
   );
 }

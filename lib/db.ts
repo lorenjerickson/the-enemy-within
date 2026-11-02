@@ -767,6 +767,7 @@ export function getAssetIdByUrl(url: string): number | undefined {
 export interface MapTile {
   id: number;
   asset_id: number;
+  name: string; // asset name
   url: string;
   col: number;
   row: number;
@@ -777,14 +778,22 @@ export interface MapTile {
 export function listTiles(levelId: number): MapTile[] {
   return db
     .prepare<[number], MapTile>(
-      `SELECT t.id, t.asset_id, a.url, t.col, t.row, t.cols, t.rows FROM map_tiles t
+      `SELECT t.id, t.asset_id, a.name, a.url, t.col, t.row, t.cols, t.rows FROM map_tiles t
        JOIN assets a ON a.id = t.asset_id WHERE t.level_id = ? ORDER BY t.id`
     )
     .all(levelId);
 }
 
-export function addTile(levelId: number, t: Omit<MapTile, "id" | "url">): void {
-  db.prepare<Omit<MapTile, "id" | "url"> & { level_id: number }>(
+export function addTile(levelId: number, t: Omit<MapTile, "id" | "url" | "name">): void {
+  db.prepare<Omit<MapTile, "id" | "url" | "name"> & { level_id: number }>(
     "INSERT INTO map_tiles (level_id, asset_id, col, row, cols, rows) VALUES (@level_id, @asset_id, @col, @row, @cols, @rows)"
   ).run({ ...t, level_id: levelId });
+}
+
+export function moveTile(id: number, col: number, row: number): void {
+  db.prepare<[number, number, number]>("UPDATE map_tiles SET col = ?, row = ? WHERE id = ?").run(col, row, id);
+}
+
+export function deleteTile(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_tiles WHERE id = ?").run(id);
 }
