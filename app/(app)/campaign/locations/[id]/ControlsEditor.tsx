@@ -20,7 +20,7 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
 
   return (
     <div className="space-y-3">
-      <form key={controls.length} action={submitControl.bind(null, locationId, levelId)} className="flex items-center gap-2">
+      <form key={`add-${controls.length}`} action={submitControl.bind(null, locationId, levelId)} className="flex items-center gap-2">
         <input type="hidden" name="icon" value={icon} />
         <button type="button" title="Choose icon" className="btn btn-sm btn-square" onClick={() => dialog.current?.showModal()}>
           <GameIcon name={icon} className="size-5" />
@@ -93,7 +93,7 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
         ))}
       </div>
       {editing ? (
-        <ScriptForm key={editing.id} locationId={locationId} control={editing} />
+        <ScriptForm key={`script-${editing.id}`} locationId={locationId} control={editing} />
       ) : (
         controls.length > 0 && <p className="text-xs opacity-60">Click a button&apos;s label to edit the script it runs.</p>
       )}
