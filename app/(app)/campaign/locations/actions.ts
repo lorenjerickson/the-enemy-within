@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -101,4 +101,22 @@ export async function addTileAsset(locationId: number, formData: FormData): Prom
   const url = await imageFromForm(formData, "tile", String(formData.get("name") ?? "").trim());
   revalidatePath(`/campaign/locations/${locationId}`);
   return url ? getAssetIdByUrl(url) ?? null : null;
+}
+
+/** Places an asset over a rectangle of grid cells on a level. */
+export async function placeTile(
+  locationId: number,
+  levelId: number,
+  tile: { asset_id: number; col: number; row: number; cols: number; rows: number }
+) {
+  await requireGm();
+  const int = (n: number) => Math.round(Number(n));
+  addTile(levelId, {
+    asset_id: int(tile.asset_id),
+    col: int(tile.col),
+    row: int(tile.row),
+    cols: Math.max(1, int(tile.cols)),
+    rows: Math.max(1, int(tile.rows)),
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
 }

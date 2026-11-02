@@ -6,9 +6,18 @@ import ImagePicker from "../../ImagePicker";
 import { addTileAsset } from "../actions";
 import AssetPicker from "./AssetPicker";
 
-/** Tiles layer editor. Step 1 of placing a tile: choose an asset from the library, or upload / generate a new one. */
-export default function TilesEditor({ locationId, assets }: { locationId: number; assets: Asset[] }) {
-  const [asset, setAsset] = useState<Asset | null>(null);
+/** Tiles layer editor: choose (or upload / generate) the tile asset that clicks on the map will place. */
+export default function TilesEditor({
+  locationId,
+  assets,
+  asset,
+  onAssetChange: setAsset,
+}: {
+  locationId: number;
+  assets: Asset[];
+  asset: Asset | null;
+  onAssetChange: (asset: Asset) => void;
+}) {
   const [newId, setNewId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -21,7 +30,7 @@ export default function TilesEditor({ locationId, assets }: { locationId: number
       setAsset(added);
       setNewId(null);
     }
-  }, [assets, newId]);
+  }, [assets, newId, setAsset]);
 
   async function add(formData: FormData) {
     const id = await addTileAsset(locationId, formData);
@@ -49,7 +58,7 @@ export default function TilesEditor({ locationId, assets }: { locationId: number
         </form>
       </details>
 
-      {asset && <p className="text-xs opacity-60">Placing tiles on the map comes next.</p>}
+      {asset && <p className="text-xs opacity-60">Click a grid cell to place it, or click and drag to cover several cells.</p>}
     </div>
   );
 }

@@ -89,6 +89,16 @@ db.exec(`
     layer TEXT NOT NULL, -- MapLayer
     PRIMARY KEY (level_id, layer)
   );
+  -- Tiles placed on a level: an asset covering a rectangle of grid cells.
+  CREATE TABLE IF NOT EXISTS map_tiles (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    asset_id INTEGER NOT NULL REFERENCES assets(id),
+    col INTEGER NOT NULL,
+    row INTEGER NOT NULL,
+    cols INTEGER NOT NULL DEFAULT 1,
+    rows INTEGER NOT NULL DEFAULT 1
+  );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY,
@@ -697,6 +707,7 @@ export function addLevel(locationId: number, name: string, relativeTo?: { levelI
 
 export function removeLevel(levelId: number): void {
   db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM map_tiles WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
   })();
@@ -750,4 +761,30 @@ export function addAsset(a: Omit<Asset, "id">): void {
 
 export function getAssetIdByUrl(url: string): number | undefined {
   return db.prepare<[string], { id: number }>("SELECT id FROM assets WHERE url = ?").get(url)?.id;
+}
+
+/** A placed tile, in grid cells (col/row of the top-left cell, plus size in cells). */
+export interface MapTile {
+  id: number;
+  asset_id: number;
+  url: string;
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+}
+
+export function listTiles(levelId: number): MapTile[] {
+  return db
+    .prepare<[number], MapTile>(
+      `SELECT t.id, t.asset_id, a.url, t.col, t.row, t.cols, t.rows FROM map_tiles t
+       JOIN assets a ON a.id = t.asset_id WHERE t.level_id = ? ORDER BY t.id`
+    )
+    .all(levelId);
+}
+
+export function addTile(levelId: number, t: Omit<MapTile, "id" | "url">): void {
+  db.prepare<Omit<MapTile, "id" | "url"> & { level_id: number }>(
+    "INSERT INTO map_tiles (level_id, asset_id, col, row, cols, rows) VALUES (@level_id, @asset_id, @col, @row, @cols, @rows)"
+  ).run({ ...t, level_id: levelId });
 }

@@ -4,11 +4,11 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { Asset } from "@/lib/db";
+import type { Asset, MapTile } from "@/lib/db";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { toggleLayer } from "../actions";
+import { placeTile, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -30,7 +30,11 @@ interface MapState {
   mapImage: MapImage;
   mapImageEl: HTMLImageElement | null;
   grid: MapGrid;
+  tiles: MapTile[];
+  tileImages: Map<string, HTMLImageElement>;
 }
+
+type CellRect = { col: number; row: number; cols: number; rows: number };
 
 /** Loads an image URL into an element (null until loaded, or when there's no URL). */
 function useImage(url: string | null): HTMLImageElement | null {
@@ -56,6 +60,20 @@ function mapRect({ background: { padding: p }, mapImageEl: img }: MapState, w: n
   return { x: p.left + (innerW - drawW) / 2, y: p.top + (innerH - drawH) / 2, w: drawW, h: drawH };
 }
 
+/** Grid cell geometry: top-left of cell (0,0) and the cell size, in map space. */
+function gridOrigin(state: MapState, w: number, h: number) {
+  const { size, offsetX, offsetY } = state.grid;
+  const p = state.background.padding;
+  const r = mapRect(state, w, h) ?? { x: p.left, y: p.top, w: w - p.left - p.right, h: h - p.top - p.bottom };
+  const first = (start: number, offset: number) => start + (((offset % size) + size) % size);
+  return { x0: first(r.x, offsetX), y0: first(r.y, offsetY), size };
+}
+
+const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
+  const { x0, y0, size } = gridOrigin(state, w, h);
+  return { x: x0 + c.col * size, y: y0 + c.row * size, w: c.cols * size, h: c.rows * size };
+};
+
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
 const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -71,6 +89,13 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       ctx.fillRect(0, 0, w, h);
     } else {
       ctx.drawImage(img, 0, 0, w, h);
+    }
+  },
+  tiles: (state) => (ctx, w, h) => {
+    for (const t of state.tiles) {
+      const img = state.tileImages.get(t.url);
+      const r = cellToRect(state, w, h, t);
+      if (img) ctx.drawImage(img, r.x, r.y, r.w, r.h);
     }
   },
   map: (state) => (ctx, w, h) => {
@@ -113,6 +138,7 @@ export default function MapView({
   grid,
   templateColors,
   tileAssets,
+  tiles,
 }: {
   locationId: number;
   levelId: number;
@@ -122,6 +148,7 @@ export default function MapView({
   grid: MapGrid;
   templateColors: TemplateColors;
   tileAssets: Asset[];
+  tiles: MapTile[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -134,6 +161,42 @@ export default function MapView({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundImage = useImage(background.mode === "texture" ? background.image : null);
   const mapImageEl = useImage(mapImage.image);
+
+  // Tile images, loaded once per URL; bump a counter to redraw as each arrives.
+  const tileImages = useRef(new Map<string, HTMLImageElement>()).current;
+  const [, setLoaded] = useState(0);
+  useEffect(() => {
+    for (const url of new Set(tiles.map((t) => t.url))) {
+      if (tileImages.has(url)) continue;
+      const img = new Image();
+      img.onload = () => setLoaded((n) => n + 1);
+      img.src = url;
+      tileImages.set(url, img);
+    }
+  }, [tiles, tileImages]);
+  const loadedTileImages = new Map([...tileImages].filter(([, img]) => img.complete && img.naturalWidth > 0));
+
+  // Tile placement: with the Tiles layer selected and an asset chosen, left click / drag covers grid cells.
+  const [tileAsset, setTileAsset] = useState<Asset | null>(null);
+  const [placing, setPlacing] = useState<{ start: { col: number; row: number }; end: { col: number; row: number } } | null>(null);
+  const [optimisticTiles, addOptimisticTile] = useOptimistic(tiles, (ts: MapTile[], t: MapTile) => [...ts, t]);
+  const state: MapState = { background, backgroundImage, mapImage, mapImageEl, grid, tiles: optimisticTiles, tileImages: loadedTileImages };
+
+  /** Grid cell under a pointer event, accounting for zoom and pan. */
+  function cellAt(e: React.PointerEvent<HTMLCanvasElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - view.x) / view.zoom;
+    const my = (e.clientY - rect.top - view.y) / view.zoom;
+    const { x0, y0, size } = gridOrigin(state, rect.width, rect.height);
+    return { col: Math.floor((mx - x0) / size), row: Math.floor((my - y0) / size) };
+  }
+
+  const spanOf = (p: NonNullable<typeof placing>): CellRect => ({
+    col: Math.min(p.start.col, p.end.col),
+    row: Math.min(p.start.row, p.end.row),
+    cols: Math.abs(p.end.col - p.start.col) + 1,
+    rows: Math.abs(p.end.row - p.start.row) + 1,
+  });
   const [selected, setSelected] = useState<MapLayer | null>(null);
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
@@ -162,18 +225,39 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "tiles" && tileAsset) {
+      const cell = cellAt(e);
+      setPlacing({ start: cell, end: cell });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button !== 2) return;
     drag.current = { x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (placing) {
+      const cell = cellAt(e);
+      if (cell.col !== placing.end.col || cell.row !== placing.end.row) setPlacing({ ...placing, end: cell });
+      return;
+    }
     if (!drag.current) return;
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
     drag.current = { x: e.clientX, y: e.clientY };
     setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
   };
-  const onPointerUp = () => (drag.current = null);
+  const onPointerUp = () => {
+    drag.current = null;
+    if (placing && tileAsset) {
+      const span = spanOf(placing);
+      setPlacing(null);
+      startTransition(async () => {
+        addOptimisticTile({ id: -Date.now(), asset_id: tileAsset.id, url: tileAsset.url, ...span });
+        await placeTile(locationId, levelId, { asset_id: tileAsset.id, ...span });
+      });
+    }
+  };
 
   // Redraw every visible layer, bottom to top, whenever visibility, the view or the canvas size changes.
   useEffect(() => {
@@ -188,14 +272,25 @@ export default function MapView({
       ctx.clearRect(0, 0, width, height);
       ctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.x, dpr * view.y);
       for (const layer of MAP_LAYERS) {
-        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.({ background, backgroundImage, mapImage, mapImageEl, grid })(ctx, width, height);
+        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, width, height);
+      }
+      // Placement preview: outline of the cells the tile will cover.
+      if (placing) {
+        const r = cellToRect(state, width, height, spanOf(placing));
+        ctx.save();
+        ctx.fillStyle = "rgba(99,102,241,0.25)";
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 2 / view.zoom;
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.restore();
       }
     };
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [hiddenSet, background, backgroundImage, mapImage, mapImageEl, grid, view]);
+  });
 
   function onToggle(layer: MapLayer, visible: boolean) {
     startTransition(async () => {
@@ -230,7 +325,7 @@ export default function MapView({
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
               ) : selected === "tiles" ? (
-                <TilesEditor locationId={locationId} assets={tileAssets} />
+                <TilesEditor locationId={locationId} assets={tileAssets} asset={tileAsset} onAssetChange={setTileAsset} />
               ) : selected === "templates" ? (
                 <TemplatesEditor key={JSON.stringify(templateColors)} locationId={locationId} levelId={levelId} colors={templateColors} />
               ) : selected === "grid" ? (
