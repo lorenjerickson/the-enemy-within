@@ -200,6 +200,19 @@ if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'loc
   })();
 }
 
+// File images that existed before the asset library into it (idempotent: skips URLs already present).
+db.exec(`
+  INSERT INTO assets (name, type, usage, url)
+    SELECT name, 'image', 'item', image FROM items WHERE image IS NOT NULL
+    UNION ALL SELECT name, 'image', 'creature', image FROM creatures WHERE image IS NOT NULL
+    UNION ALL SELECT name, 'image', 'creature', image FROM characters WHERE image IS NOT NULL
+    UNION ALL SELECT name || ' background', 'image', 'background', json_extract(background, '$.image') FROM map_levels
+      WHERE json_extract(background, '$.image') IS NOT NULL
+    UNION ALL SELECT name || ' map', 'image', 'map', json_extract(map_image, '$.image') FROM map_levels
+      WHERE json_extract(map_image, '$.image') IS NOT NULL;
+  DELETE FROM assets WHERE id NOT IN (SELECT MIN(id) FROM assets GROUP BY url);
+`);
+
 export default db;
 
 export const USER_COLUMNS = "id, name, username, contact, role, must_change_password";
@@ -713,8 +726,9 @@ export function saveTemplateColors(levelId: number, colors: TemplateColors): voi
   db.prepare<[string, number]>("UPDATE map_levels SET template_colors = ? WHERE id = ?").run(JSON.stringify(colors), levelId);
 }
 
+export const ASSET_USAGES = ["item", "creature", "background", "map", "tile"] as const;
 export type AssetType = "image";
-export type AssetUsage = "tile";
+export type AssetUsage = (typeof ASSET_USAGES)[number];
 
 export interface Asset {
   id: number;

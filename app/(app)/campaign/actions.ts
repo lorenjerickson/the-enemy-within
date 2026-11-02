@@ -2,13 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn } from "@/lib/db";
+import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage } from "@/lib/db";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
 export type ArtworkKind = "item" | "creature" | "texture" | "map";
+
+/** Asset library usage that each kind of generated artwork is filed under. */
+const USAGE: Record<ArtworkKind, AssetUsage> = { item: "item", creature: "creature", texture: "background", map: "map" };
 
 const PROMPTS: Record<ArtworkKind, string> = {
   item: "Illustration of a single item for a dark fantasy roleplaying game, centered on a plain background.",
@@ -24,7 +27,9 @@ export async function generateArtwork(
 ): Promise<{ url?: string; error?: string }> {
   await requireGm();
   try {
-    return { url: await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`) };
+    const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`);
+    addAsset({ name: kind === "item" || kind === "creature" ? name : description.slice(0, 60), type: "image", usage: USAGE[kind], url });
+    return { url };
   } catch (e) {
     return { error: (e as Error).message };
   }

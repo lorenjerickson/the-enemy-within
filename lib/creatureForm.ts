@@ -39,7 +39,7 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
   return {
     name: text("name"),
     description: text("description"),
-    image: await imageFromForm(formData),
+    image: await imageFromForm(formData, "creature", text("name")),
     type,
     attributes,
     equipment,

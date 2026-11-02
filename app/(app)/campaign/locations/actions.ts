@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addAsset, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -51,7 +51,7 @@ export async function submitBackground(locationId: number, levelId: number, form
   saveBackground(levelId, {
     mode,
     color,
-    image: await imageFromForm(formData),
+    image: await imageFromForm(formData, "background"),
     fit: formData.get("fit") === "tile" ? "tile" : "fill",
     padding: paddingFromForm(formData),
   });
@@ -62,7 +62,7 @@ export async function submitMapImage(locationId: number, levelId: number, formDa
   await requireGm();
   const perspective = String(formData.get("perspective")) as Perspective;
   if (!PERSPECTIVES.includes(perspective)) throw new Error("Invalid perspective");
-  saveMapImage(levelId, { image: await imageFromForm(formData), perspective });
+  saveMapImage(levelId, { image: await imageFromForm(formData, "map"), perspective });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -90,8 +90,7 @@ export async function submitTemplateColors(locationId: number, levelId: number, 
 /** Uploads an image into the asset library as a tile. */
 export async function uploadTileAsset(locationId: number, formData: FormData) {
   await requireGm();
-  const url = await imageFromForm(formData);
+  const url = await imageFromForm(formData, "tile", String(formData.get("name") ?? "").trim());
   if (!url) throw new Error("Choose an image to upload");
-  addAsset({ name: String(formData.get("name") ?? "").trim() || "Untitled tile", type: "image", usage: "tile", url });
   revalidatePath(`/campaign/locations/${locationId}`);
 }

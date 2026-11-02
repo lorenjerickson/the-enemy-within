@@ -31,7 +31,7 @@ export async function submitItem(id: number | null, formData: FormData) {
   const max_stack = type === "consumable" ? (stackable ? Math.max(2, Math.round(num("max_stack"))) : 1) : null;
   const durability = Math.min(100, Math.max(1, Math.round(num("durability"))));
 
-  const image = await imageFromForm(formData);
+  const image = await imageFromForm(formData, "item", text("name"));
 
   saveItem(id, {
     name: text("name"),

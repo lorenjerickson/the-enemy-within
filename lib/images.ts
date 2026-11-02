@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { addAsset, type AssetUsage } from "@/lib/db";
 
 // Images live in data/images and are served by app/images/[file]/route.ts.
 export const IMAGE_DIR = path.join("data", "images");
@@ -43,11 +44,16 @@ export async function generateImage(prompt: string): Promise<string> {
   return saveImage(Buffer.from(json.data[0].b64_json, "base64"), "image/png");
 }
 
-/** Reads the ImagePicker fields: an uploaded file wins, otherwise a generated image URL. */
-export async function imageFromForm(formData: FormData): Promise<string | null> {
+/**
+ * Reads the ImagePicker fields: an uploaded file wins, otherwise a generated image URL.
+ * A new upload is recorded in the asset library as an image with the given usage.
+ */
+export async function imageFromForm(formData: FormData, usage: AssetUsage, name?: string): Promise<string | null> {
   const upload = formData.get("upload");
   if (upload instanceof File && upload.size > 0) {
-    return saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
+    const url = saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
+    addAsset({ name: name || upload.name.replace(/\.[^.]+$/, "") || "Untitled", type: "image", usage, url });
+    return url;
   }
   return String(formData.get("image") ?? "").trim() || null;
 }
