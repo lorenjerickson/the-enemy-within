@@ -925,8 +925,9 @@ export default function MapView({
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-4">
-        <div className="flex-1 min-w-0 space-y-3">
+      {/* Map, layer list, then the selected layer's editor: side by side on wide screens, editor below otherwise. */}
+      <div className="flex flex-wrap min-[1700px]:flex-nowrap gap-4">
+        <div className="flex-1 min-w-0 max-w-[88rem] space-y-3">
           <div className="relative">
             <div className="relative overflow-hidden rounded-box">
             {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
@@ -964,120 +965,8 @@ export default function MapView({
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
             </div>
           </div>
-          {selected && (
-            <div className="rounded-box bg-base-200 p-3" data-editor={selected}>
-              <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
-              {selected === "background" ? (
-                <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
-              ) : selected === "controls" ? (
-                <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} />
-              ) : selected === "notes" ? (
-                <NotesEditor
-                  draft={noteDraft}
-                  onDraftChange={setNoteDraft}
-                  notes={optimisticNotes}
-                  selectedId={selectedNoteId}
-                  onSelect={(id) => setSelectedNoteId(id === selectedNoteId ? null : id)}
-                  onEdit={(id, text) => editNote(locationId, id, text)}
-                  onRemove={(id) =>
-                    startTransition(async () => {
-                      changeNotes({ remove: id });
-                      await removeNote(locationId, id);
-                    })
-                  }
-                />
-              ) : selected === "lighting" ? (
-                <LightingEditor
-                  value={shownIllumination}
-                  onPreview={setPreviewIllumination}
-                  onCommit={(v) => changeIllumination(locationId, levelId, v)}
-                  tool={lightTool}
-                  onToolChange={setLightTool}
-                  lights={optimisticLights}
-                  selectedId={selectedLightId}
-                  onSelect={(id) => setSelectedLightId(id === selectedLightId ? null : id)}
-                  onRemove={(id) =>
-                    startTransition(async () => {
-                      changeLights({ remove: id });
-                      await removeLight(locationId, id);
-                    })
-                  }
-                />
-              ) : selected === "sounds" ? (
-                <SoundsEditor
-                  locationId={locationId}
-                  levelId={levelId}
-                  sounds={sounds}
-                  audioAssets={audioAssets}
-                  positional={optimisticPositional}
-                  tool={positionalTool}
-                  onToolChange={setPositionalTool}
-                  selectedPositionalId={selectedPositionalId}
-                  onSelectPositional={(id) => setSelectedPositionalId(id === selectedPositionalId ? null : id)}
-                />
-              ) : selected === "tokens" ? (
-                <TokensEditor
-                  creatures={creatures}
-                  creature={tokenCreature}
-                  onCreatureChange={setTokenCreature}
-                  tokens={optimisticTokens}
-                  selectedId={selectedTokenId}
-                  onSelect={(id) => setSelectedTokenId(id === selectedTokenId ? null : id)}
-                  onDelete={(id) =>
-                    startTransition(async () => {
-                      changeTokens({ remove: id });
-                      setSelectedTokenId(null);
-                      await removeToken(locationId, id);
-                    })
-                  }
-                />
-              ) : selected === "structure" ? (
-                <StructureEditor
-                  tool={structureTool}
-                  onToolChange={setStructureTool}
-                  levels={otherLevels}
-                  pieces={optimisticStructures}
-                  selectedId={selectedStructureId}
-                  onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
-                  onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}
-                  onDelete={(id) =>
-                    startTransition(async () => {
-                      changeStructures({ remove: id });
-                      setSelectedStructureId(null);
-                      await removeStructure(locationId, id);
-                    })
-                  }
-                />
-              ) : selected === "tiles" ? (
-                <TilesEditor
-                  locationId={locationId}
-                  assets={tileAssets}
-                  asset={tileAsset}
-                  onAssetChange={setTileAsset}
-                  tiles={optimisticTiles}
-                  selectedTileId={selectedTileId}
-                  onSelectTile={(id) => setSelectedTileId(id === selectedTileId ? null : id)}
-                  onDeleteTile={(id) =>
-                    startTransition(async () => {
-                      changeTiles({ remove: id });
-                      setSelectedTileId(null);
-                      await removeTile(locationId, id);
-                    })
-                  }
-                />
-              ) : selected === "templates" ? (
-                <TemplatesEditor key={JSON.stringify(templateColors)} locationId={locationId} levelId={levelId} colors={templateColors} />
-              ) : selected === "grid" ? (
-                <GridEditor key={JSON.stringify(grid)} locationId={locationId} levelId={levelId} grid={grid} perspective={mapImage.perspective} />
-              ) : selected === "map" ? (
-                <MapImageEditor key={JSON.stringify(mapImage)} locationId={locationId} levelId={levelId} mapImage={mapImage} />
-              ) : (
-                <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
-              )}
-            </div>
-          )}
         </div>
-        <ul className="w-44 shrink-0 bg-base-200 rounded-box p-2 text-sm">
+        <ul className="w-44 shrink-0 self-start bg-base-200 rounded-box p-2 text-sm">
           <li className="text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
@@ -1103,6 +992,118 @@ export default function MapView({
             </li>
           ))}
         </ul>
+        {selected && (
+          <div className="w-full min-[1700px]:w-[28rem] shrink-0 self-start rounded-box bg-base-200 p-3" data-editor={selected}>
+            <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
+            {selected === "background" ? (
+              <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+            ) : selected === "controls" ? (
+              <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} />
+            ) : selected === "notes" ? (
+              <NotesEditor
+                draft={noteDraft}
+                onDraftChange={setNoteDraft}
+                notes={optimisticNotes}
+                selectedId={selectedNoteId}
+                onSelect={(id) => setSelectedNoteId(id === selectedNoteId ? null : id)}
+                onEdit={(id, text) => editNote(locationId, id, text)}
+                onRemove={(id) =>
+                  startTransition(async () => {
+                    changeNotes({ remove: id });
+                    await removeNote(locationId, id);
+                  })
+                }
+              />
+            ) : selected === "lighting" ? (
+              <LightingEditor
+                value={shownIllumination}
+                onPreview={setPreviewIllumination}
+                onCommit={(v) => changeIllumination(locationId, levelId, v)}
+                tool={lightTool}
+                onToolChange={setLightTool}
+                lights={optimisticLights}
+                selectedId={selectedLightId}
+                onSelect={(id) => setSelectedLightId(id === selectedLightId ? null : id)}
+                onRemove={(id) =>
+                  startTransition(async () => {
+                    changeLights({ remove: id });
+                    await removeLight(locationId, id);
+                  })
+                }
+              />
+            ) : selected === "sounds" ? (
+              <SoundsEditor
+                locationId={locationId}
+                levelId={levelId}
+                sounds={sounds}
+                audioAssets={audioAssets}
+                positional={optimisticPositional}
+                tool={positionalTool}
+                onToolChange={setPositionalTool}
+                selectedPositionalId={selectedPositionalId}
+                onSelectPositional={(id) => setSelectedPositionalId(id === selectedPositionalId ? null : id)}
+              />
+            ) : selected === "tokens" ? (
+              <TokensEditor
+                creatures={creatures}
+                creature={tokenCreature}
+                onCreatureChange={setTokenCreature}
+                tokens={optimisticTokens}
+                selectedId={selectedTokenId}
+                onSelect={(id) => setSelectedTokenId(id === selectedTokenId ? null : id)}
+                onDelete={(id) =>
+                  startTransition(async () => {
+                    changeTokens({ remove: id });
+                    setSelectedTokenId(null);
+                    await removeToken(locationId, id);
+                  })
+                }
+              />
+            ) : selected === "structure" ? (
+              <StructureEditor
+                tool={structureTool}
+                onToolChange={setStructureTool}
+                levels={otherLevels}
+                pieces={optimisticStructures}
+                selectedId={selectedStructureId}
+                onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
+                onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}
+                onDelete={(id) =>
+                  startTransition(async () => {
+                    changeStructures({ remove: id });
+                    setSelectedStructureId(null);
+                    await removeStructure(locationId, id);
+                  })
+                }
+              />
+            ) : selected === "tiles" ? (
+              <TilesEditor
+                locationId={locationId}
+                assets={tileAssets}
+                asset={tileAsset}
+                onAssetChange={setTileAsset}
+                tiles={optimisticTiles}
+                selectedTileId={selectedTileId}
+                onSelectTile={(id) => setSelectedTileId(id === selectedTileId ? null : id)}
+                onDeleteTile={(id) =>
+                  startTransition(async () => {
+                    changeTiles({ remove: id });
+                    setSelectedTileId(null);
+                    await removeTile(locationId, id);
+                  })
+                }
+              />
+            ) : selected === "templates" ? (
+              <TemplatesEditor key={JSON.stringify(templateColors)} locationId={locationId} levelId={levelId} colors={templateColors} />
+            ) : selected === "grid" ? (
+              <GridEditor key={JSON.stringify(grid)} locationId={locationId} levelId={levelId} grid={grid} perspective={mapImage.perspective} />
+            ) : selected === "map" ? (
+              <MapImageEditor key={JSON.stringify(mapImage)} locationId={locationId} levelId={levelId} mapImage={mapImage} />
+            ) : (
+              <p className="text-sm opacity-60">No editing tools for this layer yet.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -24,9 +24,11 @@ export default async function EditLocation({
   return (
     <div className="space-y-8">
       <LocationForm initial={location} />
-      <div className="max-w-4xl space-y-3">
+      <div className="space-y-3">
         <h3 className="font-semibold">Map</h3>
-        <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
+        <div className="max-w-4xl">
+          <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
+        </div>
         <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
           tileAssets={listAssets({ type: "image", usage: "tile" })}
           tiles={listTiles(level.id)}
