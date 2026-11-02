@@ -243,6 +243,9 @@ addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls'"); // layer renamed
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
+addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
+addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
+db.exec("CREATE TABLE IF NOT EXISTS game_vars (key TEXT PRIMARY KEY, value TEXT NOT NULL)"); // script variables, JSON values
 
 // One-time migration: the old per-profession "ranks" tree becomes linked professions.
 const hasRanks = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ranks'").get();
@@ -1132,3 +1135,45 @@ export function addControl(levelId: number, edge: ControlEdge, icon: string, lab
 export function deleteControl(id: number): void {
   db.prepare<[number]>("DELETE FROM map_controls WHERE id = ?").run(id);
 }
+
+// ---------- Game state changed by scripts ----------
+
+export interface CharacterState {
+  id: number;
+  name: string;
+  type: CreatureType;
+  attributes: Attributes;
+  health: string; // formula
+  hp: number | null;
+  conditions: string[];
+}
+
+export function listCharacterStates(): CharacterState[] {
+  return db
+    .prepare<[], Omit<CharacterState, "attributes" | "conditions"> & { attributes: string; conditions: string }>(
+      "SELECT id, name, type, attributes, health, hp, conditions FROM characters ORDER BY name"
+    )
+    .all()
+    .map((r) => ({ ...r, attributes: JSON.parse(r.attributes), conditions: JSON.parse(r.conditions) }));
+}
+
+export function saveCharacterState(s: Pick<CharacterState, "id" | "attributes" | "hp" | "conditions">): void {
+  db.prepare<[string, number | null, string, number]>("UPDATE characters SET attributes = ?, hp = ?, conditions = ? WHERE id = ?")
+    .run(JSON.stringify(s.attributes), s.hp, JSON.stringify(s.conditions), s.id);
+}
+
+export type VarValue = number | string | boolean | null;
+
+export function getVars(): Record<string, VarValue> {
+  const rows = db.prepare<[], { key: string; value: string }>("SELECT key, value FROM game_vars").all();
+  return Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)]));
+}
+
+export function saveVars(vars: Record<string, VarValue>): void {
+  db.exec("DELETE FROM game_vars");
+  const insert = db.prepare<[string, string]>("INSERT INTO game_vars (key, value) VALUES (?, ?)");
+  for (const [k, v] of Object.entries(vars)) if (v !== null) insert.run(k, JSON.stringify(v));
+}
+
+/** Runs fn in a single transaction. */
+export const transaction = <T>(fn: () => T): T => db.transaction(fn)();

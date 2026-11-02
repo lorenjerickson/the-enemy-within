@@ -22,3 +22,18 @@ export function sumDice(formulas: string[]): { formula: string; min: number; max
     max: ranges.reduce((s, r) => s + r.max, 0),
   };
 }
+
+/** Rolls a dice formula such as "1d20+2" or "3d4 + 2d6 - 1" and returns the total. */
+export function rollDice(formula: string): number {
+  const terms = formula.replace(/\s/g, "").match(/[+-]?[^+-]+/g);
+  if (!terms) throw new Error(`Not a dice formula: ${formula}`);
+  return terms.reduce((total, term) => {
+    const m = term.match(/^([+-]?)(?:(\d*)d(\d+)|(\d+))$/i);
+    if (!m) throw new Error(`Not a dice formula: ${formula}`);
+    const sign = m[1] === "-" ? -1 : 1;
+    if (m[4]) return total + sign * Number(m[4]);
+    let sum = 0;
+    for (let i = 0; i < Number(m[2] || 1); i++) sum += 1 + Math.floor(Math.random() * Number(m[3]));
+    return total + sign * sum;
+  }, 0);
+}
