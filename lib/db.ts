@@ -5,7 +5,7 @@ import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creature
 import type { Attributes } from "@/lib/attributes";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
-  type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
+  type ClipMode, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
 } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
@@ -119,6 +119,18 @@ db.exec(`
     character_id INTEGER REFERENCES characters(id),
     col INTEGER NOT NULL,
     row INTEGER NOT NULL
+  );
+  -- Ambient sounds on a level: a named playlist of audio clips. Only one plays at a time.
+  CREATE TABLE IF NOT EXISTS ambient_sounds (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    name TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ambient_clips (
+    id INTEGER PRIMARY KEY,
+    sound_id INTEGER NOT NULL REFERENCES ambient_sounds(id),
+    asset_id INTEGER NOT NULL REFERENCES assets(id),
+    mode TEXT NOT NULL DEFAULT 'loop' -- ClipMode
   );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
@@ -731,6 +743,8 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM map_tiles WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_tokens WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM ambient_clips WHERE sound_id IN (SELECT id FROM ambient_sounds WHERE level_id = ?)").run(levelId);
+    db.prepare<[number]>("DELETE FROM ambient_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -761,8 +775,8 @@ export function saveTemplateColors(levelId: number, colors: TemplateColors): voi
   db.prepare<[string, number]>("UPDATE map_levels SET template_colors = ? WHERE id = ?").run(JSON.stringify(colors), levelId);
 }
 
-export const ASSET_USAGES = ["item", "creature", "background", "map", "tile"] as const;
-export type AssetType = "image";
+export const ASSET_USAGES = ["item", "creature", "background", "map", "tile", "ambient"] as const;
+export type AssetType = "image" | "audio";
 export type AssetUsage = (typeof ASSET_USAGES)[number];
 
 export interface Asset {
@@ -888,4 +902,50 @@ export function deleteToken(id: number): void {
 
 export function moveToken(id: number, col: number, row: number): void {
   db.prepare<[number, number, number]>("UPDATE map_tokens SET col = ?, row = ? WHERE id = ?").run(col, row, id);
+}
+
+export interface AmbientClip {
+  id: number;
+  asset_id: number;
+  name: string;
+  url: string;
+  mode: ClipMode;
+}
+
+export interface AmbientSound {
+  id: number;
+  name: string;
+  clips: AmbientClip[]; // playlist order
+}
+
+export function listAmbientSounds(levelId: number): AmbientSound[] {
+  const sounds = db.prepare<[number], { id: number; name: string }>("SELECT id, name FROM ambient_sounds WHERE level_id = ? ORDER BY id").all(levelId);
+  const clips = db.prepare<[number], AmbientClip>(
+    `SELECT c.id, c.asset_id, a.name, a.url, c.mode FROM ambient_clips c JOIN assets a ON a.id = c.asset_id
+     WHERE c.sound_id = ? ORDER BY c.id`
+  );
+  return sounds.map((s) => ({ ...s, clips: clips.all(s.id) }));
+}
+
+export function addAmbientSound(levelId: number, name: string): void {
+  db.prepare<[number, string]>("INSERT INTO ambient_sounds (level_id, name) VALUES (?, ?)").run(levelId, name);
+}
+
+export function deleteAmbientSound(id: number): void {
+  db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM ambient_clips WHERE sound_id = ?").run(id);
+    db.prepare<[number]>("DELETE FROM ambient_sounds WHERE id = ?").run(id);
+  })();
+}
+
+export function addAmbientClip(soundId: number, assetId: number, mode: ClipMode): void {
+  db.prepare<[number, number, string]>("INSERT INTO ambient_clips (sound_id, asset_id, mode) VALUES (?, ?, ?)").run(soundId, assetId, mode);
+}
+
+export function setClipMode(id: number, mode: ClipMode): void {
+  db.prepare<[string, number]>("UPDATE ambient_clips SET mode = ? WHERE id = ?").run(mode, id);
+}
+
+export function deleteAmbientClip(id: number): void {
+  db.prepare<[number]>("DELETE FROM ambient_clips WHERE id = ?").run(id);
 }

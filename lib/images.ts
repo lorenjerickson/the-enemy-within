@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { addAsset, type AssetUsage } from "@/lib/db";
 
-// Images live in data/images and are served by app/images/[file]/route.ts.
+// Uploaded media (images and audio) live in data/images and are served by app/images/[file]/route.ts.
 export const IMAGE_DIR = path.join("data", "images");
 fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
@@ -12,14 +12,21 @@ const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
+  "audio/mpeg": "mp3",
+  "audio/ogg": "ogg",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
 };
 
-export const CONTENT_TYPES = Object.fromEntries(Object.entries(EXTENSIONS).map(([type, ext]) => [ext, type]));
+export const CONTENT_TYPES: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(EXTENSIONS).map(([type, ext]) => [ext, type])),
+  wav: "audio/wav",
+};
 
-/** Saves image bytes and returns the URL to reference them by. */
+/** Saves uploaded media bytes (image or audio) and returns the URL to reference them by. */
 export function saveImage(bytes: Buffer, contentType: string): string {
   const ext = EXTENSIONS[contentType];
-  if (!ext) throw new Error(`Unsupported image type: ${contentType}`);
+  if (!ext) throw new Error(`Unsupported file type: ${contentType}`);
   const file = `${crypto.randomUUID()}.${ext}`;
   fs.writeFileSync(path.join(IMAGE_DIR, file), bytes);
   return `/images/${file}`;
@@ -56,4 +63,14 @@ export async function imageFromForm(formData: FormData, usage: AssetUsage, name?
     return url;
   }
   return String(formData.get("image") ?? "").trim() || null;
+}
+
+/** Saves an uploaded audio file into the asset library as ambient sound; returns the asset URL. */
+export async function audioFromForm(formData: FormData, name?: string): Promise<string | null> {
+  const upload = formData.get("audio");
+  if (!(upload instanceof File) || upload.size === 0) return null;
+  if (!upload.type.startsWith("audio/")) throw new Error("Not an audio file");
+  const url = saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
+  addAsset({ name: name || upload.name.replace(/\.[^.]+$/, "") || "Untitled", type: "audio", usage: "ambient", url });
+  return url;
 }

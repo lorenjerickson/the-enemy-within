@@ -76,3 +76,12 @@ export const STRUCTURE_STYLES: Record<Exclude<StructureKind, "staircase">, { col
   door: { color: "#b45309", width: 6 },
   window: { color: "#7dd3fc", width: 3 },
 };
+
+/** How a clip in an ambient sound's playlist plays. */
+export const CLIP_MODES = ["loop", "event", "manual"] as const;
+export type ClipMode = (typeof CLIP_MODES)[number];
+export const CLIP_MODE_LABELS: Record<ClipMode, string> = {
+  loop: "Looped in sequence",
+  event: "Triggered by map event",
+  manual: "Played manually",
+};

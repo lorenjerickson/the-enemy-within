@@ -4,7 +4,8 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { Asset, MapStructure, MapTile, MapToken } from "@/lib/db";
+import type { AmbientSound, Asset, MapStructure, MapTile, MapToken } from "@/lib/db";
+import SoundsEditor from "./SoundsEditor";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
@@ -214,6 +215,8 @@ export default function MapView({
   otherLevels,
   tokens,
   creatures,
+  sounds,
+  audioAssets,
 }: {
   locationId: number;
   levelId: number;
@@ -228,6 +231,8 @@ export default function MapView({
   otherLevels: { id: number; name: string }[];
   tokens: MapToken[];
   creatures: TokenCreature[];
+  sounds: AmbientSound[];
+  audioAssets: Asset[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -604,6 +609,8 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "sounds" ? (
+                <SoundsEditor locationId={locationId} levelId={levelId} sounds={sounds} audioAssets={audioAssets} />
               ) : selected === "tokens" ? (
                 <TokensEditor
                   creatures={creatures}

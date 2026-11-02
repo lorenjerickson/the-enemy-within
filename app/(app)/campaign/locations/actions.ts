@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
-import { imageFromForm } from "@/lib/images";
-import { EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
+import { addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { audioFromForm, imageFromForm } from "@/lib/images";
+import { CLIP_MODES, type ClipMode, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -179,5 +179,42 @@ export async function removeToken(locationId: number, id: number) {
 export async function moveTokenTo(locationId: number, id: number, col: number, row: number) {
   await requireGm();
   moveToken(id, Math.round(col), Math.round(row));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function submitAmbientSound(locationId: number, levelId: number, formData: FormData) {
+  await requireGm();
+  addAmbientSound(levelId, String(formData.get("name") ?? "").trim() || "Ambient sound");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeAmbientSound(locationId: number, soundId: number) {
+  await requireGm();
+  deleteAmbientSound(soundId);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Adds a clip to a sound's playlist: an existing audio asset, or a newly uploaded file. */
+export async function submitAmbientClip(locationId: number, soundId: number, formData: FormData) {
+  await requireGm();
+  const mode = String(formData.get("mode")) as ClipMode;
+  if (!CLIP_MODES.includes(mode)) throw new Error("Invalid clip mode");
+  const uploaded = await audioFromForm(formData);
+  const assetId = uploaded ? getAssetIdByUrl(uploaded) : Number(formData.get("asset_id")) || undefined;
+  if (!assetId) throw new Error("Choose an audio clip or upload one");
+  addAmbientClip(soundId, assetId, mode);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function changeClipMode(locationId: number, clipId: number, mode: ClipMode) {
+  await requireGm();
+  if (!CLIP_MODES.includes(mode)) throw new Error("Invalid clip mode");
+  setClipMode(clipId, mode);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeAmbientClip(locationId: number, clipId: number) {
+  await requireGm();
+  deleteAmbientClip(clipId);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
