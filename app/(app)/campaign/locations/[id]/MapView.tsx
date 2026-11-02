@@ -14,7 +14,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -75,12 +75,13 @@ function mapRect({ background: { padding: p }, mapImageEl: img }: MapState, w: n
 }
 
 /**
- * Sticky note geometry for a given grid size: fixed width (1.6 cells), at least square,
- * and as tall as its word-wrapped text needs.
+ * Sticky note geometry for a given grid size: the note's own width and height (in cells),
+ * made taller if its word-wrapped text needs more room. Text size follows the grid, not the note.
  */
-function noteLayout(ctx: CanvasRenderingContext2D, text: string, size: number) {
-  const width = size * 1.6, pad = width * 0.08, fold = width * 0.15;
-  const fontSize = Math.max(6, width * 0.11);
+function noteLayout(ctx: CanvasRenderingContext2D, note: Pick<MapNote, "text" | "w" | "h">, size: number) {
+  const text = note.text;
+  const width = size * note.w, pad = size * 0.13, fold = size * 0.24;
+  const fontSize = Math.max(6, size * 0.176);
   ctx.save();
   ctx.font = `${fontSize}px sans-serif`;
   const lines: string[] = [];
@@ -96,7 +97,7 @@ function noteLayout(ctx: CanvasRenderingContext2D, text: string, size: number) {
     lines.push(line);
   }
   ctx.restore();
-  const height = Math.max(width, 2 * pad + lines.length * fontSize * 1.2 + fold * 0.6);
+  const height = Math.max(size * note.h, 2 * pad + lines.length * fontSize * 1.2 + fold * 0.6);
   return { width, height, pad, fold, fontSize, lines };
 }
 
@@ -180,7 +181,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const n of state.notes) {
       const x = x0 + n.x * size, y = y0 + n.y * size;
-      const { width: side, height, pad, fold, fontSize, lines } = noteLayout(ctx, n.text, size);
+      const { width: side, height, pad, fold, fontSize, lines } = noteLayout(ctx, n, size);
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.35)";
       ctx.shadowBlur = 6;
@@ -522,16 +523,25 @@ export default function MapView({
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
-  type NoteChange = { add: MapNote } | { remove: number };
+  type NoteChange = { add: MapNote } | { resize: { id: number; w: number; h: number } } | { remove: number };
   const [optimisticNotes, changeNotes] = useOptimistic(notes, (ns: MapNote[], c: NoteChange) =>
-    "add" in c ? [...ns, c.add] : ns.filter((n) => n.id !== c.remove)
+    "add" in c
+      ? [...ns, c.add]
+      : "resize" in c
+        ? ns.map((n) => (n.id === c.resize.id ? { ...n, w: c.resize.w, h: c.resize.h } : n))
+        : ns.filter((n) => n.id !== c.remove)
   );
+  // Resizing a note by dragging its folded corner: live size in grid cells.
+  const [resizingNote, setResizingNote] = useState<{ id: number; w: number; h: number } | null>(null);
+  const drawnNotes = resizingNote
+    ? optimisticNotes.map((n) => (n.id === resizingNote.id ? { ...n, w: resizingNote.w, h: resizingNote.h } : n))
+    : optimisticNotes;
 
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: optimisticNotes,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -587,12 +597,26 @@ export default function MapView({
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 0 && selected === "notes") {
+      // Grabbing a note's folded corner resizes it (topmost note first).
+      const { gx, gy } = gridAt(e);
+      const corner = [...optimisticNotes].reverse().find((n) => {
+        const ctx = e.currentTarget.getContext("2d")!;
+        const size = gridOrigin(state, e.currentTarget.getBoundingClientRect().width, e.currentTarget.getBoundingClientRect().height).size;
+        const { width, height } = noteLayout(ctx, n, size);
+        const right = n.x + width / size, bottom = n.y + height / size;
+        return gx >= right - 0.35 && gx <= right + 0.1 && gy >= bottom - 0.35 && gy <= bottom + 0.1;
+      });
+      if (corner) {
+        setSelectedNoteId(corner.id);
+        setResizingNote({ id: corner.id, w: corner.w, h: corner.h });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
       const text = noteDraft.trim();
       if (!text) return;
-      const { gx, gy } = gridAt(e);
       setNoteDraft("");
       startTransition(async () => {
-        changeNotes({ add: { id: -Date.now(), x: gx, y: gy, text } });
+        changeNotes({ add: { id: -Date.now(), x: gx, y: gy, w: 1.6, h: 1.6, text } });
         await placeNote(locationId, levelId, gx, gy, text);
       });
       return;
@@ -673,6 +697,12 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (resizingNote) {
+      const n = optimisticNotes.find((x) => x.id === resizingNote.id)!;
+      const { gx, gy } = gridAt(e);
+      setResizingNote({ id: n.id, w: Math.max(0.6, gx - n.x), h: Math.max(0.6, gy - n.y) });
+      return;
+    }
     if (draggingToken) {
       const { col, row } = cellAt(e);
       if (col !== draggingToken.col || row !== draggingToken.row) setDraggingToken({ ...draggingToken, col, row });
@@ -702,6 +732,15 @@ export default function MapView({
   };
   const onPointerUp = () => {
     drag.current = null;
+    if (resizingNote) {
+      const r = resizingNote;
+      setResizingNote(null);
+      startTransition(async () => {
+        changeNotes({ resize: r });
+        await changeNoteSize(locationId, r.id, r.w, r.h);
+      });
+      return;
+    }
     if (draggingToken) {
       const { id, col, row } = draggingToken;
       const before = optimisticTokens.find((t) => t.id === id);
@@ -774,14 +813,14 @@ export default function MapView({
         ctx.restore();
       }
       // Highlight the note picked in the editor.
-      const note = optimisticNotes.find((n) => n.id === selectedNoteId);
+      const note = drawnNotes.find((n) => n.id === selectedNoteId);
       if (note && selected === "notes") {
         const { x0, y0, size } = gridOrigin(state, width, height);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
         ctx.lineWidth = 3 / view.zoom;
         ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
-        const { width: nw, height: nh } = noteLayout(ctx, note.text, size);
+        const { width: nw, height: nh } = noteLayout(ctx, note, size);
         ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, nw + 8, nh + 8);
         ctx.restore();
       }

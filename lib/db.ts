@@ -227,6 +227,8 @@ addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("map_levels", "grid", "TEXT"); // JSON MapGrid
 addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
 addColumn("map_structures", "open", "INTEGER NOT NULL DEFAULT 0"); // doors only: 1 = open
+addColumn("map_notes", "w", "REAL NOT NULL DEFAULT 1.6"); // size in grid cells
+addColumn("map_notes", "h", "REAL NOT NULL DEFAULT 1.6"); // minimum height; grows to fit text
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -1072,15 +1074,17 @@ export interface MapNote {
   id: number;
   x: number;
   y: number;
+  w: number; // width in grid cells
+  h: number; // minimum height in grid cells (taller if the text needs it)
   text: string;
 }
 
 export function listNotes(levelId: number): MapNote[] {
-  return db.prepare<[number], MapNote>("SELECT id, x, y, text FROM map_notes WHERE level_id = ? ORDER BY id").all(levelId);
+  return db.prepare<[number], MapNote>("SELECT id, x, y, w, h, text FROM map_notes WHERE level_id = ? ORDER BY id").all(levelId);
 }
 
-export function addNote(levelId: number, n: Omit<MapNote, "id">): void {
-  db.prepare<Omit<MapNote, "id"> & { level_id: number }>("INSERT INTO map_notes (level_id, x, y, text) VALUES (@level_id, @x, @y, @text)").run({
+export function addNote(levelId: number, n: Omit<MapNote, "id" | "w" | "h">): void {
+  db.prepare<Omit<MapNote, "id" | "w" | "h"> & { level_id: number }>("INSERT INTO map_notes (level_id, x, y, text) VALUES (@level_id, @x, @y, @text)").run({
     ...n,
     level_id: levelId,
   });
@@ -1092,4 +1096,8 @@ export function updateNoteText(id: number, text: string): void {
 
 export function deleteNote(id: number): void {
   db.prepare<[number]>("DELETE FROM map_notes WHERE id = ?").run(id);
+}
+
+export function resizeNote(id: number, w: number, h: number): void {
+  db.prepare<[number, number, number]>("UPDATE map_notes SET w = ?, h = ? WHERE id = ?").run(w, h, id);
 }

@@ -30,7 +30,7 @@ export default function NotesEditor({
         className="textarea textarea-sm w-full bg-yellow-100 text-neutral-900 placeholder:text-neutral-500"
         rows={3}
       />
-      <p className="text-xs opacity-60">Notes are only ever shown to the GM.</p>
+      <p className="text-xs opacity-60">Notes are only ever shown to the GM. Drag a note&apos;s folded corner to resize it.</p>
       {notes.length > 0 && (
         <ul className="space-y-2">
           {notes.map((n) => (
