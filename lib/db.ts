@@ -944,10 +944,21 @@ export function listTokens(levelId: number): MapToken[] {
     .all(levelId);
 }
 
-export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number): void {
-  db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, creature_id, col, row) VALUES (?, ?, ?, ?)").run(
-    levelId, creatureId, col, row
+export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number): number {
+  return Number(
+    db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, creature_id, col, row) VALUES (?, ?, ?, ?)").run(
+      levelId, creatureId, col, row
+    ).lastInsertRowid
   );
+}
+
+/** The location a map level belongs to, with the level's name. */
+export function getLevelPlace(levelId: number): { location: string; level: string } | undefined {
+  return db
+    .prepare<[number], { location: string; level: string }>(
+      "SELECT l.name AS location, m.name AS level FROM map_levels m JOIN locations l ON l.id = m.location_id WHERE m.id = ?"
+    )
+    .get(levelId);
 }
 
 export function deleteToken(id: number): void {
@@ -1134,8 +1145,8 @@ export function addControl(levelId: number, edge: ControlEdge, icon: string, lab
   );
 }
 
-export function getControlScript(id: number): string | undefined {
-  return db.prepare<[number], { script: string }>("SELECT script FROM map_controls WHERE id = ?").get(id)?.script;
+export function getControlScript(id: number): { script: string; level_id: number } | undefined {
+  return db.prepare<[number], { script: string; level_id: number }>("SELECT script, level_id FROM map_controls WHERE id = ?").get(id);
 }
 
 export function saveControlScript(id: number, script: string): void {

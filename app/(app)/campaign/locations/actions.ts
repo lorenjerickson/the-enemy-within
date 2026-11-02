@@ -331,12 +331,14 @@ export async function changeControlScript(locationId: number, id: number, script
 }
 
 /** Runs a button's script (a GM clicked it on the map). */
-export async function runControl(id: number): Promise<ScriptResult> {
+export async function runControl(locationId: number, id: number): Promise<ScriptResult> {
   await requireGm();
-  const script = getControlScript(id);
-  if (script === undefined) return { ok: false, error: "That button no longer exists" };
-  if (!script.trim()) return { ok: false, error: "This button has no script yet" };
-  return tryGameScript(script);
+  const control = getControlScript(id);
+  if (!control) return { ok: false, error: "That button no longer exists" };
+  if (!control.script.trim()) return { ok: false, error: "This button has no script yet" };
+  const result = tryGameScript(control.script, control.level_id);
+  revalidatePath(`/campaign/locations/${locationId}`);
+  return result;
 }
 
 export async function removeControl(locationId: number, id: number) {

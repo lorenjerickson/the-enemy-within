@@ -936,7 +936,7 @@ export default function MapView({
                 size={canvasSize}
                 onRun={(c) =>
                   startTransition(async () => {
-                    const r = await runControl(c.id);
+                    const r = await runControl(locationId, c.id);
                     setControlResult({ label: c.label, ok: r.ok, text: r.ok ? r.value : r.error });
                   })
                 }

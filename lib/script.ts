@@ -6,9 +6,9 @@
 
 // ---------- Values the interpreter understands besides plain data ----------
 
-/** Named records, reachable as coll['annis'], coll.annis or coll.all.<property>. */
+/** Named records, reachable as coll['annis'], coll.annis, coll.random or coll.all.<property>; coll.add(name) when `adder` is given. */
 export class Collection<T extends { id: number; name: string }> {
-  constructor(public kind: string, public items: T[]) {}
+  constructor(public kind: string, public items: T[], public adder?: (name: string) => T) {}
 }
 /** A set of words, e.g. conditions: add, remove, has, count. */
 export class Tags {
@@ -258,6 +258,14 @@ function getKey(obj: unknown, key: string): unknown {
   if (obj instanceof Broadcast) return new Broadcast(obj.values.map((v) => getKey(v, key)));
   if (obj instanceof Collection) {
     if (key === "all" || key === "each") return new Broadcast(obj.items);
+    if (key === "random") {
+      if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s to pick from`);
+      return obj.items[Math.floor(Math.random() * obj.items.length)];
+    }
+    if (key === "add" && obj.adder) {
+      const adder = obj.adder;
+      return new Method((name) => adder(String(name)));
+    }
     if (key === "count") return obj.items.length;
     const found = obj.items.find((it) => it.name.toLowerCase() === key.toLowerCase() || String(it.id) === key);
     if (!found) throw new ScriptError(`No ${obj.kind} named "${key}"`);
@@ -294,6 +302,8 @@ function setKey(obj: unknown, key: string, value: unknown): void {
     if (value !== null && !["number", "string", "boolean"].includes(typeof value)) throw new ScriptError(`game.vars can only hold numbers, text, true/false or null`);
   } else if (!Object.hasOwn(rec, key)) {
     throw new ScriptError(`There is no "${key}" to change`);
+  } else if (value !== null && typeof value === "object") {
+    throw new ScriptError(`"${key}" can't be replaced as a whole; change its parts${key === "position" ? " or use place()" : ""}`);
   } else if (typeof rec[key] !== typeof value) {
     throw new ScriptError(`"${key}" is a ${typeof rec[key]}, not a ${typeof value}`);
   }

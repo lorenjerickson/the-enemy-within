@@ -10,6 +10,9 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
+- `game.currentLocation` (map button scripts only): `name`, `level`, `actors` (everything on the level) and `creatures`.
+  Each actor has `name`, `type` and `position` (`{col, row}`). `creatures.add('giant rat')` adds a creature from the templates; it must then be placed.
+- `coll.random` picks one item at random.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
 Changes are saved when the script finishes. A failing script saves nothing.
@@ -31,6 +34,7 @@ WITH game.players.each.health as H
 ```
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
+Map helpers: `near(position)` (a random free cell next to it), `place(actor, position)`.
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).
