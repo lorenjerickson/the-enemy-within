@@ -1104,7 +1104,7 @@ function ControlButtons({
   size: { w: number; h: number };
   view: { zoom: number; x: number; y: number };
 }) {
-  const MARGIN = 12, GAP = 8, B = 36;
+  const MARGIN = 12, GAP = 6, B = 26;
   const placed = (["top", "right", "bottom", "left"] as const).flatMap((edge) => {
     const row = controls.filter((c) => c.edge === edge);
     const horizontal = edge === "top" || edge === "bottom";
@@ -1127,8 +1127,14 @@ function ControlButtons({
           data-tip={c.label}
           style={{ left: view.x + x * view.zoom, top: view.y + y * view.zoom, transform: `scale(${view.zoom})`, transformOrigin: "top left" }}
         >
-          <button type="button" data-control-button={c.label} aria-label={c.label} className="btn btn-primary btn-square shadow-lg" style={{ width: B, height: B, minHeight: B }}>
-            <GameIcon name={c.icon} className="size-5" />
+          <button
+            type="button"
+            data-control-button={c.label}
+            aria-label={c.label}
+            className="flex items-center justify-center rounded-md border border-white/70 bg-transparent text-white/90 hover:border-white hover:text-white"
+            style={{ width: B, height: B }}
+          >
+            <GameIcon name={c.icon} className="size-4" />
           </button>
         </div>
       ))}
