@@ -1,19 +1,18 @@
 "use client";
 
 import type { MapStructure } from "@/lib/db";
-import { STRUCTURE_KINDS, type StructureKind } from "@/lib/maps";
+import { STRUCTURE_KINDS, STRUCTURE_LABELS, type StructureKind } from "@/lib/maps";
 
 export interface StructureTool {
   kind: StructureKind;
   targetLevelId: number | null;
 }
 
-const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
-
 /** Structure layer editor: pick what to place, and list / delete what's placed. */
 export default function StructureEditor({
   tool,
   onToolChange,
+  portrait,
   levels,
   pieces,
   selectedId,
@@ -23,6 +22,7 @@ export default function StructureEditor({
 }: {
   tool: StructureTool;
   onToolChange: (tool: StructureTool) => void;
+  portrait: boolean; // side-on map: offers stairs
   levels: { id: number; name: string }[]; // other levels a staircase can lead to
   pieces: MapStructure[];
   selectedId: number | null;
@@ -34,7 +34,7 @@ export default function StructureEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="join">
-          {STRUCTURE_KINDS.map((k) => (
+          {STRUCTURE_KINDS.filter((k) => portrait || k !== "stairs").map((k) => (
             <button
               key={k}
               type="button"
@@ -42,7 +42,7 @@ export default function StructureEditor({
               className={`btn btn-sm join-item ${tool.kind === k ? "btn-primary" : ""}`}
               onClick={() => onToolChange({ ...tool, kind: k })}
             >
-              {capitalize(k)}
+              {STRUCTURE_LABELS[k]}
             </button>
           ))}
         </div>
@@ -63,10 +63,12 @@ export default function StructureEditor({
       <p className="text-xs opacity-60">
         {tool.kind === "staircase"
           ? levels.length === 0
-            ? "Add another level first — a staircase leads from this level to another."
-            : "Click a grid cell to place a staircase to the chosen level."
-          : `Click and drag between grid corners to draw a ${tool.kind}.`}{" "}
-        Walls and closed doors block light.
+            ? "Add another level first — a level link leads from this level to another."
+            : "Click a grid cell to place a level link (stairs to the chosen level)."
+          : tool.kind === "stairs"
+            ? "Drag from the top step to the bottom step of a flight. Tokens stand on it part way down."
+            : `Click and drag between grid corners to draw a ${tool.kind}.`}{" "}
+        Walls and closed doors block light.{portrait && " Horizontal walls, windows and closed doors are floors."}
       </p>
 
       <div className="space-y-1">
@@ -78,7 +80,7 @@ export default function StructureEditor({
             {pieces.map((s) => (
               <li key={s.id} className={`flex items-center gap-2 px-2 py-1 ${s.id === selectedId ? "bg-primary/20" : ""}`}>
                 <button type="button" data-structure={s.id} onClick={() => onSelect(s.id)} className="flex flex-1 items-center gap-2 text-left">
-                  <span>{capitalize(s.kind)}{s.kind === "door" && (s.open ? " (open)" : " (closed)")}</span>
+                  <span>{STRUCTURE_LABELS[s.kind]}{s.kind === "door" && (s.open ? " (open)" : " (closed)")}</span>
                   <span className="text-xs opacity-60">
                     {s.kind === "staircase"
                       ? `cell ${s.x1}, ${s.y1} → ${s.target_name ?? "(missing level)"}`

@@ -43,6 +43,7 @@ Map helpers:
 - `move(actor, position)`: movement during play. Returns any fall damage taken.
 
 Portrait (side-on) maps have gravity: horizontal walls, windows and closed doors are floors (an open door is a trapdoor).
+Stairs (a structure on portrait maps) are sloped floors: a token in a column stands on the flight at that column's middle. A drop of under 2 cells does no damage, so walking down stairs isn't a fall.
 Floors can be at any height (drawing snaps to columns across, 1/20 of a cell up and down), so an actor's `position.row` can be fractional: it stands on a floor at `row + 1`.
 Anything placed or moved drops to the first floor below its middle; `near()` only picks spots on floors.
 `move()` deals fall damage, 1d6 per 10 ft (2 cells). With no floor below, nothing falls, so draw the ground.

@@ -164,6 +164,22 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.font = `${Math.max(9, size / 6)}px sans-serif`;
         ctx.textAlign = "center";
         ctx.fillText(s.target_name ?? "?", r.x + r.w / 2, r.y + r.h - 4);
+      } else if (s.kind === "stairs") {
+        // A flight: treads and risers from one end to the other, about four steps per cell across.
+        const [top, bottom] = s.y1 <= s.y2 ? [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }] : [{ x: s.x2, y: s.y2 }, { x: s.x1, y: s.y1 }];
+        const steps = Math.max(2, Math.round(Math.abs(bottom.x - top.x) * 4));
+        const dx = ((bottom.x - top.x) / steps) * size, dy = ((bottom.y - top.y) / steps) * size;
+        ctx.strokeStyle = STRUCTURE_STYLES.stairs.color;
+        ctx.lineWidth = STRUCTURE_STYLES.stairs.width;
+        ctx.lineJoin = "miter";
+        ctx.beginPath();
+        let px = x0 + top.x * size, py = y0 + top.y * size;
+        ctx.moveTo(px, py);
+        for (let i = 0; i < steps; i++) {
+          ctx.lineTo((px += dx), py);
+          ctx.lineTo(px, (py += dy));
+        }
+        ctx.stroke();
       } else {
         const style = STRUCTURE_STYLES[s.kind];
         ctx.strokeStyle = style.color;
@@ -1071,6 +1087,7 @@ export default function MapView({
               />
             ) : selected === "structure" ? (
               <StructureEditor
+                portrait={portrait}
                 tool={structureTool}
                 onToolChange={setStructureTool}
                 levels={otherLevels}
