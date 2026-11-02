@@ -23,7 +23,7 @@ export default function BackgroundEditor({
       <div className="join">
         {(["color", "texture"] as const).map((m) => (
           <label key={m} className={`btn btn-sm join-item ${mode === m ? "btn-primary" : ""}`}>
-            <input type="radio" name="mode" value={m} checked={mode === m} onChange={() => setMode(m)} hidden />
+            <input type="radio" name="mode" value={m} defaultChecked={background.mode === m} onChange={() => setMode(m)} hidden />
             {m === "color" ? "Colour" : "Texture"}
           </label>
         ))}

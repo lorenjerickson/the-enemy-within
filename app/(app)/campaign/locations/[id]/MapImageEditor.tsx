@@ -19,7 +19,8 @@ export default function MapImageEditor({ locationId, levelId, mapImage }: { loca
         <div className="flex-1 space-y-3">
           <label className="flex items-center gap-2 text-sm">
             Perspective
-            <select name="perspective" value={perspective} onChange={(e) => setPerspective(e.target.value as Perspective)} className="select select-sm w-40">
+            {/* Uncontrolled: React resets forms after their action, and a controlled select would show its first option. */}
+            <select name="perspective" defaultValue={mapImage.perspective} onChange={(e) => setPerspective(e.target.value as Perspective)} className="select select-sm w-40">
               {PERSPECTIVES.map((p) => (
                 <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>
               ))}
