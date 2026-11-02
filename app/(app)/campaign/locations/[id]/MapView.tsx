@@ -74,6 +74,32 @@ function mapRect({ background: { padding: p }, mapImageEl: img }: MapState, w: n
   return { x: p.left + (innerW - drawW) / 2, y: p.top + (innerH - drawH) / 2, w: drawW, h: drawH };
 }
 
+/**
+ * Sticky note geometry for a given grid size: fixed width (1.6 cells), at least square,
+ * and as tall as its word-wrapped text needs.
+ */
+function noteLayout(ctx: CanvasRenderingContext2D, text: string, size: number) {
+  const width = size * 1.6, pad = width * 0.08, fold = width * 0.15;
+  const fontSize = Math.max(6, width * 0.11);
+  ctx.save();
+  ctx.font = `${fontSize}px sans-serif`;
+  const lines: string[] = [];
+  for (const para of text.split("\n")) {
+    let line = "";
+    for (const word of para.split(" ")) {
+      const next = line ? `${line} ${word}` : word;
+      if (ctx.measureText(next).width > width - 2 * pad && line) {
+        lines.push(line);
+        line = word;
+      } else line = next;
+    }
+    lines.push(line);
+  }
+  ctx.restore();
+  const height = Math.max(width, 2 * pad + lines.length * fontSize * 1.2 + fold * 0.6);
+  return { width, height, pad, fold, fontSize, lines };
+}
+
 /** Grid cell geometry: top-left of cell (0,0) and the cell size, in map space. */
 function gridOrigin(state: MapState, w: number, h: number) {
   const { size, offsetX, offsetY } = state.grid;
@@ -149,12 +175,12 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.restore();
   },
   // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
-  // GM-only yellow sticky notes: a square with a folded corner and wrapped text.
+  // GM-only yellow sticky notes: fixed width, growing taller to fit their text, with a folded corner.
   notes: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
-    const side = size * 1.6, pad = side * 0.08, fold = side * 0.15;
     for (const n of state.notes) {
       const x = x0 + n.x * size, y = y0 + n.y * size;
+      const { width: side, height, pad, fold, fontSize, lines } = noteLayout(ctx, n.text, size);
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.35)";
       ctx.shadowBlur = 6;
@@ -163,38 +189,23 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x + side, y);
-      ctx.lineTo(x + side, y + side - fold);
-      ctx.lineTo(x + side - fold, y + side);
-      ctx.lineTo(x, y + side);
+      ctx.lineTo(x + side, y + height - fold);
+      ctx.lineTo(x + side - fold, y + height);
+      ctx.lineTo(x, y + height);
       ctx.closePath();
       ctx.fill();
       ctx.shadowColor = "transparent";
       ctx.fillStyle = "#fbbf24";
       ctx.beginPath();
-      ctx.moveTo(x + side, y + side - fold);
-      ctx.lineTo(x + side - fold, y + side - fold);
-      ctx.lineTo(x + side - fold, y + side);
+      ctx.moveTo(x + side, y + height - fold);
+      ctx.lineTo(x + side - fold, y + height - fold);
+      ctx.lineTo(x + side - fold, y + height);
       ctx.closePath();
       ctx.fill();
-      // Word-wrapped text, clipped to the note.
-      const fontSize = Math.max(6, side * 0.11);
       ctx.font = `${fontSize}px sans-serif`;
       ctx.fillStyle = "#1f2937";
       ctx.textBaseline = "top";
-      const lines: string[] = [];
-      for (const para of n.text.split("\n")) {
-        let line = "";
-        for (const word of para.split(" ")) {
-          const next = line ? `${line} ${word}` : word;
-          if (ctx.measureText(next).width > side - 2 * pad && line) {
-            lines.push(line);
-            line = word;
-          } else line = next;
-        }
-        lines.push(line);
-      }
-      const maxLines = Math.floor((side - 2 * pad - fold * 0.5) / (fontSize * 1.2));
-      lines.slice(0, maxLines).forEach((l, i) => ctx.fillText(l, x + pad, y + pad + i * fontSize * 1.2));
+      lines.forEach((l, i) => ctx.fillText(l, x + pad, y + pad + i * fontSize * 1.2));
       ctx.restore();
     }
   },
@@ -770,7 +781,8 @@ export default function MapView({
         ctx.strokeStyle = "rgb(129,140,248)";
         ctx.lineWidth = 3 / view.zoom;
         ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
-        ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, size * 1.6 + 8, size * 1.6 + 8);
+        const { width: nw, height: nh } = noteLayout(ctx, note.text, size);
+        ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, nw + 8, nh + 8);
         ctx.restore();
       }
       // Highlight the light picked in the editor.
