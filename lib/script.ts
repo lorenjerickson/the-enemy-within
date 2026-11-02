@@ -259,7 +259,12 @@ function describe(v: unknown): string {
 
 function getKey(obj: unknown, key: string): unknown {
   if (FORBIDDEN.has(key)) throw new ScriptError(`"${key}" isn't allowed`);
-  if (obj instanceof Broadcast) return new Broadcast(obj.values.map((v) => getKey(v, key)));
+  if (obj instanceof Broadcast) {
+    // A list is already "each": coll.all.each.x is the same as coll.each.x.
+    if (key === "each" || key === "all") return obj;
+    if (key === "count") return obj.values.length;
+    return new Broadcast(obj.values.map((v) => getKey(v, key)));
+  }
   if (obj instanceof Collection) {
     if (key === "all" || key === "each") return new Broadcast(obj.items);
     if (key === "current") {

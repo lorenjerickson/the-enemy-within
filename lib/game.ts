@@ -1,10 +1,11 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  addCreatureToken, getLevelPlace, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
+import { makeEncounter, rollsFor, type Actor, type EncounterState } from "./encounter";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
 
@@ -18,14 +19,7 @@ export interface Player {
   conditions: Tags;
 }
 
-/** A creature or character on the current map level. */
-export interface Actor {
-  id: number; // negative until saved
-  name: string;
-  type: "creature" | "character";
-  /** Grid cell; null for a creature added but not placed yet. */
-  position: { col: number; row: number } | null;
-}
+export type { Actor };
 
 export interface GameLocation {
   id: number;
@@ -37,6 +31,8 @@ export interface CurrentLocation extends GameLocation {
   level: string;
   actors: Collection<Actor>;
   creatures: Collection<Actor>;
+  /** The encounter on this level: active, round, actor, order, begin(actors, rolls), next(), end(). */
+  encounter: Record<string, unknown>;
 }
 
 export interface Game {
@@ -51,24 +47,35 @@ interface ActorChanges {
   levelId: number;
   added: Map<Actor, number>; // actor -> creature id
   start: Map<Actor, string>;
+  encounter: () => EncounterState | null;
 }
 
 function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
   const place = getLevelPlace(levelId);
   if (!place) throw new ScriptError("This map level no longer exists");
-  const changes: ActorChanges = { levelId, added: new Map(), start: new Map() };
+  const changes: ActorChanges = { levelId, added: new Map(), start: new Map(), encounter: () => null };
+  const templates = listCreatures();
+  const characters = listCharacterStates();
+  const attributesOf = (t: { creature_id: number | null; character_id: number | null }) =>
+    (t.character_id ? characters.find((c) => c.id === t.character_id) : templates.find((c) => c.id === t.creature_id))?.attributes ?? {};
   const actors = listTokens(levelId).map((t): Actor => {
-    const a: Actor = { id: t.id, name: t.name, type: t.character_id ? "character" : "creature", position: { col: t.col, row: t.row } };
+    const a: Actor = {
+      id: t.id,
+      name: t.name,
+      type: t.character_id ? "character" : "creature",
+      position: { col: t.col, row: t.row },
+      rolls: rollsFor(attributesOf(t)),
+    };
     changes.start.set(a, `${t.col},${t.row}`);
     return a;
   });
   let nextId = -1;
   // add('giant rat') returns the new creature; add('giant rat', 3) returns a group of them.
   const creatures = new Collection("creature", actors.filter((a) => a.type === "creature"), (name, count) => {
-    const template = listCreatures().find((c) => c.name.toLowerCase() === name.toLowerCase());
+    const template = templates.find((c) => c.name.toLowerCase() === name.toLowerCase());
     if (!template) throw new ScriptError(`No creature named "${name}" (see Campaign › Creatures)`);
     const added = Array.from({ length: count }, (): Actor => {
-      const a: Actor = { id: nextId--, name: template.name, type: "creature", position: null };
+      const a: Actor = { id: nextId--, name: template.name, type: "creature", position: null, rolls: rollsFor(template.attributes) };
       changes.added.set(a, template.id);
       creatures.items.push(a);
       actorsColl.items.push(a);
@@ -77,7 +84,18 @@ function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
     return count === 1 ? added[0] : new Collection("creature", added);
   });
   const actorsColl = new Collection("actor", actors);
-  return [{ id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures }, changes];
+  // The saved encounter, with token ids turned back into actors (tokens removed since are dropped).
+  const saved = getEncounter(levelId);
+  const order = (saved?.order ?? []).flatMap((o) => {
+    const actor = actors.find((a) => a.id === o.token_id);
+    return actor ? [{ actor, initiative: o.initiative }] : [];
+  });
+  const { encounter, state } = makeEncounter(
+    actorsColl,
+    saved && order.length ? { order, round: saved.round, turn: Math.min(saved.turn, order.length - 1) } : null
+  );
+  changes.encounter = state;
+  return [{ id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter }, changes];
 }
 
 function saveActors(changes: ActorChanges, location: CurrentLocation): void {
@@ -85,11 +103,14 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
     const creatureId = changes.added.get(a);
     if (creatureId !== undefined) {
       if (!a.position) throw new ScriptError(`${a.name} was added but never placed; use place(...)`);
-      addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row);
+      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row);
     } else if (a.position && changes.start.get(a) !== `${a.position.col},${a.position.row}`) {
       moveToken(a.id, Math.round(a.position.col), Math.round(a.position.row));
     }
   }
+  // After the inserts above, so new creatures have their token ids.
+  const e = changes.encounter();
+  saveEncounter(changes.levelId, e && { round: e.round, turn: e.turn, order: e.order.map((o) => ({ token_id: o.actor.id, initiative: o.initiative })) });
 }
 
 function loadGame(levelId?: number): [Game, ActorChanges | null] {

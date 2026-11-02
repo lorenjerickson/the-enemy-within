@@ -247,6 +247,13 @@ addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of Equi
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
 db.exec("CREATE TABLE IF NOT EXISTS game_vars (key TEXT PRIMARY KEY, value TEXT NOT NULL)"); // script variables, JSON values
+// The running encounter on a map level; turn_order is JSON [{ token_id, initiative }], highest first.
+db.exec(`CREATE TABLE IF NOT EXISTS encounters (
+  level_id INTEGER PRIMARY KEY REFERENCES map_levels(id),
+  round INTEGER NOT NULL,
+  turn INTEGER NOT NULL,
+  turn_order TEXT NOT NULL
+)`);
 
 // One-time migration: the old per-profession "ranks" tree becomes linked professions.
 const hasRanks = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ranks'").get();
@@ -798,6 +805,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_controls WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM encounters WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -1198,3 +1206,27 @@ export function saveVars(vars: Record<string, VarValue>): void {
 
 /** Runs fn in a single transaction. */
 export const transaction = <T>(fn: () => T): T => db.transaction(fn)();
+
+export interface EncounterRow {
+  round: number;
+  turn: number;
+  order: { token_id: number; initiative: number }[];
+}
+
+export function getEncounter(levelId: number): EncounterRow | undefined {
+  const row = db
+    .prepare<[number], { round: number; turn: number; turn_order: string }>("SELECT round, turn, turn_order FROM encounters WHERE level_id = ?")
+    .get(levelId);
+  return row && { round: row.round, turn: row.turn, order: JSON.parse(row.turn_order) };
+}
+
+/** Saves the level's encounter, or ends it (null). */
+export function saveEncounter(levelId: number, e: EncounterRow | null): void {
+  if (!e) {
+    db.prepare<[number]>("DELETE FROM encounters WHERE level_id = ?").run(levelId);
+    return;
+  }
+  db.prepare<[number, number, number, string]>(
+    "INSERT INTO encounters (level_id, round, turn, turn_order) VALUES (?, ?, ?, ?) ON CONFLICT(level_id) DO UPDATE SET round = excluded.round, turn = excluded.turn, turn_order = excluded.turn_order"
+  ).run(levelId, e.round, e.turn, JSON.stringify(e.order));
+}

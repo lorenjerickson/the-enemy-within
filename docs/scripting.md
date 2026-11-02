@@ -12,6 +12,9 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.locations`: every location by name. `game.locations.current` (map button scripts only) is the button's location, with `level`, `actors` (everything on that level) and `creatures`.
   Each actor has `name`, `type` and `position` (`{col, row}`). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
+- Actors have `rolls.initiative` (1d20 + agility modifier, rolled fresh each read).
+- `L.encounter` on the current location: `active`, `round`, `actor` (whose turn), `order`;
+  `begin(actors, initiatives)` (initiatives optional, one per actor), `next()`, `end()`.
 - `coll.random` picks one item at random; `coll.find('name')` is the first with that name.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
