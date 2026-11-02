@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
-import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
+import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { Asset, MapTile } from "@/lib/db";
+import type { Asset, MapStructure, MapTile } from "@/lib/db";
+import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { moveTileTo, placeTile, removeTile, toggleLayer } from "../actions";
+import { moveTileTo, placeStructure, placeTile, removeStructure, removeTile, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -32,6 +33,7 @@ interface MapState {
   grid: MapGrid;
   tiles: MapTile[];
   tileImages: Map<string, HTMLImageElement>;
+  structures: MapStructure[];
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -98,6 +100,40 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       if (img) ctx.drawImage(img, r.x, r.y, r.w, r.h);
     }
   },
+  structure: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    ctx.save();
+    ctx.lineCap = "round";
+    for (const s of state.structures) {
+      if (s.kind === "staircase") {
+        const r = cellToRect(state, w, h, { col: s.x1, row: s.y1, cols: 1, rows: 1 });
+        ctx.fillStyle = "rgba(17,24,39,0.7)";
+        ctx.fillRect(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.lineWidth = 2;
+        for (let i = 1; i < 4; i++) {
+          const y = r.y + (r.h * i) / 4;
+          ctx.beginPath();
+          ctx.moveTo(r.x + r.w * 0.2, y);
+          ctx.lineTo(r.x + r.w * 0.8, y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#e5e7eb";
+        ctx.font = `${Math.max(9, size / 6)}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(s.target_name ?? "?", r.x + r.w / 2, r.y + r.h - 4);
+      } else {
+        const style = STRUCTURE_STYLES[s.kind];
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = style.width;
+        ctx.beginPath();
+        ctx.moveTo(x0 + s.x1 * size, y0 + s.y1 * size);
+        ctx.lineTo(x0 + s.x2 * size, y0 + s.y2 * size);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  },
   map: (state) => (ctx, w, h) => {
     const r = mapRect(state, w, h);
     if (r && state.mapImageEl) ctx.drawImage(state.mapImageEl, r.x, r.y, r.w, r.h);
@@ -139,6 +175,8 @@ export default function MapView({
   templateColors,
   tileAssets,
   tiles,
+  structures,
+  otherLevels,
 }: {
   locationId: number;
   levelId: number;
@@ -149,6 +187,8 @@ export default function MapView({
   templateColors: TemplateColors;
   tileAssets: Asset[];
   tiles: MapTile[];
+  structures: MapStructure[];
+  otherLevels: { id: number; name: string }[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -195,16 +235,38 @@ export default function MapView({
   const drawnTiles = moving
     ? optimisticTiles.map((t) => (t.id === selectedTileId ? { ...t, col: t.col + moving.delta.col, row: t.row + moving.delta.row } : t))
     : optimisticTiles;
-  const state: MapState = { background, backgroundImage, mapImage, mapImageEl, grid, tiles: drawnTiles, tileImages: loadedTileImages };
+  // Structure placement: lines between grid corners, or a staircase in a cell.
+  const [structureTool, setStructureTool] = useState<StructureTool>({ kind: "wall", targetLevelId: otherLevels[0]?.id ?? null });
+  const [drawingLine, setDrawingLine] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
+  const [selectedStructureId, setSelectedStructureId] = useState<number | null>(null);
+  type StructureChange = { add: MapStructure } | { remove: number };
+  const [optimisticStructures, changeStructures] = useOptimistic(structures, (ss: MapStructure[], c: StructureChange) =>
+    "add" in c ? [...ss, c.add] : ss.filter((s) => s.id !== c.remove)
+  );
 
-  /** Grid cell under a pointer event, accounting for zoom and pan. */
-  function cellAt(e: React.PointerEvent<HTMLCanvasElement>) {
+  const state: MapState = {
+    background, backgroundImage, mapImage, mapImageEl, grid,
+    tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
+  };
+
+  /** Pointer position in grid units (fractional), accounting for zoom and pan. */
+  function gridAt(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const mx = (e.clientX - rect.left - view.x) / view.zoom;
     const my = (e.clientY - rect.top - view.y) / view.zoom;
     const { x0, y0, size } = gridOrigin(state, rect.width, rect.height);
-    return { col: Math.floor((mx - x0) / size), row: Math.floor((my - y0) / size) };
+    return { gx: (mx - x0) / size, gy: (my - y0) / size };
   }
+  /** Grid cell under the pointer. */
+  const cellAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { gx, gy } = gridAt(e);
+    return { col: Math.floor(gx), row: Math.floor(gy) };
+  };
+  /** Nearest grid corner to the pointer. */
+  const cornerAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { gx, gy } = gridAt(e);
+    return { x: Math.round(gx), y: Math.round(gy) };
+  };
 
   const spanOf = (p: NonNullable<typeof placing>): CellRect => ({
     col: Math.min(p.start.col, p.end.col),
@@ -240,6 +302,23 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "structure") {
+      if (structureTool.kind === "staircase") {
+        if (!structureTool.targetLevelId) return;
+        const cell = cellAt(e);
+        const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
+        const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
+        startTransition(async () => {
+          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name } });
+          await placeStructure(locationId, levelId, piece);
+        });
+      } else {
+        const corner = cornerAt(e);
+        setDrawingLine({ start: corner, end: corner });
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
     if (e.button === 0 && selected === "tiles" && selectedTile) {
       const cell = cellAt(e);
       const t = selectedTile;
@@ -260,6 +339,11 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drawingLine) {
+      const corner = cornerAt(e);
+      if (corner.x !== drawingLine.end.x || corner.y !== drawingLine.end.y) setDrawingLine({ ...drawingLine, end: corner });
+      return;
+    }
     if (moving) {
       const cell = cellAt(e);
       const delta = { col: cell.col - moving.grab.col, row: cell.row - moving.grab.row };
@@ -279,6 +363,17 @@ export default function MapView({
   };
   const onPointerUp = () => {
     drag.current = null;
+    if (drawingLine) {
+      const { start, end } = drawingLine;
+      setDrawingLine(null);
+      if (start.x === end.x && start.y === end.y) return; // a click without a drag draws nothing
+      const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: end.y, target_level_id: null };
+      startTransition(async () => {
+        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null } });
+        await placeStructure(locationId, levelId, piece);
+      });
+      return;
+    }
     if (moving && selectedTile) {
       const { col, row } = { col: selectedTile.col + moving.delta.col, row: selectedTile.row + moving.delta.row };
       const id = selectedTile.id;
@@ -325,6 +420,35 @@ export default function MapView({
         ctx.lineWidth = 3 / view.zoom;
         ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
         ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.restore();
+      }
+      // Structure: preview of the line being drawn, and highlight of the selected piece.
+      if (drawingLine && structureTool.kind !== "staircase") {
+        const { x0, y0, size } = gridOrigin(state, width, height);
+        const style = STRUCTURE_STYLES[structureTool.kind];
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = style.width;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(x0 + drawingLine.start.x * size, y0 + drawingLine.start.y * size);
+        ctx.lineTo(x0 + drawingLine.end.x * size, y0 + drawingLine.end.y * size);
+        ctx.stroke();
+        ctx.restore();
+      }
+      const piece = optimisticStructures.find((s) => s.id === selectedStructureId);
+      if (piece && selected === "structure") {
+        const { x0, y0, size } = gridOrigin(state, width, height);
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        const pad = 6;
+        const [ax, bx] = [Math.min(piece.x1, piece.x2), Math.max(piece.x1, piece.x2)];
+        const [ay, by] = [Math.min(piece.y1, piece.y2), Math.max(piece.y1, piece.y2)];
+        const extra = piece.kind === "staircase" ? 1 : 0;
+        ctx.strokeRect(x0 + ax * size - pad, y0 + ay * size - pad, (bx - ax + extra) * size + 2 * pad, (by - ay + extra) * size + 2 * pad);
         ctx.restore();
       }
       // Placement preview: outline of the cells the tile will cover.
@@ -377,6 +501,22 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "structure" ? (
+                <StructureEditor
+                  tool={structureTool}
+                  onToolChange={setStructureTool}
+                  levels={otherLevels}
+                  pieces={optimisticStructures}
+                  selectedId={selectedStructureId}
+                  onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
+                  onDelete={(id) =>
+                    startTransition(async () => {
+                      changeStructures({ remove: id });
+                      setSelectedStructureId(null);
+                      await removeStructure(locationId, id);
+                    })
+                  }
+                />
               ) : selected === "tiles" ? (
                 <TilesEditor
                   locationId={locationId}

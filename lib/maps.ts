@@ -66,3 +66,13 @@ export const TEMPLATE_LABELS: Record<TemplateKind, string> = { movement: "Moveme
 export const TEMPLATE_OPACITY = 0.15;
 
 export const DEFAULT_TEMPLATE_COLORS: TemplateColors = { movement: "#3b82f6", aoe: "#ef4444", vision: "#facc15" };
+
+/** Structure layer pieces. Walls, doors and windows run between grid corners; a staircase sits in a cell and leads to another level. */
+export const STRUCTURE_KINDS = ["wall", "door", "window", "staircase"] as const;
+export type StructureKind = (typeof STRUCTURE_KINDS)[number];
+
+export const STRUCTURE_STYLES: Record<Exclude<StructureKind, "staircase">, { color: string; width: number }> = {
+  wall: { color: "#e5e7eb", width: 6 },
+  door: { color: "#b45309", width: 6 },
+  window: { color: "#7dd3fc", width: 3 },
+};

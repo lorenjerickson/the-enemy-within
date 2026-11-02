@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addTile, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addStructure, addTile, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
-import { EDGES, MAP_LAYERS, PERSPECTIVES, TEMPLATE_KINDS, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
+import { EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -130,5 +130,34 @@ export async function moveTileTo(locationId: number, tileId: number, col: number
 export async function removeTile(locationId: number, tileId: number) {
   await requireGm();
   deleteTile(tileId);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function placeStructure(
+  locationId: number,
+  levelId: number,
+  piece: { kind: StructureKind; x1: number; y1: number; x2: number; y2: number; target_level_id: number | null }
+) {
+  await requireGm();
+  if (!STRUCTURE_KINDS.includes(piece.kind)) throw new Error("Invalid structure kind");
+  const levels = listLevels(locationId);
+  if (piece.kind === "staircase" && !levels.some((l) => l.id === piece.target_level_id && l.id !== levelId)) {
+    throw new Error("A staircase needs another level to lead to");
+  }
+  const int = (n: number) => Math.round(Number(n));
+  addStructure(levelId, {
+    kind: piece.kind,
+    x1: int(piece.x1),
+    y1: int(piece.y1),
+    x2: int(piece.x2),
+    y2: int(piece.y2),
+    target_level_id: piece.kind === "staircase" ? piece.target_level_id : null,
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeStructure(locationId: number, id: number) {
+  await requireGm();
+  deleteStructure(id);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

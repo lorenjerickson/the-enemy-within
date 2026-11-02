@@ -5,7 +5,7 @@ import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creature
 import type { Attributes } from "@/lib/attributes";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
-  type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors,
+  type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
 } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
@@ -98,6 +98,18 @@ db.exec(`
     row INTEGER NOT NULL,
     cols INTEGER NOT NULL DEFAULT 1,
     rows INTEGER NOT NULL DEFAULT 1
+  );
+  -- Structure on a level. Lines (wall/door/window) run between grid corners (x1,y1)-(x2,y2);
+  -- a staircase occupies cell (x1,y1) and leads to target_level_id.
+  CREATE TABLE IF NOT EXISTS map_structures (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    kind TEXT NOT NULL, -- StructureKind
+    x1 INTEGER NOT NULL,
+    y1 INTEGER NOT NULL,
+    x2 INTEGER NOT NULL,
+    y2 INTEGER NOT NULL,
+    target_level_id INTEGER REFERENCES map_levels(id)
   );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
@@ -708,6 +720,8 @@ export function addLevel(locationId: number, name: string, relativeTo?: { levelI
 export function removeLevel(levelId: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM map_tiles WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
   })();
@@ -796,4 +810,35 @@ export function moveTile(id: number, col: number, row: number): void {
 
 export function deleteTile(id: number): void {
   db.prepare<[number]>("DELETE FROM map_tiles WHERE id = ?").run(id);
+}
+
+export interface MapStructure {
+  id: number;
+  kind: StructureKind;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  target_level_id: number | null;
+  target_name: string | null;
+}
+
+export function listStructures(levelId: number): MapStructure[] {
+  return db
+    .prepare<[number], MapStructure>(
+      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name
+       FROM map_structures s LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE s.level_id = ? ORDER BY s.id`
+    )
+    .all(levelId);
+}
+
+export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name">): void {
+  db.prepare<Omit<MapStructure, "id" | "target_name"> & { level_id: number }>(
+    `INSERT INTO map_structures (level_id, kind, x1, y1, x2, y2, target_level_id)
+     VALUES (@level_id, @kind, @x1, @y1, @x2, @y2, @target_level_id)`
+  ).run({ ...s, level_id: levelId });
+}
+
+export function deleteStructure(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_structures WHERE id = ?").run(id);
 }
