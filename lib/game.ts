@@ -3,6 +3,8 @@ import { rollDice } from "./dice";
 import { getVars, listCharacterStates, saveCharacterState, saveVars, transaction, type VarValue } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
 
+export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
+
 /** A character as scripts see it. Everything here except id, name and type can be changed. */
 export interface Player {
   id: number;
@@ -78,4 +80,14 @@ export function runGameScript(source: string): unknown {
   const result = runScript(source, { game, ...HELPERS });
   saveGame(game);
   return toPlain(result);
+}
+
+/** Runs a game script, returning its value as JSON text, or the script error. */
+export function tryGameScript(source: string): ScriptResult {
+  try {
+    return { ok: true, value: JSON.stringify(runGameScript(source), null, 2) };
+  } catch (e) {
+    if (e instanceof ScriptError) return { ok: false, error: e.message };
+    throw e;
+  }
 }

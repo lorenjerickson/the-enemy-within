@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { MapControl } from "@/lib/db";
 import { CONTROL_EDGES } from "@/lib/maps";
-import { removeControl, submitControl } from "../actions";
+import { changeControlScript, removeControl, submitControl } from "../actions";
 import GameIcon, { ICON_NAMES, iconWords } from "./GameIcon";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -13,6 +13,8 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
   const dialog = useRef<HTMLDialogElement>(null);
   const [icon, setIcon] = useState("GiClick");
   const [query, setQuery] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const editing = controls.find((c) => c.id === editingId);
   const q = query.trim().toLowerCase();
   const matches = ICON_NAMES.filter((n) => !q || iconWords(n).includes(q)).slice(0, 160);
 
@@ -76,9 +78,12 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
             {controls
               .filter((c) => c.edge === edge)
               .map((c) => (
-                <div key={c.id} data-control={c.label} className="flex items-center gap-1">
+                <div key={c.id} data-control={c.label} className={`flex items-center gap-1 rounded px-1 ${c.id === editingId ? "bg-primary/25" : ""}`}>
                   <GameIcon name={c.icon} className="size-4" />
-                  <span className="flex-1 truncate">{c.label}</span>
+                  <button type="button" title="Edit this button's script" className="flex-1 truncate text-left hover:underline" onClick={() => setEditingId(c.id === editingId ? null : c.id)}>
+                    {c.label}
+                  </button>
+                  {c.script.trim() && <span title="Has a script" className="text-xs opacity-60">ƒ</span>}
                   <form action={removeControl.bind(null, locationId, c.id)}>
                     <button title="Remove this button" className="btn btn-ghost btn-xs text-error">✕</button>
                   </form>
@@ -87,6 +92,49 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
           </div>
         ))}
       </div>
+      {editing ? (
+        <ScriptForm key={editing.id} locationId={locationId} control={editing} />
+      ) : (
+        controls.length > 0 && <p className="text-xs opacity-60">Click a button&apos;s label to edit the script it runs.</p>
+      )}
     </div>
+  );
+}
+
+/** Edit the script a button runs when clicked on the map. */
+function ScriptForm({ locationId, control }: { locationId: number; control: MapControl }) {
+  const [script, setScript] = useState(control.script);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, startTransition] = useTransition();
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        startTransition(async () => {
+          const error = await changeControlScript(locationId, control.id, script);
+          setMessage(error ? { ok: false, text: error } : { ok: true, text: "Saved" });
+        });
+      }}
+    >
+      <div className="text-sm font-semibold">Script for “{control.label}”</div>
+      <textarea
+        aria-label="Button script"
+        className="textarea textarea-bordered w-full font-mono text-sm"
+        rows={6}
+        spellCheck={false}
+        placeholder={"game.vars.alarm = true"}
+        value={script}
+        onChange={(e) => {
+          setScript(e.target.value);
+          setMessage(null);
+        }}
+      />
+      <div className="flex items-center gap-3">
+        <button className="btn btn-sm btn-primary" disabled={pending || script === control.script}>Save script</button>
+        {message && <span data-script-message className={`text-xs ${message.ok ? "text-success" : "text-error"}`}>{message.text}</span>}
+        <span className="text-xs opacity-60 ml-auto">See docs/scripting.md</span>
+      </div>
+    </form>
   );
 }

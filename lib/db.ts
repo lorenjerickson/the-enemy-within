@@ -237,6 +237,7 @@ addColumn("map_structures", "open", "INTEGER NOT NULL DEFAULT 0"); // doors only
 addColumn("map_notes", "w", "REAL NOT NULL DEFAULT 1.6"); // size in grid cells
 addColumn("map_notes", "h", "REAL NOT NULL DEFAULT 1.6"); // minimum height; grows to fit text
 addColumn("map_controls", "icon", "TEXT NOT NULL DEFAULT 'GiClick'"); // react-icons Game Icons name
+addColumn("map_controls", "script", "TEXT NOT NULL DEFAULT ''"); // game script run when the button is clicked
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -1120,16 +1121,25 @@ export interface MapControl {
   edge: ControlEdge;
   icon: string; // react-icons Game Icons component name, e.g. "GiDoorway"
   label: string; // shown as a tooltip
+  script: string; // game script run on click (docs/scripting.md)
 }
 
 export function listControls(levelId: number): MapControl[] {
-  return db.prepare<[number], MapControl>("SELECT id, edge, icon, label FROM map_controls WHERE level_id = ? ORDER BY id").all(levelId);
+  return db.prepare<[number], MapControl>("SELECT id, edge, icon, label, script FROM map_controls WHERE level_id = ? ORDER BY id").all(levelId);
 }
 
 export function addControl(levelId: number, edge: ControlEdge, icon: string, label: string): void {
   db.prepare<[number, string, string, string]>("INSERT INTO map_controls (level_id, edge, icon, label) VALUES (?, ?, ?, ?)").run(
     levelId, edge, icon, label
   );
+}
+
+export function getControlScript(id: number): string | undefined {
+  return db.prepare<[number], { script: string }>("SELECT script FROM map_controls WHERE id = ?").get(id)?.script;
+}
+
+export function saveControlScript(id: number, script: string): void {
+  db.prepare<[string, number]>("UPDATE map_controls SET script = ? WHERE id = ?").run(script, id);
 }
 
 export function deleteControl(id: number): void {

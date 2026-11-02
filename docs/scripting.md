@@ -10,7 +10,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
-- `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null`.
+- `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
 Changes are saved when the script finishes. A failing script saves nothing.
 
@@ -34,3 +34,7 @@ Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).
+
+## Map buttons
+
+Location → Controls: click a button's label to edit its script (saved only if it parses). Clicking the button on the map runs it; the result or error shows under the map.

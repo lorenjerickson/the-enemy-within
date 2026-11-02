@@ -394,7 +394,11 @@ function execute(stmts: Stmt[], scopes: Scope[]): unknown {
         };
         // A broadcast target ("lights.all.level += 1") updates each item from its own old value.
         const targets = obj instanceof Broadcast ? obj.values : [obj];
-        for (const o of targets) setKey(o, key, apply(s.op === "=" ? undefined : getKey(o, key)));
+        for (const o of targets) {
+          // An unset game.vars counter starts from 0, so "game.vars.rolls += 1" just works.
+          const old = s.op === "=" ? undefined : getKey(o, key);
+          setKey(o, key, apply(old === null && FREEFORM.has(o as object) ? 0 : old));
+        }
         last = null;
       }
     } catch (err) {
@@ -403,6 +407,17 @@ function execute(stmts: Stmt[], scopes: Scope[]): unknown {
     }
   }
   return last;
+}
+
+/** The first syntax error in a script, or null if it parses. */
+export function checkScript(source: string): string | null {
+  try {
+    parse(source);
+    return null;
+  } catch (e) {
+    if (e instanceof ScriptError) return e.message;
+    throw e;
+  }
 }
 
 /** Parses and runs a script against `globals` (e.g. { game, roll }), mutating them. Returns the last value. */

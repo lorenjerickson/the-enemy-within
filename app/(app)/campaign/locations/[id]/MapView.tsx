@@ -16,7 +16,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -424,6 +424,8 @@ export default function MapView({
   controls: MapControl[];
 }) {
   const [, startTransition] = useTransition();
+  /** What the last clicked control button's script returned. */
+  const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
     const next = new Set(set);
@@ -929,7 +931,16 @@ export default function MapView({
             <div className="relative overflow-hidden rounded-box">
             {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
             {!hiddenSet.has("controls") && (
-              <ControlButtons controls={controls} size={canvasSize} />
+              <ControlButtons
+                controls={controls}
+                size={canvasSize}
+                onRun={(c) =>
+                  startTransition(async () => {
+                    const r = await runControl(c.id);
+                    setControlResult({ label: c.label, ok: r.ok, text: r.ok ? r.value : r.error });
+                  })
+                }
+              />
             )}
             <canvas
               ref={canvasRef}
@@ -942,6 +953,12 @@ export default function MapView({
             />
             </div>
             <div className="mt-1 flex items-center justify-end gap-1 text-xs">
+              {controlResult && (
+                <span data-control-result className={`mr-auto truncate ${controlResult.ok ? "" : "text-error"}`} title={controlResult.text}>
+                  {controlResult.label}: {controlResult.text.replace(/\s+/g, " ")}
+                  <button type="button" className="btn btn-ghost btn-xs" aria-label="Dismiss" onClick={() => setControlResult(null)}>✕</button>
+                </span>
+              )}
               <span className="opacity-60 mr-1">Scroll to zoom · right-drag to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
@@ -1095,7 +1112,15 @@ export default function MapView({
  * Icon buttons fixed to the viewport (the canvas), one row per edge, 12px in from the edge and
  * centred along it. They ignore zoom and pan so they're always in reach.
  */
-function ControlButtons({ controls, size }: { controls: MapControl[]; size: { w: number; h: number } }) {
+function ControlButtons({
+  controls,
+  size,
+  onRun,
+}: {
+  controls: MapControl[];
+  size: { w: number; h: number };
+  onRun: (control: MapControl) => void;
+}) {
   const MARGIN = 12, GAP = 6, B = 26;
   const placed = (["top", "right", "bottom", "left"] as const).flatMap((edge) => {
     const row = controls.filter((c) => c.edge === edge);
@@ -1124,6 +1149,7 @@ function ControlButtons({ controls, size }: { controls: MapControl[]; size: { w:
             type="button"
             data-control-button={c.label}
             aria-label={c.label}
+            onClick={() => onRun(c)}
             className="flex items-center justify-center rounded-md border border-white/70 bg-transparent text-white/90 hover:border-white hover:text-white"
             style={{ width: B, height: B }}
           >

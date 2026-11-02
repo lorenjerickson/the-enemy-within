@@ -3,9 +3,11 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addControl, deleteControl, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
+import { checkScript } from "@/lib/script";
+import { tryGameScript, type ScriptResult } from "@/lib/game";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -316,6 +318,25 @@ export async function submitControl(locationId: number, levelId: number, formDat
   if (!/^Gi[A-Za-z0-9]+$/.test(icon)) throw new Error("Choose an icon");
   addControl(levelId, edge, icon, String(formData.get("label") ?? "").trim() || "Button");
   revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Saves a button's script; returns the syntax error instead of saving if it doesn't parse. */
+export async function changeControlScript(locationId: number, id: number, script: string): Promise<string | null> {
+  await requireGm();
+  const error = checkScript(script);
+  if (error) return error;
+  saveControlScript(id, script);
+  revalidatePath(`/campaign/locations/${locationId}`);
+  return null;
+}
+
+/** Runs a button's script (a GM clicked it on the map). */
+export async function runControl(id: number): Promise<ScriptResult> {
+  await requireGm();
+  const script = getControlScript(id);
+  if (script === undefined) return { ok: false, error: "That button no longer exists" };
+  if (!script.trim()) return { ok: false, error: "This button has no script yet" };
+  return tryGameScript(script);
 }
 
 export async function removeControl(locationId: number, id: number) {

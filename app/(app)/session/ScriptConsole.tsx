@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runScript, type ScriptResult } from "./actions";
+import type { ScriptResult } from "@/lib/game";
+import { runScript } from "./actions";
 
 const EXAMPLE = `with game.players['annis'] as A
    IF A.attributes.might > 12
