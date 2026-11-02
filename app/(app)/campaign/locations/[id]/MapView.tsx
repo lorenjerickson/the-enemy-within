@@ -356,6 +356,10 @@ export default function MapView({
 
   // Illumination being previewed in the lighting editor (null = use the saved level).
   const [previewIllumination, setPreviewIllumination] = useState<number | null>(null);
+  // Keep showing the previewed value until the saved value catches up, so the slider never jumps back.
+  useEffect(() => {
+    if (previewIllumination !== null && Math.abs(previewIllumination - illumination) < 1e-6) setPreviewIllumination(null);
+  }, [illumination, previewIllumination]);
   const shownIllumination = previewIllumination ?? illumination;
 
   const state: MapState = {
@@ -690,12 +694,7 @@ export default function MapView({
                 <LightingEditor
                   value={shownIllumination}
                   onPreview={setPreviewIllumination}
-                  onCommit={(v) =>
-                    startTransition(async () => {
-                      await changeIllumination(locationId, levelId, v);
-                      setPreviewIllumination(null);
-                    })
-                  }
+                  onCommit={(v) => changeIllumination(locationId, levelId, v)}
                 />
               ) : selected === "sounds" ? (
                 <SoundsEditor
