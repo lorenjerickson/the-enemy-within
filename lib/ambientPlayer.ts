@@ -35,15 +35,22 @@ function play(soundId: number, clip: { id: number; url: string }, onEnded: (() =
   emit();
 }
 
+/** Sets the playing ambient sound's volume (0..1). */
+export function setAmbientVolume(volume: number) {
+  player().volume = Math.min(1, Math.max(0, volume));
+}
+
 /** Plays a sound's looped clips one after another, starting over after the last. */
-export function playSequence(soundId: number, clips: { id: number; url: string }[]) {
+export function playSequence(soundId: number, clips: { id: number; url: string }[], volume = 1) {
   if (clips.length === 0) return stopAmbient();
+  setAmbientVolume(volume);
   const step = (i: number) => play(soundId, clips[i], () => step((i + 1) % clips.length));
   step(0);
 }
 
 /** Plays a single clip once (manual or event clips). */
-export function playOnce(soundId: number, clip: { id: number; url: string }) {
+export function playOnce(soundId: number, clip: { id: number; url: string }, volume = 1) {
+  setAmbientVolume(volume);
   play(soundId, clip, () => stopAmbient());
 }
 

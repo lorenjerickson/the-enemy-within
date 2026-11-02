@@ -205,6 +205,8 @@ db.exec("UPDATE map_levels SET position = id WHERE position = 0");
 addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("map_levels", "grid", "TEXT"); // JSON MapGrid
 addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
+addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
+addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls'"); // layer renamed
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
@@ -925,11 +927,14 @@ export interface AmbientClip {
 export interface AmbientSound {
   id: number;
   name: string;
+  volume: number; // 0..1
   clips: AmbientClip[]; // playlist order
 }
 
 export function listAmbientSounds(levelId: number): AmbientSound[] {
-  const sounds = db.prepare<[number], { id: number; name: string }>("SELECT id, name FROM ambient_sounds WHERE level_id = ? ORDER BY id").all(levelId);
+  const sounds = db
+    .prepare<[number], { id: number; name: string; volume: number }>("SELECT id, name, volume FROM ambient_sounds WHERE level_id = ? ORDER BY id")
+    .all(levelId);
   const clips = db.prepare<[number], AmbientClip>(
     `SELECT c.id, c.asset_id, a.name, a.url, c.mode FROM ambient_clips c JOIN assets a ON a.id = c.asset_id
      WHERE c.sound_id = ? ORDER BY c.id`
@@ -969,19 +974,20 @@ export interface PositionalSound {
   x: number;
   y: number;
   radius: number;
+  volume: number; // 0..1
 }
 
 export function listPositionalSounds(levelId: number): PositionalSound[] {
   return db
     .prepare<[number], PositionalSound>(
-      `SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius FROM positional_sounds p
+      `SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius, p.volume FROM positional_sounds p
        JOIN assets a ON a.id = p.asset_id WHERE p.level_id = ? ORDER BY p.id`
     )
     .all(levelId);
 }
 
-export function addPositionalSound(levelId: number, s: Omit<PositionalSound, "id" | "name" | "url">): void {
-  db.prepare<Omit<PositionalSound, "id" | "name" | "url"> & { level_id: number }>(
+export function addPositionalSound(levelId: number, s: Omit<PositionalSound, "id" | "name" | "url" | "volume">): void {
+  db.prepare<Omit<PositionalSound, "id" | "name" | "url" | "volume"> & { level_id: number }>(
     "INSERT INTO positional_sounds (level_id, asset_id, x, y, radius) VALUES (@level_id, @asset_id, @x, @y, @radius)"
   ).run({ ...s, level_id: levelId });
 }
@@ -992,4 +998,8 @@ export function setPositionalRadius(id: number, radius: number): void {
 
 export function deletePositionalSound(id: number): void {
   db.prepare<[number]>("DELETE FROM positional_sounds WHERE id = ?").run(id);
+}
+
+export function setSoundVolume(table: "ambient_sounds" | "positional_sounds", id: number, volume: number): void {
+  db.prepare<[number, number]>(`UPDATE ${table} SET volume = ? WHERE id = ?`).run(Math.min(1, Math.max(0, volume)), id);
 }

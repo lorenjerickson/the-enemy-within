@@ -3,8 +3,8 @@
 import { useRef, useState } from "react";
 import type { AmbientSound, Asset, PositionalSound } from "@/lib/db";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
-import { playOnce, playSequence, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
-import { addClipToSound, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
+import { playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
+import { addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
 import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 
 /** Sounds layer editor: ambient sounds made of clip playlists, with GM playback (one ambient sound at a time). */
@@ -41,6 +41,20 @@ export default function SoundsEditor({
   // The library is opened either to add a clip to an ambient sound, or to choose a positional sound's audio.
   const [adding, setAdding] = useState<{ soundId: number; mode: ClipMode } | "positional" | null>(null);
   const [modes, setModes] = useState<Record<number, ClipMode>>({});
+  // Volumes being dragged (saved when released); falls back to the stored value.
+  const [volumes, setVolumes] = useState<Record<string, number>>({});
+  const vol = (key: string, stored: number) => volumes[key] ?? stored;
+
+  /** Props for a volume slider: live updates while dragging, saved to the server on release. */
+  const volumeProps = (kind: "ambient" | "positional", id: number, stored: number, onLive: (v: number) => void) => ({
+    label: `${kind} volume`,
+    value: vol(`${kind}:${id}`, stored),
+    onLive: (v: number) => {
+      setVolumes((vs) => ({ ...vs, [`${kind}:${id}`]: v }));
+      onLive(v);
+    },
+    onCommit: (v: number) => changeSoundVolume(locationId, kind, id, v),
+  });
 
   // Manual playback of a positional sound, separate from the ambient player so it doesn't interrupt ambience.
   const positionalAudio = useRef<HTMLAudioElement | null>(null);
@@ -54,6 +68,7 @@ export default function SoundsEditor({
       return;
     }
     a.src = p.url;
+    a.volume = vol(`positional:${p.id}`, p.volume);
     a.onended = () => setPlayingPositionalId(null);
     void a.play().catch(() => setPlayingPositionalId(null));
     setPlayingPositionalId(p.id);
@@ -71,11 +86,12 @@ export default function SoundsEditor({
             <div className="flex items-center gap-2">
               <span className="font-semibold">{s.name}</span>
               {playing && <span className="badge badge-primary badge-sm">playing</span>}
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex items-center gap-1">
+                <VolumeSlider {...volumeProps("ambient", s.id, s.volume, (v) => playing && setAmbientVolume(v))} />
                 {playing ? (
                   <button type="button" className="btn btn-sm" onClick={stopAmbient}>■ Stop</button>
                 ) : (
-                  <button type="button" className="btn btn-sm" disabled={looped.length === 0} onClick={() => playSequence(s.id, looped)}>
+                  <button type="button" className="btn btn-sm" disabled={looped.length === 0} onClick={() => playSequence(s.id, looped, vol(`ambient:${s.id}`, s.volume))}>
                     ▶ Play loop
                   </button>
                 )}
@@ -101,7 +117,7 @@ export default function SoundsEditor({
                     ))}
                   </select>
                   {c.mode !== "loop" && (
-                    <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c)}>▶</button>
+                    <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume))}>▶</button>
                   )}
                   <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => removeAmbientClip(locationId, c.id)}>✕</button>
                 </li>
@@ -198,6 +214,11 @@ export default function SoundsEditor({
                     className="input input-xs w-16"
                   />
                 </label>
+                <VolumeSlider
+                  {...volumeProps("positional", p.id, p.volume, (v) => {
+                    if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.volume = v;
+                  })}
+                />
                 <button
                   type="button"
                   title={playingPositionalId === p.id ? "Stop" : "Play this sound now"}
@@ -220,5 +241,38 @@ export default function SoundsEditor({
         )}
       </div>
     </div>
+  );
+}
+
+/** Volume slider (0–100%): `onLive` while dragging, `onCommit` when released. */
+function VolumeSlider({
+  label,
+  value,
+  onLive,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  onLive: (v: number) => void;
+  onCommit: (v: number) => void;
+}) {
+  const commit = (e: { currentTarget: HTMLInputElement }) => onCommit(Number(e.currentTarget.value));
+  return (
+    <label className="flex items-center gap-1 text-xs" title="Volume">
+      🔈
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onLive(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        className="range range-xs w-24"
+      />
+      <span className="w-8 text-right">{Math.round(value * 100)}%</span>
+    </label>
   );
 }

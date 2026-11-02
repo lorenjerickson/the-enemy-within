@@ -405,7 +405,7 @@ export default function MapView({
       const { col, row } = cellAt(e);
       const placed = { x: col + 0.5, y: row + 0.5, radius: positionalTool.radius };
       startTransition(async () => {
-        addOptimisticPositional({ id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, ...placed });
+        addOptimisticPositional({ id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, volume: 1, ...placed });
         await placePositionalSound(locationId, levelId, a.id, placed.x, placed.y, placed.radius);
       });
       return;
