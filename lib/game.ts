@@ -6,7 +6,7 @@ import {
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState } from "./encounter";
-import { fallDice, landingRow, standable } from "./gravity";
+import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
 
@@ -126,7 +126,7 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
       continue;
     }
     if (a.position && changes.start.get(a) !== `${a.position.col},${a.position.row}`) {
-      moveToken(a.id, Math.round(a.position.col), Math.round(a.position.row));
+      moveToken(a.id, a.position.col, a.position.row); // already whole cells, or snapped heights on portrait maps
     }
     // Creature tokens keep their own health (rolled on first use); characters' is saved with the player.
     if (changes.startHp.has(a) && changes.startHp.get(a) !== Math.round(a.health)) setTokenHp(a.id, Math.round(a.health));
@@ -204,26 +204,39 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
     if (!game.locations.current) throw new ScriptError("There's no current location; run this from a map button");
     return game.locations.current as CurrentLocation;
   };
-  const taken = () => new Set(location().actors.items.flatMap((a) => (a.position ? [`${a.position.col},${a.position.row}`] : [])));
   const portrait = !!changes?.portrait;
   const structures = changes?.structures ?? [];
-  /** Where something at this cell comes to rest: on portrait maps it falls to the floor below. */
+  /** Whether an actor already occupies this spot (same column, overlapping height). */
+  const taken = (c: Cell) =>
+    location().actors.items.some((a) => a.position && a.position.col === c.col && Math.abs(a.position.row - c.row) < 0.5);
+  /** A position from script values: whole cells, except heights on portrait maps. */
+  const toCell = (at: Cell): Cell => ({ col: Math.round(at.col), row: portrait ? snapHeight(at.row) : Math.round(at.row) });
+  /** Where something here comes to rest: on portrait maps it falls to the floor below. */
   const settle = (c: Cell): Cell => (portrait ? { col: c.col, row: landingRow(structures, c.col, c.row) } : c);
-  /** On portrait maps with floors drawn, only cells with a floor under them; elsewhere any cell. */
-  const canStand = (c: Cell) => !portrait || standable(structures, c.col, c.row);
-  /** A random free cell next to a cell (one you can stand in), widening the search until one is found. */
+  const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
+  /** A random free spot next to a position, widening the search until one is found. */
   const freeNear = ({ col, row }: Cell): Cell => {
-    const used = taken();
+    if (portrait && hasFloors(structures)) {
+      // Side-on: the spots are the floors in nearby columns; nearest by columns across and cells of height.
+      const spots = Array.from({ length: 41 }, (_, i) => col - 20 + i).flatMap((c) =>
+        c < 0 ? [] : floorsUnder(structures, c).map((y) => ({ col: c, row: y - 1 }))
+      );
+      const free = spots.filter((s) => !(s.col === col && Math.abs(s.row - row) < 0.5) && !taken(s));
+      if (!free.length) throw new ScriptError("No free spot on a floor near that position");
+      const distance = (s: Cell) => Math.ceil(Math.max(Math.abs(s.col - col), Math.abs(s.row - row)));
+      const best = Math.min(...free.map(distance));
+      return pick(free.filter((s) => distance(s) === best));
+    }
     for (let r = 1; r <= 20; r++) {
       const free: Cell[] = [];
       for (let dc = -r; dc <= r; dc++)
         for (let dr = -r; dr <= r; dr++) {
           const c = { col: col + dc, row: row + dr };
-          if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !used.has(`${c.col},${c.row}`) && canStand(c)) free.push(c);
+          if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !taken(c)) free.push(c);
         }
-      if (free.length) return free[Math.floor(Math.random() * free.length)];
+      if (free.length) return pick(free);
     }
-    throw new ScriptError(portrait ? "No free cell with a floor under it near that position" : "No free cell near that position");
+    throw new ScriptError("No free cell near that position");
   };
   return {
     /** A random free cell next to a position, actor or group. */
@@ -237,10 +250,10 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
       const members = target instanceof Collection ? (target.items as Actor[]) : [target as Actor];
       for (const a of members) if (!location().actors.items.includes(a)) throw new ScriptError("place() needs actors on the current map");
       const at = asCell(pos, "place()");
-      const cell = settle({ col: Math.round(at.col), row: Math.round(at.row) });
+      const cell = settle(toCell(at));
       for (const a of members) {
         a.position = null;
-        a.position = taken().has(`${cell.col},${cell.row}`) ? freeNear(cell) : cell;
+        a.position = taken(cell) ? freeNear(cell) : cell;
       }
       return target;
     }),
@@ -253,7 +266,7 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
       if (!location().actors.items.includes(a)) throw new ScriptError("move() needs an actor on the current map");
       if (!a.position) throw new ScriptError(`${a.name} isn't placed yet; use place() to put it in the scene`);
       const at = asCell(pos, "move()");
-      const target = { col: Math.round(at.col), row: Math.round(at.row) };
+      const target = toCell(at);
       const landed = settle(target);
       a.position = landed;
       const dice = fallDice(landed.row - target.row);

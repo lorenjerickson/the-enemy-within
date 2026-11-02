@@ -5,7 +5,7 @@ import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type Ma
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { visibilityPolygon, type Segment } from "@/lib/visibility";
-import { landingRow } from "@/lib/gravity";
+import { landingRow, snapHeight } from "@/lib/gravity";
 import type { AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
@@ -482,8 +482,8 @@ export default function MapView({
     "add" in c ? [...ss, c.add] : ss.filter((s) => s.id !== c.remove)
   );
   /** On portrait maps a placed token drops to the floor below (the server does the same). */
-  const settle = (col: number, row: number) =>
-    mapImage.perspective === "portrait" ? landingRow(optimisticStructures, col, row) : row;
+  const portrait = mapImage.perspective === "portrait";
+  const settle = (col: number, row: number) => (portrait ? landingRow(optimisticStructures, col, row) : row);
 
   // Token placement: pick a creature, then click a cell.
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
@@ -568,10 +568,15 @@ export default function MapView({
     const { gx, gy } = gridAt(e);
     return { col: Math.floor(gx), row: Math.floor(gy) };
   };
-  /** Nearest grid corner to the pointer. */
+  /** Nearest grid corner to the pointer. On portrait maps only across: heights follow the pointer. */
   const cornerAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { gx, gy } = gridAt(e);
-    return { x: Math.round(gx), y: Math.round(gy) };
+    return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
+  };
+  /** Where a token under the pointer goes: its cell, or on portrait maps its column with the pointer at its middle. */
+  const tokenAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { gx, gy } = gridAt(e);
+    return { col: Math.floor(gx), row: portrait ? snapHeight(gy - 0.5) : Math.floor(gy) };
   };
 
   const spanOf = (p: NonNullable<typeof placing>): CellRect => ({
@@ -654,12 +659,13 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "tokens") {
-      const { col, row } = cellAt(e);
+      const { col, row } = tokenAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
-      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && t.row === row);
+      const { gy } = gridAt(e);
+      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && gy >= t.row && gy < t.row + 1);
       if (hit) {
         setSelectedTokenId(hit.id);
-        setDraggingToken({ id: hit.id, col, row });
+        setDraggingToken({ id: hit.id, col: hit.col, row: hit.row });
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
@@ -715,7 +721,7 @@ export default function MapView({
       return;
     }
     if (draggingToken) {
-      const { col, row } = cellAt(e);
+      const { col, row } = tokenAt(e);
       if (col !== draggingToken.col || row !== draggingToken.row) setDraggingToken({ ...draggingToken, col, row });
       return;
     }

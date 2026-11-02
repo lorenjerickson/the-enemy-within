@@ -7,7 +7,7 @@ import { getTokenLevel, isPortraitLevel, listStructures, addControl, deleteContr
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
-import { landingRow } from "@/lib/gravity";
+import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 
 const paddingFromForm = (formData: FormData) =>
@@ -148,12 +148,14 @@ export async function placeStructure(
     throw new Error("A staircase needs another level to lead to");
   }
   const int = (n: number) => Math.round(Number(n));
+  // Portrait maps: columns across, but any height (so floors can follow the art).
+  const height = isPortraitLevel(levelId) && piece.kind !== "staircase" ? (n: number) => snapHeight(Number(n)) : int;
   addStructure(levelId, {
     kind: piece.kind,
     x1: int(piece.x1),
-    y1: int(piece.y1),
+    y1: height(piece.y1),
     x2: int(piece.x2),
-    y2: int(piece.y2),
+    y2: height(piece.y2),
     target_level_id: piece.kind === "staircase" ? piece.target_level_id : null,
   });
   revalidatePath(`/campaign/locations/${locationId}`);
@@ -169,7 +171,7 @@ export async function removeStructure(locationId: number, id: number) {
 export async function placeCreatureToken(locationId: number, levelId: number, creatureId: number, col: number, row: number) {
   await requireGm();
   if (!getCreature(creatureId)) throw new Error("Unknown creature");
-  addCreatureToken(levelId, creatureId, Math.round(col), settle(levelId, Math.round(col), Math.round(row)));
+  addCreatureToken(levelId, creatureId, Math.round(col), settle(levelId, Math.round(col), row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -183,13 +185,16 @@ export async function moveTokenTo(locationId: number, id: number, col: number, r
   await requireGm();
   const levelId = getTokenLevel(id);
   if (levelId === undefined) return;
-  moveToken(id, Math.round(col), settle(levelId, Math.round(col), Math.round(row)));
+  moveToken(id, Math.round(col), settle(levelId, Math.round(col), row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
-/** Where the GM's placed token comes to rest: on portrait maps it drops to the floor below (no fall damage). */
+/**
+ * Where the GM's placed token comes to rest: on portrait maps it drops to the floor below (no fall damage),
+ * at any height; elsewhere it sits in a whole cell.
+ */
 function settle(levelId: number, col: number, row: number): number {
-  return isPortraitLevel(levelId) ? landingRow(listStructures(levelId), col, row) : row;
+  return isPortraitLevel(levelId) ? landingRow(listStructures(levelId), col, snapHeight(Number(row))) : Math.round(row);
 }
 
 export async function submitAmbientSound(locationId: number, levelId: number, formData: FormData) {
