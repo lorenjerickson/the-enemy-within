@@ -90,10 +90,11 @@ export const STRUCTURE_STYLES: Record<Exclude<StructureKind, "staircase">, { col
 };
 
 /** How a clip in an ambient sound's playlist plays. */
-export const CLIP_MODES = ["loop", "event", "manual"] as const;
+export const CLIP_MODES = ["loop", "layer", "event", "manual"] as const;
 export type ClipMode = (typeof CLIP_MODES)[number];
 export const CLIP_MODE_LABELS: Record<ClipMode, string> = {
   loop: "Looped in sequence",
+  layer: "Looped together (layer)",
   event: "Triggered by map event",
   manual: "Played manually",
 };
