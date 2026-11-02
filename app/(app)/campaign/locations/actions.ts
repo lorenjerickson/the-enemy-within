@@ -312,7 +312,9 @@ export async function submitControl(locationId: number, levelId: number, formDat
   await requireGm();
   const edge = String(formData.get("edge")) as ControlEdge;
   if (!CONTROL_EDGES.includes(edge)) throw new Error("Invalid edge");
-  addControl(levelId, edge, String(formData.get("label") ?? "").trim() || "Button");
+  const icon = String(formData.get("icon") ?? "");
+  if (!/^Gi[A-Za-z0-9]+$/.test(icon)) throw new Error("Choose an icon");
+  addControl(levelId, edge, icon, String(formData.get("label") ?? "").trim() || "Button");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

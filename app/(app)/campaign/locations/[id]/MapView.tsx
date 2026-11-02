@@ -10,6 +10,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import ControlsEditor from "./ControlsEditor";
+import GameIcon from "./GameIcon";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
@@ -47,7 +48,6 @@ interface MapState {
   lights: LightSource[];
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
-  controls: MapControl[];
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -178,39 +178,6 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.restore();
   },
   // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
-  // Buttons along the scene's edges, above everything: a margin from the edge, a gap between buttons,
-  // each edge's row (or column) centred along it.
-  controls: (state) => (ctx, w, h) => {
-    const MARGIN = 12, GAP = 8, PAD_X = 12, HEIGHT = 30;
-    ctx.save();
-    ctx.font = "13px sans-serif";
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    for (const edge of ["top", "right", "bottom", "left"] as const) {
-      const buttons = state.controls.filter((c) => c.edge === edge).map((c) => ({ c, bw: ctx.measureText(c.label).width + 2 * PAD_X }));
-      if (buttons.length === 0) continue;
-      const horizontal = edge === "top" || edge === "bottom";
-      const total = horizontal
-        ? buttons.reduce((s, b) => s + b.bw, 0) + GAP * (buttons.length - 1)
-        : buttons.length * HEIGHT + GAP * (buttons.length - 1);
-      let cursor = horizontal ? (w - total) / 2 : (h - total) / 2;
-      for (const { c, bw } of buttons) {
-        const x = horizontal ? cursor : edge === "left" ? MARGIN : w - MARGIN - bw;
-        const y = horizontal ? (edge === "top" ? MARGIN : h - MARGIN - HEIGHT) : cursor;
-        ctx.shadowColor = "rgba(0,0,0,0.4)";
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = "#4f46e5";
-        ctx.beginPath();
-        ctx.roundRect(x, y, bw, HEIGHT, 8);
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(c.label, x + bw / 2, y + HEIGHT / 2);
-        cursor += (horizontal ? bw : HEIGHT) + GAP;
-      }
-    }
-    ctx.restore();
-  },
   // GM-only yellow sticky notes: fixed width, growing taller to fit their text, with a folded corner.
   notes: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
@@ -466,6 +433,7 @@ export default function MapView({
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const backgroundImage = useImage(background.mode === "texture" ? background.image : null);
   const mapImageEl = useImage(mapImage.image);
 
@@ -578,7 +546,7 @@ export default function MapView({
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, controls,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -828,6 +796,7 @@ export default function MapView({
     const canvas = canvasRef.current!;
     const draw = () => {
       const { width, height } = canvas.getBoundingClientRect();
+      if (width !== canvasSize.w || height !== canvasSize.h) setCanvasSize({ w: width, h: height });
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
@@ -957,6 +926,11 @@ export default function MapView({
       <div className="flex gap-4">
         <div className="flex-1 min-w-0 space-y-3">
           <div className="relative">
+            <div className="relative overflow-hidden rounded-box">
+            {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
+            {!hiddenSet.has("controls") && (
+              <ControlButtons controls={controls} size={canvasSize} view={view} />
+            )}
             <canvas
               ref={canvasRef}
               onPointerDown={onPointerDown}
@@ -966,6 +940,7 @@ export default function MapView({
               onContextMenu={(e) => e.preventDefault()}
               className="w-full aspect-video rounded-box bg-base-300 touch-none"
             />
+            </div>
             <div className="mt-1 flex items-center justify-end gap-1 text-xs">
               <span className="opacity-60 mr-1">Scroll to zoom · right-drag to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
@@ -1113,5 +1088,50 @@ export default function MapView({
         </ul>
       </div>
     </div>
+  );
+}
+
+/**
+ * Icon buttons along each edge of the scene: 12px in from the edge, 8px apart, each edge's buttons
+ * centred along it. Positions are in scene space, then placed through the current zoom/pan.
+ */
+function ControlButtons({
+  controls,
+  size,
+  view,
+}: {
+  controls: MapControl[];
+  size: { w: number; h: number };
+  view: { zoom: number; x: number; y: number };
+}) {
+  const MARGIN = 12, GAP = 8, B = 36;
+  const placed = (["top", "right", "bottom", "left"] as const).flatMap((edge) => {
+    const row = controls.filter((c) => c.edge === edge);
+    const horizontal = edge === "top" || edge === "bottom";
+    const total = row.length * B + Math.max(0, row.length - 1) * GAP;
+    const start = ((horizontal ? size.w : size.h) - total) / 2;
+    return row.map((c, i) => {
+      const along = start + i * (B + GAP);
+      const x = horizontal ? along : edge === "left" ? MARGIN : size.w - MARGIN - B;
+      const y = horizontal ? (edge === "top" ? MARGIN : size.h - MARGIN - B) : along;
+      return { c, x, y, edge };
+    });
+  });
+  return (
+    <>
+      {placed.map(({ c, x, y, edge }) => (
+        <div
+          key={c.id}
+          // Tooltips open towards the middle of the scene so they aren't cut off at the edge.
+          className={`tooltip absolute z-10 ${{ top: "tooltip-bottom", bottom: "tooltip-top", left: "tooltip-right", right: "tooltip-left" }[edge]}`}
+          data-tip={c.label}
+          style={{ left: view.x + x * view.zoom, top: view.y + y * view.zoom, transform: `scale(${view.zoom})`, transformOrigin: "top left" }}
+        >
+          <button type="button" data-control-button={c.label} aria-label={c.label} className="btn btn-primary btn-square shadow-lg" style={{ width: B, height: B, minHeight: B }}>
+            <GameIcon name={c.icon} className="size-5" />
+          </button>
+        </div>
+      ))}
+    </>
   );
 }

@@ -236,6 +236,7 @@ addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
 addColumn("map_structures", "open", "INTEGER NOT NULL DEFAULT 0"); // doors only: 1 = open
 addColumn("map_notes", "w", "REAL NOT NULL DEFAULT 1.6"); // size in grid cells
 addColumn("map_notes", "h", "REAL NOT NULL DEFAULT 1.6"); // minimum height; grows to fit text
+addColumn("map_controls", "icon", "TEXT NOT NULL DEFAULT 'GiClick'"); // react-icons Game Icons name
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -1114,15 +1115,18 @@ export function resizeNote(id: number, w: number, h: number): void {
 export interface MapControl {
   id: number;
   edge: ControlEdge;
-  label: string;
+  icon: string; // react-icons Game Icons component name, e.g. "GiDoorway"
+  label: string; // shown as a tooltip
 }
 
 export function listControls(levelId: number): MapControl[] {
-  return db.prepare<[number], MapControl>("SELECT id, edge, label FROM map_controls WHERE level_id = ? ORDER BY id").all(levelId);
+  return db.prepare<[number], MapControl>("SELECT id, edge, icon, label FROM map_controls WHERE level_id = ? ORDER BY id").all(levelId);
 }
 
-export function addControl(levelId: number, edge: ControlEdge, label: string): void {
-  db.prepare<[number, string, string]>("INSERT INTO map_controls (level_id, edge, label) VALUES (?, ?, ?)").run(levelId, edge, label);
+export function addControl(levelId: number, edge: ControlEdge, icon: string, label: string): void {
+  db.prepare<[number, string, string, string]>("INSERT INTO map_controls (level_id, edge, icon, label) VALUES (?, ?, ?, ?)").run(
+    levelId, edge, icon, label
+  );
 }
 
 export function deleteControl(id: number): void {
