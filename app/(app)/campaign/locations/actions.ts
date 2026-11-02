@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { CLIP_MODES, type ClipMode, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
+import { CLIP_MODES, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -250,5 +250,30 @@ export async function changeSoundVolume(locationId: number, kind: "ambient" | "p
 export async function changeIllumination(locationId: number, levelId: number, illumination: number) {
   await requireGm();
   saveIllumination(levelId, Number(illumination));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function placeLight(
+  locationId: number,
+  levelId: number,
+  light: { kind: LightKind; x: number; y: number; radius: number; angle: number; spread: number; flicker: boolean }
+) {
+  await requireGm();
+  if (!LIGHT_KINDS.includes(light.kind)) throw new Error("Invalid light kind");
+  addLight(levelId, {
+    kind: light.kind,
+    x: Number(light.x),
+    y: Number(light.y),
+    radius: Math.max(0.5, Number(light.radius) || 4),
+    angle: ((Number(light.angle) % 360) + 360) % 360,
+    spread: Math.min(360, Math.max(5, Number(light.spread) || 60)),
+    flicker: light.flicker ? 1 : 0,
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeLight(locationId: number, id: number) {
+  await requireGm();
+  deleteLight(id);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

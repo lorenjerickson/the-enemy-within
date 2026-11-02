@@ -85,3 +85,7 @@ export const CLIP_MODE_LABELS: Record<ClipMode, string> = {
   event: "Triggered by map event",
   manual: "Played manually",
 };
+
+/** Light sources: a point light shines all round; a directional light shines in a cone. */
+export const LIGHT_KINDS = ["point", "directional"] as const;
+export type LightKind = (typeof LIGHT_KINDS)[number];

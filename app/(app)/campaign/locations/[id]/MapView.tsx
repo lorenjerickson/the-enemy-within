@@ -4,15 +4,15 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { AmbientSound, Asset, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { AmbientSound, Asset, LightSource, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
-import LightingEditor from "./LightingEditor";
+import LightingEditor, { type LightTool } from "./LightingEditor";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { changeIllumination, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -41,6 +41,8 @@ interface MapState {
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
   illumination: number;
+  lights: LightSource[];
+  showLightAreas: boolean; // outline each light's area (while editing lighting)
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -142,14 +144,65 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.restore();
   },
   // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
-  lighting: (state) => (ctx) => {
+  // Global illumination darkens everything below; light sources cut lit areas out of that darkness.
+  // Flickering lights vary their reach a little on every redraw.
+  lighting: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
     const darkness = 1 - state.illumination;
-    if (darkness <= 0) return;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = `rgba(0,0,0,${darkness})`;
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    ctx.restore();
+    const light = (l: LightSource) => {
+      const cx = x0 + l.x * size, cy = y0 + l.y * size;
+      const r = l.radius * size * (l.flicker ? 0.9 + Math.random() * 0.15 : 1);
+      const half = (l.spread * Math.PI) / 360, dir = (l.angle * Math.PI) / 180;
+      return { cx, cy, r, path: (c: CanvasRenderingContext2D) => {
+        c.beginPath();
+        if (l.kind === "point" || l.spread >= 360) c.arc(cx, cy, r, 0, Math.PI * 2);
+        else { c.moveTo(cx, cy); c.arc(cx, cy, r, dir - half, dir + half); c.closePath(); }
+      } };
+    };
+    if (darkness > 0) {
+      const off = document.createElement("canvas");
+      off.width = ctx.canvas.width;
+      off.height = ctx.canvas.height;
+      const o = off.getContext("2d")!;
+      o.fillStyle = `rgba(0,0,0,${darkness})`;
+      o.fillRect(0, 0, off.width, off.height);
+      o.setTransform(ctx.getTransform());
+      o.globalCompositeOperation = "destination-out";
+      for (const l of state.lights) {
+        const { cx, cy, r, path } = light(l);
+        const g = o.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, "rgba(0,0,0,1)");
+        g.addColorStop(0.6, "rgba(0,0,0,0.8)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        o.fillStyle = g;
+        path(o);
+        o.fill();
+      }
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(off, 0, 0);
+      ctx.restore();
+    }
+    // Warm overlay marking each light's area of effect, plus a bulb icon.
+    for (const l of state.lights) {
+      const { cx, cy, path } = light(l);
+      ctx.save();
+      path(ctx);
+      ctx.fillStyle = "rgba(253,224,71,0.12)";
+      ctx.fill();
+      if (state.showLightAreas) {
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(253,224,71,0.7)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#facc15";
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   },
   // Positional sounds: a speaker icon with a faint circle showing the effective range.
   sounds: (state) => (ctx, w, h) => {
@@ -259,6 +312,7 @@ export default function MapView({
   audioAssets,
   positional,
   illumination,
+  lights,
 }: {
   locationId: number;
   levelId: number;
@@ -277,8 +331,10 @@ export default function MapView({
   audioAssets: Asset[];
   positional: PositionalSound[];
   illumination: number;
+  lights: LightSource[];
 }) {
   const [, startTransition] = useTransition();
+  const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
     const next = new Set(set);
     if (visible) next.delete(layer);
@@ -362,10 +418,27 @@ export default function MapView({
   }, [illumination, previewIllumination]);
   const shownIllumination = previewIllumination ?? illumination;
 
+  // Light source placement: choose kind/range/direction/flicker, then click the map (snaps to the cell centre).
+  const [lightTool, setLightTool] = useState<LightTool>({ kind: "point", radius: 4, angle: 0, spread: 60, flicker: false });
+  const [selectedLightId, setSelectedLightId] = useState<number | null>(null);
+  type LightChange = { add: LightSource } | { remove: number };
+  const [optimisticLights, changeLights] = useOptimistic(lights, (ls: LightSource[], c: LightChange) =>
+    "add" in c ? [...ls, c.add] : ls.filter((l) => l.id !== c.remove)
+  );
+  // Redraw ~8 times a second while any light flickers.
+  const [, setFlickerTick] = useState(0);
+  const anyFlicker = optimisticLights.some((l) => l.flicker) && !hiddenSet.has("lighting");
+  useEffect(() => {
+    if (!anyFlicker) return;
+    const t = setInterval(() => setFlickerTick((n) => n + 1), 120);
+    return () => clearInterval(t);
+  }, [anyFlicker]);
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
+    lights: optimisticLights, showLightAreas: selected === "lighting",
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -393,7 +466,6 @@ export default function MapView({
     cols: Math.abs(p.end.col - p.start.col) + 1,
     rows: Math.abs(p.end.row - p.start.row) + 1,
   });
-  const [selected, setSelected] = useState<MapLayer | null>(null);
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
 
@@ -421,6 +493,16 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "lighting") {
+      const { col, row } = cellAt(e);
+      const t = lightTool;
+      const placed = { kind: t.kind, x: col + 0.5, y: row + 0.5, radius: t.radius, angle: t.angle, spread: t.spread, flicker: t.flicker };
+      startTransition(async () => {
+        changeLights({ add: { id: -Date.now(), ...placed, flicker: placed.flicker ? 1 : 0 } });
+        await placeLight(locationId, levelId, placed);
+      });
+      return;
+    }
     if (e.button === 0 && selected === "sounds") {
       const a = positionalTool.asset;
       if (!a) return;
@@ -587,6 +669,19 @@ export default function MapView({
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
+      // Highlight the light picked in the editor.
+      const lt = optimisticLights.find((l) => l.id === selectedLightId);
+      if (lt && selected === "lighting") {
+        const { x0, y0, size } = gridOrigin(state, width, height);
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.beginPath();
+        ctx.arc(x0 + lt.x * size, y0 + lt.y * size, size * 0.45, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // Highlight the positional sound picked in the editor.
       const ps = optimisticPositional.find((p) => p.id === selectedPositionalId);
       if (ps && selected === "sounds") {
@@ -695,6 +790,17 @@ export default function MapView({
                   value={shownIllumination}
                   onPreview={setPreviewIllumination}
                   onCommit={(v) => changeIllumination(locationId, levelId, v)}
+                  tool={lightTool}
+                  onToolChange={setLightTool}
+                  lights={optimisticLights}
+                  selectedId={selectedLightId}
+                  onSelect={(id) => setSelectedLightId(id === selectedLightId ? null : id)}
+                  onRemove={(id) =>
+                    startTransition(async () => {
+                      changeLights({ remove: id });
+                      await removeLight(locationId, id);
+                    })
+                  }
                 />
               ) : selected === "sounds" ? (
                 <SoundsEditor

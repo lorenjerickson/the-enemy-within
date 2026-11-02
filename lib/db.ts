@@ -5,7 +5,7 @@ import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creature
 import type { Attributes } from "@/lib/attributes";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
-  type ClipMode, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
+  type ClipMode, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
 } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
@@ -140,6 +140,19 @@ db.exec(`
     x REAL NOT NULL,
     y REAL NOT NULL,
     radius REAL NOT NULL DEFAULT 3
+  );
+  -- Light sources on a level, at a grid position (cell units). Directional lights shine a cone
+  -- of spread degrees towards angle degrees (0 = east, 90 = south).
+  CREATE TABLE IF NOT EXISTS light_sources (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    kind TEXT NOT NULL, -- LightKind
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    radius REAL NOT NULL DEFAULT 4,
+    angle REAL NOT NULL DEFAULT 0,
+    spread REAL NOT NULL DEFAULT 60,
+    flicker INTEGER NOT NULL DEFAULT 0
   );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
@@ -759,6 +772,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM ambient_clips WHERE sound_id IN (SELECT id FROM ambient_sounds WHERE level_id = ?)").run(levelId);
     db.prepare<[number]>("DELETE FROM ambient_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM positional_sounds WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -1008,4 +1022,32 @@ export function setSoundVolume(table: "ambient_sounds" | "positional_sounds", id
 
 export function saveIllumination(levelId: number, illumination: number): void {
   db.prepare<[number, number]>("UPDATE map_levels SET illumination = ? WHERE id = ?").run(Math.min(1, Math.max(0, illumination)), levelId);
+}
+
+export interface LightSource {
+  id: number;
+  kind: LightKind;
+  x: number; // grid units; cell centre = col + 0.5
+  y: number;
+  radius: number; // cells
+  angle: number; // degrees, directional only
+  spread: number; // degrees, directional only
+  flicker: 0 | 1;
+}
+
+export function listLights(levelId: number): LightSource[] {
+  return db
+    .prepare<[number], LightSource>("SELECT id, kind, x, y, radius, angle, spread, flicker FROM light_sources WHERE level_id = ? ORDER BY id")
+    .all(levelId);
+}
+
+export function addLight(levelId: number, l: Omit<LightSource, "id">): void {
+  db.prepare<Omit<LightSource, "id"> & { level_id: number }>(
+    `INSERT INTO light_sources (level_id, kind, x, y, radius, angle, spread, flicker)
+     VALUES (@level_id, @kind, @x, @y, @radius, @angle, @spread, @flicker)`
+  ).run({ ...l, level_id: levelId });
+}
+
+export function deleteLight(id: number): void {
+  db.prepare<[number]>("DELETE FROM light_sources WHERE id = ?").run(id);
 }
