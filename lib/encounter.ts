@@ -11,6 +11,8 @@ export interface Actor {
   position: { col: number; row: number } | null;
   /** Fresh rolls each time they're read, e.g. rolls.initiative. */
   rolls: { initiative: number };
+  /** Current health; a character's is its own (the same as game.players.<name>.health). */
+  health: number;
 }
 
 /** Defines a read-only, computed property that scripts can read but not assign. */

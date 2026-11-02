@@ -5,6 +5,7 @@ import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type Ma
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { visibilityPolygon, type Segment } from "@/lib/visibility";
+import { landingRow } from "@/lib/gravity";
 import type { AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
@@ -480,6 +481,9 @@ export default function MapView({
   const [optimisticStructures, changeStructures] = useOptimistic(structures, (ss: MapStructure[], c: StructureChange) =>
     "add" in c ? [...ss, c.add] : ss.filter((s) => s.id !== c.remove)
   );
+  /** On portrait maps a placed token drops to the floor below (the server does the same). */
+  const settle = (col: number, row: number) =>
+    mapImage.perspective === "portrait" ? landingRow(optimisticStructures, col, row) : row;
 
   // Token placement: pick a creature, then click a cell.
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
@@ -662,7 +666,7 @@ export default function MapView({
       if (!tokenCreature) return;
       const c = tokenCreature;
       startTransition(async () => {
-        changeTokens({ add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, col, row } });
+        changeTokens({ add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, col, row: settle(col, row), hp: null } });
         await placeCreatureToken(locationId, levelId, c.id, col, row);
       });
       return;
@@ -754,7 +758,7 @@ export default function MapView({
       setDraggingToken(null);
       if (before && (before.col !== col || before.row !== row)) {
         startTransition(async () => {
-          changeTokens({ move: { id, col, row } });
+          changeTokens({ move: { id, col, row: settle(col, row) } });
           await moveTokenTo(locationId, id, col, row);
         });
       }

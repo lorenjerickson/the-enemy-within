@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
+import { landingRow } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 
 const paddingFromForm = (formData: FormData) =>
@@ -168,7 +169,7 @@ export async function removeStructure(locationId: number, id: number) {
 export async function placeCreatureToken(locationId: number, levelId: number, creatureId: number, col: number, row: number) {
   await requireGm();
   if (!getCreature(creatureId)) throw new Error("Unknown creature");
-  addCreatureToken(levelId, creatureId, Math.round(col), Math.round(row));
+  addCreatureToken(levelId, creatureId, Math.round(col), settle(levelId, Math.round(col), Math.round(row)));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -180,8 +181,15 @@ export async function removeToken(locationId: number, id: number) {
 
 export async function moveTokenTo(locationId: number, id: number, col: number, row: number) {
   await requireGm();
-  moveToken(id, Math.round(col), Math.round(row));
+  const levelId = getTokenLevel(id);
+  if (levelId === undefined) return;
+  moveToken(id, Math.round(col), settle(levelId, Math.round(col), Math.round(row)));
   revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Where the GM's placed token comes to rest: on portrait maps it drops to the floor below (no fall damage). */
+function settle(levelId: number, col: number, row: number): number {
+  return isPortraitLevel(levelId) ? landingRow(listStructures(levelId), col, row) : row;
 }
 
 export async function submitAmbientSound(locationId: number, levelId: number, formData: FormData) {

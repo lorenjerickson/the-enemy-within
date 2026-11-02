@@ -238,6 +238,7 @@ addColumn("map_notes", "w", "REAL NOT NULL DEFAULT 1.6"); // size in grid cells
 addColumn("map_notes", "h", "REAL NOT NULL DEFAULT 1.6"); // minimum height; grows to fit text
 addColumn("map_controls", "icon", "TEXT NOT NULL DEFAULT 'GiClick'"); // react-icons Game Icons name
 addColumn("map_controls", "script", "TEXT NOT NULL DEFAULT ''"); // game script run when the button is clicked
+addColumn("map_tokens", "hp", "INTEGER"); // a creature token's current health; null until first rolled
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -938,12 +939,13 @@ export interface MapToken {
   image: string | null;
   col: number;
   row: number;
+  hp: number | null; // creature tokens only; characters use their own
 }
 
 export function listTokens(levelId: number): MapToken[] {
   return db
     .prepare<[number], MapToken>(
-      `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row
+      `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row, t.hp
        FROM map_tokens t
        LEFT JOIN creatures cr ON cr.id = t.creature_id
        LEFT JOIN characters ch ON ch.id = t.character_id
@@ -952,12 +954,26 @@ export function listTokens(levelId: number): MapToken[] {
     .all(levelId);
 }
 
-export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number): number {
+export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number, hp: number | null = null): number {
   return Number(
-    db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, creature_id, col, row) VALUES (?, ?, ?, ?)").run(
-      levelId, creatureId, col, row
+    db.prepare<[number, number, number, number, number | null]>("INSERT INTO map_tokens (level_id, creature_id, col, row, hp) VALUES (?, ?, ?, ?, ?)").run(
+      levelId, creatureId, col, row, hp
     ).lastInsertRowid
   );
+}
+
+export function setTokenHp(id: number, hp: number): void {
+  db.prepare<[number, number]>("UPDATE map_tokens SET hp = ? WHERE id = ?").run(hp, id);
+}
+
+/** Whether a map level is drawn side-on (portrait), where gravity applies. */
+export function isPortraitLevel(levelId: number): boolean {
+  const row = db.prepare<[number], { map_image: string | null }>("SELECT map_image FROM map_levels WHERE id = ?").get(levelId);
+  return !!row?.map_image && JSON.parse(row.map_image).perspective === "portrait";
+}
+
+export function getTokenLevel(id: number): number | undefined {
+  return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(id)?.level_id;
 }
 
 /** The location a map level belongs to, with the level's name. */

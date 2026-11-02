@@ -1,11 +1,12 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  addCreatureToken, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState } from "./encounter";
+import { fallDice, landingRow, standable } from "./gravity";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
 
@@ -47,13 +48,19 @@ interface ActorChanges {
   levelId: number;
   added: Map<Actor, number>; // actor -> creature id
   start: Map<Actor, string>;
+  startHp: Map<Actor, number | null>; // creature tokens' saved health
   encounter: () => EncounterState | null;
+  portrait: boolean; // gravity applies
+  structures: MapStructure[];
 }
 
-function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
+function loadLocation(levelId: number, players: Player[]): [CurrentLocation, ActorChanges] {
   const place = getLevelPlace(levelId);
   if (!place) throw new ScriptError("This map level no longer exists");
-  const changes: ActorChanges = { levelId, added: new Map(), start: new Map(), encounter: () => null };
+  const changes: ActorChanges = {
+    levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null,
+    portrait: isPortraitLevel(levelId), structures: listStructures(levelId),
+  };
   const templates = listCreatures();
   const characters = listCharacterStates();
   const attributesOf = (t: { creature_id: number | null; character_id: number | null }) =>
@@ -65,7 +72,16 @@ function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
       type: t.character_id ? "character" : "creature",
       position: { col: t.col, row: t.row },
       rolls: rollsFor(attributesOf(t)),
+      health: 0,
     };
+    const player = t.character_id ? players.find((p) => p.id === t.character_id) : undefined;
+    if (player) {
+      Object.defineProperty(a, "health", { enumerable: true, get: () => player.health, set: (v: number) => (player.health = v) });
+    } else {
+      const template = templates.find((c) => c.id === t.creature_id);
+      a.health = t.hp ?? rollDice(template?.health || "0");
+      changes.startHp.set(a, t.hp);
+    }
     changes.start.set(a, `${t.col},${t.row}`);
     return a;
   });
@@ -75,7 +91,10 @@ function loadLocation(levelId: number): [CurrentLocation, ActorChanges] {
     const template = templates.find((c) => c.name.toLowerCase() === name.toLowerCase());
     if (!template) throw new ScriptError(`No creature named "${name}" (see Campaign › Creatures)`);
     const added = Array.from({ length: count }, (): Actor => {
-      const a: Actor = { id: nextId--, name: template.name, type: "creature", position: null, rolls: rollsFor(template.attributes) };
+      const a: Actor = {
+        id: nextId--, name: template.name, type: "creature", position: null,
+        rolls: rollsFor(template.attributes), health: rollDice(template.health || "0"),
+      };
       changes.added.set(a, template.id);
       creatures.items.push(a);
       actorsColl.items.push(a);
@@ -103,10 +122,14 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
     const creatureId = changes.added.get(a);
     if (creatureId !== undefined) {
       if (!a.position) throw new ScriptError(`${a.name} was added but never placed; use place(...)`);
-      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row);
-    } else if (a.position && changes.start.get(a) !== `${a.position.col},${a.position.row}`) {
+      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row, Math.round(a.health));
+      continue;
+    }
+    if (a.position && changes.start.get(a) !== `${a.position.col},${a.position.row}`) {
       moveToken(a.id, Math.round(a.position.col), Math.round(a.position.row));
     }
+    // Creature tokens keep their own health (rolled on first use); characters' is saved with the player.
+    if (changes.startHp.has(a) && changes.startHp.get(a) !== Math.round(a.health)) setTokenHp(a.id, Math.round(a.health));
   }
   // After the inserts above, so new creatures have their token ids.
   const e = changes.encounter();
@@ -125,7 +148,7 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   }));
   const vars = Object.assign(Object.create(null), getVars());
   FREEFORM.add(vars);
-  const [current, changes] = levelId === undefined ? [null, null] : loadLocation(levelId);
+  const [current, changes] = levelId === undefined ? [null, null] : loadLocation(levelId, players);
   const locations = new Collection<GameLocation>(
     "location",
     listLocations().map((l) => (l.id === current?.id ? current : { id: l.id, name: l.name }))
@@ -176,13 +199,19 @@ function asCell(v: unknown, what: string): Cell {
 }
 
 /** Helpers that need the game: placing actors on the current level. */
-function mapHelpers(game: Game) {
+function mapHelpers(game: Game, changes: ActorChanges | null) {
   const location = () => {
     if (!game.locations.current) throw new ScriptError("There's no current location; run this from a map button");
     return game.locations.current as CurrentLocation;
   };
   const taken = () => new Set(location().actors.items.flatMap((a) => (a.position ? [`${a.position.col},${a.position.row}`] : [])));
-  /** A random free cell next to a cell, widening the search until one is found. */
+  const portrait = !!changes?.portrait;
+  const structures = changes?.structures ?? [];
+  /** Where something at this cell comes to rest: on portrait maps it falls to the floor below. */
+  const settle = (c: Cell): Cell => (portrait ? { col: c.col, row: landingRow(structures, c.col, c.row) } : c);
+  /** On portrait maps with floors drawn, only cells with a floor under them; elsewhere any cell. */
+  const canStand = (c: Cell) => !portrait || standable(structures, c.col, c.row);
+  /** A random free cell next to a cell (one you can stand in), widening the search until one is found. */
   const freeNear = ({ col, row }: Cell): Cell => {
     const used = taken();
     for (let r = 1; r <= 20; r++) {
@@ -190,29 +219,47 @@ function mapHelpers(game: Game) {
       for (let dc = -r; dc <= r; dc++)
         for (let dr = -r; dr <= r; dr++) {
           const c = { col: col + dc, row: row + dr };
-          if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !used.has(`${c.col},${c.row}`)) free.push(c);
+          if (Math.max(Math.abs(dc), Math.abs(dr)) === r && c.col >= 0 && c.row >= 0 && !used.has(`${c.col},${c.row}`) && canStand(c)) free.push(c);
         }
       if (free.length) return free[Math.floor(Math.random() * free.length)];
     }
-    throw new ScriptError("No free cell near that position");
+    throw new ScriptError(portrait ? "No free cell with a floor under it near that position" : "No free cell near that position");
   };
   return {
     /** A random free cell next to a position, actor or group. */
     near: new Method((pos) => freeNear(asCell(pos, "near()"))),
     /**
-     * Moves an actor, or each of a group, to a position. The first goes there if it's free;
-     * the rest (or all, if it's taken) go to free cells around it.
+     * Puts an actor, or each of a group, at a position: setting up the scene, so no fall damage.
+     * On portrait maps it drops to the floor below. The first goes there if it's free; the rest
+     * (or all, if it's taken) go to free cells around it.
      */
     place: new Method((target, pos) => {
       const members = target instanceof Collection ? (target.items as Actor[]) : [target as Actor];
       for (const a of members) if (!location().actors.items.includes(a)) throw new ScriptError("place() needs actors on the current map");
       const at = asCell(pos, "place()");
-      const cell = { col: Math.round(at.col), row: Math.round(at.row) };
+      const cell = settle({ col: Math.round(at.col), row: Math.round(at.row) });
       for (const a of members) {
         a.position = null;
         a.position = taken().has(`${cell.col},${cell.row}`) ? freeNear(cell) : cell;
       }
       return target;
+    }),
+    /**
+     * Moves an actor during play (e.g. pushed off a ledge). On portrait maps it falls to the floor below
+     * and takes fall damage: 1d6 per 10 ft (2 cells). Returns the damage taken.
+     */
+    move: new Method((actor, pos) => {
+      const a = actor as Actor;
+      if (!location().actors.items.includes(a)) throw new ScriptError("move() needs an actor on the current map");
+      if (!a.position) throw new ScriptError(`${a.name} isn't placed yet; use place() to put it in the scene`);
+      const at = asCell(pos, "move()");
+      const target = { col: Math.round(at.col), row: Math.round(at.row) };
+      const landed = settle(target);
+      a.position = landed;
+      const dice = fallDice(landed.row - target.row);
+      const damage = dice > 0 ? rollDice(`${dice}d6`) : 0;
+      a.health = Math.max(0, a.health - damage);
+      return damage;
     }),
   };
 }
@@ -243,7 +290,7 @@ const HELPERS = {
  */
 export function runGameScript(source: string, levelId?: number): unknown {
   const [game, changes] = loadGame(levelId);
-  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game) });
+  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) });
   saveGame(game, changes);
   return toPlain(result);
 }

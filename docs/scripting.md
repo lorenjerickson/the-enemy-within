@@ -11,7 +11,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.locations`: every location by name. `game.locations.current` (map button scripts only) is the button's location, with `level`, `actors` (everything on that level) and `creatures`.
-  Each actor has `name`, `type` and `position` (`{col, row}`). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
+  Each actor has `name`, `type`, `position` (`{col, row}`) and `health` (a character's is the player's). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
 - Actors have `rolls.initiative` (1d20 + agility modifier, rolled fresh each read).
 - `L.encounter` on the current location: `active`, `round`, `actor` (whose turn), `order`;
   `begin(actors, initiatives)` (initiatives optional, one per actor), `next()`, `end()`.
@@ -37,7 +37,14 @@ WITH game.players.each.health as H
 ```
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
-Map helpers: `near(x)` (a random free cell next to a position, actor or group), `place(actor or group, position)` (a group spreads out around it).
+Map helpers:
+- `near(x)`: a random free cell next to a position, actor or group.
+- `place(actor or group, position)`: sets up the scene (a group spreads out around the position). No fall damage.
+- `move(actor, position)`: movement during play. Returns any fall damage taken.
+
+Portrait (side-on) maps have gravity: horizontal walls, windows and closed doors are floors (an open door is a trapdoor).
+Anything placed or moved drops to the floor below its cell; `near()` only picks cells with a floor under them.
+`move()` deals fall damage, 1d6 per 10 ft (2 cells). With no floor below, nothing falls, so draw the ground.
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).
