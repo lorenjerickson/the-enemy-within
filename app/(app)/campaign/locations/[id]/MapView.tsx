@@ -5,15 +5,16 @@ import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type Ma
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { visibilityPolygon, type Segment } from "@/lib/visibility";
-import type { AmbientSound, Asset, LightSource, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { AmbientSound, Asset, LightSource, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
+import NotesEditor from "./NotesEditor";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -44,6 +45,7 @@ interface MapState {
   illumination: number;
   lights: LightSource[];
   showLightAreas: boolean; // outline each light's area (while editing lighting)
+  notes: MapNote[];
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -147,6 +149,55 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.restore();
   },
   // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
+  // GM-only yellow sticky notes: a square with a folded corner and wrapped text.
+  notes: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    const side = size * 1.6, pad = side * 0.08, fold = side * 0.15;
+    for (const n of state.notes) {
+      const x = x0 + n.x * size, y = y0 + n.y * size;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = "#fde68a";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + side, y);
+      ctx.lineTo(x + side, y + side - fold);
+      ctx.lineTo(x + side - fold, y + side);
+      ctx.lineTo(x, y + side);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = "#fbbf24";
+      ctx.beginPath();
+      ctx.moveTo(x + side, y + side - fold);
+      ctx.lineTo(x + side - fold, y + side - fold);
+      ctx.lineTo(x + side - fold, y + side);
+      ctx.closePath();
+      ctx.fill();
+      // Word-wrapped text, clipped to the note.
+      const fontSize = Math.max(6, side * 0.11);
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.fillStyle = "#1f2937";
+      ctx.textBaseline = "top";
+      const lines: string[] = [];
+      for (const para of n.text.split("\n")) {
+        let line = "";
+        for (const word of para.split(" ")) {
+          const next = line ? `${line} ${word}` : word;
+          if (ctx.measureText(next).width > side - 2 * pad && line) {
+            lines.push(line);
+            line = word;
+          } else line = next;
+        }
+        lines.push(line);
+      }
+      const maxLines = Math.floor((side - 2 * pad - fold * 0.5) / (fontSize * 1.2));
+      lines.slice(0, maxLines).forEach((l, i) => ctx.fillText(l, x + pad, y + pad + i * fontSize * 1.2));
+      ctx.restore();
+    }
+  },
   // Global illumination darkens everything below; light sources cut lit areas out of that darkness.
   // Flickering lights vary their reach a little on every redraw.
   lighting: (state) => (ctx, w, h) => {
@@ -334,6 +385,7 @@ export default function MapView({
   positional,
   illumination,
   lights,
+  notes,
 }: {
   locationId: number;
   levelId: number;
@@ -353,6 +405,7 @@ export default function MapView({
   positional: PositionalSound[];
   illumination: number;
   lights: LightSource[];
+  notes: MapNote[];
 }) {
   const [, startTransition] = useTransition();
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
@@ -455,11 +508,19 @@ export default function MapView({
     return () => clearInterval(t);
   }, [anyFlicker]);
 
+  // Note placement: write the note, then click the map; the note's corner goes where you click.
+  const [noteDraft, setNoteDraft] = useState("");
+  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
+  type NoteChange = { add: MapNote } | { remove: number };
+  const [optimisticNotes, changeNotes] = useOptimistic(notes, (ns: MapNote[], c: NoteChange) =>
+    "add" in c ? [...ns, c.add] : ns.filter((n) => n.id !== c.remove)
+  );
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
-    lights: optimisticLights, showLightAreas: selected === "lighting",
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: optimisticNotes,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -514,6 +575,17 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "notes") {
+      const text = noteDraft.trim();
+      if (!text) return;
+      const { gx, gy } = gridAt(e);
+      setNoteDraft("");
+      startTransition(async () => {
+        changeNotes({ add: { id: -Date.now(), x: gx, y: gy, text } });
+        await placeNote(locationId, levelId, gx, gy, text);
+      });
+      return;
+    }
     if (e.button === 0 && selected === "lighting") {
       const { col, row } = cellAt(e);
       const t = lightTool;
@@ -690,6 +762,17 @@ export default function MapView({
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
+      // Highlight the note picked in the editor.
+      const note = optimisticNotes.find((n) => n.id === selectedNoteId);
+      if (note && selected === "notes") {
+        const { x0, y0, size } = gridOrigin(state, width, height);
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, size * 1.6 + 8, size * 1.6 + 8);
+        ctx.restore();
+      }
       // Highlight the light picked in the editor.
       const lt = optimisticLights.find((l) => l.id === selectedLightId);
       if (lt && selected === "lighting") {
@@ -806,6 +889,21 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "notes" ? (
+                <NotesEditor
+                  draft={noteDraft}
+                  onDraftChange={setNoteDraft}
+                  notes={optimisticNotes}
+                  selectedId={selectedNoteId}
+                  onSelect={(id) => setSelectedNoteId(id === selectedNoteId ? null : id)}
+                  onEdit={(id, text) => editNote(locationId, id, text)}
+                  onRemove={(id) =>
+                    startTransition(async () => {
+                      changeNotes({ remove: id });
+                      await removeNote(locationId, id);
+                    })
+                  }
+                />
               ) : selected === "lighting" ? (
                 <LightingEditor
                   value={shownIllumination}

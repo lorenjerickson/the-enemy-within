@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getLocation, listLights, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
+import { getLocation, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
@@ -36,6 +36,7 @@ export default async function EditLocation({
           positional={listPositionalSounds(level.id)}
           illumination={level.illumination}
           lights={listLights(level.id)}
+          notes={listNotes(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
           creatures={listCreatures().map(({ id, name, type, image }) => ({ id, name, type, image }))}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}

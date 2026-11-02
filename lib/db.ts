@@ -154,6 +154,14 @@ db.exec(`
     spread REAL NOT NULL DEFAULT 60,
     flicker INTEGER NOT NULL DEFAULT 0
   );
+  -- GM-only sticky notes on a level; (x, y) is the note's top-left in grid units.
+  CREATE TABLE IF NOT EXISTS map_notes (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    text TEXT NOT NULL
+  );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY,
@@ -774,6 +782,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM ambient_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM positional_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -1056,4 +1065,31 @@ export function deleteLight(id: number): void {
 
 export function setDoorOpen(id: number, open: boolean): void {
   db.prepare<[number, number]>("UPDATE map_structures SET open = ? WHERE id = ? AND kind = 'door'").run(open ? 1 : 0, id);
+}
+
+/** A GM-only sticky note on the map. */
+export interface MapNote {
+  id: number;
+  x: number;
+  y: number;
+  text: string;
+}
+
+export function listNotes(levelId: number): MapNote[] {
+  return db.prepare<[number], MapNote>("SELECT id, x, y, text FROM map_notes WHERE level_id = ? ORDER BY id").all(levelId);
+}
+
+export function addNote(levelId: number, n: Omit<MapNote, "id">): void {
+  db.prepare<Omit<MapNote, "id"> & { level_id: number }>("INSERT INTO map_notes (level_id, x, y, text) VALUES (@level_id, @x, @y, @text)").run({
+    ...n,
+    level_id: levelId,
+  });
+}
+
+export function updateNoteText(id: number, text: string): void {
+  db.prepare<[string, number]>("UPDATE map_notes SET text = ? WHERE id = ?").run(text, id);
+}
+
+export function deleteNote(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_notes WHERE id = ?").run(id);
 }
