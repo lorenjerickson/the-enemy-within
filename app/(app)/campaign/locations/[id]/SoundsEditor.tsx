@@ -181,11 +181,14 @@ export default function SoundsEditor({
                     className="input input-xs w-16"
                   />
                 </label>
-                {p.id === selectedPositionalId && (
-                  <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => removePositionalSound(locationId, p.id)}>
-                    Delete
-                  </button>
-                )}
+                <button
+                  type="button"
+                  title="Remove this positional sound"
+                  className="btn btn-ghost btn-xs text-error"
+                  onClick={() => removePositionalSound(locationId, p.id)}
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
