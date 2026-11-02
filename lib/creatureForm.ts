@@ -40,6 +40,8 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
     name: text("name"),
     description: text("description"),
     image: await imageFromForm(formData, "creature", text("name")),
+    token_overhead: await imageFromForm(formData, "token", `${text("name")} (overhead token)`, "tokenOverhead"),
+    token_side: await imageFromForm(formData, "token", `${text("name")} (side token)`, "tokenSide"),
     type,
     attributes,
     equipment,

@@ -8,10 +8,12 @@ import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, 
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 
-export type ArtworkKind = "item" | "creature" | "texture" | "map" | "tile";
+export type ArtworkKind = "item" | "creature" | "texture" | "map" | "tile" | "overhead token" | "side token";
 
 /** Asset library usage that each kind of generated artwork is filed under. */
-const USAGE: Record<ArtworkKind, AssetUsage> = { item: "item", creature: "creature", texture: "background", map: "map", tile: "tile" };
+const USAGE: Record<ArtworkKind, AssetUsage> = {
+  item: "item", creature: "creature", texture: "background", map: "map", tile: "tile", "overhead token": "token", "side token": "token",
+};
 
 const PROMPTS: Record<ArtworkKind, string> = {
   item: "Illustration of a single item for a dark fantasy roleplaying game, centered on a plain background.",
@@ -19,6 +21,10 @@ const PROMPTS: Record<ArtworkKind, string> = {
   map: "Map artwork for a location in a dark fantasy roleplaying game, no text.",
   tile: "Single square top-down map tile for a tabletop battle map, fills the whole frame, no border, no text.",
   texture: "Seamless, tileable top-down texture for a tabletop battle map, evenly lit, no objects or borders.",
+  "overhead token":
+    "Round token for a tabletop battle map: one creature seen directly from above, centred and filling a circle, plain dark background, no text.",
+  "side token":
+    "Side-on full-body figure of one creature for a side-view game map, standing, facing right, feet at the bottom edge, plain background, no text.",
 };
 
 export async function generateArtwork(
@@ -29,7 +35,8 @@ export async function generateArtwork(
   await requireGm();
   try {
     const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`);
-    addAsset({ name: kind === "texture" || kind === "map" ? description.slice(0, 60) : name, type: "image", usage: USAGE[kind], url });
+    const assetName = kind === "texture" || kind === "map" ? description.slice(0, 60) : kind.endsWith("token") ? `${name} (${kind})` : name;
+    addAsset({ name: assetName, type: "image", usage: USAGE[kind], url });
     return { url };
   } catch (e) {
     return { error: (e as Error).message };

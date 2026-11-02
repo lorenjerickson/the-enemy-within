@@ -339,13 +339,23 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     for (const t of state.tokens) {
       const r = cellToRect(state, w, h, { col: t.col, row: t.row, cols: 1, rows: 1 });
       const cx = r.x + r.w / 2, cy = r.y + r.h / 2, rad = r.w * 0.42;
+      // Side-on maps show the side-on figure standing on its floor, scaled to fit the cell.
+      const side = state.mapImage.perspective === "portrait" && t.token_side ? state.tokenImages.get(t.token_side) : undefined;
+      if (side) {
+        const k = Math.min(r.w / side.naturalWidth, r.h / side.naturalHeight);
+        const dw = side.naturalWidth * k, dh = side.naturalHeight * k;
+        ctx.drawImage(side, r.x + (r.w - dw) / 2, r.y + r.h - dh, dw, dh);
+        continue;
+      }
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, rad, 0, Math.PI * 2);
       ctx.closePath();
       ctx.fillStyle = t.character_id ? "#1d4ed8" : "#7f1d1d";
       ctx.fill();
-      const img = t.image ? state.tokenImages.get(t.image) : undefined;
+      // From above: the overhead token, else the portrait cropped to a circle.
+      const art = (state.mapImage.perspective === "portrait" ? null : t.token_overhead) ?? t.image;
+      const img = art ? state.tokenImages.get(art) : undefined;
       if (img) {
         ctx.clip();
         ctx.drawImage(img, cx - rad, cy - rad, rad * 2, rad * 2);
@@ -460,7 +470,8 @@ export default function MapView({
   const tileImages = useRef(new Map<string, HTMLImageElement>()).current;
   const [, setLoaded] = useState(0);
   useEffect(() => {
-    for (const url of new Set([...tiles.map((t) => t.url), ...tokens.flatMap((t) => (t.image ? [t.image] : []))])) {
+    const tokenArt = tokens.flatMap((t) => [t.image, t.token_overhead, t.token_side].filter((u): u is string => !!u));
+    for (const url of new Set([...tiles.map((t) => t.url), ...tokenArt])) {
       if (tileImages.has(url)) continue;
       const img = new Image();
       img.onload = () => setLoaded((n) => n + 1);
@@ -688,7 +699,9 @@ export default function MapView({
       if (!tokenCreature) return;
       const c = tokenCreature;
       startTransition(async () => {
-        changeTokens({ add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, col, row: settle(col, row), hp: null } });
+        changeTokens({
+          add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, token_overhead: c.token_overhead, token_side: c.token_side, col, row: settle(col, row), hp: null },
+        });
         await placeCreatureToken(locationId, levelId, c.id, col, row);
       });
       return;

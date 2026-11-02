@@ -238,6 +238,10 @@ addColumn("map_notes", "w", "REAL NOT NULL DEFAULT 1.6"); // size in grid cells
 addColumn("map_notes", "h", "REAL NOT NULL DEFAULT 1.6"); // minimum height; grows to fit text
 addColumn("map_controls", "icon", "TEXT NOT NULL DEFAULT 'GiClick'"); // react-icons Game Icons name
 addColumn("map_controls", "script", "TEXT NOT NULL DEFAULT ''"); // game script run when the button is clicked
+addColumn("creatures", "token_overhead", "TEXT"); // token art seen from above (overhead maps)
+addColumn("creatures", "token_side", "TEXT"); // token art seen side-on (portrait maps)
+addColumn("characters", "token_overhead", "TEXT");
+addColumn("characters", "token_side", "TEXT");
 addColumn("map_tokens", "hp", "INTEGER"); // a creature token's current health; null until first rolled
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -433,7 +437,9 @@ export interface Creature {
   id: number;
   name: string;
   description: string;
-  image: string | null;
+  image: string | null; // portrait: an artistic rendering, not a token
+  token_overhead: string | null; // map token seen from above
+  token_side: string | null; // map token seen side-on (portrait maps)
   type: CreatureType;
   attributes: Attributes;
   equipment: Equipment;
@@ -450,7 +456,7 @@ type CreatureRow = Omit<Creature, "attributes" | "equipment" | "movement"> & {
   movement: string;
 };
 
-const CREATURE_COLUMNS = "id, name, description, image, type, attributes, equipment, health, movement";
+const CREATURE_COLUMNS = "id, name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement";
 
 const parseCreature = (row: CreatureRow): Creature => ({
   ...row,
@@ -480,12 +486,13 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
   const params = toParams(c);
   if (id === null) {
     db.prepare<Omit<CreatureRow, "id">>(
-      `INSERT INTO creatures (name, description, image, type, attributes, equipment, health, movement)
-       VALUES (@name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
+      `INSERT INTO creatures (name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement)
+       VALUES (@name, @description, @image, @token_overhead, @token_side, @type, @attributes, @equipment, @health, @movement)`
     ).run(params);
   } else {
     db.prepare<CreatureRow>(
-      `UPDATE creatures SET name = @name, description = @description, image = @image, type = @type,
+      `UPDATE creatures SET name = @name, description = @description, image = @image, token_overhead = @token_overhead,
+         token_side = @token_side, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
   }
@@ -494,7 +501,8 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
 /** A single-instance creature, copied from a creature template. */
 export type Character = Creature & { creature_id: number | null; template_name: string | null };
 
-const CHARACTER_SELECT = `SELECT c.id, c.creature_id, t.name AS template_name, c.name, c.description, c.image, c.type,
+const CHARACTER_SELECT = `SELECT c.id, c.creature_id, t.name AS template_name, c.name, c.description, c.image,
+  c.token_overhead, c.token_side, c.type,
   c.attributes, c.equipment, c.health, c.movement FROM characters c LEFT JOIN creatures t ON t.id = c.creature_id`;
 
 type CharacterRow = CreatureRow & { creature_id: number | null; template_name: string | null };
@@ -514,13 +522,14 @@ export function saveCharacter(id: number | null, creatureId: number | null, c: O
   if (id === null) {
     return Number(
       db.prepare<Omit<CreatureRow, "id"> & { creature_id: number | null }>(
-        `INSERT INTO characters (creature_id, name, description, image, type, attributes, equipment, health, movement)
-         VALUES (@creature_id, @name, @description, @image, @type, @attributes, @equipment, @health, @movement)`
+        `INSERT INTO characters (creature_id, name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement)
+         VALUES (@creature_id, @name, @description, @image, @token_overhead, @token_side, @type, @attributes, @equipment, @health, @movement)`
       ).run({ ...params, creature_id: creatureId }).lastInsertRowid
     );
   } else {
     db.prepare<CreatureRow>(
-      `UPDATE characters SET name = @name, description = @description, image = @image, type = @type,
+      `UPDATE characters SET name = @name, description = @description, image = @image, token_overhead = @token_overhead,
+         token_side = @token_side, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
     return id;
@@ -837,7 +846,7 @@ export function saveTemplateColors(levelId: number, colors: TemplateColors): voi
   db.prepare<[string, number]>("UPDATE map_levels SET template_colors = ? WHERE id = ?").run(JSON.stringify(colors), levelId);
 }
 
-export const ASSET_USAGES = ["item", "creature", "background", "map", "tile", "ambient"] as const;
+export const ASSET_USAGES = ["item", "creature", "token", "background", "map", "tile", "ambient"] as const;
 export type AssetType = "image" | "audio";
 export type AssetUsage = (typeof ASSET_USAGES)[number];
 
@@ -940,12 +949,16 @@ export interface MapToken {
   col: number;
   row: number;
   hp: number | null; // creature tokens only; characters use their own
+  token_overhead: string | null; // the creature's / character's token art
+  token_side: string | null;
 }
 
 export function listTokens(levelId: number): MapToken[] {
   return db
     .prepare<[number], MapToken>(
-      `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row, t.hp
+      `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row, t.hp,
+         CASE WHEN t.character_id IS NULL THEN cr.token_overhead ELSE ch.token_overhead END AS token_overhead,
+         CASE WHEN t.character_id IS NULL THEN cr.token_side ELSE ch.token_side END AS token_side
        FROM map_tokens t
        LEFT JOIN creatures cr ON cr.id = t.creature_id
        LEFT JOIN characters ch ON ch.id = t.character_id

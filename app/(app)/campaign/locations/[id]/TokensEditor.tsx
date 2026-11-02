@@ -8,6 +8,8 @@ export interface TokenCreature {
   name: string;
   type: string;
   image: string | null;
+  token_overhead: string | null;
+  token_side: string | null;
 }
 
 /** Tokens layer editor: pick a creature from a modal to place, and list / delete placed tokens. */

@@ -34,11 +34,16 @@ export default function CreatureForm({
     <form action={action ?? submitCreature.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
       <h2 className="text-xl font-semibold">{title ?? (initial ? "Edit creature" : "New creature")}</h2>
       <div className="flex gap-4">
-        <ImagePicker kind="creature" name={name} description={description} initial={initial?.image} />
+        <ImagePicker kind="creature" name={name} description={description} initial={initial?.image} label="Portrait" />
         <div className="flex-1 space-y-3">
           <input name="name" placeholder="Name" required className="input w-full" value={name} onChange={(e) => setName(e.target.value)} />
           <textarea name="description" placeholder="Description" className="textarea w-full h-[6.5rem]" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
+      </div>
+      {/* Map tokens: seen from above on overhead maps, side-on on portrait maps. */}
+      <div className="flex gap-4">
+        <ImagePicker kind="overhead token" field="tokenOverhead" label="Overhead token" small name={name} description={description} initial={initial?.token_overhead} />
+        <ImagePicker kind="side token" field="tokenSide" label="Side-on token" small name={name} description={description} initial={initial?.token_side} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <select name="type" required defaultValue={initial?.type ?? ""} className="select w-full">

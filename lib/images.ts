@@ -55,14 +55,15 @@ export async function generateImage(prompt: string): Promise<string> {
  * Reads the ImagePicker fields: an uploaded file wins, otherwise a generated image URL.
  * A new upload is recorded in the asset library as an image with the given usage.
  */
-export async function imageFromForm(formData: FormData, usage: AssetUsage, name?: string): Promise<string | null> {
-  const upload = formData.get("upload");
+export async function imageFromForm(formData: FormData, usage: AssetUsage, name?: string, field = "image"): Promise<string | null> {
+  // The default ImagePicker submits "upload" + "image"; one with another field name submits "<field>Upload" + "<field>".
+  const upload = formData.get(field === "image" ? "upload" : `${field}Upload`);
   if (upload instanceof File && upload.size > 0) {
     const url = saveImage(Buffer.from(await upload.arrayBuffer()), upload.type);
     addAsset({ name: name || upload.name.replace(/\.[^.]+$/, "") || "Untitled", type: "image", usage, url });
     return url;
   }
-  return String(formData.get("image") ?? "").trim() || null;
+  return String(formData.get(field) ?? "").trim() || null;
 }
 
 /** Saves an uploaded audio file into the asset library as ambient sound; returns the asset URL. */

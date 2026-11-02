@@ -41,7 +41,7 @@ export default async function EditLocation({
           notes={listNotes(level.id)}
           controls={listControls(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
-          creatures={listCreatures().map(({ id, name, type, image }) => ({ id, name, type, image }))}
+          creatures={listCreatures().map(({ id, name, type, image, token_overhead, token_side }) => ({ id, name, type, image, token_overhead, token_side }))}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
         />
       </div>
