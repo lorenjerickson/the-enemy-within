@@ -132,6 +132,15 @@ db.exec(`
     asset_id INTEGER NOT NULL REFERENCES assets(id),
     mode TEXT NOT NULL DEFAULT 'loop' -- ClipMode
   );
+  -- Positional sounds on a level: an audio asset at a grid position (cell units) heard within a radius (cells).
+  CREATE TABLE IF NOT EXISTS positional_sounds (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    asset_id INTEGER NOT NULL REFERENCES assets(id),
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    radius REAL NOT NULL DEFAULT 3
+  );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY,
@@ -745,6 +754,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM map_tokens WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM ambient_clips WHERE sound_id IN (SELECT id FROM ambient_sounds WHERE level_id = ?)").run(levelId);
     db.prepare<[number]>("DELETE FROM ambient_sounds WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM positional_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -948,4 +958,38 @@ export function setClipMode(id: number, mode: ClipMode): void {
 
 export function deleteAmbientClip(id: number): void {
   db.prepare<[number]>("DELETE FROM ambient_clips WHERE id = ?").run(id);
+}
+
+/** A sound placed on the map: position in grid units (cell centre = col + 0.5) and effective range in cells. */
+export interface PositionalSound {
+  id: number;
+  asset_id: number;
+  name: string;
+  url: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+export function listPositionalSounds(levelId: number): PositionalSound[] {
+  return db
+    .prepare<[number], PositionalSound>(
+      `SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius FROM positional_sounds p
+       JOIN assets a ON a.id = p.asset_id WHERE p.level_id = ? ORDER BY p.id`
+    )
+    .all(levelId);
+}
+
+export function addPositionalSound(levelId: number, s: Omit<PositionalSound, "id" | "name" | "url">): void {
+  db.prepare<Omit<PositionalSound, "id" | "name" | "url"> & { level_id: number }>(
+    "INSERT INTO positional_sounds (level_id, asset_id, x, y, radius) VALUES (@level_id, @asset_id, @x, @y, @radius)"
+  ).run({ ...s, level_id: levelId });
+}
+
+export function setPositionalRadius(id: number, radius: number): void {
+  db.prepare<[number, number]>("UPDATE positional_sounds SET radius = ? WHERE id = ?").run(radius, id);
+}
+
+export function deletePositionalSound(id: number): void {
+  db.prepare<[number]>("DELETE FROM positional_sounds WHERE id = ?").run(id);
 }

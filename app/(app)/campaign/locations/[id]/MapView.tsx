@@ -4,14 +4,14 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { AmbientSound, Asset, MapStructure, MapTile, MapToken } from "@/lib/db";
-import SoundsEditor from "./SoundsEditor";
+import type { AmbientSound, Asset, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -38,6 +38,7 @@ interface MapState {
   structures: MapStructure[];
   tokens: MapToken[];
   tokenImages: Map<string, HTMLImageElement>;
+  positional: PositionalSound[];
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -138,6 +139,33 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     }
     ctx.restore();
   },
+  // Positional sounds: a speaker icon with a faint circle showing the effective range.
+  sounds: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const p of state.positional) {
+      const cx = x0 + p.x * size, cy = y0 + p.y * size;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.radius * size, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(16,185,129,0.10)";
+      ctx.fill();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "rgba(16,185,129,0.6)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = "#065f46";
+      ctx.fill();
+      ctx.fillStyle = "#ecfdf5";
+      ctx.font = `${size * 0.26}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("♪", cx, cy);
+      ctx.restore();
+    }
+  },
   // Round token per creature/character, filling its cell: portrait if there is one, otherwise the initial.
   tokens: (state) => (ctx, w, h) => {
     for (const t of state.tokens) {
@@ -217,6 +245,7 @@ export default function MapView({
   creatures,
   sounds,
   audioAssets,
+  positional,
 }: {
   locationId: number;
   levelId: number;
@@ -233,6 +262,7 @@ export default function MapView({
   creatures: TokenCreature[];
   sounds: AmbientSound[];
   audioAssets: Asset[];
+  positional: PositionalSound[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -305,10 +335,15 @@ export default function MapView({
     ? optimisticTokens.map((t) => (t.id === draggingToken.id ? { ...t, col: draggingToken.col, row: draggingToken.row } : t))
     : optimisticTokens;
 
+  // Positional sound placement: choose audio + range, then click the map (snaps to the cell centre).
+  const [positionalTool, setPositionalTool] = useState<PositionalTool>({ asset: null, radius: 3 });
+  const [selectedPositionalId, setSelectedPositionalId] = useState<number | null>(null);
+  const [optimisticPositional, addOptimisticPositional] = useOptimistic(positional, (ps: PositionalSound[], p: PositionalSound) => [...ps, p]);
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
-    tokens: drawnTokens, tokenImages: loadedTileImages,
+    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -364,6 +399,17 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "sounds") {
+      const a = positionalTool.asset;
+      if (!a) return;
+      const { col, row } = cellAt(e);
+      const placed = { x: col + 0.5, y: row + 0.5, radius: positionalTool.radius };
+      startTransition(async () => {
+        addOptimisticPositional({ id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, ...placed });
+        await placePositionalSound(locationId, levelId, a.id, placed.x, placed.y, placed.radius);
+      });
+      return;
+    }
     if (e.button === 0 && selected === "tokens") {
       const { col, row } = cellAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
@@ -519,6 +565,19 @@ export default function MapView({
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
+      // Highlight the positional sound picked in the editor.
+      const ps = optimisticPositional.find((p) => p.id === selectedPositionalId);
+      if (ps && selected === "sounds") {
+        const { x0, y0, size } = gridOrigin(state, width, height);
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.beginPath();
+        ctx.arc(x0 + ps.x * size, y0 + ps.y * size, ps.radius * size, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // Highlight the token picked in the editor.
       const token = drawnTokens.find((t) => t.id === selectedTokenId);
       if (token && selected === "tokens") {
@@ -610,7 +669,17 @@ export default function MapView({
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
               ) : selected === "sounds" ? (
-                <SoundsEditor locationId={locationId} levelId={levelId} sounds={sounds} audioAssets={audioAssets} />
+                <SoundsEditor
+                  locationId={locationId}
+                  levelId={levelId}
+                  sounds={sounds}
+                  audioAssets={audioAssets}
+                  positional={optimisticPositional}
+                  tool={positionalTool}
+                  onToolChange={setPositionalTool}
+                  selectedPositionalId={selectedPositionalId}
+                  onSelectPositional={(id) => setSelectedPositionalId(id === selectedPositionalId ? null : id)}
+                />
               ) : selected === "tokens" ? (
                 <TokensEditor
                   creatures={creatures}

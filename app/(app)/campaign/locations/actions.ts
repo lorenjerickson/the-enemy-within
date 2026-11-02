@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, type ClipMode, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 
@@ -220,5 +220,23 @@ export async function changeClipMode(locationId: number, clipId: number, mode: C
 export async function removeAmbientClip(locationId: number, clipId: number) {
   await requireGm();
   deleteAmbientClip(clipId);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function placePositionalSound(locationId: number, levelId: number, assetId: number, x: number, y: number, radius: number) {
+  await requireGm();
+  addPositionalSound(levelId, { asset_id: assetId, x: Number(x), y: Number(y), radius: Math.max(0.5, Number(radius) || 3) });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function changePositionalRadius(locationId: number, id: number, radius: number) {
+  await requireGm();
+  setPositionalRadius(id, Math.max(0.5, Number(radius) || 3));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removePositionalSound(locationId: number, id: number) {
+  await requireGm();
+  deletePositionalSound(id);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
