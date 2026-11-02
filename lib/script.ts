@@ -15,7 +15,7 @@ export class Tags {
   constructor(public set: Set<string>) {}
 }
 /** The same property on every item of a collection: reads give a list, writes and calls apply to each. */
-class Broadcast {
+export class Broadcast {
   constructor(public values: unknown[]) {}
 }
 /** A callable: a helper like roll() or a method like conditions.add. */
@@ -82,7 +82,7 @@ type Expr =
 type Stmt = { line: number } & (
   | { k: "expr"; e: Expr }
   | { k: "assign"; target: Expr; op: string; value?: Expr }
-  | { k: "with"; e: Expr; as?: string; body: Stmt[] }
+  | { k: "with"; e: Expr; as?: string; body?: Stmt[] }
   | { k: "if"; c: Expr; then: Stmt[]; else?: Stmt[] }
 );
 
@@ -128,7 +128,8 @@ function parse(source: string): Stmt[] {
       if (eatKw("as")) as = peek().t === "id" ? next().v : fail("expected a name after AS");
       if (peek().t !== "nl") fail("expected the end of the line after WITH");
       p++;
-      return { k: "with", e, as, body: block(), line };
+      // Without an indented block, the WITH applies to the rest of the enclosing block.
+      return { k: "with", e, as, body: peek().t === "indent" ? block() : undefined, line };
     }
     if (eatKw("if")) {
       const c = expr();
@@ -256,7 +257,7 @@ function getKey(obj: unknown, key: string): unknown {
   if (FORBIDDEN.has(key)) throw new ScriptError(`"${key}" isn't allowed`);
   if (obj instanceof Broadcast) return new Broadcast(obj.values.map((v) => getKey(v, key)));
   if (obj instanceof Collection) {
-    if (key === "all") return new Broadcast(obj.items);
+    if (key === "all" || key === "each") return new Broadcast(obj.items);
     if (key === "count") return obj.items.length;
     const found = obj.items.find((it) => it.name.toLowerCase() === key.toLowerCase() || String(it.id) === key);
     if (!found) throw new ScriptError(`No ${obj.kind} named "${key}"`);
@@ -373,14 +374,17 @@ function assignTarget(t: Expr, scopes: Scope[]): [unknown, string] {
   throw new ScriptError("can only assign to a property");
 }
 
-function execute(stmts: Stmt[], scopes: Scope[]): unknown {
+function execute(stmts: Stmt[], outer: Scope[]): unknown {
+  let scopes = outer;
   let last: unknown = null;
   for (const s of stmts) {
     try {
       if (s.k === "expr") last = evaluate(s.e, scopes);
       else if (s.k === "with") {
         const v = evaluate(s.e, scopes);
-        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }]);
+        const inner: Scope[] = [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }];
+        if (s.body) last = execute(s.body, inner);
+        else scopes = inner;
       } else if (s.k === "if") {
         last = evaluate(s.c, scopes) ? execute(s.then, scopes) : s.else ? execute(s.else, scopes) : null;
       } else {
@@ -408,6 +412,9 @@ function execute(stmts: Stmt[], scopes: Scope[]): unknown {
 export function runScript(source: string, globals: Record<string, unknown>): unknown {
   return execute(parse(source), [{ names: globals }]);
 }
+
+/** Helper arguments with lists (coll.each.x) spread out, e.g. sum(G) or max(a, b). */
+export const spread = (args: unknown[]): unknown[] => args.flatMap((a) => (a instanceof Broadcast ? a.values : [a]));
 
 /** A script value as plain JSON for display. */
 export function toPlain(v: unknown): unknown {

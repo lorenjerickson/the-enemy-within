@@ -6,7 +6,8 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 
 - `game.players`: characters, by name or id: `game.players['annis']`, `game.players.annis`.
   Each has `name`, `type` (read-only), `attributes.might` …, `health` (current), `conditions`.
-- `coll.all.<prop>` reads or writes a property on every item: `game.players.all.health += 5`.
+- `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health` → `[25, 7]`.
+  Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null`.
@@ -24,9 +25,12 @@ with game.players as P                     # WITH ... AS name: a short name
    with P.annis                            # WITH without AS: its properties become bare names
       IF attributes.might > 12
          THEN health += roll('1d6')
+
+WITH game.players.each.health as H         # a WITH with no indented block applies
+IF sum(H) < 20 THEN game.vars.retreat = true   # to the rest of the lines around it
 ```
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
-Helpers: `roll('2d6+1')`, `mod(score)`, `min(...)`, `max(...)`.
+Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).

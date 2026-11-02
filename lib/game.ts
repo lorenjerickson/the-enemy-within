@@ -1,7 +1,7 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import { getVars, listCharacterStates, saveCharacterState, saveVars, transaction, type VarValue } from "./db";
-import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, toPlain } from "./script";
+import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
 
 /** A character as scripts see it. Everything here except id, name and type can be changed. */
 export interface Player {
@@ -44,6 +44,14 @@ function saveGame(game: Game): void {
   });
 }
 
+/** Numbers from helper arguments, lists spread out. */
+function numbers(args: unknown[]): number[] {
+  return spread(args).map((v) => {
+    if (typeof v !== "number") throw new ScriptError(`expected numbers, got ${JSON.stringify(v)}`);
+    return v;
+  });
+}
+
 /** Helpers scripts can call alongside `game`. */
 const HELPERS = {
   roll: new Method((f) => {
@@ -54,8 +62,14 @@ const HELPERS = {
     }
   }),
   mod: new Method((score) => modifier(Number(score))),
-  min: new Method((...n) => Math.min(...n.map(Number))),
-  max: new Method((...n) => Math.max(...n.map(Number))),
+  min: new Method((...a) => Math.min(...numbers(a))),
+  max: new Method((...a) => Math.max(...numbers(a))),
+  sum: new Method((...a) => numbers(a).reduce((s, n) => s + n, 0)),
+  avg: new Method((...a) => {
+    const n = numbers(a);
+    return n.length ? n.reduce((s, x) => s + x, 0) / n.length : 0;
+  }),
+  count: new Method((...a) => spread(a).length),
 };
 
 /** Runs a script against the current game state and saves what it changed. Returns the last value. */
