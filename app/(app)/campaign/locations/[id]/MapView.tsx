@@ -4,12 +4,13 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import type { Asset, MapStructure, MapTile } from "@/lib/db";
+import type { Asset, MapStructure, MapTile, MapToken } from "@/lib/db";
+import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { moveTileTo, placeStructure, placeTile, removeStructure, removeTile, toggleLayer } from "../actions";
+import { moveTileTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -34,6 +35,8 @@ interface MapState {
   tiles: MapTile[];
   tileImages: Map<string, HTMLImageElement>;
   structures: MapStructure[];
+  tokens: MapToken[];
+  tokenImages: Map<string, HTMLImageElement>;
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -134,6 +137,38 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     }
     ctx.restore();
   },
+  // Round token per creature/character, filling its cell: portrait if there is one, otherwise the initial.
+  tokens: (state) => (ctx, w, h) => {
+    for (const t of state.tokens) {
+      const r = cellToRect(state, w, h, { col: t.col, row: t.row, cols: 1, rows: 1 });
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, rad = r.w * 0.42;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fillStyle = t.character_id ? "#1d4ed8" : "#7f1d1d";
+      ctx.fill();
+      const img = t.image ? state.tokenImages.get(t.image) : undefined;
+      if (img) {
+        ctx.clip();
+        ctx.drawImage(img, cx - rad, cy - rad, rad * 2, rad * 2);
+      } else {
+        ctx.fillStyle = "#f9fafb";
+        ctx.font = `bold ${rad}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(t.name[0]?.toUpperCase() ?? "?", cx, cy);
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = t.character_id ? "#93c5fd" : "#fca5a5";
+      ctx.stroke();
+      ctx.restore();
+    }
+  },
   map: (state) => (ctx, w, h) => {
     const r = mapRect(state, w, h);
     if (r && state.mapImageEl) ctx.drawImage(state.mapImageEl, r.x, r.y, r.w, r.h);
@@ -177,6 +212,8 @@ export default function MapView({
   tiles,
   structures,
   otherLevels,
+  tokens,
+  creatures,
 }: {
   locationId: number;
   levelId: number;
@@ -189,6 +226,8 @@ export default function MapView({
   tiles: MapTile[];
   structures: MapStructure[];
   otherLevels: { id: number; name: string }[];
+  tokens: MapToken[];
+  creatures: TokenCreature[];
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -206,14 +245,14 @@ export default function MapView({
   const tileImages = useRef(new Map<string, HTMLImageElement>()).current;
   const [, setLoaded] = useState(0);
   useEffect(() => {
-    for (const url of new Set(tiles.map((t) => t.url))) {
+    for (const url of new Set([...tiles.map((t) => t.url), ...tokens.flatMap((t) => (t.image ? [t.image] : []))])) {
       if (tileImages.has(url)) continue;
       const img = new Image();
       img.onload = () => setLoaded((n) => n + 1);
       img.src = url;
       tileImages.set(url, img);
     }
-  }, [tiles, tileImages]);
+  }, [tiles, tokens, tileImages]);
   const loadedTileImages = new Map([...tileImages].filter(([, img]) => img.complete && img.naturalWidth > 0));
 
   // Tile placement: with the Tiles layer selected and an asset chosen, left click / drag covers grid cells.
@@ -244,9 +283,18 @@ export default function MapView({
     "add" in c ? [...ss, c.add] : ss.filter((s) => s.id !== c.remove)
   );
 
+  // Token placement: pick a creature, then click a cell.
+  const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
+  type TokenChange = { add: MapToken } | { remove: number };
+  const [optimisticTokens, changeTokens] = useOptimistic(tokens, (ts: MapToken[], c: TokenChange) =>
+    "add" in c ? [...ts, c.add] : ts.filter((t) => t.id !== c.remove)
+  );
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
+    tokens: optimisticTokens, tokenImages: loadedTileImages,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -302,6 +350,16 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && selected === "tokens") {
+      if (!tokenCreature) return;
+      const { col, row } = cellAt(e);
+      const c = tokenCreature;
+      startTransition(async () => {
+        changeTokens({ add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, col, row } });
+        await placeCreatureToken(locationId, levelId, c.id, col, row);
+      });
+      return;
+    }
     if (e.button === 0 && selected === "structure") {
       if (structureTool.kind === "staircase") {
         if (!structureTool.targetLevelId) return;
@@ -422,6 +480,17 @@ export default function MapView({
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
+      // Highlight the token picked in the editor.
+      const token = optimisticTokens.find((t) => t.id === selectedTokenId);
+      if (token && selected === "tokens") {
+        const r = cellToRect(state, width, height, { col: token.col, row: token.row, cols: 1, rows: 1 });
+        ctx.save();
+        ctx.strokeStyle = "rgb(129,140,248)";
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.restore();
+      }
       // Structure: preview of the line being drawn, and highlight of the selected piece.
       if (drawingLine && structureTool.kind !== "staircase") {
         const { x0, y0, size } = gridOrigin(state, width, height);
@@ -501,6 +570,22 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "tokens" ? (
+                <TokensEditor
+                  creatures={creatures}
+                  creature={tokenCreature}
+                  onCreatureChange={setTokenCreature}
+                  tokens={optimisticTokens}
+                  selectedId={selectedTokenId}
+                  onSelect={(id) => setSelectedTokenId(id === selectedTokenId ? null : id)}
+                  onDelete={(id) =>
+                    startTransition(async () => {
+                      changeTokens({ remove: id });
+                      setSelectedTokenId(null);
+                      await removeToken(locationId, id);
+                    })
+                  }
+                />
               ) : selected === "structure" ? (
                 <StructureEditor
                   tool={structureTool}

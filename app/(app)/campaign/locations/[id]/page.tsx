@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getLocation, listAssets, listLevels, listStructures, listTiles } from "@/lib/db";
+import { getLocation, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
@@ -31,6 +31,8 @@ export default async function EditLocation({
           tileAssets={listAssets({ type: "image", usage: "tile" })}
           tiles={listTiles(level.id)}
           structures={listStructures(level.id)}
+          tokens={listTokens(level.id)}
+          creatures={listCreatures().map(({ id, name, type, image }) => ({ id, name, type, image }))}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
         />
       </div>

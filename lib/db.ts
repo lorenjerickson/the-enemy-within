@@ -111,6 +111,15 @@ db.exec(`
     y2 INTEGER NOT NULL,
     target_level_id INTEGER REFERENCES map_levels(id)
   );
+  -- Tokens on a level: a creature (initial placement by the GM) or a character, in a grid cell.
+  CREATE TABLE IF NOT EXISTS map_tokens (
+    id INTEGER PRIMARY KEY,
+    level_id INTEGER NOT NULL REFERENCES map_levels(id),
+    creature_id INTEGER REFERENCES creatures(id),
+    character_id INTEGER REFERENCES characters(id),
+    col INTEGER NOT NULL,
+    row INTEGER NOT NULL
+  );
   -- Reusable media for maps, e.g. tile images.
   CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY,
@@ -721,6 +730,7 @@ export function removeLevel(levelId: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM map_tiles WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_tokens WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM level_hidden_layers WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_levels WHERE id = ?").run(levelId);
@@ -841,4 +851,37 @@ export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "targ
 
 export function deleteStructure(id: number): void {
   db.prepare<[number]>("DELETE FROM map_structures WHERE id = ?").run(id);
+}
+
+/** A token on a level: who it is (creature or character), how it looks, and its cell. */
+export interface MapToken {
+  id: number;
+  creature_id: number | null;
+  character_id: number | null;
+  name: string;
+  image: string | null;
+  col: number;
+  row: number;
+}
+
+export function listTokens(levelId: number): MapToken[] {
+  return db
+    .prepare<[number], MapToken>(
+      `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row
+       FROM map_tokens t
+       LEFT JOIN creatures cr ON cr.id = t.creature_id
+       LEFT JOIN characters ch ON ch.id = t.character_id
+       WHERE t.level_id = ? ORDER BY t.id`
+    )
+    .all(levelId);
+}
+
+export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number): void {
+  db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, creature_id, col, row) VALUES (?, ?, ?, ?)").run(
+    levelId, creatureId, col, row
+  );
+}
+
+export function deleteToken(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_tokens WHERE id = ?").run(id);
 }
