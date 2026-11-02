@@ -205,6 +205,7 @@ db.exec("UPDATE map_levels SET position = id WHERE position = 0");
 addColumn("map_levels", "map_image", "TEXT"); // JSON MapImage
 addColumn("map_levels", "grid", "TEXT"); // JSON MapGrid
 addColumn("map_levels", "template_colors", "TEXT"); // JSON TemplateColors
+addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls'"); // layer renamed
@@ -702,6 +703,7 @@ export interface MapLevel {
   mapImage: MapImage;
   grid: MapGrid;
   templateColors: TemplateColors;
+  illumination: number; // global light level, 0 (dark) .. 1 (full)
   hidden: MapLayer[];
 }
 
@@ -710,8 +712,8 @@ export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
     db.prepare<
       [number],
-      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null }
-    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors FROM map_levels WHERE location_id = ? ORDER BY position DESC"
+      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null; illumination: number }
+    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors, illumination FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
@@ -1002,4 +1004,8 @@ export function deletePositionalSound(id: number): void {
 
 export function setSoundVolume(table: "ambient_sounds" | "positional_sounds", id: number, volume: number): void {
   db.prepare<[number, number]>(`UPDATE ${table} SET volume = ? WHERE id = ?`).run(Math.min(1, Math.max(0, volume)), id);
+}
+
+export function saveIllumination(levelId: number, illumination: number): void {
+  db.prepare<[number, number]>("UPDATE map_levels SET illumination = ? WHERE id = ?").run(Math.min(1, Math.max(0, illumination)), levelId);
 }

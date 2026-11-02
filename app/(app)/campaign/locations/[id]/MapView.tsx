@@ -6,12 +6,13 @@ import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import type { AmbientSound, Asset, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
+import LightingEditor from "./LightingEditor";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { changeIllumination, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -39,6 +40,7 @@ interface MapState {
   tokens: MapToken[];
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
+  illumination: number;
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -137,6 +139,16 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.stroke();
       }
     }
+    ctx.restore();
+  },
+  // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
+  lighting: (state) => (ctx) => {
+    const darkness = 1 - state.illumination;
+    if (darkness <= 0) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(0,0,0,${darkness})`;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.restore();
   },
   // Positional sounds: a speaker icon with a faint circle showing the effective range.
@@ -246,6 +258,7 @@ export default function MapView({
   sounds,
   audioAssets,
   positional,
+  illumination,
 }: {
   locationId: number;
   levelId: number;
@@ -263,6 +276,7 @@ export default function MapView({
   sounds: AmbientSound[];
   audioAssets: Asset[];
   positional: PositionalSound[];
+  illumination: number;
 }) {
   const [, startTransition] = useTransition();
   const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -340,10 +354,14 @@ export default function MapView({
   const [selectedPositionalId, setSelectedPositionalId] = useState<number | null>(null);
   const [optimisticPositional, addOptimisticPositional] = useOptimistic(positional, (ps: PositionalSound[], p: PositionalSound) => [...ps, p]);
 
+  // Illumination being previewed in the lighting editor (null = use the saved level).
+  const [previewIllumination, setPreviewIllumination] = useState<number | null>(null);
+  const shownIllumination = previewIllumination ?? illumination;
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
-    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional,
+    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -668,6 +686,17 @@ export default function MapView({
               <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
               {selected === "background" ? (
                 <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
+              ) : selected === "lighting" ? (
+                <LightingEditor
+                  value={shownIllumination}
+                  onPreview={setPreviewIllumination}
+                  onCommit={(v) =>
+                    startTransition(async () => {
+                      await changeIllumination(locationId, levelId, v);
+                      setPreviewIllumination(null);
+                    })
+                  }
+                />
               ) : selected === "sounds" ? (
                 <SoundsEditor
                   locationId={locationId}
