@@ -255,13 +255,22 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     const blockers: Segment[] = state.structures
       .filter((s) => s.kind === "wall" || (s.kind === "door" && !s.open))
       .map((s) => ({ a: { x: x0 + s.x1 * size, y: y0 + s.y1 * size }, b: { x: x0 + s.x2 * size, y: y0 + s.y2 * size } }));
+    // Flicker: each frame a flickering light gets one random draw that moves its range and its strength
+    // together (a flare reaches further and burns brighter), shared by the darkness cut-out and the warm overlay.
+    const flicker = new Map(
+      state.lights.map((l) => {
+        const u = Math.random();
+        return [l, l.flicker ? { range: 0.85 + 0.2 * u, strength: 0.55 + 0.45 * u } : { range: 1, strength: 1 }];
+      })
+    );
     const light = (l: LightSource) => {
       const cx = x0 + l.x * size, cy = y0 + l.y * size;
-      const r = l.radius * size * (l.flicker ? 0.9 + Math.random() * 0.15 : 1);
+      const { range, strength } = flicker.get(l)!;
+      const r = l.radius * size * range;
       const half = (l.spread * Math.PI) / 360, dir = (l.angle * Math.PI) / 180;
       const seen = visibilityPolygon({ x: cx, y: cy }, r, blockers);
       return {
-        cx, cy, r,
+        cx, cy, r, strength,
         // The light's shape (circle or cone), clipped to what it can see past walls.
         path: (c: CanvasRenderingContext2D) => {
           c.beginPath();
@@ -284,10 +293,10 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       o.setTransform(ctx.getTransform());
       o.globalCompositeOperation = "destination-out";
       for (const l of state.lights) {
-        const { cx, cy, r, path } = light(l);
+        const { cx, cy, r, strength, path } = light(l);
         const g = o.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, "rgba(0,0,0,1)");
-        g.addColorStop(0.6, "rgba(0,0,0,0.8)");
+        g.addColorStop(0, `rgba(0,0,0,${strength})`);
+        g.addColorStop(0.6, `rgba(0,0,0,${0.8 * strength})`);
         g.addColorStop(1, "rgba(0,0,0,0)");
         o.save();
         o.fillStyle = g;
@@ -302,10 +311,10 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     }
     // Warm overlay marking each light's area of effect, plus a bulb icon.
     for (const l of state.lights) {
-      const { cx, cy, path } = light(l);
+      const { cx, cy, strength, path } = light(l);
       ctx.save();
       path(ctx);
-      ctx.fillStyle = "rgba(253,224,71,0.12)";
+      ctx.fillStyle = `rgba(253,224,71,${0.12 * strength})`;
       ctx.fill();
       if (state.showLightAreas) {
         ctx.setLineDash([4, 4]);
