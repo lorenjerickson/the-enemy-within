@@ -1332,6 +1332,10 @@ export function addEffect(levelId: number, e: Omit<MapEffect, "id">): void {
   ).run({ ...e, level_id: levelId });
 }
 
+export function moveEffect(id: number, x: number, y: number): void {
+  db.prepare<[number, number, number]>("UPDATE map_effects SET x = ?, y = ? WHERE id = ? AND w IS NOT NULL").run(x, y, id);
+}
+
 export function setEffectIntensity(id: number, intensity: number): void {
   db.prepare<[number, number]>("UPDATE map_effects SET intensity = ? WHERE id = ?").run(Math.min(1, Math.max(0, intensity)), id);
 }

@@ -73,13 +73,14 @@ export default function EffectsEditor({
           {tool.wholeMap ? (
             <button type="button" className="btn btn-sm" onClick={onAddToMap}>Add {EFFECT_LABELS[tool.kind].toLowerCase()} to the map</button>
           ) : (
-            <span className="text-xs opacity-70">Drag on the map to mark its area.</span>
+            <span className="text-xs opacity-70">Drag on an empty part of the map to mark its area.</span>
           )}
         </div>
       </div>
 
       <div className="space-y-1">
         <div className="text-sm font-semibold">Effects (drawn in this order, last on top)</div>
+        <p className="text-xs opacity-60">Drag a placed effect on the map to move it.</p>
         {effects.length === 0 ? (
           <p className="text-xs opacity-60">None yet.</p>
         ) : (

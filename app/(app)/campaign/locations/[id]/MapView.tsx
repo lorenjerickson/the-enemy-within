@@ -19,7 +19,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -627,6 +627,14 @@ export default function MapView({
   const [, setFlickerTick] = useState(0);
   const anyFlicker = optimisticLights.some((l) => l.flicker) && !hiddenSet.has("lighting");
   const anyEffect = effects.length > 0 && !hiddenSet.has("effects");
+  // Placed effects, with moves shown straight away (optimistic) and the one being dragged offset by the drag.
+  const [optimisticEffects, moveEffectLocally] = useOptimistic(effects, (es: MapEffect[], m: { id: number; x: number; y: number }) =>
+    es.map((e) => (e.id === m.id ? { ...e, x: m.x, y: m.y } : e))
+  );
+  const [draggingEffect, setDraggingEffect] = useState<{ id: number; grab: { x: number; y: number }; dx: number; dy: number } | null>(null);
+  const drawnEffects = draggingEffect
+    ? optimisticEffects.map((e) => (e.id === draggingEffect.id ? { ...e, x: e.x! + draggingEffect.dx, y: e.y! + draggingEffect.dy } : e))
+    : optimisticEffects;
   const frameMs = anyEffect ? 40 : anyFlicker ? 120 : 0;
   useEffect(() => {
     if (!frameMs) return;
@@ -668,7 +676,7 @@ export default function MapView({
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: shownIllumination, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
-    effects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
+    effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -771,8 +779,17 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "effects") {
-      if (effectTool.wholeMap) return;
       const { gx, gy } = gridAt(e);
+      // Pressing inside a placed effect (topmost first) picks it up to move it.
+      const hit = [...optimisticEffects].reverse().find(
+        (f) => f.w !== null && f.h !== null && gx >= f.x! && gx <= f.x! + f.w && gy >= f.y! && gy <= f.y! + f.h
+      );
+      if (hit) {
+        setDraggingEffect({ id: hit.id, grab: { x: gx, y: gy }, dx: 0, dy: 0 });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+      if (effectTool.wholeMap) return;
       const corner = { x: quarter(gx), y: quarter(gy) };
       setEffectDrag({ start: corner, end: corner });
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -872,6 +889,12 @@ export default function MapView({
       setResizingNote({ id: n.id, w: Math.max(0.6, gx - n.x), h: Math.max(0.6, gy - n.y) });
       return;
     }
+    if (draggingEffect) {
+      const { gx, gy } = gridAt(e);
+      const dx = quarter(gx - draggingEffect.grab.x), dy = quarter(gy - draggingEffect.grab.y);
+      if (dx !== draggingEffect.dx || dy !== draggingEffect.dy) setDraggingEffect({ ...draggingEffect, dx, dy });
+      return;
+    }
     if (effectDrag) {
       const { gx, gy } = gridAt(e);
       const end = { x: quarter(gx), y: quarter(gy) };
@@ -919,6 +942,19 @@ export default function MapView({
         changeNotes({ resize: r });
         await changeNoteSize(locationId, r.id, r.w, r.h);
       });
+      return;
+    }
+    if (draggingEffect) {
+      const { id, dx, dy } = draggingEffect;
+      const before = optimisticEffects.find((f) => f.id === id);
+      setDraggingEffect(null);
+      if (before && (dx || dy)) {
+        const to = { id, x: before.x! + dx, y: before.y! + dy };
+        startTransition(async () => {
+          moveEffectLocally(to);
+          await moveEffectTo(locationId, id, to.x, to.y);
+        });
+      }
       return;
     }
     if (effectDrag) {
@@ -1232,7 +1268,7 @@ export default function MapView({
               <EffectsEditor
                 tool={effectTool}
                 onToolChange={setEffectTool}
-                effects={effects}
+                effects={optimisticEffects}
                 onAddToMap={() =>
                   startTransition(() =>
                     placeEffect(locationId, levelId, { kind: effectTool.kind, x: null, y: null, w: null, h: null, intensity: effectTool.intensity })
