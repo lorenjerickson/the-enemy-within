@@ -6,10 +6,12 @@ import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { blockingSegments, visibilityPolygon, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
-import type { AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
+import EffectsEditor, { type EffectTool } from "./EffectsEditor";
+import { drawEffect } from "@/lib/effects";
 import ControlsEditor from "./ControlsEditor";
 import GameIcon from "./GameIcon";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
@@ -17,7 +19,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -50,6 +52,9 @@ interface MapState {
   lights: LightSource[];
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
+  effects: MapEffect[];
+  time: number; // seconds, drives animated effects
+  showEffectAreas: boolean; // outline placed effects (while editing effects)
 }
 
 type CellRect = { col: number; row: number; cols: number; rows: number };
@@ -217,6 +222,26 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   },
   // Global illumination: darken everything below by (1 - illumination), across the whole visible area.
   // GM-only yellow sticky notes: fixed width, growing taller to fit their text, with a folded corner.
+  // Animated effects, in the order added: whole-map ones fill the scene, placed ones fill their circle.
+  effects: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const e of state.effects) {
+      const placed = e.x !== null && e.y !== null;
+      const cx = x0 + (e.x ?? 0) * size, cy = y0 + (e.y ?? 0) * size, r = (e.radius ?? 0) * size;
+      const area = placed ? { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r, circle: true } : { x: 0, y: 0, w, h, circle: false };
+      drawEffect(ctx, e.kind, area, e.intensity, state.time, size);
+      if (placed && state.showEffectAreas) {
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(167,139,250,0.8)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  },
   notes: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const n of state.notes) {
@@ -466,6 +491,7 @@ export default function MapView({
   figureHeight,
   lights,
   notes,
+  effects,
   controls,
 }: {
   locationId: number;
@@ -488,6 +514,7 @@ export default function MapView({
   figureHeight: number;
   lights: LightSource[];
   notes: MapNote[];
+  effects: MapEffect[];
   controls: MapControl[];
 }) {
   const [, startTransition] = useTransition();
@@ -597,14 +624,19 @@ export default function MapView({
   const [optimisticLights, changeLights] = useOptimistic(lights, (ls: LightSource[], c: LightChange) =>
     "add" in c ? [...ls, c.add] : ls.filter((l) => l.id !== c.remove)
   );
-  // Redraw ~8 times a second while any light flickers.
+  // Animate: ~25 frames a second while effects are showing, ~8 while any light flickers.
   const [, setFlickerTick] = useState(0);
   const anyFlicker = optimisticLights.some((l) => l.flicker) && !hiddenSet.has("lighting");
+  const anyEffect = effects.length > 0 && !hiddenSet.has("effects");
+  const frameMs = anyEffect ? 40 : anyFlicker ? 120 : 0;
   useEffect(() => {
-    if (!anyFlicker) return;
-    const t = setInterval(() => setFlickerTick((n) => n + 1), 120);
+    if (!frameMs) return;
+    const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
     return () => clearInterval(t);
-  }, [anyFlicker]);
+  }, [frameMs]);
+
+  // Effects: choose a built-in effect, then add it to the whole map or click to place it.
+  const [effectTool, setEffectTool] = useState<EffectTool>({ kind: "rain", intensity: 0.5, wholeMap: true, radius: 2 });
 
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
@@ -628,6 +660,7 @@ export default function MapView({
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: shownIllumination, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
+    effects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -727,6 +760,13 @@ export default function MapView({
         changeLights({ add: { id: -Date.now(), ...placed, flicker: placed.flicker ? 1 : 0 } });
         await placeLight(locationId, levelId, placed);
       });
+      return;
+    }
+    if (e.button === 0 && selected === "effects") {
+      if (effectTool.wholeMap) return;
+      const { col, row } = cellAt(e);
+      const t = effectTool;
+      startTransition(() => placeEffect(locationId, levelId, { kind: t.kind, x: col + 0.5, y: row + 0.5, radius: t.radius, intensity: t.intensity }));
       return;
     }
     if (e.button === 0 && selected === "sounds") {
@@ -1151,6 +1191,19 @@ export default function MapView({
                     await removeNote(locationId, id);
                   })
                 }
+              />
+            ) : selected === "effects" ? (
+              <EffectsEditor
+                tool={effectTool}
+                onToolChange={setEffectTool}
+                effects={effects}
+                onAddToMap={() =>
+                  startTransition(() =>
+                    placeEffect(locationId, levelId, { kind: effectTool.kind, x: null, y: null, radius: null, intensity: effectTool.intensity })
+                  )
+                }
+                onIntensity={(id, v) => startTransition(() => changeEffectIntensity(locationId, id, v))}
+                onRemove={(id) => startTransition(() => removeEffect(locationId, id))}
               />
             ) : selected === "lighting" ? (
               <LightingEditor

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
+import { listEffects, listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
@@ -58,6 +58,7 @@ export default async function EditLocation({
           figureHeight={level.figure_height}
           lights={listLights(level.id)}
           notes={listNotes(level.id)}
+          effects={listEffects(level.id)}
           controls={listControls(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
           creatures={[

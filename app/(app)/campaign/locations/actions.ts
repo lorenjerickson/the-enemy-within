@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
+import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 
@@ -260,6 +261,37 @@ export async function removeAmbientClip(locationId: number, clipId: number) {
 export async function placePositionalSound(locationId: number, levelId: number, assetId: number, x: number, y: number, radius: number) {
   await requireGm();
   addPositionalSound(levelId, { asset_id: assetId, x: Number(x), y: Number(y), radius: Math.max(0.5, Number(radius) || 3) });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Adds an effect: to the whole map (no position) or as a circle placed at (x, y). */
+export async function placeEffect(
+  locationId: number,
+  levelId: number,
+  e: { kind: EffectKind; x: number | null; y: number | null; radius: number | null; intensity: number }
+) {
+  await requireGm();
+  if (!EFFECT_KINDS.includes(e.kind)) throw new Error("Unknown effect");
+  const placed = e.x !== null && e.y !== null;
+  addEffect(levelId, {
+    kind: e.kind,
+    x: placed ? Number(e.x) : null,
+    y: placed ? Number(e.y) : null,
+    radius: placed ? Math.max(0.5, Number(e.radius) || 2) : null,
+    intensity: Math.min(1, Math.max(0, Number(e.intensity))),
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function changeEffectIntensity(locationId: number, id: number, intensity: number) {
+  await requireGm();
+  setEffectIntensity(id, Number(intensity));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeEffect(locationId: number, id: number) {
+  await requireGm();
+  deleteEffect(id);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

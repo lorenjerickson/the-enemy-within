@@ -9,6 +9,7 @@ import {
 } from "@/lib/maps";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib/actions";
+import type { EffectKind } from "@/lib/effects";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
@@ -243,6 +244,16 @@ addColumn("creatures", "token_side", "TEXT"); // token art seen side-on (portrai
 addColumn("characters", "token_overhead", "TEXT");
 addColumn("characters", "token_side", "TEXT");
 addColumn("map_tokens", "hp", "INTEGER");
+// Animated effects on a level, drawn in the order added. No position = covers the whole map.
+db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  kind TEXT NOT NULL,
+  x REAL,
+  y REAL,
+  radius REAL,
+  intensity REAL NOT NULL DEFAULT 0.5
+)`);
 addColumn("positional_sounds", "loop", "INTEGER NOT NULL DEFAULT 0"); // 1 = plays on a loop
 addColumn("creatures", "height", "REAL NOT NULL DEFAULT 1.8"); // metres, for side-on tokens
 addColumn("characters", "height", "REAL NOT NULL DEFAULT 1.8");
@@ -820,6 +831,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM positional_sounds WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_effects WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_controls WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM encounters WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
@@ -1291,4 +1303,34 @@ export function saveEncounter(levelId: number, e: EncounterRow | null): void {
   db.prepare<[number, number, number, string]>(
     "INSERT INTO encounters (level_id, round, turn, turn_order) VALUES (?, ?, ?, ?) ON CONFLICT(level_id) DO UPDATE SET round = excluded.round, turn = excluded.turn, turn_order = excluded.turn_order"
   ).run(levelId, e.round, e.turn, JSON.stringify(e.order));
+}
+
+// ---------- Effects ----------
+
+/** An animated effect on a level. With no position it covers the whole map; otherwise a circle of `radius` cells. */
+export interface MapEffect {
+  id: number;
+  kind: EffectKind;
+  x: number | null;
+  y: number | null;
+  radius: number | null;
+  intensity: number; // 0..1
+}
+
+export function listEffects(levelId: number): MapEffect[] {
+  return db.prepare<[number], MapEffect>("SELECT id, kind, x, y, radius, intensity FROM map_effects WHERE level_id = ? ORDER BY id").all(levelId);
+}
+
+export function addEffect(levelId: number, e: Omit<MapEffect, "id">): void {
+  db.prepare<Omit<MapEffect, "id"> & { level_id: number }>(
+    "INSERT INTO map_effects (level_id, kind, x, y, radius, intensity) VALUES (@level_id, @kind, @x, @y, @radius, @intensity)"
+  ).run({ ...e, level_id: levelId });
+}
+
+export function setEffectIntensity(id: number, intensity: number): void {
+  db.prepare<[number, number]>("UPDATE map_effects SET intensity = ? WHERE id = ?").run(Math.min(1, Math.max(0, intensity)), id);
+}
+
+export function deleteEffect(id: number): void {
+  db.prepare<[number]>("DELETE FROM map_effects WHERE id = ?").run(id);
 }
