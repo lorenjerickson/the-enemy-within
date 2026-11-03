@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import { autocompletion, completionStatus, closeBrackets, closeBracketsKeymap, completionKeymap, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { linter, lintGutter } from "@codemirror/lint";
 import { tags } from "@lezer/highlight";
 import { checkScript } from "@/lib/script";
@@ -45,7 +45,7 @@ const colours = HighlightStyle.define([
 
 const theme = EditorView.theme(
   {
-    "&": { backgroundColor: "var(--color-base-100)", border: "1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent)", borderRadius: "0.5rem", fontSize: "13px" },
+    "&": { height: "100%", backgroundColor: "var(--color-base-100)", border: "1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent)", borderRadius: "0.5rem", fontSize: "13px" },
     "&.cm-focused": { outline: "2px solid var(--color-primary)", outlineOffset: "1px" },
     ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", caretColor: "var(--color-base-content)" },
     ".cm-gutters": { backgroundColor: "transparent", border: "none" },
@@ -168,6 +168,9 @@ export default function ScriptEditor({
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const [source, setSource] = useState(defaultValue);
+  const [expanded, setExpanded] = useState(false);
+  const expandedRef = useRef(false);
+  expandedRef.current = expanded;
   // Kept in refs so the editor (created once) always sees the latest props.
   const latest = useRef({ names, onChange, onSubmit });
   latest.current = { names, onChange, onSubmit };
@@ -200,6 +203,10 @@ export default function ScriptEditor({
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "false" }),
           EditorView.theme({ ".cm-content, .cm-gutter": { minHeight: `${minLines * 1.45}em` } }),
+          // Escape closes suggestions first, then the expanded editor.
+          Prec.highest(
+            keymap.of([{ key: "Escape", run: (v) => (expandedRef.current && !completionStatus(v.state) ? (setExpanded(false), true) : false) }])
+          ),
           keymap.of([
             { key: "Mod-Enter", run: () => (latest.current.onSubmit?.(), true) },
             { key: "Shift-Alt-f", run: () => (format(), true) },
@@ -225,11 +232,20 @@ export default function ScriptEditor({
   }, []);
 
   return (
-    <div className="space-y-1" data-script-editor={label}>
-      <div ref={host} />
-      <div className="flex items-center gap-2 text-xs opacity-60">
-        <span>Ctrl+Space suggests · Shift+Alt+F formats</span>
-        <button type="button" className="btn btn-ghost btn-xs ml-auto" onClick={format}>Format</button>
+    <div
+      className={expanded ? "fixed inset-0 z-50 flex flex-col gap-2 bg-base-300/95 p-4 md:p-8" : "space-y-1"}
+      data-script-editor={label}
+      onClick={expanded ? (e) => e.target === e.currentTarget && setExpanded(false) : undefined}
+    >
+      {expanded && <div className="text-sm font-semibold">{label}</div>}
+      {/* Drag the bottom-right corner to resize; Expand fills the window. */}
+      <div ref={host} className={expanded ? "min-h-0 flex-1" : "resize-y overflow-auto"} />
+      <div className="flex items-center gap-2 text-xs">
+        <span className="opacity-60">Ctrl+Space suggests · Shift+Alt+F formats{expanded && " · Esc closes"}</span>
+        <button type="button" className="btn btn-ghost btn-xs ml-auto opacity-60 hover:opacity-100" onClick={format}>Format</button>
+        <button type="button" className="btn btn-ghost btn-xs opacity-60 hover:opacity-100" onClick={() => (setExpanded(!expanded), requestAnimationFrame(() => view.current?.focus()))}>
+          {expanded ? "Done" : "Expand"}
+        </button>
       </div>
       {name && <input type="hidden" name={name} value={source} />}
     </div>
