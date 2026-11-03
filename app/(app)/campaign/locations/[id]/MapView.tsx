@@ -104,6 +104,19 @@ function noteLayout(ctx: CanvasRenderingContext2D, note: Pick<MapNote, "text" | 
   return { width, height, pad, fold, fontSize, lines };
 }
 
+/**
+ * The scene's fixed size in map space. Everything is drawn at this size and then scaled to fit the canvas,
+ * so the map art, grid and everything placed on it stay aligned whatever size the canvas is.
+ * (1408×792 is the size the first levels were drawn at.)
+ */
+const SCENE = { w: 1408, h: 792 };
+
+/** How the scene is scaled (s) and centred (ox, oy) to fit a canvas of this CSS size. */
+function fitScene(w: number, h: number) {
+  const s = Math.min(w / SCENE.w, h / SCENE.h) || 1;
+  return { s, ox: (w - SCENE.w * s) / 2, oy: (h - SCENE.h * s) / 2 };
+}
+
 /** Grid cell geometry: top-left of cell (0,0) and the cell size, in map space. */
 function gridOrigin(state: MapState, w: number, h: number) {
   const { size, offsetX, offsetY } = state.grid;
@@ -585,9 +598,10 @@ export default function MapView({
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
   function gridAt(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
-    const mx = (e.clientX - rect.left - view.x) / view.zoom;
-    const my = (e.clientY - rect.top - view.y) / view.zoom;
-    const { x0, y0, size } = gridOrigin(state, rect.width, rect.height);
+    const fit = fitScene(rect.width, rect.height);
+    const mx = ((e.clientX - rect.left - view.x) / view.zoom - fit.ox) / fit.s;
+    const my = ((e.clientY - rect.top - view.y) / view.zoom - fit.oy) / fit.s;
+    const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
     return { gx: (mx - x0) / size, gy: (my - y0) / size };
   }
   /** Grid cell under the pointer. */
@@ -617,6 +631,12 @@ export default function MapView({
 
   // View transform: zoom about a point and pan. The map is drawn in "map space" (the canvas size at zoom 1).
   const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
+  // Focus: hides the campaign menu (and trims page padding) while the map is open, via a data-focus flag on <html>.
+  const [focus, setFocus] = useState(false);
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-focus", focus);
+    return () => document.documentElement.removeAttribute("data-focus");
+  }, [focus]);
   const drag = useRef<{ x: number; y: number } | null>(null);
 
   // Wheel zooms around the cursor (non-passive so the page doesn't scroll).
@@ -644,7 +664,7 @@ export default function MapView({
       const { gx, gy } = gridAt(e);
       const corner = [...optimisticNotes].reverse().find((n) => {
         const ctx = e.currentTarget.getContext("2d")!;
-        const size = gridOrigin(state, e.currentTarget.getBoundingClientRect().width, e.currentTarget.getBoundingClientRect().height).size;
+        const size = gridOrigin(state, SCENE.w, SCENE.h).size;
         const { width, height } = noteLayout(ctx, n, size);
         const right = n.x + width / size, bottom = n.y + height / size;
         return gx >= right - 0.35 && gx <= right + 0.1 && gy >= bottom - 0.35 && gy <= bottom + 0.1;
@@ -839,6 +859,7 @@ export default function MapView({
     const canvas = canvasRef.current!;
     const draw = () => {
       const { width, height } = canvas.getBoundingClientRect();
+      if (width === 0 || height === 0) return; // not laid out (e.g. while switching tabs)
       if (width !== canvasSize.w || height !== canvasSize.h) setCanvasSize({ w: width, h: height });
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.round(width * dpr);
@@ -846,29 +867,32 @@ export default function MapView({
       const ctx = canvas.getContext("2d")!;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      ctx.setTransform(dpr * view.zoom, 0, 0, dpr * view.zoom, dpr * view.x, dpr * view.y);
+      // Scene to screen: fit the fixed-size scene to the canvas, then apply the GM's zoom and pan.
+      const fit = fitScene(width, height);
+      const k = view.zoom * fit.s; // screen pixels per map unit (keeps outlines a constant width on screen)
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (view.x + view.zoom * fit.ox), dpr * (view.y + view.zoom * fit.oy));
       for (const layer of MAP_LAYERS) {
-        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, width, height);
+        if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
       }
       // Highlight the tile picked in the editor.
       const highlighted = drawnTiles.find((t) => t.id === selectedTileId);
       if (highlighted && selected === "tiles") {
-        const r = cellToRect(state, width, height, highlighted);
+        const r = cellToRect(state, SCENE.w, SCENE.h, highlighted);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
       // Highlight the note picked in the editor.
       const note = drawnNotes.find((n) => n.id === selectedNoteId);
       if (note && selected === "notes") {
-        const { x0, y0, size } = gridOrigin(state, width, height);
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         const { width: nw, height: nh } = noteLayout(ctx, note, size);
         ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, nw + 8, nh + 8);
         ctx.restore();
@@ -876,11 +900,11 @@ export default function MapView({
       // Highlight the light picked in the editor.
       const lt = optimisticLights.find((l) => l.id === selectedLightId);
       if (lt && selected === "lighting") {
-        const { x0, y0, size } = gridOrigin(state, width, height);
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         ctx.beginPath();
         ctx.arc(x0 + lt.x * size, y0 + lt.y * size, size * 0.45, 0, Math.PI * 2);
         ctx.stroke();
@@ -889,11 +913,11 @@ export default function MapView({
       // Highlight the positional sound picked in the editor.
       const ps = optimisticPositional.find((p) => p.id === selectedPositionalId);
       if (ps && selected === "sounds") {
-        const { x0, y0, size } = gridOrigin(state, width, height);
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         ctx.beginPath();
         ctx.arc(x0 + ps.x * size, y0 + ps.y * size, ps.radius * size, 0, Math.PI * 2);
         ctx.stroke();
@@ -902,17 +926,17 @@ export default function MapView({
       // Highlight the token picked in the editor.
       const token = drawnTokens.find((t) => t.id === selectedTokenId);
       if (token && selected === "tokens") {
-        const r = cellToRect(state, width, height, { col: token.col, row: token.row, cols: 1, rows: 1 });
+        const r = cellToRect(state, SCENE.w, SCENE.h, { col: token.col, row: token.row, cols: 1, rows: 1 });
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
       }
       // Structure: preview of the line being drawn, and highlight of the selected piece.
       if (drawingLine && structureTool.kind !== "staircase") {
-        const { x0, y0, size } = gridOrigin(state, width, height);
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         const style = STRUCTURE_STYLES[structureTool.kind];
         ctx.save();
         ctx.globalAlpha = 0.6;
@@ -927,11 +951,11 @@ export default function MapView({
       }
       const piece = optimisticStructures.find((s) => s.id === selectedStructureId);
       if (piece && selected === "structure") {
-        const { x0, y0, size } = gridOrigin(state, width, height);
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / view.zoom;
-        ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+        ctx.lineWidth = 3 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
         const pad = 6;
         const [ax, bx] = [Math.min(piece.x1, piece.x2), Math.max(piece.x1, piece.x2)];
         const [ay, by] = [Math.min(piece.y1, piece.y2), Math.max(piece.y1, piece.y2)];
@@ -941,11 +965,11 @@ export default function MapView({
       }
       // Placement preview: outline of the cells the tile will cover.
       if (placing) {
-        const r = cellToRect(state, width, height, spanOf(placing));
+        const r = cellToRect(state, SCENE.w, SCENE.h, spanOf(placing));
         ctx.save();
         ctx.fillStyle = "rgba(99,102,241,0.25)";
         ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 2 / view.zoom;
+        ctx.lineWidth = 2 / k;
         ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.strokeRect(r.x, r.y, r.w, r.h);
         ctx.restore();
@@ -965,12 +989,11 @@ export default function MapView({
   }
 
   return (
-    <div className="space-y-2">
-      {/* Map, layer list, then the selected layer's editor: side by side on wide screens, editor below otherwise. */}
-      <div className="flex flex-wrap min-[1700px]:flex-nowrap gap-4">
-        <div className="flex-1 min-w-0 max-w-[88rem] space-y-3">
-          <div className="relative">
-            <div className="relative overflow-hidden rounded-box">
+    // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
+    // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
+    <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
             {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
             {!hiddenSet.has("controls") && (
               <ControlButtons
@@ -991,10 +1014,10 @@ export default function MapView({
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
               onContextMenu={(e) => e.preventDefault()}
-              className="w-full aspect-video rounded-box bg-base-300 touch-none"
+              className="absolute inset-0 size-full touch-none"
             />
             </div>
-            <div className="mt-1 flex items-center justify-end gap-1 text-xs">
+            <div className="flex items-center justify-end gap-1 text-xs">
               {controlResult && (
                 <span data-control-result className={`mr-auto truncate ${controlResult.ok ? "" : "text-error"}`} title={controlResult.text}>
                   {controlResult.label}: {controlResult.text.replace(/\s+/g, " ")}
@@ -1004,11 +1027,14 @@ export default function MapView({
               <span className="opacity-60 mr-1">Scroll to zoom · right-drag to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
+              <button type="button" className={`btn btn-xs ${focus ? "btn-primary" : ""}`} aria-pressed={focus} onClick={() => setFocus(!focus)} title="Hide the campaign menu to give the map more room">
+                Focus
+              </button>
             </div>
-          </div>
         </div>
-        <ul className="w-44 shrink-0 self-start bg-base-200 rounded-box p-2 text-sm">
-          <li className="text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
+        <div className="2xl:w-[26rem] shrink-0 flex flex-col gap-3 min-h-0">
+        <ul className="grid grid-cols-4 2xl:grid-cols-2 gap-x-1 bg-base-200 rounded-box p-2 text-sm">
+          <li className="col-span-full text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
               <div className={`flex items-center gap-1 rounded ${selected === layer ? "bg-[color-mix(in_oklab,var(--color-primary)_60%,white)] text-base-100" : ""}`}>
@@ -1034,7 +1060,7 @@ export default function MapView({
           ))}
         </ul>
         {selected && (
-          <div className="w-full min-[1700px]:w-[28rem] shrink-0 self-start rounded-box bg-base-200 p-3" data-editor={selected}>
+          <div className="2xl:flex-1 2xl:min-h-0 overflow-y-auto rounded-box bg-base-200 p-3" data-editor={selected}>
             <div className="font-semibold mb-2">{capitalize(selected)} layer</div>
             {selected === "background" ? (
               <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
@@ -1146,7 +1172,7 @@ export default function MapView({
             )}
           </div>
         )}
-      </div>
+        </div>
     </div>
   );
 }

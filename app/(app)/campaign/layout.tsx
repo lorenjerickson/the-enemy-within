@@ -18,8 +18,8 @@ export default async function CampaignLayout({ children }: { children: ReactNode
   await requireGm();
 
   return (
-    <div className="flex gap-8">
-      <ul className="menu bg-base-200 rounded-box w-48 shrink-0">
+    <div className="flex gap-8 in-data-focus:gap-0">
+      <ul className="menu bg-base-200 rounded-box w-48 shrink-0 in-data-focus:hidden">
         {CAMPAIGN_NAV.map((n) => (
           <li key={n.href}><Link href={n.href}>{n.label}</Link></li>
         ))}

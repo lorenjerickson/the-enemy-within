@@ -16,7 +16,7 @@ export default function LocationForm({ initial }: { initial?: Location }) {
 
   return (
     <form action={submitLocation.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
-      <h2 className="text-xl font-semibold">{initial ? "Edit location" : "New location"}</h2>
+      {!initial && <h2 className="text-xl font-semibold">New location</h2>}
       <input name="name" placeholder="Name (e.g. San Francisco)" required defaultValue={initial?.name} className="input w-full" />
       <input name="description" placeholder="Short description" defaultValue={initial?.description} className="input w-full" />
       <select name="parent_id" defaultValue={initial?.parent_id ?? ""} className="select w-full">

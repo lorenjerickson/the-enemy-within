@@ -46,7 +46,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </ul>
         </details>
       </header>
-      <main className="p-8">{children}</main>
+      <main className="p-8 in-data-focus:p-4">{children}</main>
     </>
   );
 }
