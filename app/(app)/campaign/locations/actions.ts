@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -260,6 +260,18 @@ export async function removeAmbientClip(locationId: number, clipId: number) {
 export async function placePositionalSound(locationId: number, levelId: number, assetId: number, x: number, y: number, radius: number) {
   await requireGm();
   addPositionalSound(levelId, { asset_id: assetId, x: Number(x), y: Number(y), radius: Math.max(0.5, Number(radius) || 3) });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function changePositionalLoop(locationId: number, id: number, loop: boolean) {
+  await requireGm();
+  setPositionalLoop(id, !!loop);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function movePositionalSoundTo(locationId: number, id: number, x: number, y: number) {
+  await requireGm();
+  movePositionalSound(id, Number(x), Number(y));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

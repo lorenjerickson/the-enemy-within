@@ -17,7 +17,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -572,7 +572,15 @@ export default function MapView({
   // Positional sound placement: choose audio + range, then click the map (snaps to the cell centre).
   const [positionalTool, setPositionalTool] = useState<PositionalTool>({ asset: null, radius: 3 });
   const [selectedPositionalId, setSelectedPositionalId] = useState<number | null>(null);
-  const [optimisticPositional, addOptimisticPositional] = useOptimistic(positional, (ps: PositionalSound[], p: PositionalSound) => [...ps, p]);
+  type PositionalChange = { add: PositionalSound } | { move: { id: number; x: number; y: number } };
+  const [optimisticPositional, changePositional] = useOptimistic(positional, (ps: PositionalSound[], c: PositionalChange) =>
+    "add" in c ? [...ps, c.add] : ps.map((p) => (p.id === c.move.id ? { ...p, x: c.move.x, y: c.move.y } : p))
+  );
+  // Dragging a positional sound: which one, and the cell centre it's currently over.
+  const [draggingSound, setDraggingSound] = useState<{ id: number; x: number; y: number } | null>(null);
+  const drawnPositional = draggingSound
+    ? optimisticPositional.map((p) => (p.id === draggingSound.id ? { ...p, x: draggingSound.x, y: draggingSound.y } : p))
+    : optimisticPositional;
 
   // Illumination being previewed in the lighting editor (null = use the saved level).
   const [previewIllumination, setPreviewIllumination] = useState<number | null>(null);
@@ -618,7 +626,7 @@ export default function MapView({
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
-    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination, figureHeight,
+    tokens: drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: shownIllumination, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
   };
 
@@ -722,12 +730,21 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "sounds") {
+      // Pressing on a sound's marker picks it up to move it; otherwise place the chosen audio.
+      const { gx, gy } = gridAt(e);
+      const hit = [...optimisticPositional].reverse().find((p) => Math.hypot(p.x - gx, p.y - gy) <= 0.35);
+      if (hit) {
+        setSelectedPositionalId(hit.id);
+        setDraggingSound({ id: hit.id, x: hit.x, y: hit.y });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
       const a = positionalTool.asset;
       if (!a) return;
       const { col, row } = cellAt(e);
       const placed = { x: col + 0.5, y: row + 0.5, radius: positionalTool.radius };
       startTransition(async () => {
-        addOptimisticPositional({ id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, volume: 1, ...placed });
+        changePositional({ add: { id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, volume: 1, loop: 0, ...placed } });
         await placePositionalSound(locationId, levelId, a.id, placed.x, placed.y, placed.radius);
       });
       return;
@@ -806,6 +823,11 @@ export default function MapView({
       setResizingNote({ id: n.id, w: Math.max(0.6, gx - n.x), h: Math.max(0.6, gy - n.y) });
       return;
     }
+    if (draggingSound) {
+      const { col, row } = cellAt(e);
+      if (col + 0.5 !== draggingSound.x || row + 0.5 !== draggingSound.y) setDraggingSound({ ...draggingSound, x: col + 0.5, y: row + 0.5 });
+      return;
+    }
     if (draggingToken) {
       const { col, row } = tokenAt(e);
       if (col !== draggingToken.col || row !== draggingToken.row) setDraggingToken({ ...draggingToken, col, row });
@@ -842,6 +864,18 @@ export default function MapView({
         changeNotes({ resize: r });
         await changeNoteSize(locationId, r.id, r.w, r.h);
       });
+      return;
+    }
+    if (draggingSound) {
+      const { id, x, y } = draggingSound;
+      const before = optimisticPositional.find((p) => p.id === id);
+      setDraggingSound(null);
+      if (before && (before.x !== x || before.y !== y)) {
+        startTransition(async () => {
+          changePositional({ move: { id, x, y } });
+          await movePositionalSoundTo(locationId, id, x, y);
+        });
+      }
       return;
     }
     if (draggingToken) {
@@ -948,7 +982,7 @@ export default function MapView({
         ctx.restore();
       }
       // Highlight the positional sound picked in the editor.
-      const ps = optimisticPositional.find((p) => p.id === selectedPositionalId);
+      const ps = drawnPositional.find((p) => p.id === selectedPositionalId);
       if (ps && selected === "sounds") {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();

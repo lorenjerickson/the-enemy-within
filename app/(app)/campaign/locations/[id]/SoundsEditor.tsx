@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { AmbientSound, Asset, PositionalSound } from "@/lib/db";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
 import { playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
-import { addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
+import { changePositionalLoop, addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
 import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 
 /** Sounds layer editor: ambient sounds made of clip playlists, with GM playback (one ambient sound at a time). */
@@ -68,6 +68,7 @@ export default function SoundsEditor({
       return;
     }
     a.src = p.url;
+    a.loop = !!p.loop;
     a.volume = vol(`positional:${p.id}`, p.volume);
     a.onended = () => setPlayingPositionalId(null);
     void a.play().catch(() => setPlayingPositionalId(null));
@@ -196,7 +197,7 @@ export default function SoundsEditor({
             />
           </label>
         </div>
-        <p className="text-xs opacity-60">{tool.asset ? "Click the map to place it." : "Choose audio, then click the map to place it."}</p>
+        <p className="text-xs opacity-60">{tool.asset ? "Click the map to place it." : "Choose audio, then click the map to place it."} Drag a placed sound's ♪ to move it.</p>
         {positional.length > 0 && (
           <ul className="rounded-box bg-base-100 text-sm">
             {positional.map((p) => (
@@ -204,6 +205,19 @@ export default function SoundsEditor({
                 <button type="button" data-positional={p.name} onClick={() => onSelectPositional(p.id)} className="flex-1 text-left">
                   🔊 {p.name} <span className="text-xs opacity-60">at {Math.floor(p.x)}, {Math.floor(p.y)}</span>
                 </button>
+                <label className="flex items-center gap-1 text-xs" title="Play on a loop until stopped">
+                  <input
+                    type="checkbox"
+                    aria-label="Loop"
+                    className="checkbox checkbox-xs"
+                    defaultChecked={!!p.loop}
+                    onChange={(e) => {
+                      if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.loop = e.target.checked;
+                      changePositionalLoop(locationId, p.id, e.target.checked);
+                    }}
+                  />
+                  loop
+                </label>
                 <label className="flex items-center gap-1 text-xs">
                   range
                   <input

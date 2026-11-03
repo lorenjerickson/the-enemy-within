@@ -243,6 +243,7 @@ addColumn("creatures", "token_side", "TEXT"); // token art seen side-on (portrai
 addColumn("characters", "token_overhead", "TEXT");
 addColumn("characters", "token_side", "TEXT");
 addColumn("map_tokens", "hp", "INTEGER");
+addColumn("positional_sounds", "loop", "INTEGER NOT NULL DEFAULT 0"); // 1 = plays on a loop
 addColumn("creatures", "height", "REAL NOT NULL DEFAULT 1.8"); // metres, for side-on tokens
 addColumn("characters", "height", "REAL NOT NULL DEFAULT 1.8");
 addColumn("map_levels", "figure_height", "REAL NOT NULL DEFAULT 1"); // portrait maps: grid cells a 1.8 m figure stands // a creature token's current health; null until first rolled
@@ -1084,21 +1085,30 @@ export interface PositionalSound {
   y: number;
   radius: number;
   volume: number; // 0..1
+  loop: 0 | 1;
 }
 
 export function listPositionalSounds(levelId: number): PositionalSound[] {
   return db
     .prepare<[number], PositionalSound>(
-      `SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius, p.volume FROM positional_sounds p
+      `SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius, p.volume, p.loop FROM positional_sounds p
        JOIN assets a ON a.id = p.asset_id WHERE p.level_id = ? ORDER BY p.id`
     )
     .all(levelId);
 }
 
-export function addPositionalSound(levelId: number, s: Omit<PositionalSound, "id" | "name" | "url" | "volume">): void {
-  db.prepare<Omit<PositionalSound, "id" | "name" | "url" | "volume"> & { level_id: number }>(
+export function addPositionalSound(levelId: number, s: Omit<PositionalSound, "id" | "name" | "url" | "volume" | "loop">): void {
+  db.prepare<Omit<PositionalSound, "id" | "name" | "url" | "volume" | "loop"> & { level_id: number }>(
     "INSERT INTO positional_sounds (level_id, asset_id, x, y, radius) VALUES (@level_id, @asset_id, @x, @y, @radius)"
   ).run({ ...s, level_id: levelId });
+}
+
+export function setPositionalLoop(id: number, loop: boolean): void {
+  db.prepare<[number, number]>("UPDATE positional_sounds SET loop = ? WHERE id = ?").run(loop ? 1 : 0, id);
+}
+
+export function movePositionalSound(id: number, x: number, y: number): void {
+  db.prepare<[number, number, number]>("UPDATE positional_sounds SET x = ?, y = ? WHERE id = ?").run(x, y, id);
 }
 
 export function setPositionalRadius(id: number, radius: number): void {
