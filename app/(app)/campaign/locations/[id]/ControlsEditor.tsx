@@ -70,28 +70,26 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
         </form>
       </dialog>
 
-      <div className="grid grid-cols-4 gap-3 text-sm">
-        {CONTROL_EDGES.map((edge) => (
-          <div key={edge} className="space-y-1">
-            <div className="font-semibold">{capitalize(edge)}</div>
-            {controls.filter((c) => c.edge === edge).length === 0 && <p className="text-xs opacity-60">None</p>}
-            {controls
-              .filter((c) => c.edge === edge)
-              .map((c) => (
-                <div key={c.id} data-control={c.label} className={`flex items-center gap-1 rounded px-1 ${c.id === editingId ? "bg-primary/25" : ""}`}>
-                  <GameIcon name={c.icon} className="size-4" />
-                  <button type="button" title="Edit this button's script" className="flex-1 truncate text-left hover:underline" onClick={() => setEditingId(c.id === editingId ? null : c.id)}>
-                    {c.label}
-                  </button>
-                  {c.script.trim() && <span title="Has a script" className="text-xs opacity-60">ƒ</span>}
-                  <form action={removeControl.bind(null, locationId, c.id)}>
-                    <button title="Remove this button" className="btn btn-ghost btn-xs text-error">✕</button>
-                  </form>
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
+      {/* One list, in edge order (top, right, bottom, left), each row labelled with its position. */}
+      {controls.length === 0 ? (
+        <p className="text-xs opacity-60">No buttons yet.</p>
+      ) : (
+        <ul className="rounded-box bg-base-100 text-sm">
+          {CONTROL_EDGES.flatMap((edge) => controls.filter((c) => c.edge === edge)).map((c) => (
+            <li key={c.id} data-control={c.label} className={`flex items-center gap-2 px-2 py-1 ${c.id === editingId ? "bg-primary/25" : ""}`}>
+              <GameIcon name={c.icon} className="size-4 shrink-0" />
+              <button type="button" title="Edit this button's script" className="flex-1 truncate text-left hover:underline" onClick={() => setEditingId(c.id === editingId ? null : c.id)}>
+                {c.label}
+              </button>
+              {c.script.trim() && <span title="Has a script" className="text-xs opacity-60">ƒ</span>}
+              <span className="badge badge-ghost badge-sm" title="Edge of the map">{capitalize(c.edge)}</span>
+              <form action={removeControl.bind(null, locationId, c.id)}>
+                <button title="Remove this button" className="btn btn-ghost btn-xs text-error">✕</button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
       {editing ? (
         <ScriptForm key={`script-${editing.id}`} locationId={locationId} control={editing} />
       ) : (
