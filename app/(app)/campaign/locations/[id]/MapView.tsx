@@ -311,10 +311,15 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     }
     // Warm overlay marking each light's area of effect, plus a bulb icon.
     for (const l of state.lights) {
-      const { cx, cy, strength, path } = light(l);
+      const { cx, cy, r, strength, path } = light(l);
       ctx.save();
       path(ctx);
-      ctx.fillStyle = `rgba(253,224,71,${0.12 * strength})`;
+      // Warm glow fading out towards the edge of the light's range (no hard edge).
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      glow.addColorStop(0, `rgba(253,224,71,${0.2 * strength})`);
+      glow.addColorStop(0.5, `rgba(253,224,71,${0.1 * strength})`);
+      glow.addColorStop(1, "rgba(253,224,71,0)");
+      ctx.fillStyle = glow;
       ctx.fill();
       if (state.showLightAreas) {
         ctx.setLineDash([4, 4]);
