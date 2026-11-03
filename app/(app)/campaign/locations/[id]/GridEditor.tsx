@@ -21,7 +21,7 @@ export default function GridEditor({
 }) {
   return (
     <form action={submitGrid.bind(null, locationId, levelId)} className="space-y-3">
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <label className="flex items-center gap-2">
           Size (pixels)
           <input name="size" type="number" min="5" defaultValue={grid.size} className="input input-sm w-24" />

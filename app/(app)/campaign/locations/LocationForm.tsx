@@ -1,6 +1,8 @@
 import { listLocations, type Location } from "@/lib/db";
 import { submitLocation } from "./actions";
 
+export const LOCATION_FORM_ID = "location-form";
+
 /** Name, description and parent. A location can't be placed inside itself or one of its own sub-locations. */
 export default function LocationForm({ initial }: { initial?: Location }) {
   const all = listLocations();
@@ -15,7 +17,7 @@ export default function LocationForm({ initial }: { initial?: Location }) {
   }
 
   return (
-    <form action={submitLocation.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
+    <form id={LOCATION_FORM_ID} action={submitLocation.bind(null, initial?.id ?? null)} className="space-y-3 max-w-2xl">
       {!initial && <h2 className="text-xl font-semibold">New location</h2>}
       <input name="name" placeholder="Name (e.g. San Francisco)" required defaultValue={initial?.name} className="input w-full" />
       <input name="description" placeholder="Short description" defaultValue={initial?.description} className="input w-full" />
@@ -27,7 +29,8 @@ export default function LocationForm({ initial }: { initial?: Location }) {
             <option key={l.id} value={l.id}>{l.path ? `${l.path} › ${l.name}` : l.name}</option>
           ))}
       </select>
-      <button className="btn btn-primary">Save location</button>
+      {/* Editing an existing location, the Save button lives in the page header instead (form={LOCATION_FORM_ID}). */}
+      {!initial && <button className="btn btn-primary">Save location</button>}
     </form>
   );
 }

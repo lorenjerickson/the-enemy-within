@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
-import LocationForm from "../LocationForm";
+import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
 
@@ -35,10 +35,14 @@ export default async function EditLocation({
             </Link>
           ))}
         </div>
+        {/* Saves the Details form from any tab; right-aligned with the editing surface. */}
+        <button form={LOCATION_FORM_ID} className="btn btn-primary btn-sm ml-auto mb-2">Save location</button>
       </div>
-      {tab === "details" ? (
+      {/* Always rendered (hidden on other tabs) so the header's Save button works from any tab. */}
+      <div className={tab === "details" ? "" : "hidden"}>
         <LocationForm initial={location} />
-      ) : (
+      </div>
+      {tab === "details" ? null : (
       <div className="space-y-3">
         <div className="max-w-4xl">
           <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />

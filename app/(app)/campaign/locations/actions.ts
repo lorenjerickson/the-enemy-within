@@ -20,7 +20,10 @@ export async function submitLocation(id: number | null, formData: FormData) {
   if (parent_id !== null && !listLocations().some((l) => l.id === parent_id)) throw new Error("Unknown parent location");
   if (parent_id !== null && parent_id === id) throw new Error("A location cannot be inside itself");
   saveLocation(id, { parent_id, name: text("name"), description: text("description") });
-  redirect("/campaign/locations");
+  // A new location goes back to the list; editing one stays put (its Save button is in the page header).
+  if (id === null) redirect("/campaign/locations");
+  revalidatePath(`/campaign/locations/${id}`);
+  revalidatePath("/campaign/locations");
 }
 
 export async function toggleLayer(locationId: number, levelId: number, layer: MapLayer, visible: boolean) {

@@ -1032,7 +1032,7 @@ export default function MapView({
               </button>
             </div>
         </div>
-        <div className="2xl:w-[26rem] shrink-0 flex flex-col gap-3 min-h-0">
+        <div className="2xl:w-[30rem] shrink-0 flex flex-col gap-3 min-h-0">
         <ul className="grid grid-cols-4 2xl:grid-cols-2 gap-x-1 bg-base-200 rounded-box p-2 text-sm">
           <li className="col-span-full text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
