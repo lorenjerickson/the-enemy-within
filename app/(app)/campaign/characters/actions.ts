@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { listProfessionGraph, saveCharacter, setCharacterProfessions } from "@/lib/db";
+import { listProfessionGraph, saveCharacter, setCharacterProfessions, setInParty } from "@/lib/db";
 import { parseCreatureForm } from "@/lib/creatureForm";
 
 /** Creates the character from creatureId's template when id is null, otherwise updates it. */
@@ -19,5 +19,6 @@ export async function submitCharacter(id: number | null, creatureId: number | nu
   }
   const saved = saveCharacter(id, creatureId, await parseCreatureForm(formData));
   setCharacterProfessions(saved, [...chosen]);
+  setInParty(saved, formData.get("in_party") === "on");
   redirect("/campaign/characters");
 }

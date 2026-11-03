@@ -215,7 +215,7 @@ function nameUnnamed(): void {
 }
 
 // Add columns introduced after a database was first created.
-function addColumn(table: string, column: string, definition: string): void {
+export function addColumn(table: string, column: string, definition: string): void {
   const cols = db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all();
   if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
@@ -254,6 +254,11 @@ addColumn("creatures", "token_side", "TEXT"); // token art seen side-on (portrai
 addColumn("characters", "token_overhead", "TEXT");
 addColumn("characters", "token_side", "TEXT");
 addColumn("map_tokens", "hp", "INTEGER");
+addColumn("characters", "in_party", "INTEGER NOT NULL DEFAULT 0"); // 1 = a player character (game.characters.party)
+// Game time, in minutes since the campaign began, moved forward by the GM; and named timers measured against it.
+db.exec(`CREATE TABLE IF NOT EXISTS calendar (id INTEGER PRIMARY KEY CHECK (id = 1), now REAL NOT NULL DEFAULT 0)`);
+db.exec("INSERT OR IGNORE INTO calendar (id, now) VALUES (1, 0)");
+db.exec(`CREATE TABLE IF NOT EXISTS timers (name TEXT PRIMARY KEY, started REAL NOT NULL)`);
 // Animated effects on a level, drawn in the order added. No position = covers the whole map.
 db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
   id INTEGER PRIMARY KEY,
@@ -1295,12 +1300,13 @@ export interface CharacterState {
   health: string; // formula
   hp: number | null;
   conditions: string[];
+  in_party: 0 | 1;
 }
 
 export function listCharacterStates(): CharacterState[] {
   return db
     .prepare<[], Omit<CharacterState, "attributes" | "conditions"> & { attributes: string; conditions: string }>(
-      "SELECT id, name, type, attributes, health, hp, conditions FROM characters ORDER BY name"
+      "SELECT id, name, type, attributes, health, hp, conditions, in_party FROM characters ORDER BY name"
     )
     .all()
     .map((r) => ({ ...r, attributes: JSON.parse(r.attributes), conditions: JSON.parse(r.conditions) }));
@@ -1392,4 +1398,41 @@ export function setEffectIntensity(id: number, intensity: number): void {
 
 export function deleteEffect(id: number): void {
   db.prepare<[number]>("DELETE FROM map_effects WHERE id = ?").run(id);
+}
+
+export function isInParty(characterId: number): boolean {
+  return !!db.prepare<[number], { in_party: number }>("SELECT in_party FROM characters WHERE id = ?").get(characterId)?.in_party;
+}
+
+export function setInParty(characterId: number, inParty: boolean): void {
+  db.prepare<[number, number]>("UPDATE characters SET in_party = ? WHERE id = ?").run(inParty ? 1 : 0, characterId);
+}
+
+// ---------- Calendar ----------
+
+/** Game time in minutes since the campaign began. */
+export function getGameTime(): number {
+  return db.prepare<[], { now: number }>("SELECT now FROM calendar WHERE id = 1").get()?.now ?? 0;
+}
+
+export function setGameTime(minutes: number): void {
+  db.prepare<[number]>("UPDATE calendar SET now = ? WHERE id = 1").run(Math.max(0, minutes));
+}
+
+export interface Timer {
+  name: string;
+  started: number; // game time it started, in minutes
+}
+
+export function listTimers(): Timer[] {
+  return db.prepare<[], Timer>("SELECT name, started FROM timers ORDER BY name").all();
+}
+
+/** Replaces all timers (scripts load them all, change them, and save them back). */
+export function saveTimers(timers: Timer[]): void {
+  db.transaction(() => {
+    db.exec("DELETE FROM timers");
+    const insert = db.prepare<[string, number]>("INSERT INTO timers (name, started) VALUES (?, ?)");
+    for (const t of timers) insert.run(t.name, t.started);
+  })();
 }

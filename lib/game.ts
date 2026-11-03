@@ -1,12 +1,13 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
+  getGameTime, setGameTime, listTimers, saveTimers,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
   addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
-import { makeEncounter, rollsFor, type Actor, type EncounterState } from "./encounter";
+import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
@@ -21,6 +22,32 @@ export interface Player {
   conditions: Tags;
   /** Read-only: health above 0. */
   readonly alive: boolean;
+  /** Fresh d20 rolls with modifiers: rolls.investigation, rolls.might, rolls.initiative … */
+  rolls: Rolls;
+}
+
+/** A named timer, measured in game time. */
+export interface GameTimer {
+  id: number;
+  name: string;
+  started: number; // game minutes
+  readonly elapsed: number; // game minutes since it started
+}
+
+/** Game time (minutes since the campaign began) and named timers. */
+export interface Calendar {
+  now: number;
+  timers: Collection<GameTimer>;
+  advance: Method;
+}
+
+/** Time units scripts can use, in minutes. */
+const UNITS: Record<string, number> = { minute: 1, hour: 60, day: 1440, week: 10080 };
+function unitMinutes(unit: unknown): number {
+  const u = String(unit ?? "").toLowerCase().replace(/s$/, "");
+  const m = UNITS[u];
+  if (!m) throw new ScriptError(`Unknown time unit "${unit}" (use minutes, hours, days or weeks)`);
+  return m;
 }
 
 export type { Actor };
@@ -52,6 +79,7 @@ export interface ScriptEffect { id: number; name: string; kind: string; intensit
 export interface ScriptDoor { id: number; name: string; open: boolean }
 
 export interface Game {
+  calendar: Calendar;
   players: Collection<Player>;
   /** The same list as players (the party's characters). */
   characters: Collection<Player>;
@@ -184,8 +212,10 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
     // Current health starts as a roll of the character's health formula.
     health: c.hp ?? rollDice(c.health || "0"),
     conditions: new Tags(new Set(c.conditions)),
-  })) as unknown as Player[]; // `alive` is added just below
+  })) as unknown as Player[]; // `alive` and `rolls` are added just below
+  const inParty = new Set(listCharacterStates().filter((c) => c.in_party).map((c) => c.id));
   for (const p of players) {
+    p.rolls = rollsFor(p.attributes); // reads the attributes live, so changes made by the script count
     Object.defineProperty(p, "alive", {
       enumerable: true,
       get: () => p.health > 0,
@@ -203,7 +233,50 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   );
   if (current) locations.current = current;
   const party = new Collection("character", players);
-  return [{ players: party, characters: party, vars, locations }, changes];
+  // game.characters.party: the player characters (ticked "In the party" on the character form).
+  party.extras.party = () => new Collection("party member", players.filter((p) => inParty.has(p.id)));
+  return [{ players: party, characters: party, vars, locations, calendar: loadCalendar() }, changes];
+}
+
+function loadCalendar(): Calendar {
+  const calendar = { now: getGameTime() } as Calendar;
+  const timer = (name: string, started: number, id: number): GameTimer => {
+    const t = { id, name, started } as GameTimer;
+    Object.defineProperty(t, "elapsed", {
+      enumerable: true,
+      get: () => calendar.now - t.started,
+      set() {
+        throw new ScriptError('"elapsed" can\'t be set; change started or restart the timer');
+      },
+    });
+    return t;
+  };
+  const timers = new Collection<GameTimer>("timer", listTimers().map((t, i) => timer(t.name, t.started, i + 1)));
+  /** Starts (or restarts) a timer from now. */
+  const start = (name: string) => {
+    const existing = timers.items.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      existing.started = calendar.now;
+      return existing;
+    }
+    const t = timer(name, calendar.now, timers.items.length + 1);
+    timers.items.push(t);
+    return t;
+  };
+  timers.adder = (name) => start(name);
+  timers.extras.start = () => new Method((name) => start(String(name)));
+  timers.extras.stop = () =>
+    new Method((name) => {
+      timers.items = timers.items.filter((t) => t.name.toLowerCase() !== String(name).toLowerCase());
+    });
+  calendar.timers = timers;
+  /** advance(2, 'hours'): moves game time forward. */
+  calendar.advance = new Method((n, unit = "minutes") => {
+    if (typeof n !== "number") throw new ScriptError("advance() needs a number, like advance(2, 'hours')");
+    calendar.now += n * unitMinutes(unit);
+    return calendar.now;
+  });
+  return calendar;
 }
 
 function saveGame(game: Game, changes: ActorChanges | null): void {
@@ -214,6 +287,8 @@ function saveGame(game: Game, changes: ActorChanges | null): void {
       saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health), conditions: [...p.conditions.set] });
     }
     saveVars({ ...game.vars });
+    setGameTime(game.calendar.now);
+    saveTimers(game.calendar.timers.items.map((t) => ({ name: t.name, started: t.started })));
     if (changes && game.locations.current) saveActors(changes, game.locations.current as CurrentLocation);
   });
 }
@@ -328,6 +403,16 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
 
 /** Helpers scripts can call alongside `game`. */
 const HELPERS = {
+  /** interval(minutes, 'days'): a game time span in the given unit, e.g. interval(timer.elapsed, 'days') < 3 */
+  interval: new Method((minutes, unit) => {
+    if (typeof minutes !== "number") throw new ScriptError("interval() needs a time in minutes, like a timer's elapsed");
+    return minutes / unitMinutes(unit);
+  }),
+  /** duration(3, 'days'): that span in minutes (game time is in minutes). */
+  duration: new Method((n, unit) => {
+    if (typeof n !== "number") throw new ScriptError("duration() needs a number, like duration(3, 'days')");
+    return n * unitMinutes(unit);
+  }),
   roll: new Method((f) => {
     try {
       return rollDice(String(f));

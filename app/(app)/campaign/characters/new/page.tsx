@@ -6,6 +6,7 @@ import CreatureForm from "../../creatures/new/CreatureForm";
 import { submitCharacter } from "../actions";
 import { equippableItems, professionNodes } from "../formOptions";
 import ProfessionsInput from "../ProfessionsInput";
+import InPartyInput from "../InPartyInput";
 
 /** Step 1: pick a creature template. Step 2 (?template=id): the creature form, preloaded from it. */
 export default async function NewCharacter({ searchParams }: { searchParams: Promise<{ template?: string }> }) {
@@ -45,7 +46,12 @@ export default async function NewCharacter({ searchParams }: { searchParams: Pro
       action={submitCharacter.bind(null, null, id)}
       title={`New character (based on ${template.name})`}
       submitLabel="Save character"
-      extra={<ProfessionsInput professions={professionNodes()} />}
+      extra={
+        <>
+          <InPartyInput />
+          <ProfessionsInput professions={professionNodes()} />
+        </>
+      }
     />
   );
 }

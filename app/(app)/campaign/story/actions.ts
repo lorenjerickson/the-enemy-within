@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import { checkScript } from "@/lib/script";
 import { checkGameState, tryGameScript } from "@/lib/game";
+import { revealDiscovery } from "@/lib/storyRules";
 import {
-  DISCOVERY_KINDS, OBJECTIVE_STATUSES, RELATIONS, deleteDiscovery, deleteObjective, findDiscovery, getObjective, saveDiscovery,
+  DISCOVERY_KINDS, OBJECTIVE_STATUSES, RELATIONS, deleteDiscovery, deleteObjective, getDiscovery, getObjective, saveDiscovery,
   saveObjective, setLinks, setObjectiveCharacters, setObjectiveStatus, type DiscoveryKind, type ObjectiveStatus, type Relation,
 } from "@/lib/story";
 
@@ -22,6 +23,11 @@ export async function submitDiscovery(discoveryId: number | null, formData: Form
   const [ownerType, ownerId] = text(formData, "owner").split(":");
   const owner = (t: string) => (ownerType === t ? Number(ownerId) || null : null);
   const dc = text(formData, "reveal_dc");
+  const onFound = text(formData, "on_found");
+  const scriptError = checkScript(onFound);
+  if (scriptError) throw new Error(`When found script: ${scriptError}`);
+  const wasFound = discoveryId !== null && !!getDiscovery(discoveryId)?.found;
+  const found = formData.get("found") === "on";
   const saved = saveDiscovery(discoveryId, {
     title: text(formData, "title") || "Untitled discovery",
     text: text(formData, "text"),
@@ -30,17 +36,21 @@ export async function submitDiscovery(discoveryId: number | null, formData: Form
     character_id: owner("character"),
     item_id: owner("item"),
     objective_id: id(formData, "objective_id"),
-    found: formData.get("found") === "on" ? 1 : 0,
+    found: found && wasFound ? 1 : 0, // newly found is applied below, so the "when found" script runs
     reveal: text(formData, "reveal"),
     reveal_skill: text(formData, "reveal_skill") || null,
     reveal_dc: dc === "" ? null : Math.round(Number(dc)) || null,
+    on_found: onFound,
   });
   // Links: a "link:<otherId>" field per other discovery, set to a relation or empty.
   const links = [...formData.entries()].flatMap(([k, v]) =>
     k.startsWith("link:") && RELATIONS.includes(String(v) as Relation) ? [{ other_id: Number(k.slice(5)), relation: String(v) as Relation }] : []
   );
   setLinks(saved, links);
-  if (formData.get("found") === "on") findDiscovery(saved); // also makes an objective it assigns known to the party
+  if (found && !wasFound) {
+    const r = revealDiscovery(saved); // also makes an objective it assigns known to the party
+    if (r && !r.ok) throw new Error(`Saved and found, but its "when found" script failed: ${r.error}`);
+  }
   revalidatePath("/campaign/story");
   redirect("/campaign/story?tab=discoveries");
 }
@@ -54,7 +64,7 @@ export async function removeDiscovery(discoveryId: number) {
 export async function submitObjective(objectiveId: number | null, formData: FormData) {
   await requireGm();
   const LABELS: Record<string, string> = {
-    reward_script: "Reward script", penalty_script: "Penalty script", success_check: "Success check", failure_check: "Failure check",
+    reward_script: "Reward script", penalty_script: "Penalty script", success_check: "Success condition", failure_check: "Failure condition",
   };
   for (const [k, label] of Object.entries(LABELS)) {
     const error = checkScript(text(formData, k));
@@ -94,7 +104,7 @@ export async function checkObjective(objectiveId: number): Promise<string> {
   const o = getObjective(objectiveId);
   if (!o) throw new Error("Unknown objective");
   const describe = (label: string, source: string) => {
-    if (!source.trim()) return `${label}: no check.`;
+    if (!source.trim()) return `${label}: no condition.`;
     const r = checkGameState(source);
     return r.ok ? `${label}: ${r.value ? "met" : "not met"} (${JSON.stringify(r.value)}).` : `${label}: ${r.error}`;
   };
@@ -114,8 +124,9 @@ export async function settleObjective(objectiveId: number, status: ObjectiveStat
   setObjectiveStatus(objectiveId, status);
   const notes: string[] = [`Marked ${status}.`];
   if (status === "succeeded" && o.reward_discovery_id) {
-    findDiscovery(o.reward_discovery_id);
+    const r = revealDiscovery(o.reward_discovery_id);
     notes.push("The party found the reward discovery.");
+    if (r) notes.push(r.ok ? `Its "when found" script ran: ${r.value}` : `Its "when found" script failed: ${r.error}`);
   }
   const script = status === "succeeded" ? o.reward_script : status === "failed" ? o.penalty_script : "";
   if (script.trim()) {

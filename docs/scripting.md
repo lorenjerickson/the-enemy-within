@@ -21,6 +21,11 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 - `L.encounter` on the current location: `active`, `round`, `actor` (whose turn), `order`;
   `begin(actors, initiatives)` (initiatives optional, one per actor), `next()`, `end()`.
 - `coll.random` picks one item at random; `coll.find('name')` is the first with that name.
+- `game.characters.party`: the player characters (ticked "In the party" on the character form). `.any` is every member having a go (true if any of them succeeds, e.g. `party.any.rolls.investigation > 16`); `.one` is a single attempt by whoever the party sends (for now the member with the best modifier for that roll); `.random` picks one at random.
+- `rolls.<attribute or skill>` on characters and actors: d20 + modifier, rolled afresh each time, e.g. `rolls.investigation`, `rolls.might`, `rolls.sleight_of_hand`.
+- `game.calendar`: `now` (game minutes since the campaign began), `advance(2, 'hours')`, and `timers`:
+  `timers.start('find holmes')` starts (or restarts) one, `timers['find holmes'].elapsed` is the game time since, `timers.stop('find holmes')`.
+  Helpers: `interval(minutes, 'days')` converts to minutes/hours/days/weeks; `duration(3, 'days')` is that span in minutes.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
 Changes are saved when the script finishes. A failing script saves nothing.

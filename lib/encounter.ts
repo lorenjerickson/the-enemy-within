@@ -1,6 +1,6 @@
-import { modifier, type Attributes } from "./attributes";
+import { ATTRIBUTES, modifier, skillModifiers, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
-import { Broadcast, Collection, Method, ScriptError } from "./script";
+import { Broadcast, Collection, MODIFIERS, Method, ScriptError } from "./script";
 
 /** A creature or character on the current map level. */
 export interface Actor {
@@ -10,7 +10,7 @@ export interface Actor {
   /** Grid cell; null for a creature added but not placed yet. */
   position: { col: number; row: number } | null;
   /** Fresh rolls each time they're read, e.g. rolls.initiative. */
-  rolls: { initiative: number };
+  rolls: Rolls;
   /** Current health; a character's is its own (the same as game.players.<name>.health). */
   health: number;
 }
@@ -27,14 +27,30 @@ function computed<T extends object>(obj: T, key: string, get: () => unknown, hin
 }
 
 /**
- * An actor's rolls. Initiative is 1d20 + agility modifier, rolled automatically.
+ * An actor's or character's rolls. Initiative is 1d20 + agility modifier, rolled automatically.
  * (In a session, characters' rolls will prompt their player instead.)
  */
-export function rollsFor(attributes: Partial<Attributes>): Actor["rolls"] {
-  const rolls = {} as Actor["rolls"];
-  computed(rolls, "initiative", () => rollDice("1d20") + modifier(attributes.agility ?? 10), "; it's rolled each time");
+export function rollsFor(attributes: Partial<Attributes>): Rolls {
+  const rolls = {} as Rolls;
+  const hint = "; it's rolled each time";
+  // Modifiers are read when rolled, so attribute changes made earlier in a script count.
+  const full = () => Object.fromEntries(ATTRIBUTES.map((a) => [a, attributes[a] ?? 10])) as Attributes;
+  const modifiers = () => {
+    const f = full();
+    return {
+      initiative: modifier(f.agility),
+      ...Object.fromEntries(ATTRIBUTES.map((a) => [a, modifier(f[a])])),
+      ...Object.fromEntries(skillModifiers(f).map((s) => [s.skill.replace(/ /g, "_"), s.modifier])),
+    } as Record<string, number>;
+  };
+  for (const key of Object.keys(modifiers())) computed(rolls, key, () => rollDice("1d20") + modifiers()[key], hint);
+  // Not visible to scripts: lets coll.one find who's best at a roll.
+  Object.defineProperty(rolls, MODIFIERS, { get: modifiers });
   return rolls;
 }
+
+/** Fresh rolls each time they're read: initiative, each attribute (might …) and each skill (investigation, sleight_of_hand …). */
+export type Rolls = { initiative: number } & Record<string, number>;
 
 export interface EncounterState {
   order: { actor: Actor; initiative: number }[]; // highest initiative first

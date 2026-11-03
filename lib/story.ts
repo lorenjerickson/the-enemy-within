@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { addColumn, db } from "./db";
 
 /**
  * The story: discoveries (what the party can learn) and objectives (what it's asked to do).
@@ -62,6 +62,8 @@ db.exec(`
   );
 `);
 
+addColumn("discoveries", "on_found", "TEXT NOT NULL DEFAULT ''"); // game script run once when the party finds it
+
 export interface Discovery {
   id: number;
   title: string;
@@ -75,11 +77,12 @@ export interface Discovery {
   reveal: string; // how it's found
   reveal_skill: string | null; // optional skill check to find it…
   reveal_dc: number | null; // …and its difficulty
+  on_found: string; // game script run when the party finds it, e.g. starting a timer
   owner_name: string | null; // the location's, character's or item's name
 }
 
 const DISCOVERY_SELECT = `SELECT d.id, d.title, d.text, d.kind, d.location_id, d.character_id, d.item_id, d.objective_id, d.found,
-  d.reveal, d.reveal_skill, d.reveal_dc, COALESCE(l.name, c.name, i.name) AS owner_name
+  d.reveal, d.reveal_skill, d.reveal_dc, d.on_found, COALESCE(l.name, c.name, i.name) AS owner_name
   FROM discoveries d LEFT JOIN locations l ON l.id = d.location_id LEFT JOIN characters c ON c.id = d.character_id
   LEFT JOIN items i ON i.id = d.item_id`;
 
@@ -96,20 +99,23 @@ export function saveDiscovery(id: number | null, d: Omit<Discovery, "id" | "owne
   if (id === null) {
     return Number(
       db.prepare<Omit<Discovery, "id" | "owner_name">>(
-        `INSERT INTO discoveries (title, text, kind, location_id, character_id, item_id, objective_id, found, reveal, reveal_skill, reveal_dc)
-         VALUES (@title, @text, @kind, @location_id, @character_id, @item_id, @objective_id, @found, @reveal, @reveal_skill, @reveal_dc)`
+        `INSERT INTO discoveries (title, text, kind, location_id, character_id, item_id, objective_id, found, reveal, reveal_skill, reveal_dc, on_found)
+         VALUES (@title, @text, @kind, @location_id, @character_id, @item_id, @objective_id, @found, @reveal, @reveal_skill, @reveal_dc, @on_found)`
       ).run(d).lastInsertRowid
     );
   }
   db.prepare<Omit<Discovery, "owner_name">>(
     `UPDATE discoveries SET title = @title, text = @text, kind = @kind, location_id = @location_id, character_id = @character_id,
        item_id = @item_id, objective_id = @objective_id, found = @found, reveal = @reveal, reveal_skill = @reveal_skill,
-       reveal_dc = @reveal_dc WHERE id = @id`
+       reveal_dc = @reveal_dc, on_found = @on_found WHERE id = @id`
   ).run({ ...d, id });
   return id;
 }
 
-/** The party learns a discovery; an objective it assigns becomes known to the party too. */
+/**
+ * The party learns a discovery; an objective it assigns becomes known to the party too.
+ * (Use revealDiscovery in lib/storyRules.ts, which also runs its "when found" script.)
+ */
 export function findDiscovery(id: number): void {
   db.prepare<[number]>("UPDATE discoveries SET found = 1 WHERE id = ?").run(id);
   db.prepare<[number]>("UPDATE objectives SET revealed = 1 WHERE id = (SELECT objective_id FROM discoveries WHERE id = ?)").run(id);

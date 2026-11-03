@@ -86,6 +86,16 @@ export default function DiscoveryForm({ initial }: { initial?: Discovery }) {
             </ul>
           </fieldset>
         )}
+        <fieldset className="fieldset">
+          <legend className="fieldset-legend">When found (a script, run once when the party finds it)</legend>
+          <textarea
+            name="on_found"
+            placeholder={"e.g. game.calendar.timers.start('find holmes')"}
+            defaultValue={initial?.on_found}
+            spellCheck={false}
+            className="textarea w-full h-16 font-mono text-sm"
+          />
+        </fieldset>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="found" defaultChecked={!!initial?.found} className="checkbox checkbox-sm" />
           The party has found this (an objective it assigns becomes known to them)

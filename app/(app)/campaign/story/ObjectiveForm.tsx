@@ -35,19 +35,27 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
         </fieldset>
 
         <fieldset className="fieldset">
-          <legend className="fieldset-legend">Success</legend>
-          <textarea name="success" placeholder="e.g. The letter reaches the mayor" defaultValue={initial?.success} className="textarea w-full h-16" />
-          <label className="flex items-center gap-2 text-sm">
-            Within
-            <input name="success_within_days" type="number" min="0" step="any" defaultValue={initial?.success_within_days ?? ""} className="input input-sm w-20" />
-            days (blank = no deadline)
-          </label>
-          <input name="success_check" placeholder="Optional game-state check, e.g. game.vars.letterDelivered" defaultValue={initial?.success_check} spellCheck={false} className="input input-sm w-full font-mono" />
+          <legend className="fieldset-legend">Success condition (a script, true once it has succeeded)</legend>
+          <textarea
+            name="success_check"
+            placeholder={"e.g.\nWITH game.calendar.timers['deliver the letter'].elapsed as V\n   game.vars.letterDelivered and interval(V, 'days') < 3"}
+            defaultValue={initial?.success_check}
+            spellCheck={false}
+            className="textarea w-full h-24 font-mono text-sm"
+          />
+          <input name="success" placeholder="Notes (optional), e.g. the letter reaches the mayor within 3 days" defaultValue={initial?.success} className="input input-sm w-full" />
+          <input type="hidden" name="success_within_days" value={initial?.success_within_days ?? ""} />
         </fieldset>
         <fieldset className="fieldset">
-          <legend className="fieldset-legend">Failure</legend>
-          <textarea name="failure" placeholder="e.g. The deadline passes, or the letter is lost" defaultValue={initial?.failure} className="textarea w-full h-16" />
-          <input name="failure_check" placeholder="Optional game-state check, e.g. not game.characters['sheena'].alive" defaultValue={initial?.failure_check} spellCheck={false} className="input input-sm w-full font-mono" />
+          <legend className="fieldset-legend">Failure condition (a script, true once it has failed)</legend>
+          <textarea
+            name="failure_check"
+            placeholder={"e.g. not game.characters['sheena'].alive"}
+            defaultValue={initial?.failure_check}
+            spellCheck={false}
+            className="textarea w-full h-20 font-mono text-sm"
+          />
+          <input name="failure" placeholder="Notes (optional), e.g. the deadline passes or the letter is lost" defaultValue={initial?.failure} className="input input-sm w-full" />
         </fieldset>
 
         <fieldset className="fieldset">

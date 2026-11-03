@@ -12,6 +12,8 @@
  */
 export class Collection<T extends { id: number; name: string }> {
   current?: T;
+  /** Extra named values computed on demand, e.g. characters.party. */
+  extras: Record<string, () => unknown> = {};
   constructor(public kind: string, public items: T[], public adder?: (name: string, count: number) => unknown) {}
 }
 /** A set of words, e.g. conditions: add, remove, has, count. */
@@ -22,6 +24,22 @@ export class Tags {
 export class Broadcast {
   constructor(public values: unknown[]) {}
 }
+/**
+ * A question put to a group, from coll.any or coll.one:
+ * - any: every member has a go; a comparison holds if it holds for any of them.
+ * - one: a single attempt by whichever member the party sends. Rolls are made once, by the member with the
+ *   best modifier for that roll (until the players can be asked who goes); for anything else it's the same as any.
+ */
+export class Some {
+  constructor(public mode: "any" | "one", public values: unknown[]) {}
+}
+/** Each rolls object carries the modifier behind each roll, so .one can tell who's best at it. */
+export const MODIFIERS = Symbol("modifiers");
+/** A group's rolls under .one: reading a roll makes it once, for the member best at it. */
+class OneRoll {
+  constructor(public members: unknown[]) {}
+}
+
 /** A callable: a helper like roll() or a method like conditions.add. */
 export class Method {
   constructor(public fn: (...args: unknown[]) => unknown) {}
@@ -259,6 +277,19 @@ function describe(v: unknown): string {
 
 function getKey(obj: unknown, key: string): unknown {
   if (FORBIDDEN.has(key)) throw new ScriptError(`"${key}" isn't allowed`);
+  if (obj instanceof Some) {
+    if (obj.mode === "one" && key === "rolls") return new OneRoll(obj.values);
+    return new Some(obj.mode, obj.values.map((v) => getKey(v, key)));
+  }
+  if (obj instanceof OneRoll) {
+    // One attempt, by the member best at it (highest modifier for this roll).
+    const best = (m: unknown) => {
+      const rolls = getKey(m, "rolls") as Record<string | symbol, unknown>;
+      return ((rolls?.[MODIFIERS] as Record<string, number> | undefined)?.[key] ?? 0);
+    };
+    const member = obj.members.reduce((a, b) => (best(b) > best(a) ? b : a));
+    return getKey(getKey(member, "rolls"), key);
+  }
   if (obj instanceof Broadcast) {
     // A list is already "each": coll.all.each.x is the same as coll.each.x.
     if (key === "each" || key === "all") return obj;
@@ -271,9 +302,15 @@ function getKey(obj: unknown, key: string): unknown {
       if (!obj.current) throw new ScriptError(`There's no current ${obj.kind}${obj.kind === "location" ? "; run this from a map button" : ""}`);
       return obj.current;
     }
+    if (Object.hasOwn(obj.extras, key)) return obj.extras[key]();
+    // .one: any one item (picked at random), e.g. game.characters.party.one
     if (key === "random") {
       if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s to pick from`);
       return obj.items[Math.floor(Math.random() * obj.items.length)];
+    }
+    if (key === "any" || key === "one") {
+      if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s`);
+      return new Some(key, obj.items);
     }
     if (key === "add" && obj.adder) {
       const adder = obj.adder;
@@ -344,7 +381,16 @@ function num(v: unknown, op: string): number {
   return v;
 }
 
+/** Truth of a value; a group's (any / one) is true if any member's is. */
+const truthy = (v: unknown): boolean => (v instanceof Some ? v.values.some(truthy) : !!v);
+
 function binary(op: string, a: unknown, b: unknown): unknown {
+  // A group on either side: comparisons hold if they hold for any member; arithmetic applies to each.
+  if (a instanceof Some || b instanceof Some) {
+    const group = (a instanceof Some ? a : b) as Some;
+    const each = group.values.map((v) => binary(op, a instanceof Some ? v : a, b instanceof Some ? v : b));
+    return ["==", "!=", "<", ">", "<=", ">="].includes(op) ? each.some(truthy) : new Some(group.mode, each);
+  }
   switch (op) {
     case "==": return a === b;
     case "!=": return a !== b;
@@ -381,15 +427,19 @@ function evaluate(e: Expr, scopes: Scope[]): unknown {
       return call(evaluate(e.callee, scopes), e.args.map((a) => evaluate(a, scopes)));
     case "un": {
       const v = evaluate(e.e, scopes);
-      return e.op === "not" ? !v : -num(v, "-");
+      if (e.op === "not") return !truthy(v);
+      return v instanceof Some ? new Some(v.mode, v.values.map((x) => -num(x, "-"))) : -num(v, "-");
     }
     case "bin": {
-      if (e.op === "and") return evaluate(e.a, scopes) && evaluate(e.b, scopes);
-      if (e.op === "or") return evaluate(e.a, scopes) || evaluate(e.b, scopes);
+      if (e.op === "and") return truthy(evaluate(e.a, scopes)) && truthy(evaluate(e.b, scopes));
+      if (e.op === "or") {
+        const a = evaluate(e.a, scopes);
+        return truthy(a) ? a : evaluate(e.b, scopes);
+      }
       return binary(e.op, evaluate(e.a, scopes), evaluate(e.b, scopes));
     }
     case "tern":
-      return evaluate(e.c, scopes) ? evaluate(e.a, scopes) : e.b ? evaluate(e.b, scopes) : null;
+      return truthy(evaluate(e.c, scopes)) ? evaluate(e.a, scopes) : e.b ? evaluate(e.b, scopes) : null;
   }
 }
 
@@ -416,7 +466,7 @@ function execute(stmts: Stmt[], scopes: Scope[]): unknown {
         const v = evaluate(s.e, scopes);
         last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }]);
       } else if (s.k === "if") {
-        last = evaluate(s.c, scopes) ? execute(s.then, scopes) : s.else ? execute(s.else, scopes) : null;
+        last = truthy(evaluate(s.c, scopes)) ? execute(s.then, scopes) : s.else ? execute(s.else, scopes) : null;
       } else {
         const [obj, key] = assignTarget(s.target, scopes);
         const apply = (old: unknown) => {
@@ -459,13 +509,13 @@ export function runScript(source: string, globals: Record<string, unknown>): unk
 }
 
 /** Helper arguments with lists (coll.each.x) spread out, e.g. sum(G) or max(a, b). */
-export const spread = (args: unknown[]): unknown[] => args.flatMap((a) => (a instanceof Broadcast ? a.values : [a]));
+export const spread = (args: unknown[]): unknown[] => args.flatMap((a) => (a instanceof Broadcast || a instanceof Some ? a.values : [a]));
 
 /** A script value as plain JSON for display. */
 export function toPlain(v: unknown): unknown {
   if (v instanceof Collection) return v.items.map((i) => i.name);
   if (v instanceof Tags) return [...v.set];
-  if (v instanceof Broadcast) return v.values.map(toPlain);
+  if (v instanceof Broadcast || v instanceof Some) return v.values.map(toPlain);
   if (v instanceof Method) return "(method)";
   if (Array.isArray(v)) return v.map(toPlain);
   if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toPlain(x)]));

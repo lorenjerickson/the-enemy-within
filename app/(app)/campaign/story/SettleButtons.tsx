@@ -20,7 +20,7 @@ export default function SettleButtons({ objectiveId, status }: { objectiveId: nu
           Check conditions
         </button>
       </div>
-      <p className="text-xs opacity-60">Succeeding runs the reward script and reveals the reward discovery; failing runs the penalty script. Check conditions evaluates the success and failure checks against the game state without changing anything.</p>
+      <p className="text-xs opacity-60">Succeeding runs the reward script and reveals the reward discovery; failing runs the penalty script. Check conditions evaluates the success and failure conditions against the game state without changing anything (rolls are made afresh each time).</p>
       {message && <p data-settle-message className="text-sm">{message}</p>}
     </div>
   );
