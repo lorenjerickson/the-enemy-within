@@ -86,10 +86,9 @@ export default function SoundsEditor({
         return (
           <div key={s.id} data-sound={s.name} className={`rounded-box border p-3 space-y-2 ${playing ? "border-primary" : "border-base-300"}`}>
             <div className="flex items-center gap-2">
-              <span className="font-semibold">{s.name}</span>
+              <span className="font-semibold truncate">{s.name}</span>
               {playing && <span className="badge badge-primary badge-sm">playing</span>}
-              <div className="ml-auto flex items-center gap-1">
-                <VolumeSlider {...volumeProps("ambient", s.id, s.volume, (v) => playing && setAmbientVolume(v))} />
+              <div className="ml-auto flex shrink-0 items-center gap-1">
                 {playing ? (
                   <button type="button" className="btn btn-sm" onClick={stopAmbient}>■ Stop</button>
                 ) : (
@@ -102,26 +101,29 @@ export default function SoundsEditor({
                 </form>
               </div>
             </div>
+            <VolumeSlider wide {...volumeProps("ambient", s.id, s.volume, (v) => playing && setAmbientVolume(v))} />
 
             <ol className="space-y-1 text-sm">
               {s.clips.map((c, i) => (
-                <li key={c.id} data-clip={c.name} className={`flex items-center gap-2 rounded px-2 py-1 ${now?.clipId === c.id || now?.layerIds.includes(c.id) ? "bg-primary/20" : ""}`}>
-                  <span className="w-5 opacity-60">{i + 1}.</span>
-                  <span className="flex-1 truncate">{c.name}</span>
+                <li key={c.id} data-clip={c.name} className={`space-y-1 rounded px-2 py-1 ${now?.clipId === c.id || now?.layerIds.includes(c.id) ? "bg-primary/20" : ""}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 shrink-0 opacity-60">{i + 1}.</span>
+                    <span className="flex-1 truncate">{c.name}</span>
+                    {c.mode !== "loop" && c.mode !== "layer" && (
+                      <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume))}>▶</button>
+                    )}
+                    <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => removeAmbientClip(locationId, c.id)}>✕</button>
+                  </div>
                   <select
                     aria-label="Mode"
                     value={c.mode}
                     onChange={(e) => changeClipMode(locationId, c.id, e.target.value as ClipMode)}
-                    className="select select-xs w-48"
+                    className="select select-xs ml-7 w-[calc(100%-1.75rem)]"
                   >
                     {CLIP_MODES.map((m) => (
                       <option key={m} value={m}>{CLIP_MODE_LABELS[m]}</option>
                     ))}
                   </select>
-                  {c.mode !== "loop" && c.mode !== "layer" && (
-                    <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume))}>▶</button>
-                  )}
-                  <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => removeAmbientClip(locationId, c.id)}>✕</button>
                 </li>
               ))}
             </ol>
@@ -165,7 +167,7 @@ export default function SoundsEditor({
       />
 
       <form key={sounds.length} action={submitAmbientSound.bind(null, locationId, levelId)} className="flex items-center gap-2">
-        <input name="name" required placeholder="New ambient sound (e.g. Dripping cellar)" className="input input-sm w-72" />
+        <input name="name" required placeholder="New ambient sound (e.g. Dripping cellar)" className="input input-sm min-w-0 flex-1" />
         <button className="btn btn-sm">Add ambient sound</button>
       </form>
       <p className="text-xs opacity-60">Only one ambient sound plays at a time: its sequence clips one after another, with its layer clips looping underneath together. Event-triggered clips will play once map events exist.</p>
@@ -201,55 +203,60 @@ export default function SoundsEditor({
         {positional.length > 0 && (
           <ul className="rounded-box bg-base-100 text-sm">
             {positional.map((p) => (
-              <li key={p.id} className={`flex items-center gap-2 px-2 py-1 ${p.id === selectedPositionalId ? "bg-primary/20" : ""}`}>
-                <button type="button" data-positional={p.name} onClick={() => onSelectPositional(p.id)} className="flex-1 text-left">
-                  🔊 {p.name} <span className="text-xs opacity-60">at {Math.floor(p.x)}, {Math.floor(p.y)}</span>
-                </button>
-                <label className="flex items-center gap-1 text-xs" title="Play on a loop until stopped">
-                  <input
-                    type="checkbox"
-                    aria-label="Loop"
-                    className="checkbox checkbox-xs"
-                    defaultChecked={!!p.loop}
-                    onChange={(e) => {
-                      if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.loop = e.target.checked;
-                      changePositionalLoop(locationId, p.id, e.target.checked);
-                    }}
+              // Two lines: the sound with its play / remove buttons, then its settings.
+              <li key={p.id} className={`space-y-1 px-2 py-1 ${p.id === selectedPositionalId ? "bg-primary/20" : ""}`}>
+                <div className="flex items-center gap-2">
+                  <button type="button" data-positional={p.name} onClick={() => onSelectPositional(p.id)} className="flex-1 truncate text-left">
+                    🔊 {p.name} <span className="text-xs opacity-60">at {Math.floor(p.x)}, {Math.floor(p.y)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    title={playingPositionalId === p.id ? "Stop" : "Play this sound now"}
+                    className="btn btn-xs"
+                    onClick={() => togglePositional(p)}
+                  >
+                    {playingPositionalId === p.id ? "■" : "▶"}
+                  </button>
+                  <button
+                    type="button"
+                    title="Remove this positional sound"
+                    className="btn btn-ghost btn-xs text-error"
+                    onClick={() => removePositionalSound(locationId, p.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6">
+                  <label className="flex items-center gap-1 text-xs" title="Play on a loop until stopped">
+                    <input
+                      type="checkbox"
+                      aria-label="Loop"
+                      className="checkbox checkbox-xs"
+                      defaultChecked={!!p.loop}
+                      onChange={(e) => {
+                        if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.loop = e.target.checked;
+                        changePositionalLoop(locationId, p.id, e.target.checked);
+                      }}
+                    />
+                    loop
+                  </label>
+                  <label className="flex items-center gap-1 text-xs">
+                    range
+                    <input
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      defaultValue={p.radius}
+                      onBlur={(e) => Number(e.target.value) !== p.radius && changePositionalRadius(locationId, p.id, Number(e.target.value))}
+                      className="input input-xs w-16"
+                    />
+                  </label>
+                  <VolumeSlider
+                    {...volumeProps("positional", p.id, p.volume, (v) => {
+                      if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.volume = v;
+                    })}
                   />
-                  loop
-                </label>
-                <label className="flex items-center gap-1 text-xs">
-                  range
-                  <input
-                    type="number"
-                    min="0.5"
-                    step="0.5"
-                    defaultValue={p.radius}
-                    onBlur={(e) => Number(e.target.value) !== p.radius && changePositionalRadius(locationId, p.id, Number(e.target.value))}
-                    className="input input-xs w-16"
-                  />
-                </label>
-                <VolumeSlider
-                  {...volumeProps("positional", p.id, p.volume, (v) => {
-                    if (playingPositionalId === p.id && positionalAudio.current) positionalAudio.current.volume = v;
-                  })}
-                />
-                <button
-                  type="button"
-                  title={playingPositionalId === p.id ? "Stop" : "Play this sound now"}
-                  className="btn btn-xs"
-                  onClick={() => togglePositional(p)}
-                >
-                  {playingPositionalId === p.id ? "■" : "▶"}
-                </button>
-                <button
-                  type="button"
-                  title="Remove this positional sound"
-                  className="btn btn-ghost btn-xs text-error"
-                  onClick={() => removePositionalSound(locationId, p.id)}
-                >
-                  Remove
-                </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -265,7 +272,9 @@ function VolumeSlider({
   value,
   onLive,
   onCommit,
+  wide = false,
 }: {
+  wide?: boolean; // stretch to fill its row
   label: string;
   value: number;
   onLive: (v: number) => void;
@@ -273,7 +282,7 @@ function VolumeSlider({
 }) {
   const commit = (e: { currentTarget: HTMLInputElement }) => onCommit(Number(e.currentTarget.value));
   return (
-    <label className="flex items-center gap-1 text-xs" title="Volume">
+    <label className={`flex items-center gap-1 text-xs ${wide ? "w-full" : ""}`} title="Volume">
       🔈
       <input
         type="range"
@@ -285,7 +294,7 @@ function VolumeSlider({
         onChange={(e) => onLive(Number(e.target.value))}
         onPointerUp={commit}
         onKeyUp={commit}
-        className="range range-xs w-24"
+        className={`range range-xs ${wide ? "flex-1" : "w-24"}`}
       />
       <span className="w-8 text-right">{Math.round(value * 100)}%</span>
     </label>
