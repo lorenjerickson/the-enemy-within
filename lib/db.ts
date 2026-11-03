@@ -204,6 +204,16 @@ db.exec(`
   );
 `);
 
+/** Gives new (or old, unnamed) lights, effects and doors a default name such as "Light 3" or "Fire 7". */
+function nameUnnamed(): void {
+  const has = (table: string, column: string) =>
+    db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  if (has("light_sources", "name")) db.exec("UPDATE light_sources SET name = 'Light ' || id WHERE name IS NULL OR name = ''");
+  if (has("map_effects", "name"))
+    db.exec("UPDATE map_effects SET name = upper(substr(kind, 1, 1)) || substr(kind, 2) || ' ' || id WHERE name IS NULL OR name = ''");
+  if (has("map_structures", "name")) db.exec("UPDATE map_structures SET name = 'Door ' || id WHERE kind = 'door' AND (name IS NULL OR name = '')");
+}
+
 // Add columns introduced after a database was first created.
 function addColumn(table: string, column: string, definition: string): void {
   const cols = db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all();
@@ -254,6 +264,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
   radius REAL,
   intensity REAL NOT NULL DEFAULT 0.5
 )`);
+addColumn("light_sources", "name", "TEXT"); // scripts refer to lights, effects and doors by name
+addColumn("light_sources", "enabled", "INTEGER NOT NULL DEFAULT 1"); // 0 = switched off
+addColumn("map_effects", "name", "TEXT");
+addColumn("map_effects", "enabled", "INTEGER NOT NULL DEFAULT 1");
+addColumn("map_structures", "name", "TEXT"); // doors only
+nameUnnamed();
 addColumn("map_effects", "w", "REAL"); // a placed effect's area: (x, y) top-left, w × h cells
 addColumn("map_effects", "h", "REAL");
 // Effects placed as circles (centre + radius) before areas existed become the square around the circle.
@@ -939,22 +955,24 @@ export interface MapStructure {
   target_level_id: number | null;
   target_name: string | null;
   open: 0 | 1; // doors only
+  name: string | null; // doors only, for scripts
 }
 
 export function listStructures(levelId: number): MapStructure[] {
   return db
     .prepare<[number], MapStructure>(
-      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name, s.open
+      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name, s.open, s.name
        FROM map_structures s LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE s.level_id = ? ORDER BY s.id`
     )
     .all(levelId);
 }
 
-export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name" | "open">): void {
-  db.prepare<Omit<MapStructure, "id" | "target_name" | "open"> & { level_id: number }>(
+export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name" | "open" | "name">): void {
+  db.prepare<Omit<MapStructure, "id" | "target_name" | "open" | "name"> & { level_id: number }>(
     `INSERT INTO map_structures (level_id, kind, x1, y1, x2, y2, target_level_id)
      VALUES (@level_id, @kind, @x1, @y1, @x2, @y2, @target_level_id)`
   ).run({ ...s, level_id: levelId });
+  nameUnnamed();
 }
 
 export function deleteStructure(id: number): void {
@@ -1156,19 +1174,43 @@ export interface LightSource {
   angle: number; // degrees, directional only
   spread: number; // degrees, directional only
   flicker: 0 | 1;
+  name: string;
+  enabled: 0 | 1; // switched on
 }
 
 export function listLights(levelId: number): LightSource[] {
   return db
-    .prepare<[number], LightSource>("SELECT id, kind, x, y, radius, angle, spread, flicker FROM light_sources WHERE level_id = ? ORDER BY id")
+    .prepare<[number], LightSource>("SELECT id, kind, x, y, radius, angle, spread, flicker, name, enabled FROM light_sources WHERE level_id = ? ORDER BY id")
     .all(levelId);
 }
 
-export function addLight(levelId: number, l: Omit<LightSource, "id">): void {
-  db.prepare<Omit<LightSource, "id"> & { level_id: number }>(
+export function addLight(levelId: number, l: Omit<LightSource, "id" | "name" | "enabled">): void {
+  db.prepare<Omit<LightSource, "id" | "name" | "enabled"> & { level_id: number }>(
     `INSERT INTO light_sources (level_id, kind, x, y, radius, angle, spread, flicker)
      VALUES (@level_id, @kind, @x, @y, @radius, @angle, @spread, @flicker)`
   ).run({ ...l, level_id: levelId });
+  nameUnnamed();
+}
+
+/** What scripts can change on a light. */
+export function updateLight(id: number, l: { radius: number; flicker: boolean; on: boolean }): void {
+  db.prepare<[number, number, number, number]>("UPDATE light_sources SET radius = ?, flicker = ?, enabled = ? WHERE id = ?").run(
+    Math.max(0.5, l.radius), l.flicker ? 1 : 0, l.on ? 1 : 0, id
+  );
+}
+
+/** Renames a light, effect or door (the name scripts use). */
+export function renameMapThing(table: "light_sources" | "map_effects" | "map_structures", id: number, name: string): void {
+  db.prepare<[string, number]>(`UPDATE ${table} SET name = ? WHERE id = ?`).run(name.trim(), id);
+  nameUnnamed();
+}
+
+export function setMapThingOn(table: "light_sources" | "map_effects", id: number, on: boolean): void {
+  db.prepare<[number, number]>(`UPDATE ${table} SET enabled = ? WHERE id = ?`).run(on ? 1 : 0, id);
+}
+
+export function getIllumination(levelId: number): number {
+  return db.prepare<[number], { illumination: number }>("SELECT illumination FROM map_levels WHERE id = ?").get(levelId)?.illumination ?? 1;
 }
 
 export function deleteLight(id: number): void {
@@ -1320,16 +1362,24 @@ export interface MapEffect {
   w: number | null;
   h: number | null;
   intensity: number; // 0..1
+  name: string;
+  enabled: 0 | 1; // switched on
 }
 
 export function listEffects(levelId: number): MapEffect[] {
-  return db.prepare<[number], MapEffect>("SELECT id, kind, x, y, w, h, intensity FROM map_effects WHERE level_id = ? ORDER BY id").all(levelId);
+  return db.prepare<[number], MapEffect>("SELECT id, kind, x, y, w, h, intensity, name, enabled FROM map_effects WHERE level_id = ? ORDER BY id").all(levelId);
 }
 
-export function addEffect(levelId: number, e: Omit<MapEffect, "id">): void {
-  db.prepare<Omit<MapEffect, "id"> & { level_id: number }>(
+export function addEffect(levelId: number, e: Omit<MapEffect, "id" | "name" | "enabled">): void {
+  db.prepare<Omit<MapEffect, "id" | "name" | "enabled"> & { level_id: number }>(
     "INSERT INTO map_effects (level_id, kind, x, y, w, h, intensity) VALUES (@level_id, @kind, @x, @y, @w, @h, @intensity)"
   ).run({ ...e, level_id: levelId });
+  nameUnnamed();
+}
+
+/** What scripts can change on an effect. */
+export function updateEffect(id: number, e: { intensity: number; on: boolean }): void {
+  db.prepare<[number, number, number]>("UPDATE map_effects SET intensity = ?, enabled = ? WHERE id = ?").run(Math.min(1, Math.max(0, e.intensity)), e.on ? 1 : 0, id);
 }
 
 export function moveEffect(id: number, x: number, y: number): void {

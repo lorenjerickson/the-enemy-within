@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -281,6 +281,22 @@ export async function placeEffect(
     h: placed ? Math.max(0.25, Number(e.h)) : null,
     intensity: Math.min(1, Math.max(0, Number(e.intensity))),
   });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Renames a light, effect or door (scripts refer to them by name). */
+export async function renameThing(locationId: number, table: "light_sources" | "map_effects" | "map_structures", id: number, name: string) {
+  await requireGm();
+  if (!["light_sources", "map_effects", "map_structures"].includes(table)) throw new Error("Can't rename that");
+  renameMapThing(table, id, String(name).slice(0, 60));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Switches a light or effect on or off. */
+export async function switchThing(locationId: number, table: "light_sources" | "map_effects", id: number, on: boolean) {
+  await requireGm();
+  if (!["light_sources", "map_effects"].includes(table)) throw new Error("Can't switch that");
+  setMapThingOn(table, id, !!on);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

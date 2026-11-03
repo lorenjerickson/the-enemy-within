@@ -2,6 +2,7 @@
 
 import type { LightSource } from "@/lib/db";
 import { LIGHT_KINDS, type LightKind } from "@/lib/maps";
+import NameInput from "./NameInput";
 
 /** What a click on the map places as a light source. */
 export interface LightTool {
@@ -23,6 +24,8 @@ export default function LightingEditor({
   selectedId,
   onSelect,
   onRemove,
+  onRename,
+  onSwitch,
 }: {
   value: number;
   onPreview: (v: number) => void;
@@ -33,6 +36,8 @@ export default function LightingEditor({
   selectedId: number | null;
   onSelect: (id: number) => void;
   onRemove: (id: number) => void;
+  onRename: (id: number, name: string) => void;
+  onSwitch: (id: number, on: boolean) => void;
 }) {
   const commit = (e: { currentTarget: HTMLInputElement }) => onCommit(Number(e.currentTarget.value));
   const num = (k: "radius" | "angle" | "spread") => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -102,17 +107,20 @@ export default function LightingEditor({
         {lights.length > 0 && (
           <ul className="rounded-box bg-base-100 text-sm">
             {lights.map((l) => (
-              <li key={l.id} className={`flex items-center gap-2 px-2 py-1 ${l.id === selectedId ? "bg-primary/20" : ""}`}>
-                <button type="button" data-light={l.id} onClick={() => onSelect(l.id)} className="flex-1 text-left">
-                  💡 {l.kind === "point" ? "Point" : "Directional"}{" "}
-                  <span className="text-xs opacity-60">
-                    at {Math.floor(l.x)}, {Math.floor(l.y)} · range {l.radius}
-                    {l.kind === "directional" && ` · ${l.angle}° / ${l.spread}°`}
-                    {l.flicker ? " · flickers" : ""}
-                  </span>
-                </button>
-                <button type="button" title="Remove this light" className="btn btn-ghost btn-xs text-error" onClick={() => onRemove(l.id)}>
-                  Remove
+              <li key={l.id} className={`space-y-1 px-2 py-1 ${l.id === selectedId ? "bg-primary/20" : ""}`}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" className="toggle toggle-xs" aria-label="On" title="On / off" checked={!!l.enabled} onChange={(e) => onSwitch(l.id, e.target.checked)} />
+                  <NameInput label="Light name" value={l.name} onRename={(name) => onRename(l.id, name)} />
+                  <span className="flex-1" />
+                  <button type="button" title="Remove this light" className="btn btn-ghost btn-xs text-error" onClick={() => onRemove(l.id)}>
+                    Remove
+                  </button>
+                </div>
+                <button type="button" data-light={l.id} onClick={() => onSelect(l.id)} className={`block w-full pl-9 text-left text-xs ${l.enabled ? "opacity-60" : "opacity-40"}`}>
+                  💡 {l.kind === "point" ? "Point" : "Directional"} at {Math.floor(l.x)}, {Math.floor(l.y)} · range {l.radius}
+                  {l.kind === "directional" && ` · ${l.angle}° / ${l.spread}°`}
+                  {l.flicker ? " · flickers" : ""}
+                  {l.enabled ? "" : " · off"}
                 </button>
               </li>
             ))}

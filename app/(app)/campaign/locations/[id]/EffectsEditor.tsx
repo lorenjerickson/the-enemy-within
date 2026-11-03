@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { MapEffect } from "@/lib/db";
 import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
+import NameInput from "./NameInput";
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -21,6 +22,8 @@ export default function EffectsEditor({
   onAddToMap,
   onIntensity,
   onRemove,
+  onRename,
+  onSwitch,
 }: {
   tool: EffectTool;
   onToolChange: (t: EffectTool) => void;
@@ -28,6 +31,8 @@ export default function EffectsEditor({
   onAddToMap: () => void;
   onIntensity: (id: number, intensity: number) => void;
   onRemove: (id: number) => void;
+  onRename: (id: number, name: string) => void;
+  onSwitch: (id: number, on: boolean) => void;
 }) {
   // Intensities being dragged, saved on release.
   const [dragging, setDragging] = useState<Record<number, number>>({});
@@ -88,11 +93,14 @@ export default function EffectsEditor({
             {effects.map((e) => (
               <li key={e.id} data-effect={e.kind} className="space-y-1 rounded bg-base-100 px-2 py-1">
                 <div className="flex items-center gap-2">
-                  <span className="flex-1 truncate">
-                    {EFFECT_LABELS[e.kind]}{" "}
-                    <span className="text-xs opacity-60">{e.x === null ? "whole map" : `at ${Math.floor(e.x)}, ${Math.floor(e.y!)} · ${round(e.w!)} × ${round(e.h!)} cells`}</span>
-                  </span>
+                  <input type="checkbox" className="toggle toggle-xs" aria-label="On" title="On / off" checked={!!e.enabled} onChange={(ev) => onSwitch(e.id, ev.target.checked)} />
+                  <NameInput label="Effect name" value={e.name} onRename={(name) => onRename(e.id, name)} />
+                  <span className="flex-1" />
                   <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onRemove(e.id)}>Remove</button>
+                </div>
+                <div className={`pl-9 text-xs ${e.enabled ? "opacity-60" : "opacity-40"}`}>
+                  {EFFECT_LABELS[e.kind]} · {e.x === null ? "whole map" : `at ${Math.floor(e.x)}, ${Math.floor(e.y!)} · ${round(e.w!)} × ${round(e.h!)} cells`}
+                  {e.enabled ? "" : " · off"}
                 </div>
                 <label className="flex items-center gap-2 text-xs">
                   intensity

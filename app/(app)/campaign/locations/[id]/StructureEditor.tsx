@@ -2,6 +2,7 @@
 
 import type { MapStructure } from "@/lib/db";
 import { STRUCTURE_KINDS, STRUCTURE_LABELS, type StructureKind } from "@/lib/maps";
+import NameInput from "./NameInput";
 
 export interface StructureTool {
   kind: StructureKind;
@@ -19,6 +20,7 @@ export default function StructureEditor({
   onSelect,
   onDelete,
   onToggleDoor,
+  onRenameDoor,
 }: {
   tool: StructureTool;
   onToolChange: (tool: StructureTool) => void;
@@ -29,6 +31,7 @@ export default function StructureEditor({
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
   onToggleDoor: (id: number, open: boolean) => void;
+  onRenameDoor: (id: number, name: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -87,6 +90,7 @@ export default function StructureEditor({
                       : `(${s.x1}, ${s.y1}) – (${s.x2}, ${s.y2})`}
                   </span>
                 </button>
+                {s.kind === "door" && <NameInput label="Door name" value={s.name ?? `Door ${s.id}`} onRename={(name) => onRenameDoor(s.id, name)} />}
                 {s.kind === "door" && (
                   <button type="button" className="btn btn-xs" onClick={() => onToggleDoor(s.id, !s.open)}>
                     {s.open ? "Close" : "Open"}

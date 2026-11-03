@@ -19,7 +19,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -226,6 +226,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   effects: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const e of state.effects) {
+      if (!e.enabled) continue; // switched off
       const placed = e.x !== null && e.y !== null && e.w !== null && e.h !== null;
       const area = placed
         ? { x: x0 + e.x! * size, y: y0 + e.y! * size, w: e.w! * size, h: e.h! * size, placed: true }
@@ -319,6 +320,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       o.setTransform(ctx.getTransform());
       o.globalCompositeOperation = "destination-out";
       for (const l of state.lights) {
+        if (!l.enabled) continue; // switched off: no light
         const { cx, cy, r, strength, path } = light(l);
         const g = o.createRadialGradient(cx, cy, 0, cx, cy, r);
         g.addColorStop(0, `rgba(0,0,0,${strength})`);
@@ -340,6 +342,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       const { cx, cy, r, strength, path } = light(l);
       ctx.save();
       path(ctx);
+      if (!l.enabled) ctx.globalAlpha = 0; // switched off: no glow (its bulb still shows while editing)
       // Warm glow fading out towards the edge of the light's range (no hard edge).
       const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
       glow.addColorStop(0, `rgba(253,224,71,${0.2 * strength})`);
@@ -358,7 +361,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, size * 0.2, 0, Math.PI * 2);
-        ctx.fillStyle = "#facc15";
+        ctx.fillStyle = l.enabled ? "#facc15" : "#6b7280"; // grey bulb = switched off
         ctx.fill();
         ctx.restore();
       }
@@ -773,7 +776,7 @@ export default function MapView({
       const t = lightTool;
       const placed = { kind: t.kind, x: col + 0.5, y: row + 0.5, radius: t.radius, angle: t.angle, spread: t.spread, flicker: t.flicker };
       startTransition(async () => {
-        changeLights({ add: { id: -Date.now(), ...placed, flicker: placed.flicker ? 1 : 0 } });
+        changeLights({ add: { id: -Date.now(), ...placed, flicker: placed.flicker ? 1 : 0, name: "New light", enabled: 1 } });
         await placeLight(locationId, levelId, placed);
       });
       return;
@@ -853,7 +856,7 @@ export default function MapView({
         const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
         const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
         startTransition(async () => {
-          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0 } });
+          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0, name: null } });
           await placeStructure(locationId, levelId, piece);
         });
       } else {
@@ -997,7 +1000,7 @@ export default function MapView({
       const level = portrait && structureTool.kind !== "stairs" && start.x !== end.x && Math.abs(end.y - start.y) <= 0.25;
       const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: level ? start.y : end.y, target_level_id: null };
       startTransition(async () => {
-        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0 } });
+        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0, name: null } });
         await placeStructure(locationId, levelId, piece);
       });
       return;
@@ -1275,6 +1278,8 @@ export default function MapView({
                   )
                 }
                 onIntensity={(id, v) => startTransition(() => changeEffectIntensity(locationId, id, v))}
+                onRename={(id, name) => startTransition(() => renameThing(locationId, "map_effects", id, name))}
+                onSwitch={(id, on) => startTransition(() => switchThing(locationId, "map_effects", id, on))}
                 onRemove={(id) => startTransition(() => removeEffect(locationId, id))}
               />
             ) : selected === "lighting" ? (
@@ -1285,6 +1290,8 @@ export default function MapView({
                 tool={lightTool}
                 onToolChange={setLightTool}
                 lights={optimisticLights}
+                onRename={(id, name) => startTransition(() => renameThing(locationId, "light_sources", id, name))}
+                onSwitch={(id, on) => startTransition(() => switchThing(locationId, "light_sources", id, on))}
                 selectedId={selectedLightId}
                 onSelect={(id) => setSelectedLightId(id === selectedLightId ? null : id)}
                 onRemove={(id) =>
@@ -1335,6 +1342,7 @@ export default function MapView({
                 selectedId={selectedStructureId}
                 onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
                 onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}
+                onRenameDoor={(id, name) => startTransition(() => renameThing(locationId, "map_structures", id, name))}
                 onDelete={(id) =>
                   startTransition(async () => {
                     changeStructures({ remove: id });

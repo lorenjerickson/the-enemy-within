@@ -1,6 +1,7 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
+  getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
   addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
@@ -34,7 +35,19 @@ export interface CurrentLocation extends GameLocation {
   creatures: Collection<Actor>;
   /** The encounter on this level: active, round, actor, order, begin(actors, rolls), next(), end(). */
   encounter: Record<string, unknown>;
+  /** The level's overall light, 0 (dark) to 1 (full): the Lighting layer's global illumination. */
+  illumination: number;
+  lights: Collection<ScriptLight>;
+  effects: Collection<ScriptEffect>;
+  doors: Collection<ScriptDoor>;
 }
+
+/** A light source as scripts see it (by name, e.g. lights['lamp']). */
+export interface ScriptLight { id: number; name: string; kind: string; range: number; flicker: boolean; on: boolean }
+/** An effect as scripts see it. */
+export interface ScriptEffect { id: number; name: string; kind: string; intensity: number; on: boolean }
+/** A door as scripts see it. */
+export interface ScriptDoor { id: number; name: string; open: boolean }
 
 export interface Game {
   players: Collection<Player>;
@@ -114,7 +127,24 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
     saved && order.length ? { order, round: saved.round, turn: Math.min(saved.turn, order.length - 1) } : null
   );
   changes.encounter = state;
-  return [{ id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter }, changes];
+  // Things from the map's layers that scripts can switch and adjust.
+  const lights = listLights(levelId).map((l): ScriptLight => ({
+    id: l.id, name: l.name, kind: l.kind, range: l.radius, flicker: !!l.flicker, on: !!l.enabled,
+  }));
+  const effects = listEffects(levelId).map((e): ScriptEffect => ({ id: e.id, name: e.name, kind: e.kind, intensity: e.intensity, on: !!e.enabled }));
+  const doors = changes.structures
+    .filter((s) => s.kind === "door")
+    .map((s): ScriptDoor => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open }));
+  return [
+    {
+      id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter,
+      illumination: getIllumination(levelId),
+      lights: new Collection("light", lights),
+      effects: new Collection("effect", effects),
+      doors: new Collection("door", doors),
+    },
+    changes,
+  ];
 }
 
 function saveActors(changes: ActorChanges, location: CurrentLocation): void {
@@ -134,6 +164,11 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
   // After the inserts above, so new creatures have their token ids.
   const e = changes.encounter();
   saveEncounter(changes.levelId, e && { round: e.round, turn: e.turn, order: e.order.map((o) => ({ token_id: o.actor.id, initiative: o.initiative })) });
+  // Lighting, effects and doors (small lists, so simply written back).
+  saveIllumination(changes.levelId, location.illumination);
+  for (const l of location.lights.items) updateLight(l.id, { radius: l.range, flicker: l.flicker, on: l.on });
+  for (const f of location.effects.items) updateEffect(f.id, { intensity: f.intensity, on: f.on });
+  for (const d of location.doors.items) setDoorOpen(d.id, d.open);
 }
 
 function loadGame(levelId?: number): [Game, ActorChanges | null] {

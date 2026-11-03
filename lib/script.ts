@@ -246,7 +246,7 @@ function parse(source: string): Stmt[] {
 
 const FORBIDDEN = new Set(["__proto__", "prototype", "constructor"]);
 /** Identity fields of records. */
-const READ_ONLY = new Set(["id", "name", "type"]);
+const READ_ONLY = new Set(["id", "name", "type", "kind"]);
 const TAG_METHODS = ["add", "remove", "has"] as const;
 
 type Scope = { names: Record<string, unknown> } | { with: unknown };
