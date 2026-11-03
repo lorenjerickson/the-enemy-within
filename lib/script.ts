@@ -53,7 +53,7 @@ export class ScriptError extends Error {}
 
 type Tok = { t: "num" | "str" | "id" | "op" | "nl" | "indent" | "dedent" | "eof"; v: string; line: number };
 
-const TOKEN = /\s*(?:(\d+(?:\.\d+)?)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([A-Za-z_]\w*)|(\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||\+\+|--|[-+*/%<>=!?:.,()[\]]))/y;
+export const TOKEN = /\s*(?:(\d+(?:\.\d+)?)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|([A-Za-z_]\w*)|(\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||\+\+|--|[-+*/%<>=!?:.,()[\]]))/y;
 
 function tokenize(source: string): Tok[] {
   const toks: Tok[] = [];

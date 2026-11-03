@@ -12,6 +12,7 @@ import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
+import type { ScriptNames } from "@/lib/scriptSchema";
 import ControlsEditor from "./ControlsEditor";
 import GameIcon from "./GameIcon";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
@@ -495,6 +496,7 @@ export default function MapView({
   notes,
   effects,
   controls,
+  scriptNames,
 }: {
   locationId: number;
   levelId: number;
@@ -518,6 +520,7 @@ export default function MapView({
   notes: MapNote[];
   effects: MapEffect[];
   controls: MapControl[];
+  scriptNames: ScriptNames; // names for the script editor's suggestions (this level's lights, doors …)
 }) {
   const [, startTransition] = useTransition();
   /** What the last clicked control button's script returned. */
@@ -1251,7 +1254,7 @@ export default function MapView({
             {selected === "background" ? (
               <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
             ) : selected === "controls" ? (
-              <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} />
+              <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} names={scriptNames} />
             ) : selected === "notes" ? (
               <NotesEditor
                 draft={noteDraft}

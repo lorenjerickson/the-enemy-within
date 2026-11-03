@@ -5,11 +5,23 @@ import type { MapControl } from "@/lib/db";
 import { CONTROL_EDGES } from "@/lib/maps";
 import { changeControlScript, removeControl, submitControl } from "../actions";
 import GameIcon, { ICON_NAMES, iconWords } from "./GameIcon";
+import ScriptEditor from "../../../ScriptEditor";
+import type { ScriptNames } from "@/lib/scriptSchema";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** Controls layer editor: add icon buttons (with a tooltip label) along each edge of the scene, remove them. */
-export default function ControlsEditor({ locationId, levelId, controls }: { locationId: number; levelId: number; controls: MapControl[] }) {
+export default function ControlsEditor({
+  locationId,
+  levelId,
+  controls,
+  names,
+}: {
+  locationId: number;
+  levelId: number;
+  controls: MapControl[];
+  names: ScriptNames; // for the script editor's suggestions
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [icon, setIcon] = useState("GiClick");
   const [query, setQuery] = useState("");
@@ -91,7 +103,7 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
         </ul>
       )}
       {editing ? (
-        <ScriptForm key={`script-${editing.id}`} locationId={locationId} control={editing} />
+        <ScriptForm key={`script-${editing.id}`} locationId={locationId} control={editing} names={names} />
       ) : (
         controls.length > 0 && <p className="text-xs opacity-60">Click a button&apos;s label to edit the script it runs.</p>
       )}
@@ -100,7 +112,7 @@ export default function ControlsEditor({ locationId, levelId, controls }: { loca
 }
 
 /** Edit the script a button runs when clicked on the map. */
-function ScriptForm({ locationId, control }: { locationId: number; control: MapControl }) {
+function ScriptForm({ locationId, control, names }: { locationId: number; control: MapControl; names: ScriptNames }) {
   const [script, setScript] = useState(control.script);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -116,15 +128,14 @@ function ScriptForm({ locationId, control }: { locationId: number; control: MapC
       }}
     >
       <div className="text-sm font-semibold">Script for “{control.label}”</div>
-      <textarea
-        aria-label="Button script"
-        className="textarea textarea-bordered w-full font-mono text-sm"
-        rows={6}
-        spellCheck={false}
-        placeholder={"game.vars.alarm = true"}
-        value={script}
-        onChange={(e) => {
-          setScript(e.target.value);
+      <ScriptEditor
+        label="Button script"
+        placeholder="game.vars.alarm = true"
+        defaultValue={control.script}
+        names={names}
+        minLines={6}
+        onChange={(text) => {
+          setScript(text);
           setMessage(null);
         }}
       />

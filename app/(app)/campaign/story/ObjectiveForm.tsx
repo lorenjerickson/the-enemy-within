@@ -2,6 +2,8 @@ import { listCharacters } from "@/lib/db";
 import { listDiscoveries, listObjectiveCharacters, type Objective } from "@/lib/story";
 import { removeObjective, submitObjective } from "./actions";
 import SettleButtons from "./SettleButtons";
+import ScriptEditor from "../../ScriptEditor";
+import { scriptNames } from "@/lib/scriptNames";
 
 /**
  * An objective: who it's for, what counts as success or failure (with timelines), the reward and penalty
@@ -11,6 +13,7 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
   const forCharacters = new Set(initial ? listObjectiveCharacters(initial.id) : []);
   const discoveries = listDiscoveries();
   const assignedBy = initial ? discoveries.filter((d) => d.objective_id === initial.id) : [];
+  const names = scriptNames();
 
   return (
     <div className="space-y-3 max-w-2xl">
@@ -36,25 +39,13 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
 
         <fieldset className="fieldset">
           <legend className="fieldset-legend">Success condition (a script, true once it has succeeded)</legend>
-          <textarea
-            name="success_check"
-            placeholder={"e.g.\nWITH game.calendar.timers['deliver the letter'].elapsed as V\n   game.vars.letterDelivered and interval(V, 'days') < 3"}
-            defaultValue={initial?.success_check}
-            spellCheck={false}
-            className="textarea w-full h-24 font-mono text-sm"
-          />
+          <ScriptEditor name="success_check" label="Success condition" placeholder={"e.g.\nWITH game.calendar.timers['deliver the letter'].elapsed as V\n   game.vars.letterDelivered and interval(V, 'days') < 3"} defaultValue={initial?.success_check} names={names} minLines={4} />
           <input name="success" placeholder="Notes (optional), e.g. the letter reaches the mayor within 3 days" defaultValue={initial?.success} className="input input-sm w-full" />
           <input type="hidden" name="success_within_days" value={initial?.success_within_days ?? ""} />
         </fieldset>
         <fieldset className="fieldset">
           <legend className="fieldset-legend">Failure condition (a script, true once it has failed)</legend>
-          <textarea
-            name="failure_check"
-            placeholder={"e.g. not game.characters['sheena'].alive"}
-            defaultValue={initial?.failure_check}
-            spellCheck={false}
-            className="textarea w-full h-20 font-mono text-sm"
-          />
+          <ScriptEditor name="failure_check" label="Failure condition" placeholder={"e.g. not game.characters['sheena'].alive"} defaultValue={initial?.failure_check} names={names} minLines={3} />
           <input name="failure" placeholder="Notes (optional), e.g. the deadline passes or the letter is lost" defaultValue={initial?.failure} className="input input-sm w-full" />
         </fieldset>
 
@@ -65,7 +56,7 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
             <option value="">No discovery</option>
             {discoveries.map((d) => <option key={d.id} value={d.id}>Reveals: {d.title}</option>)}
           </select>
-          <textarea name="reward_script" placeholder="Script run on success (optional), e.g. game.vars.ravensbrookDiscount = 10" defaultValue={initial?.reward_script} spellCheck={false} className="textarea w-full h-16 font-mono text-sm" />
+          <ScriptEditor name="reward_script" label="Reward script" placeholder={"Script run on success (optional), e.g. game.vars.ravensbrookDiscount = 10"} defaultValue={initial?.reward_script} names={names} minLines={2} />
         </fieldset>
         <fieldset className="fieldset">
           <legend className="fieldset-legend">Penalty</legend>
@@ -74,7 +65,7 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
             <input name="penalty_after_days" type="number" min="0" step="any" defaultValue={initial?.penalty_after_days ?? ""} className="input input-sm w-20" />
             days after failing (blank = straight away)
           </label>
-          <textarea name="penalty_script" placeholder="Script run on failure (optional), e.g. game.vars.ravensbrookOverrun = true" defaultValue={initial?.penalty_script} spellCheck={false} className="textarea w-full h-16 font-mono text-sm" />
+          <ScriptEditor name="penalty_script" label="Penalty script" placeholder={"Script run on failure (optional), e.g. game.vars.ravensbrookOverrun = true"} defaultValue={initial?.penalty_script} names={names} minLines={2} />
         </fieldset>
 
         <fieldset className="fieldset">

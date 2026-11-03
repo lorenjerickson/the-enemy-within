@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import type { ScriptResult } from "@/lib/game";
 import { runScript } from "./actions";
+import ScriptEditor from "../ScriptEditor";
+import type { ScriptNames } from "@/lib/scriptSchema";
 
 const EXAMPLE = `with game.players['annis'] as A
    IF A.attributes.might > 12
@@ -10,31 +12,21 @@ const EXAMPLE = `with game.players['annis'] as A
 A.health += 10`;
 
 /** Run a game script and see its result. Changes to game state are saved. */
-export function ScriptConsole() {
+export function ScriptConsole({ names }: { names: ScriptNames }) {
   const [source, setSource] = useState("");
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const run = () => source.trim() && startTransition(async () => setResult(await runScript(source)));
   return (
     <form
       className="flex flex-col gap-2 max-w-3xl"
       onSubmit={(e) => {
         e.preventDefault();
-        startTransition(async () => setResult(await runScript(source)));
+        run();
       }}
     >
-      <textarea
-        aria-label="Script"
-        className="textarea textarea-bordered w-full font-mono text-sm"
-        rows={8}
-        spellCheck={false}
-        placeholder={EXAMPLE}
-        value={source}
-        onChange={(e) => setSource(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
-        }}
-      />
+      <ScriptEditor label="Script" placeholder={EXAMPLE} names={names} minLines={8} onChange={setSource} onSubmit={run} />
       <div className="flex items-center gap-3">
         <button className="btn btn-primary btn-sm" disabled={pending || !source.trim()}>Run</button>
         <span className="text-xs opacity-60">⌘/Ctrl+Enter. See docs/scripting.md.</span>

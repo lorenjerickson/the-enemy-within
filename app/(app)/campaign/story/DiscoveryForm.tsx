@@ -2,6 +2,8 @@ import { SKILLS_BY_ATTRIBUTE } from "@/lib/attributes";
 import { listCharacters, listItems, listLocations } from "@/lib/db";
 import { DISCOVERY_KINDS, RELATIONS, listDiscoveries, listLinks, listObjectives, type Discovery } from "@/lib/story";
 import { removeDiscovery, submitDiscovery } from "./actions";
+import ScriptEditor from "../../ScriptEditor";
+import { scriptNames } from "@/lib/scriptNames";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 const SKILLS = [...new Set(Object.values(SKILLS_BY_ATTRIBUTE).flat())].sort();
@@ -9,6 +11,7 @@ const SKILLS = [...new Set(Object.values(SKILLS_BY_ATTRIBUTE).flat())].sort();
 /** A discovery: what the party learns, what it really is (GM only), who or what holds it, how it's found, and its links. */
 export default function DiscoveryForm({ initial }: { initial?: Discovery }) {
   const others = listDiscoveries().filter((d) => d.id !== initial?.id);
+  const names = scriptNames();
   const links = new Map(initial ? listLinks(initial.id).map((l) => [l.other_id, l.relation]) : []);
   const owner = initial?.location_id
     ? `location:${initial.location_id}`
@@ -88,13 +91,7 @@ export default function DiscoveryForm({ initial }: { initial?: Discovery }) {
         )}
         <fieldset className="fieldset">
           <legend className="fieldset-legend">When found (a script, run once when the party finds it)</legend>
-          <textarea
-            name="on_found"
-            placeholder={"e.g. game.calendar.timers.start('find holmes')"}
-            defaultValue={initial?.on_found}
-            spellCheck={false}
-            className="textarea w-full h-16 font-mono text-sm"
-          />
+          <ScriptEditor name="on_found" label="When found script" placeholder={"e.g. game.calendar.timers.start('find holmes')"} defaultValue={initial?.on_found} names={names} minLines={2} />
         </fieldset>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="found" defaultChecked={!!initial?.found} className="checkbox checkbox-sm" />

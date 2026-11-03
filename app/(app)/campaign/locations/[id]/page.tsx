@@ -5,6 +5,7 @@ import { requireGm } from "@/lib/auth";
 import { listEffects, listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
+import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
 
 export default async function EditLocation({
@@ -59,6 +60,7 @@ export default async function EditLocation({
           lights={listLights(level.id)}
           notes={listNotes(level.id)}
           effects={listEffects(level.id)}
+          scriptNames={scriptNames(level.id)}
           controls={listControls(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
           creatures={[

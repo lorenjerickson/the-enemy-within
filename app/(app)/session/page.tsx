@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { ScriptConsole } from "./ScriptConsole";
 import { CalendarPanel } from "./CalendarPanel";
 import { getGameTime, listTimers } from "@/lib/db";
+import { scriptNames } from "@/lib/scriptNames";
 
 export default async function Session() {
   await connection();
@@ -13,7 +14,7 @@ export default async function Session() {
     <div className="flex flex-col gap-4">
       <h2 className="text-xl font-semibold">Session</h2>
       <CalendarPanel now={getGameTime()} timers={listTimers()} />
-      <ScriptConsole />
+      <ScriptConsole names={scriptNames()} />
     </div>
   );
 }
