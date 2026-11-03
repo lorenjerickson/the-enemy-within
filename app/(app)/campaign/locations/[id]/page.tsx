@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
+import { listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
 import MapView from "./MapView";
@@ -59,7 +59,10 @@ export default async function EditLocation({
           notes={listNotes(level.id)}
           controls={listControls(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
-          creatures={listCreatures().map(({ id, name, type, image, token_overhead, token_side }) => ({ id, name, type, image, token_overhead, token_side }))}
+          creatures={[
+            ...listCharacters().map(({ id, name, type, image, token_overhead, token_side }) => ({ kind: "character" as const, id, name, type, image, token_overhead, token_side })),
+            ...listCreatures().map(({ id, name, type, image, token_overhead, token_side }) => ({ kind: "creature" as const, id, name, type, image, token_overhead, token_side })),
+          ]}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
         />
       </div>

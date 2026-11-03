@@ -989,6 +989,18 @@ export function getTokenLevel(id: number): number | undefined {
   return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(id)?.level_id;
 }
 
+/** Places a character on a level. A character exists once, so any token it already has (on any level) is removed. */
+export function placeCharacterToken(levelId: number, characterId: number, col: number, row: number): number {
+  return db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM map_tokens WHERE character_id = ?").run(characterId);
+    return Number(
+      db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, character_id, col, row) VALUES (?, ?, ?, ?)").run(
+        levelId, characterId, col, row
+      ).lastInsertRowid
+    );
+  })();
+}
+
 /** The location a map level belongs to, with the level's name. */
 export function getLevelPlace(levelId: number): { location_id: number; location: string; level: string } | undefined {
   return db

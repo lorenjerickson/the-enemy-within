@@ -17,7 +17,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -718,11 +718,19 @@ export default function MapView({
       }
       if (!tokenCreature) return;
       const c = tokenCreature;
+      const character = c.kind === "character";
       startTransition(async () => {
+        // A character appears once: placing it again moves it here.
+        const existing = character ? optimisticTokens.find((t) => t.character_id === c.id) : undefined;
+        if (existing) changeTokens({ remove: existing.id });
         changeTokens({
-          add: { id: -Date.now(), creature_id: c.id, character_id: null, name: c.name, image: c.image, token_overhead: c.token_overhead, token_side: c.token_side, col, row: settle(col, row), hp: null },
+          add: {
+            id: -Date.now(), creature_id: character ? null : c.id, character_id: character ? c.id : null, name: c.name, image: c.image,
+            token_overhead: c.token_overhead, token_side: c.token_side, col, row: settle(col, row), hp: null,
+          },
         });
-        await placeCreatureToken(locationId, levelId, c.id, col, row);
+        if (character) await placeCharacterTokenAt(locationId, levelId, c.id, col, row);
+        else await placeCreatureToken(locationId, levelId, c.id, col, row);
       });
       return;
     }
