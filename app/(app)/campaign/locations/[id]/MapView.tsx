@@ -17,7 +17,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -46,6 +46,7 @@ interface MapState {
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
   illumination: number;
+  figureHeight: number; // portrait maps: grid cells a 1.8 m figure stands
   lights: LightSource[];
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
@@ -125,6 +126,9 @@ function gridOrigin(state: MapState, w: number, h: number) {
   const first = (start: number, offset: number) => start + (((offset % size) + size) % size);
   return { x0: first(r.x, offsetX), y0: first(r.y, offsetY), size };
 }
+
+/** How many grid cells tall a side-on token stands: the level's figure height for 1.8 m, scaled by the creature's height. */
+const figureCells = (figureHeight: number, t: { height: number }) => (figureHeight * (t.height || 1.8)) / 1.8;
 
 const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
   const { x0, y0, size } = gridOrigin(state, w, h);
@@ -355,8 +359,9 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       // Side-on maps show the side-on figure standing on its floor, scaled to fit the cell.
       const side = state.mapImage.perspective === "portrait" && t.token_side ? state.tokenImages.get(t.token_side) : undefined;
       if (side) {
-        const k = Math.min(r.w / side.naturalWidth, r.h / side.naturalHeight);
-        const dw = side.naturalWidth * k, dh = side.naturalHeight * k;
+        // Drawn to scale: a 1.8 m figure is figureHeight cells tall; others by their height. Feet on the floor, centred on the column.
+        const dh = figureCells(state.figureHeight, t) * r.h;
+        const dw = (side.naturalWidth / side.naturalHeight) * dh;
         ctx.drawImage(side, r.x + (r.w - dw) / 2, r.y + r.h - dh, dw, dh);
         continue;
       }
@@ -438,6 +443,7 @@ export default function MapView({
   audioAssets,
   positional,
   illumination,
+  figureHeight,
   lights,
   notes,
   controls,
@@ -459,6 +465,7 @@ export default function MapView({
   audioAssets: Asset[];
   positional: PositionalSound[];
   illumination: number;
+  figureHeight: number;
   lights: LightSource[];
   notes: MapNote[];
   controls: MapControl[];
@@ -591,7 +598,7 @@ export default function MapView({
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
-    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination,
+    tokens: drawnTokens, tokenImages: loadedTileImages, positional: optimisticPositional, illumination: shownIllumination, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
   };
 
@@ -709,7 +716,9 @@ export default function MapView({
       const { col, row } = tokenAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
       const { gy } = gridAt(e);
-      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && gy >= t.row && gy < t.row + 1);
+      // A side-on figure can be taller than its cell: it can be grabbed anywhere up to the top of its head.
+      const top = (t: MapToken) => (portrait && t.token_side ? t.row + 1 - Math.max(1, figureCells(figureHeight, t)) : t.row);
+      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && gy >= top(t) && gy < t.row + 1);
       if (hit) {
         setSelectedTokenId(hit.id);
         setDraggingToken({ id: hit.id, col: hit.col, row: hit.row });
@@ -726,7 +735,7 @@ export default function MapView({
         changeTokens({
           add: {
             id: -Date.now(), creature_id: character ? null : c.id, character_id: character ? c.id : null, name: c.name, image: c.image,
-            token_overhead: c.token_overhead, token_side: c.token_side, col, row: settle(col, row), hp: null,
+            token_overhead: c.token_overhead, token_side: c.token_side, height: c.height, col, row: settle(col, row), hp: null,
           },
         });
         if (character) await placeCharacterTokenAt(locationId, levelId, c.id, col, row);
@@ -1120,6 +1129,9 @@ export default function MapView({
               />
             ) : selected === "tokens" ? (
               <TokensEditor
+                portrait={portrait}
+                figureHeight={figureHeight}
+                onFigureHeightChange={(cells) => changeFigureHeight(locationId, levelId, cells)}
                 creatures={creatures}
                 creature={tokenCreature}
                 onCreatureChange={setTokenCreature}

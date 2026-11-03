@@ -45,7 +45,7 @@ export default function CreatureForm({
         <ImagePicker kind="overhead token" field="tokenOverhead" label="Overhead token" small name={name} description={description} initial={initial?.token_overhead} />
         <ImagePicker kind="side token" field="tokenSide" label="Side-on token" small name={name} description={description} initial={initial?.token_side} />
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[2fr_2fr_1fr] gap-2">
         <select name="type" required defaultValue={initial?.type ?? ""} className="select w-full">
           <option value="" disabled>Creature type</option>
           {CREATURE_TYPES.map((t) => (
@@ -54,6 +54,8 @@ export default function CreatureForm({
         </select>
         <label className="floating-label"><span>Health dice (e.g. 2d8+4)</span>
           <input name="health" required pattern={DICE_PATTERN} placeholder="Health dice (e.g. 2d8+4)" defaultValue={initial?.health} className="input w-full" /></label>
+        <label className="floating-label"><span>Height (m)</span>
+          <input name="height" type="number" min="0.05" max="50" step="0.05" required placeholder="Height (m)" defaultValue={initial?.height ?? 1.8} className="input w-full" /></label>
       </div>
       <fieldset className="fieldset">
         <legend className="fieldset-legend">Maximum movement range (metres, 0 = none)</legend>

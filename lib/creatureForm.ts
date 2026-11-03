@@ -11,6 +11,8 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
   if (!CREATURE_TYPES.includes(type)) throw new Error("Invalid creature type");
   const health = text("health").toLowerCase().replace(/\s/g, "");
   if (!isDiceFormula(health)) throw new Error("Invalid health dice formula");
+  const height = Number(text("height") || 1.8);
+  if (!(height >= 0.05 && height <= 50)) throw new Error("Invalid height");
 
   const attributes = Object.fromEntries(ATTRIBUTES.map((k) => [k, Number(formData.get(k))])) as Attributes;
   for (const k of ATTRIBUTES) {
@@ -46,6 +48,7 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
     attributes,
     equipment,
     health,
+    height,
     movement,
   };
 }

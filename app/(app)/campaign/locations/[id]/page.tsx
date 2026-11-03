@@ -55,13 +55,14 @@ export default async function EditLocation({
           sounds={listAmbientSounds(level.id)}
           positional={listPositionalSounds(level.id)}
           illumination={level.illumination}
+          figureHeight={level.figure_height}
           lights={listLights(level.id)}
           notes={listNotes(level.id)}
           controls={listControls(level.id)}
           audioAssets={listAssets({ type: "audio", usage: "ambient" })}
           creatures={[
-            ...listCharacters().map(({ id, name, type, image, token_overhead, token_side }) => ({ kind: "character" as const, id, name, type, image, token_overhead, token_side })),
-            ...listCreatures().map(({ id, name, type, image, token_overhead, token_side }) => ({ kind: "creature" as const, id, name, type, image, token_overhead, token_side })),
+            ...listCharacters().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "character" as const, id, name, type, image, token_overhead, token_side, height })),
+            ...listCreatures().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "creature" as const, id, name, type, image, token_overhead, token_side, height })),
           ]}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
         />

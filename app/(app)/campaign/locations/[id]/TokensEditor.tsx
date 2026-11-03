@@ -12,6 +12,7 @@ export interface TokenCreature {
   image: string | null;
   token_overhead: string | null;
   token_side: string | null;
+  height: number; // metres
 }
 
 /** Tokens layer editor: pick a character or creature from a modal to place, and list / delete placed tokens. */
@@ -23,6 +24,9 @@ export default function TokensEditor({
   selectedId,
   onSelect,
   onDelete,
+  portrait,
+  figureHeight,
+  onFigureHeightChange,
 }: {
   creatures: TokenCreature[];
   creature: TokenCreature | null;
@@ -31,6 +35,9 @@ export default function TokensEditor({
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  portrait: boolean;
+  figureHeight: number;
+  onFigureHeightChange: (cells: number) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
@@ -55,6 +62,23 @@ export default function TokensEditor({
           : ""}
         Drag any token to move it.
       </p>
+
+      {portrait && (
+        <label className="flex items-center gap-2 text-sm">
+          Figure height
+          <input
+            type="number"
+            aria-label="Figure height"
+            min="0.1"
+            max="20"
+            step="0.1"
+            defaultValue={figureHeight}
+            onChange={(e) => Number(e.target.value) > 0 && onFigureHeightChange(Number(e.target.value))}
+            className="input input-sm w-20"
+          />
+          <span className="text-xs opacity-60">cells for a 1.8 m figure; others scale by their height</span>
+        </label>
+      )}
 
       <dialog ref={dialog} className="modal">
         <div className="modal-box max-w-3xl space-y-3">

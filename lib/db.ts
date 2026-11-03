@@ -242,7 +242,10 @@ addColumn("creatures", "token_overhead", "TEXT"); // token art seen from above (
 addColumn("creatures", "token_side", "TEXT"); // token art seen side-on (portrait maps)
 addColumn("characters", "token_overhead", "TEXT");
 addColumn("characters", "token_side", "TEXT");
-addColumn("map_tokens", "hp", "INTEGER"); // a creature token's current health; null until first rolled
+addColumn("map_tokens", "hp", "INTEGER");
+addColumn("creatures", "height", "REAL NOT NULL DEFAULT 1.8"); // metres, for side-on tokens
+addColumn("characters", "height", "REAL NOT NULL DEFAULT 1.8");
+addColumn("map_levels", "figure_height", "REAL NOT NULL DEFAULT 1"); // portrait maps: grid cells a 1.8 m figure stands // a creature token's current health; null until first rolled
 addColumn("map_levels", "illumination", "REAL NOT NULL DEFAULT 1"); // global light, 0 = dark .. 1 = full
 addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
@@ -440,6 +443,7 @@ export interface Creature {
   image: string | null; // portrait: an artistic rendering, not a token
   token_overhead: string | null; // map token seen from above
   token_side: string | null; // map token seen side-on (portrait maps)
+  height: number; // metres; sizes side-on tokens
   type: CreatureType;
   attributes: Attributes;
   equipment: Equipment;
@@ -456,7 +460,7 @@ type CreatureRow = Omit<Creature, "attributes" | "equipment" | "movement"> & {
   movement: string;
 };
 
-const CREATURE_COLUMNS = "id, name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement";
+const CREATURE_COLUMNS = "id, name, description, image, token_overhead, token_side, height, type, attributes, equipment, health, movement";
 
 const parseCreature = (row: CreatureRow): Creature => ({
   ...row,
@@ -486,13 +490,13 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
   const params = toParams(c);
   if (id === null) {
     db.prepare<Omit<CreatureRow, "id">>(
-      `INSERT INTO creatures (name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement)
-       VALUES (@name, @description, @image, @token_overhead, @token_side, @type, @attributes, @equipment, @health, @movement)`
+      `INSERT INTO creatures (name, description, image, token_overhead, token_side, height, type, attributes, equipment, health, movement)
+       VALUES (@name, @description, @image, @token_overhead, @token_side, @height, @type, @attributes, @equipment, @health, @movement)`
     ).run(params);
   } else {
     db.prepare<CreatureRow>(
       `UPDATE creatures SET name = @name, description = @description, image = @image, token_overhead = @token_overhead,
-         token_side = @token_side, type = @type,
+         token_side = @token_side, height = @height, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
   }
@@ -502,7 +506,7 @@ export function saveCreature(id: number | null, c: Omit<Creature, "id">): void {
 export type Character = Creature & { creature_id: number | null; template_name: string | null };
 
 const CHARACTER_SELECT = `SELECT c.id, c.creature_id, t.name AS template_name, c.name, c.description, c.image,
-  c.token_overhead, c.token_side, c.type,
+  c.token_overhead, c.token_side, c.height, c.type,
   c.attributes, c.equipment, c.health, c.movement FROM characters c LEFT JOIN creatures t ON t.id = c.creature_id`;
 
 type CharacterRow = CreatureRow & { creature_id: number | null; template_name: string | null };
@@ -522,14 +526,14 @@ export function saveCharacter(id: number | null, creatureId: number | null, c: O
   if (id === null) {
     return Number(
       db.prepare<Omit<CreatureRow, "id"> & { creature_id: number | null }>(
-        `INSERT INTO characters (creature_id, name, description, image, token_overhead, token_side, type, attributes, equipment, health, movement)
-         VALUES (@creature_id, @name, @description, @image, @token_overhead, @token_side, @type, @attributes, @equipment, @health, @movement)`
+        `INSERT INTO characters (creature_id, name, description, image, token_overhead, token_side, height, type, attributes, equipment, health, movement)
+         VALUES (@creature_id, @name, @description, @image, @token_overhead, @token_side, @height, @type, @attributes, @equipment, @health, @movement)`
       ).run({ ...params, creature_id: creatureId }).lastInsertRowid
     );
   } else {
     db.prepare<CreatureRow>(
       `UPDATE characters SET name = @name, description = @description, image = @image, token_overhead = @token_overhead,
-         token_side = @token_side, type = @type,
+         token_side = @token_side, height = @height, type = @type,
          attributes = @attributes, equipment = @equipment, health = @health, movement = @movement WHERE id = @id`
     ).run({ ...params, id });
     return id;
@@ -757,6 +761,7 @@ export interface MapLevel {
   grid: MapGrid;
   templateColors: TemplateColors;
   illumination: number; // global light level, 0 (dark) .. 1 (full)
+  figure_height: number; // portrait maps: how many grid cells tall a 1.8 m figure stands
   hidden: MapLayer[];
 }
 
@@ -765,8 +770,8 @@ export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
     db.prepare<
       [number],
-      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null; illumination: number }
-    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors, illumination FROM map_levels WHERE location_id = ? ORDER BY position DESC"
+      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null; illumination: number; figure_height: number }
+    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors, illumination, figure_height FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
@@ -951,6 +956,7 @@ export interface MapToken {
   hp: number | null; // creature tokens only; characters use their own
   token_overhead: string | null; // the creature's / character's token art
   token_side: string | null;
+  height: number; // metres
 }
 
 export function listTokens(levelId: number): MapToken[] {
@@ -958,7 +964,8 @@ export function listTokens(levelId: number): MapToken[] {
     .prepare<[number], MapToken>(
       `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row, t.hp,
          CASE WHEN t.character_id IS NULL THEN cr.token_overhead ELSE ch.token_overhead END AS token_overhead,
-         CASE WHEN t.character_id IS NULL THEN cr.token_side ELSE ch.token_side END AS token_side
+         CASE WHEN t.character_id IS NULL THEN cr.token_side ELSE ch.token_side END AS token_side,
+         CASE WHEN t.character_id IS NULL THEN cr.height ELSE ch.height END AS height
        FROM map_tokens t
        LEFT JOIN creatures cr ON cr.id = t.creature_id
        LEFT JOIN characters ch ON ch.id = t.character_id
@@ -1104,6 +1111,10 @@ export function deletePositionalSound(id: number): void {
 
 export function setSoundVolume(table: "ambient_sounds" | "positional_sounds", id: number, volume: number): void {
   db.prepare<[number, number]>(`UPDATE ${table} SET volume = ? WHERE id = ?`).run(Math.min(1, Math.max(0, volume)), id);
+}
+
+export function saveFigureHeight(levelId: number, cells: number): void {
+  db.prepare<[number, number]>("UPDATE map_levels SET figure_height = ? WHERE id = ?").run(Math.min(20, Math.max(0.1, cells)), levelId);
 }
 
 export function saveIllumination(levelId: number, illumination: number): void {
