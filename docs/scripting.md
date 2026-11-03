@@ -4,8 +4,8 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 
 ## State (`lib/game.ts`)
 
-- `game.players`: characters, by name or id: `game.players['annis']`, `game.players.annis`.
-  Each has `name`, `type` (read-only), `attributes.might` …, `health` (current), `conditions`.
+- `game.players` (also `game.characters`): characters, by name or id: `game.players['annis']`, `game.players.annis`.
+  Each has `name`, `type` (read-only), `attributes.might` …, `health` (current), `alive` (read-only: health above 0), `conditions`.
 - `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health` → `[25, 7]`.
   Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.

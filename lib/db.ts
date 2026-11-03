@@ -13,7 +13,7 @@ import type { EffectKind } from "@/lib/effects";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
 fs.mkdirSync("data", { recursive: true });
-const db = new Database("data/game.db");
+export const db = new Database("data/game.db");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

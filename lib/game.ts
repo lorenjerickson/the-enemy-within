@@ -19,6 +19,8 @@ export interface Player {
   attributes: Attributes;
   health: number;
   conditions: Tags;
+  /** Read-only: health above 0. */
+  readonly alive: boolean;
 }
 
 export type { Actor };
@@ -51,6 +53,8 @@ export interface ScriptDoor { id: number; name: string; open: boolean }
 
 export interface Game {
   players: Collection<Player>;
+  /** The same list as players (the party's characters). */
+  characters: Collection<Player>;
   vars: Record<string, VarValue>;
   /** All locations; `.current` is the one the script runs on. */
   locations: Collection<GameLocation>;
@@ -180,7 +184,16 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
     // Current health starts as a roll of the character's health formula.
     health: c.hp ?? rollDice(c.health || "0"),
     conditions: new Tags(new Set(c.conditions)),
-  }));
+  })) as unknown as Player[]; // `alive` is added just below
+  for (const p of players) {
+    Object.defineProperty(p, "alive", {
+      enumerable: true,
+      get: () => p.health > 0,
+      set() {
+        throw new ScriptError('"alive" can\'t be set; change health instead');
+      },
+    });
+  }
   const vars = Object.assign(Object.create(null), getVars());
   FREEFORM.add(vars);
   const [current, changes] = levelId === undefined ? [null, null] : loadLocation(levelId, players);
@@ -189,7 +202,8 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
     listLocations().map((l) => (l.id === current?.id ? current : { id: l.id, name: l.name }))
   );
   if (current) locations.current = current;
-  return [{ players: new Collection("player", players), vars, locations }, changes];
+  const party = new Collection("character", players);
+  return [{ players: party, characters: party, vars, locations }, changes];
 }
 
 function saveGame(game: Game, changes: ActorChanges | null): void {
@@ -347,6 +361,20 @@ export function runGameScript(source: string, levelId?: number): unknown {
 export function tryGameScript(source: string, levelId?: number): ScriptResult {
   try {
     return { ok: true, value: JSON.stringify(runGameScript(source, levelId), null, 2) };
+  } catch (e) {
+    if (e instanceof ScriptError) return { ok: false, error: e.message };
+    throw e;
+  }
+}
+
+/**
+ * Evaluates a script as a question about the game state (e.g. an objective's condition) without saving
+ * anything it changes. Returns its value, or the script error.
+ */
+export function checkGameState(source: string): { ok: true; value: unknown } | { ok: false; error: string } {
+  try {
+    const [game, changes] = loadGame();
+    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) })) };
   } catch (e) {
     if (e instanceof ScriptError) return { ok: false, error: e.message };
     throw e;
