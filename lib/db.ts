@@ -259,6 +259,18 @@ addColumn("characters", "in_party", "INTEGER NOT NULL DEFAULT 0"); // 1 = a play
 db.exec(`CREATE TABLE IF NOT EXISTS calendar (id INTEGER PRIMARY KEY CHECK (id = 1), now REAL NOT NULL DEFAULT 0)`);
 db.exec("INSERT OR IGNORE INTO calendar (id, now) VALUES (1, 0)");
 db.exec(`CREATE TABLE IF NOT EXISTS timers (name TEXT PRIMARY KEY, started REAL NOT NULL)`);
+addColumn("timers", "duration", "REAL"); // minutes until it expires; null = never
+// ON … THEN triggers made by scripts: checked whenever game state changes, run once when the condition holds.
+db.exec(`CREATE TABLE IF NOT EXISTS triggers (
+  id INTEGER PRIMARY KEY,
+  prelude TEXT NOT NULL DEFAULT '[]',
+  condition TEXT NOT NULL,
+  action TEXT NOT NULL,
+  level_id INTEGER,
+  created REAL NOT NULL,
+  fired REAL,
+  error TEXT
+)`);
 // Animated effects on a level, drawn in the order added. No position = covers the whole map.
 db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
   id INTEGER PRIMARY KEY,
@@ -1422,17 +1434,66 @@ export function setGameTime(minutes: number): void {
 export interface Timer {
   name: string;
   started: number; // game time it started, in minutes
+  duration: number | null; // minutes until it expires; null = never
 }
 
 export function listTimers(): Timer[] {
-  return db.prepare<[], Timer>("SELECT name, started FROM timers ORDER BY name").all();
+  return db.prepare<[], Timer>("SELECT name, started, duration FROM timers ORDER BY name").all();
 }
 
 /** Replaces all timers (scripts load them all, change them, and save them back). */
 export function saveTimers(timers: Timer[]): void {
   db.transaction(() => {
     db.exec("DELETE FROM timers");
-    const insert = db.prepare<[string, number]>("INSERT INTO timers (name, started) VALUES (?, ?)");
-    for (const t of timers) insert.run(t.name, t.started);
+    const insert = db.prepare<[string, number, number | null]>("INSERT INTO timers (name, started, duration) VALUES (?, ?, ?)");
+    for (const t of timers) insert.run(t.name, t.started, t.duration);
   })();
+}
+
+// ---------- Triggers ----------
+
+export interface Trigger {
+  id: number;
+  prelude: string[]; // WITH lines naming what the trigger refers to
+  condition: string;
+  action: string;
+  level_id: number | null; // the map level it was made on (game.locations.current)
+  created: number; // game time
+  fired: number | null; // game time it ran
+  error: string | null;
+}
+type TriggerRow = Omit<Trigger, "prelude"> & { prelude: string };
+const toTrigger = (r: TriggerRow): Trigger => ({ ...r, prelude: JSON.parse(r.prelude) });
+
+export function addTrigger(t: Pick<Trigger, "prelude" | "condition" | "action" | "level_id" | "created">): void {
+  db.prepare<[string, string, string, number | null, number]>("INSERT INTO triggers (prelude, condition, action, level_id, created) VALUES (?, ?, ?, ?, ?)")
+    .run(JSON.stringify(t.prelude), t.condition, t.action, t.level_id, t.created);
+}
+
+/** Waiting triggers, oldest first. */
+export function listPendingTriggers(): Trigger[] {
+  return db.prepare<[], TriggerRow>("SELECT * FROM triggers WHERE fired IS NULL AND error IS NULL ORDER BY id").all().map(toTrigger);
+}
+
+/** Waiting and failed triggers, then the most recently fired. */
+export function listTriggers(): Trigger[] {
+  return db
+    .prepare<[], TriggerRow>(
+      `SELECT * FROM (SELECT * FROM triggers WHERE fired IS NULL OR error IS NOT NULL)
+       UNION ALL SELECT * FROM (SELECT * FROM triggers WHERE fired IS NOT NULL AND error IS NULL ORDER BY id DESC LIMIT 10)`
+    )
+    .all()
+    .map(toTrigger);
+}
+
+export function markTriggerFired(id: number, at: number): void {
+  db.prepare<[number, number]>("UPDATE triggers SET fired = ? WHERE id = ?").run(at, id);
+}
+
+export function setTriggerError(id: number, error: string): void {
+  db.prepare<[string, number]>("UPDATE triggers SET error = ? WHERE id = ?").run(error, id);
+}
+
+export function deleteTrigger(id: number): void {
+  db.prepare<[number]>("DELETE FROM triggers WHERE id = ?").run(id);
 }

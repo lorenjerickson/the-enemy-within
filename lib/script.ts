@@ -49,6 +49,28 @@ export const FREEFORM = new WeakSet<object>();
 
 export class ScriptError extends Error {}
 
+/**
+ * How to name a value again in a later script, e.g. "game.calendar.timers['find holmes']". Set as values are read
+ * (a property's path from its parent's, a collection item by its name), so ON can remember what its names meant.
+ */
+const REFS = new WeakMap<object, string>();
+/** Gives a value (e.g. a timer made by a method) a path for ON to remember it by. */
+export function setRef(v: unknown, ref: string): void {
+  if (v && typeof v === "object" && !REFS.has(v)) REFS.set(v, ref);
+}
+export const quote = (s: string) => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+
+/** A trigger made by ON: the WITH lines it needs, its condition, and what it does, as script text. */
+export interface TriggerDef {
+  prelude: string[];
+  condition: string;
+  action: string;
+}
+/** What running a script may do besides changing the game: here, register ON triggers. */
+export interface Hooks {
+  onTrigger?: (t: TriggerDef) => void;
+}
+
 // ---------- Tokens ----------
 
 type Tok = { t: "num" | "str" | "id" | "op" | "nl" | "indent" | "dedent" | "eof"; v: string; line: number };
@@ -106,6 +128,7 @@ type Stmt = { line: number } & (
   | { k: "assign"; target: Expr; op: string; value?: Expr }
   | { k: "with"; e: Expr; as?: string; body: Stmt[] }
   | { k: "if"; c: Expr; then: Stmt[]; else?: Stmt[] }
+  | { k: "on"; c: Expr; then: Stmt[] }
 );
 
 const ASSIGN_OPS = ["=", "+=", "-=", "*=", "/=", "++", "--"];
@@ -153,7 +176,10 @@ function parse(source: string): Stmt[] {
       if (peek().t !== "indent") throw new ScriptError(`Line ${line}: WITH needs an indented block below it`);
       return { k: "with", e, as, body: block(), line };
     }
-    if (eatKw("if")) {
+    // ON cond THEN …: unless "on" is a name being used (on = false inside WITH light, or on.x).
+    const isOn = kw(peek(), "on") && !(peek(1).t === "op" && [".", "[", "(", ...ASSIGN_OPS].includes(peek(1).v));
+    if (isOn || eatKw("if")) {
+      if (isOn) p++;
       const c = expr();
       // THEN may follow on the same line, or start an indented line below the IF.
       let indented = false;
@@ -164,12 +190,13 @@ function parse(source: string): Stmt[] {
       if (!eatKw("then")) fail("expected THEN");
       const then = branch();
       let otherwise: Stmt[] | undefined;
+      if (kw(peek(), "else") && isOn) fail("ON has no ELSE");
       if (eatKw("else")) otherwise = branch();
       if (indented) {
-        if (peek().t !== "dedent") fail("expected the end of the IF block");
+        if (peek().t !== "dedent") fail(`expected the end of the ${isOn ? "ON" : "IF"} block`);
         p++;
       }
-      return { k: "if", c, then, else: otherwise, line };
+      return isOn ? { k: "on", c, then, line } : { k: "if", c, then, else: otherwise, line };
     }
     const e = expr();
     let s: Stmt = { k: "expr", e, line };
@@ -260,6 +287,57 @@ function parse(source: string): Stmt[] {
   return program;
 }
 
+// ---------- Back to text (for triggers saved by ON) ----------
+
+function unparseExpr(e: Expr): string {
+  const wrap = (x: Expr) => (x.k === "bin" || x.k === "tern" || x.k === "un" ? `(${unparseExpr(x)})` : unparseExpr(x));
+  switch (e.k) {
+    case "lit":
+      return typeof e.v === "string" ? quote(e.v) : String(e.v);
+    case "id":
+      return e.name;
+    case "mem":
+      return `${wrap(e.obj)}.${e.key}`;
+    case "idx":
+      return `${wrap(e.obj)}[${unparseExpr(e.index)}]`;
+    case "call":
+      return `${wrap(e.callee)}(${e.args.map(unparseExpr).join(", ")})`;
+    case "un":
+      return e.op === "not" ? `not ${wrap(e.e)}` : `-${wrap(e.e)}`;
+    case "bin":
+      return `${wrap(e.a)} ${e.op} ${wrap(e.b)}`;
+    case "tern":
+      return `${wrap(e.c)} ? ${wrap(e.a)}${e.b ? ` : ${wrap(e.b)}` : ""}`;
+  }
+}
+
+const INDENT = "   ";
+function unparse(stmts: Stmt[], depth = 0): string[] {
+  const pad = INDENT.repeat(depth);
+  return stmts.flatMap((s): string[] => {
+    switch (s.k) {
+      case "expr":
+        return [pad + unparseExpr(s.e)];
+      case "assign":
+        return [pad + unparseExpr(s.target) + (s.value ? ` ${s.op} ${unparseExpr(s.value)}` : s.op)];
+      case "with":
+        return [`${pad}WITH ${unparseExpr(s.e)}${s.as ? ` AS ${s.as}` : ""}`, ...unparse(s.body, depth + 1)];
+      case "if":
+        return [
+          `${pad}IF ${unparseExpr(s.c)} THEN`, ...unparse(s.then, depth + 1),
+          ...(s.else ? [`${pad}ELSE`, ...unparse(s.else, depth + 1)] : []),
+        ];
+      case "on":
+        return [`${pad}ON ${unparseExpr(s.c)} THEN`, ...unparse(s.then, depth + 1)];
+    }
+  });
+}
+
+/** A trigger's WITH lines with a body (condition or action) inside them, as one script. */
+export function triggerScript(prelude: string[], body: string): string {
+  return [...prelude.map((l, i) => INDENT.repeat(i) + l), ...body.split("\n").map((l) => INDENT.repeat(prelude.length) + l)].join("\n");
+}
+
 // ---------- Interpreter ----------
 
 const FORBIDDEN = new Set(["__proto__", "prototype", "constructor"]);
@@ -275,7 +353,39 @@ function describe(v: unknown): string {
   return typeof v === "object" ? "this" : `${typeof v} ${JSON.stringify(v)}`;
 }
 
+/** A collection item's path: by name when that's unique in the collection, else by id. */
+function itemRef(coll: Collection<{ id: number; name: string }>, item: { id: number; name: string }): string | undefined {
+  const base = REFS.get(coll);
+  if (!base) return undefined;
+  const same = coll.items.filter((it) => it.name.toLowerCase() === item.name.toLowerCase()).length;
+  if (same === 1) return `${base}[${quote(item.name)}]`;
+  return item.id > 0 ? `${base}[${quote(String(item.id))}]` : undefined;
+}
+
+/** Names a collection and each of its items for ON (items by name, or id when names repeat). */
+export function refCollection(coll: Collection<{ id: number; name: string }>, ref: string): void {
+  setRef(coll, ref);
+  for (const it of coll.items) {
+    const r = itemRef(coll, it);
+    if (r) setRef(it, r);
+  }
+}
+
 function getKey(obj: unknown, key: string): unknown {
+  const v = readKey(obj, key);
+  if (v && typeof v === "object" && !REFS.has(v) && obj && typeof obj === "object") {
+    const base = REFS.get(obj);
+    if (obj instanceof Collection && obj.items.includes(v as never)) {
+      const ref = key === "current" && base ? `${base}.current` : itemRef(obj, v as { id: number; name: string });
+      if (ref) REFS.set(v, ref);
+    } else if (base && /^[A-Za-z_]\w*$/.test(key) && !(v instanceof Some) && !(v instanceof Broadcast) && !(v instanceof Method)) {
+      REFS.set(v, `${base}.${key}`);
+    }
+  }
+  return v;
+}
+
+function readKey(obj: unknown, key: string): unknown {
   if (FORBIDDEN.has(key)) throw new ScriptError(`"${key}" isn't allowed`);
   if (obj instanceof Some) {
     if (obj.mode === "one" && key === "rolls") return new OneRoll(obj.values);
@@ -306,7 +416,10 @@ function getKey(obj: unknown, key: string): unknown {
     // .one: any one item (picked at random), e.g. game.characters.party.one
     if (key === "random") {
       if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s to pick from`);
-      return obj.items[Math.floor(Math.random() * obj.items.length)];
+      const picked = obj.items[Math.floor(Math.random() * obj.items.length)];
+      const ref = itemRef(obj, picked);
+      if (ref) setRef(picked, ref); // remembered as the one picked, not a new pick
+      return picked;
     }
     if (key === "any" || key === "one") {
       if (!obj.items.length) throw new ScriptError(`There are no ${obj.kind}s`);
@@ -323,6 +436,8 @@ function getKey(obj: unknown, key: string): unknown {
       return new Method((name) => {
         const found = obj.items.find((it) => it.name.toLowerCase() === String(name).toLowerCase());
         if (!found) throw new ScriptError(`No ${obj.kind} named "${name}"`);
+        const ref = itemRef(obj, found);
+        if (ref) setRef(found, ref);
         return found;
       });
     }
@@ -364,7 +479,7 @@ function setKey(obj: unknown, key: string, value: unknown): void {
     throw new ScriptError(`There is no "${key}" to change`);
   } else if (value !== null && typeof value === "object") {
     throw new ScriptError(`"${key}" can't be replaced as a whole; change its parts${key === "position" ? " or use place()" : ""}`);
-  } else if (typeof rec[key] !== typeof value) {
+  } else if (rec[key] !== null && value !== null && typeof rec[key] !== typeof value) {
     throw new ScriptError(`"${key}" is a ${typeof rec[key]}, not a ${typeof value}`);
   }
   rec[key] = value;
@@ -382,7 +497,7 @@ function num(v: unknown, op: string): number {
 }
 
 /** Truth of a value; a group's (any / one) is true if any member's is. */
-const truthy = (v: unknown): boolean => (v instanceof Some ? v.values.some(truthy) : !!v);
+export const truthy = (v: unknown): boolean => (v instanceof Some ? v.values.some(truthy) : !!v);
 
 function binary(op: string, a: unknown, b: unknown): unknown {
   // A group on either side: comparisons hold if they hold for any member; arithmetic applies to each.
@@ -457,16 +572,40 @@ function assignTarget(t: Expr, scopes: Scope[]): [unknown, string] {
   throw new ScriptError("can only assign to a property");
 }
 
-function execute(stmts: Stmt[], scopes: Scope[]): unknown {
+/** How ON names a value from an enclosing WITH in the script it saves. */
+function remember(v: unknown, name: string): string {
+  if (v === null || v === undefined) return "null";
+  if (typeof v === "string") return quote(v);
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  const ref = typeof v === "object" ? REFS.get(v) : undefined;
+  if (ref) return ref;
+  throw new ScriptError(`ON can't keep track of ${name} for later; give it something it can find again by name, like game.characters['Ash'] or a timer`);
+}
+
+/** Registers an ON trigger: the enclosing WITH names are saved as the things they refer to now. */
+function registerTrigger(s: Extract<Stmt, { k: "on" }>, scopes: Scope[], hooks: Hooks): void {
+  if (!hooks.onTrigger) throw new ScriptError("ON can't be used here: this script only answers a question");
+  const prelude = scopes.slice(1).flatMap((sc) =>
+    "names" in sc
+      ? Object.entries(sc.names).map(([name, v]) => `WITH ${remember(v, `"${name}"`)} AS ${name}`)
+      : [`WITH ${remember(sc.with, "what this WITH refers to")}`]
+  );
+  hooks.onTrigger({ prelude, condition: unparseExpr(s.c), action: unparse(s.then).join("\n") });
+}
+
+function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
   let last: unknown = null;
   for (const s of stmts) {
     try {
       if (s.k === "expr") last = evaluate(s.e, scopes);
       else if (s.k === "with") {
         const v = evaluate(s.e, scopes);
-        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }]);
+        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }], hooks);
       } else if (s.k === "if") {
-        last = truthy(evaluate(s.c, scopes)) ? execute(s.then, scopes) : s.else ? execute(s.else, scopes) : null;
+        last = truthy(evaluate(s.c, scopes)) ? execute(s.then, scopes, hooks) : s.else ? execute(s.else, scopes, hooks) : null;
+      } else if (s.k === "on") {
+        registerTrigger(s, scopes, hooks);
+        last = null;
       } else {
         const [obj, key] = assignTarget(s.target, scopes);
         const apply = (old: unknown) => {
@@ -504,8 +643,9 @@ export function checkScript(source: string): string | null {
 }
 
 /** Parses and runs a script against `globals` (e.g. { game, roll }), mutating them. Returns the last value. */
-export function runScript(source: string, globals: Record<string, unknown>): unknown {
-  return execute(parse(source), [{ names: globals }]);
+export function runScript(source: string, globals: Record<string, unknown>, hooks: Hooks = {}): unknown {
+  for (const [name, v] of Object.entries(globals)) setRef(v, name);
+  return execute(parse(source), [{ names: globals }], hooks);
 }
 
 /** Helper arguments with lists (coll.each.x) spread out, e.g. sum(G) or max(a, b). */

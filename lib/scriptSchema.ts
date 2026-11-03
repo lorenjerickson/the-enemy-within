@@ -68,7 +68,11 @@ const TYPES: Record<string, Member[]> = {
     num("now", "game minutes since the campaign began"), { label: "timers", type: "coll:timer", detail: "start / stop" },
     { label: "advance", detail: "advance(2, 'hours')", method: true },
   ],
-  timer: [text("name", "read-only"), num("started", "game minute it started"), num("elapsed", "minutes since; interval(…, 'days')")],
+  timer: [
+    text("name", "read-only"), num("started", "game minute it started"), num("elapsed", "minutes since; interval(…, 'days')"),
+    num("duration", "minutes until it expires (null: never)"), num("remaining", "minutes left"), flag("expired", "has run its duration"),
+    { label: "expires", type: "timer", detail: "expires(3, 'days') → the timer", method: true },
+  ],
 };
 
 /** Members every collection has, for a collection of `item`. */
@@ -130,7 +134,7 @@ export const HELPER_NAMES: Member[] = [
   { label: "move", detail: "move(actor, position) → fall damage", method: true },
 ];
 
-export const KEYWORDS = ["WITH", "AS", "IF", "THEN", "ELSE", "and", "or", "not", "true", "false", "null"];
+export const KEYWORDS = ["WITH", "AS", "IF", "THEN", "ELSE", "ON", "and", "or", "not", "true", "false", "null"];
 
 /** Splits a chain like game.locations.current.lights['lamp'] into its steps. */
 function steps(chain: string): { name?: string; index?: string; call?: boolean }[] {

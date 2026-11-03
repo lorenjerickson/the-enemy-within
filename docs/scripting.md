@@ -25,6 +25,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 - `rolls.<attribute or skill>` on characters and actors: d20 + modifier, rolled afresh each time, e.g. `rolls.investigation`, `rolls.might`, `rolls.sleight_of_hand`.
 - `game.calendar`: `now` (game minutes since the campaign began), `advance(2, 'hours')`, and `timers`:
   `timers.start('find holmes')` starts (or restarts) one, `timers['find holmes'].elapsed` is the game time since, `timers.stop('find holmes')`.
+  `.expires(3, 'days')` gives a timer a duration and returns it; then `duration`, `remaining` (minutes) and `expired` (true once it has run that long).
   Helpers: `interval(minutes, 'days')` converts to minutes/hours/days/weeks; `duration(3, 'days')` is that span in minutes.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
@@ -45,6 +46,21 @@ with game.players as P                     # WITH ... AS name: a short name
 WITH game.players.each.health as H
    IF sum(H) < 20 THEN game.vars.retreat = true
 ```
+
+### Triggers: ON … THEN
+
+```
+WITH game.calendar.timers.start('find holmes').expires(3, 'days') AS T
+   ON T.expired THEN
+      game.characters['Sherlock Holmes'].health = 0
+```
+
+`ON condition THEN action` doesn't run anything now: it saves a trigger. Triggers are checked after every script runs (console, map buttons, discoveries, rewards) and whenever game time moves. The first time the condition holds, the action runs once and the trigger is done (put another ON in the action to keep watching).
+- WITH names are remembered as what they referred to when the ON ran: `T` above stays that timer, `game.characters.party.random AS P` stays the character picked. A name that can't be found again (a group from `.any` / `.one`, a creature added but not yet saved) is an error.
+- Made on a map button, `game.locations.current` stays that button's location.
+- Session › Triggers lists waiting, failed and recently run triggers; Cancel removes one. A trigger whose condition or action fails keeps the error and isn't tried again.
+- Conditions only ask (objective checks), so ON can't be used there. Chains of triggers setting off triggers stop after 5.
+- `on` is still usable as a name (`light.on`, `on = false` inside `WITH light`); ON only starts a trigger at the start of a statement.
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
 Map helpers:

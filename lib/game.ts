@@ -1,12 +1,12 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  getGameTime, setGameTime, listTimers, saveTimers,
+  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listPendingTriggers, markTriggerFired, setTriggerError, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
   addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
-import { Collection, FREEFORM, Method, ScriptError, Tags, runScript, spread, toPlain } from "./script";
+import { Collection, FREEFORM, Method, ScriptError, Tags, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 
@@ -32,6 +32,10 @@ export interface GameTimer {
   name: string;
   started: number; // game minutes
   readonly elapsed: number; // game minutes since it started
+  duration: number | null; // minutes until it expires; null = never
+  readonly remaining: number | null; // minutes left; null if it never expires
+  readonly expired: boolean; // has run for its duration
+  expires: Method; // expires(3, 'days'): sets the duration, returns the timer
 }
 
 /** Game time (minutes since the campaign began) and named timers. */
@@ -233,6 +237,15 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   );
   if (current) locations.current = current;
   const party = new Collection("character", players);
+  // So ON can name what a script refers to again later (see setRef in lib/script.ts).
+  refCollection(party, "game.characters");
+  if (current) setRef(current, "game.locations.current"); // before the list names it by name
+  refCollection(locations, "game.locations");
+  if (current) {
+    for (const key of ["actors", "creatures", "lights", "effects", "doors"] as const) {
+      refCollection(current[key] as Collection<{ id: number; name: string }>, `game.locations.current.${key}`);
+    }
+  }
   // game.characters.party: the player characters (ticked "In the party" on the character form).
   party.extras.party = () => new Collection("party member", players.filter((p) => inParty.has(p.id)));
   return [{ players: party, characters: party, vars, locations, calendar: loadCalendar() }, changes];
@@ -240,18 +253,33 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
 
 function loadCalendar(): Calendar {
   const calendar = { now: getGameTime() } as Calendar;
-  const timer = (name: string, started: number, id: number): GameTimer => {
+  const timer = (name: string, started: number, id: number, duration: number | null = null): GameTimer => {
     const t = { id, name, started } as GameTimer;
-    Object.defineProperty(t, "elapsed", {
-      enumerable: true,
-      get: () => calendar.now - t.started,
-      set() {
-        throw new ScriptError('"elapsed" can\'t be set; change started or restart the timer');
-      },
+    const readOnly = (key: string, get: () => unknown, hint: string) =>
+      Object.defineProperty(t, key, {
+        enumerable: true,
+        get,
+        set() {
+          throw new ScriptError(`"${key}" can't be set; ${hint}`);
+        },
+      });
+    readOnly("elapsed", () => calendar.now - t.started, "change started or restart the timer");
+    t.duration = duration;
+    readOnly("remaining", () => (t.duration === null ? null : Math.max(0, t.duration - t.elapsed)), "change duration");
+    readOnly("expired", () => t.duration !== null && t.elapsed >= t.duration, "change duration");
+    // A method, so not listed when a timer is shown.
+    Object.defineProperty(t, "expires", {
+      enumerable: false,
+      value: new Method((n, unit = "minutes") => {
+        if (typeof n !== "number" || n < 0) throw new ScriptError("expires() needs a number, like expires(3, 'days')");
+        t.duration = n * unitMinutes(unit);
+        return t;
+      }),
     });
+    setRef(t, `game.calendar.timers[${quote(name)}]`);
     return t;
   };
-  const timers = new Collection<GameTimer>("timer", listTimers().map((t, i) => timer(t.name, t.started, i + 1)));
+  const timers = new Collection<GameTimer>("timer", listTimers().map((t, i) => timer(t.name, t.started, i + 1, t.duration)));
   /** Starts (or restarts) a timer from now. */
   const start = (name: string) => {
     const existing = timers.items.find((t) => t.name.toLowerCase() === name.toLowerCase());
@@ -279,7 +307,7 @@ function loadCalendar(): Calendar {
   return calendar;
 }
 
-function saveGame(game: Game, changes: ActorChanges | null): void {
+function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef[] = []): void {
   const clamp = (n: number) => Math.min(MAX_SCORE, Math.max(MIN_SCORE, Math.round(n)));
   transaction(() => {
     for (const p of game.players.items) {
@@ -288,7 +316,8 @@ function saveGame(game: Game, changes: ActorChanges | null): void {
     }
     saveVars({ ...game.vars });
     setGameTime(game.calendar.now);
-    saveTimers(game.calendar.timers.items.map((t) => ({ name: t.name, started: t.started })));
+    saveTimers(game.calendar.timers.items.map((t) => ({ name: t.name, started: t.started, duration: t.duration })));
+    for (const t of triggers) addTrigger({ ...t, level_id: changes?.levelId ?? null, created: game.calendar.now });
     if (changes && game.locations.current) saveActors(changes, game.locations.current as CurrentLocation);
   });
 }
@@ -435,11 +464,51 @@ const HELPERS = {
  * Runs a script against the current game state and saves what it changed. Returns the last value.
  * `levelId` is the map level the script runs on (game.locations.current); none for the Session console.
  */
-export function runGameScript(source: string, levelId?: number): unknown {
+export function runGameScript(source: string, levelId?: number, depth = 0): unknown {
   const [game, changes] = loadGame(levelId);
-  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) });
-  saveGame(game, changes);
+  const triggers: TriggerDef[] = [];
+  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) }, { onTrigger: (t) => triggers.push(t) });
+  saveGame(game, changes, triggers);
+  fireTriggers(depth);
   return toPlain(result);
+}
+
+/** How many triggers may set off further triggers in a row (a guard against loops). */
+const MAX_CHAIN = 5;
+
+/**
+ * Runs each waiting ON trigger whose condition now holds, once. Called after every game script and when game
+ * time moves. A trigger whose condition or action fails keeps its error, for the GM to see, and isn't tried again.
+ */
+export function fireTriggers(depth = 0): void {
+  if (depth >= MAX_CHAIN) return;
+  // One at a time, re-reading the list: an action may itself have fired (or added) triggers.
+  for (let last = 0, t: Trigger | undefined; (t = listPendingTriggers().find((x) => x.id > last)); last = t.id) {
+    const fail = (e: unknown) => {
+      if (!(e instanceof ScriptError)) throw e;
+      setTriggerError(t.id, e.message);
+    };
+    let holds = false;
+    try {
+      const [game, changes] = loadGame(t.level_id ?? undefined);
+      holds = truthy(runScript(triggerScript(t.prelude, t.condition), { game, ...HELPERS, ...mapHelpers(game, changes) }));
+    } catch (e) {
+      fail(e);
+      continue;
+    }
+    if (!holds) continue;
+    markTriggerFired(t.id, getGameTime()); // first, so its own action can't set it off again
+    try {
+      runGameScript(triggerScript(t.prelude, t.action), t.level_id ?? undefined, depth + 1);
+    } catch (e) {
+      fail(e);
+    }
+  }
+}
+
+/** A trigger as one script, for showing to the GM. */
+export function triggerText(t: Pick<Trigger, "prelude" | "condition" | "action">): string {
+  return triggerScript(t.prelude, `ON ${t.condition} THEN\n${t.action.split("\n").map((l) => `   ${l}`).join("\n")}`);
 }
 
 /** Runs a game script, returning its value as JSON text, or the script error. */

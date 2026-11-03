@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { tryGameScript, type ScriptResult } from "@/lib/game";
-import { getGameTime, setGameTime } from "@/lib/db";
+import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
+import { deleteTrigger, getGameTime, setGameTime } from "@/lib/db";
 
 export async function runScript(source: string): Promise<ScriptResult> {
   await requireGm();
@@ -17,5 +17,13 @@ export async function runScript(source: string): Promise<ScriptResult> {
 export async function advanceTime(minutes: number) {
   await requireGm();
   setGameTime(getGameTime() + Math.max(0, Number(minutes) || 0));
+  fireTriggers(); // e.g. ON timer.expired
+  revalidatePath("/", "layout");
+}
+
+/** Cancels a waiting trigger, or clears one from the list. */
+export async function removeTrigger(id: number) {
+  await requireGm();
+  deleteTrigger(Number(id));
   revalidatePath("/session");
 }

@@ -20,12 +20,17 @@ const scriptLanguage = StreamLanguage.define({
     if (stream.match(/^(#|\/\/).*/)) return "comment";
     if (stream.match(/^"(?:[^"\\]|\\.)*"?/) || stream.match(/^'(?:[^'\\]|\\.)*'?/)) return "string";
     if (stream.match(/^\d+(\.\d+)?/)) return "number";
-    if (stream.match(/^(with|as|if|then|else|and|or|not)\b/i)) return "keyword";
-    if (stream.match(/^(true|false|null)\b/i)) return "atom";
-    if (stream.match(/^[A-Za-z_]\w*/)) {
-      // A name straight after a dot is a property; otherwise a variable (game, a WITH name, a helper).
+    const word = stream.match(/^[A-Za-z_]\w*/) as RegExpMatchArray | null;
+    if (word) {
+      // A name straight after a dot is a property (even light.on); otherwise a keyword or a variable.
       const before = stream.string.slice(0, stream.start).trimEnd();
-      return before.endsWith(".") ? "propertyName" : "variableName";
+      if (before.endsWith(".")) return "propertyName";
+      const w = word[0].toLowerCase();
+      if (/^(with|as|if|then|else|and|or|not)$/.test(w)) return "keyword";
+      // ON starts a trigger; "on" elsewhere (on = false inside WITH light) is a name.
+      if (w === "on" && !before && !/^\s*(=|\+=|-=|\.|\[)/.test(stream.string.slice(stream.pos))) return "keyword";
+      if (/^(true|false|null)$/.test(w)) return "atom";
+      return "variableName";
     }
     if (stream.match(/^(\+=|-=|\*=|\/=|==|!=|<=|>=|&&|\|\||\+\+|--|[-+*/%<>=!?:])/)) return "operator";
     stream.next();

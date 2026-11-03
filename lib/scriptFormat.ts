@@ -3,7 +3,7 @@ import { TOKEN } from "./script";
 /**
  * Auto-format for game scripts: re-indents blocks 3 spaces per level (keeping the structure the original
  * indentation gave them), spaces operators and commas consistently, and writes WITH / AS / IF / THEN / ELSE in
- * capitals and and / or / not / true / false / null in lower case. Comments and strings are kept as written.
+ * capitals (and ON at the start of a line) and and / or / not / true / false / null in lower case. Comments and strings are kept as written.
  * A line that can't be read is left as it was.
  */
 const BLOCK_KEYWORDS = new Set(["with", "as", "if", "then", "else"]);
@@ -49,10 +49,12 @@ function formatLine(code: string): string | null {
   let out = "";
   let prev: Tok | null = null;
   let prevUnary = false;
-  for (const tok of toks) {
+  for (const [i, tok] of toks.entries()) {
     let v = tok.v;
     const word = v.toLowerCase();
     if (tok.t === "id" && BLOCK_KEYWORDS.has(word)) v = word.toUpperCase();
+    // ON at the start of a line begins a trigger, unless it's a name being used (on = false, on.x).
+    else if (i === 0 && word === "on" && !(toks[1]?.t === "op" && /^([.[(]|[-+*/]?=|\+\+|--)$/.test(toks[1].v))) v = "ON";
     else if (tok.t === "id" && LOWER_WORDS.has(word)) v = word;
     // Does the previous token end a value? (Then "-" is subtraction and "(" / "[" are a call or an index.)
     const afterValue = !!prev && (prev.t === "op" ? [")", "]", "++", "--"].includes(prev.v) : !isWordOperator(prev));

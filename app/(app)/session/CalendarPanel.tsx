@@ -24,7 +24,7 @@ const STEPS = [
 ];
 
 /** The game calendar: the current game time, buttons to move it forward, and running timers. */
-export function CalendarPanel({ now, timers }: { now: number; timers: { name: string; started: number }[] }) {
+export function CalendarPanel({ now, timers }: { now: number; timers: { name: string; started: number; duration: number | null }[] }) {
   const [pending, startTransition] = useTransition();
   return (
     <div className="rounded-box bg-base-200 p-3 space-y-2 max-w-3xl">
@@ -43,11 +43,17 @@ export function CalendarPanel({ now, timers }: { now: number; timers: { name: st
             <li key={t.name} className="flex gap-2">
               <span>⏱ {t.name}</span>
               <span className="opacity-60">{formatSpan(now - t.started)} elapsed</span>
+              {t.duration !== null &&
+                (now - t.started >= t.duration ? (
+                  <span className="badge badge-warning badge-sm">expired</span>
+                ) : (
+                  <span className="opacity-60">· {formatSpan(t.duration - (now - t.started))} left</span>
+                ))}
             </li>
           ))}
         </ul>
       )}
-      <p className="text-xs opacity-60">Scripts: game.calendar.now, game.calendar.advance(2, &apos;hours&apos;), game.calendar.timers.start(&apos;name&apos;).</p>
+      <p className="text-xs opacity-60">Scripts: game.calendar.now, game.calendar.advance(2, &apos;hours&apos;), game.calendar.timers.start(&apos;name&apos;).expires(3, &apos;days&apos;).</p>
     </div>
   );
 }
