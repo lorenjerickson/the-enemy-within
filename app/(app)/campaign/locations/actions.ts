@@ -264,20 +264,21 @@ export async function placePositionalSound(locationId: number, levelId: number, 
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
-/** Adds an effect: to the whole map (no position) or as a circle placed at (x, y). */
+/** Adds an effect: to the whole map (no area) or over the w × h cells from (x, y). */
 export async function placeEffect(
   locationId: number,
   levelId: number,
-  e: { kind: EffectKind; x: number | null; y: number | null; radius: number | null; intensity: number }
+  e: { kind: EffectKind; x: number | null; y: number | null; w: number | null; h: number | null; intensity: number }
 ) {
   await requireGm();
   if (!EFFECT_KINDS.includes(e.kind)) throw new Error("Unknown effect");
-  const placed = e.x !== null && e.y !== null;
+  const placed = e.x !== null && e.y !== null && e.w !== null && e.h !== null;
   addEffect(levelId, {
     kind: e.kind,
     x: placed ? Number(e.x) : null,
     y: placed ? Number(e.y) : null,
-    radius: placed ? Math.max(0.5, Number(e.radius) || 2) : null,
+    w: placed ? Math.max(0.25, Number(e.w)) : null,
+    h: placed ? Math.max(0.25, Number(e.h)) : null,
     intensity: Math.min(1, Math.max(0, Number(e.intensity))),
   });
   revalidatePath(`/campaign/locations/${locationId}`);

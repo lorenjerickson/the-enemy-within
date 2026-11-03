@@ -226,18 +226,17 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   effects: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const e of state.effects) {
-      const placed = e.x !== null && e.y !== null;
-      const cx = x0 + (e.x ?? 0) * size, cy = y0 + (e.y ?? 0) * size, r = (e.radius ?? 0) * size;
-      const area = placed ? { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r, circle: true } : { x: 0, y: 0, w, h, circle: false };
+      const placed = e.x !== null && e.y !== null && e.w !== null && e.h !== null;
+      const area = placed
+        ? { x: x0 + e.x! * size, y: y0 + e.y! * size, w: e.w! * size, h: e.h! * size, placed: true }
+        : { x: 0, y: 0, w, h, placed: false };
       drawEffect(ctx, e.kind, area, e.intensity, state.time, size);
       if (placed && state.showEffectAreas) {
         ctx.save();
         ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = "rgba(167,139,250,0.8)";
+        ctx.strokeStyle = "rgba(167,139,250,0.6)";
         ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.strokeRect(area.x, area.y, area.w, area.h);
         ctx.restore();
       }
     }
@@ -636,7 +635,16 @@ export default function MapView({
   }, [frameMs]);
 
   // Effects: choose a built-in effect, then add it to the whole map or click to place it.
-  const [effectTool, setEffectTool] = useState<EffectTool>({ kind: "rain", intensity: 0.5, wholeMap: true, radius: 2 });
+  const [effectTool, setEffectTool] = useState<EffectTool>({ kind: "rain", intensity: 0.5, wholeMap: true });
+  // Dragging out a placed effect's area, corner to corner, in grid units.
+  const [effectDrag, setEffectDrag] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
+  const quarter = (v: number) => Math.round(v * 4) / 4;
+  const effectRect = (d: NonNullable<typeof effectDrag>) => ({
+    x: Math.min(d.start.x, d.end.x),
+    y: Math.min(d.start.y, d.end.y),
+    w: Math.abs(d.end.x - d.start.x),
+    h: Math.abs(d.end.y - d.start.y),
+  });
 
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
@@ -764,9 +772,10 @@ export default function MapView({
     }
     if (e.button === 0 && selected === "effects") {
       if (effectTool.wholeMap) return;
-      const { col, row } = cellAt(e);
-      const t = effectTool;
-      startTransition(() => placeEffect(locationId, levelId, { kind: t.kind, x: col + 0.5, y: row + 0.5, radius: t.radius, intensity: t.intensity }));
+      const { gx, gy } = gridAt(e);
+      const corner = { x: quarter(gx), y: quarter(gy) };
+      setEffectDrag({ start: corner, end: corner });
+      e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
     if (e.button === 0 && selected === "sounds") {
@@ -863,6 +872,12 @@ export default function MapView({
       setResizingNote({ id: n.id, w: Math.max(0.6, gx - n.x), h: Math.max(0.6, gy - n.y) });
       return;
     }
+    if (effectDrag) {
+      const { gx, gy } = gridAt(e);
+      const end = { x: quarter(gx), y: quarter(gy) };
+      if (end.x !== effectDrag.end.x || end.y !== effectDrag.end.y) setEffectDrag({ ...effectDrag, end });
+      return;
+    }
     if (draggingSound) {
       const { col, row } = cellAt(e);
       if (col + 0.5 !== draggingSound.x || row + 0.5 !== draggingSound.y) setDraggingSound({ ...draggingSound, x: col + 0.5, y: row + 0.5 });
@@ -904,6 +919,14 @@ export default function MapView({
         changeNotes({ resize: r });
         await changeNoteSize(locationId, r.id, r.w, r.h);
       });
+      return;
+    }
+    if (effectDrag) {
+      const area = effectRect(effectDrag);
+      setEffectDrag(null);
+      if (area.w < 0.25 || area.h < 0.25) return; // a click without a drag places nothing
+      const t = effectTool;
+      startTransition(() => placeEffect(locationId, levelId, { kind: t.kind, ...area, intensity: t.intensity }));
       return;
     }
     if (draggingSound) {
@@ -1074,6 +1097,19 @@ export default function MapView({
         ctx.strokeRect(x0 + ax * size - pad, y0 + ay * size - pad, (bx - ax + extra) * size + 2 * pad, (by - ay + extra) * size + 2 * pad);
         ctx.restore();
       }
+      // Effect area being dragged out.
+      if (effectDrag) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const a = effectRect(effectDrag);
+        ctx.save();
+        ctx.fillStyle = "rgba(167,139,250,0.15)";
+        ctx.strokeStyle = "rgb(167,139,250)";
+        ctx.lineWidth = 2 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
+        ctx.fillRect(x0 + a.x * size, y0 + a.y * size, a.w * size, a.h * size);
+        ctx.strokeRect(x0 + a.x * size, y0 + a.y * size, a.w * size, a.h * size);
+        ctx.restore();
+      }
       // Placement preview: outline of the cells the tile will cover.
       if (placing) {
         const r = cellToRect(state, SCENE.w, SCENE.h, spanOf(placing));
@@ -1199,7 +1235,7 @@ export default function MapView({
                 effects={effects}
                 onAddToMap={() =>
                   startTransition(() =>
-                    placeEffect(locationId, levelId, { kind: effectTool.kind, x: null, y: null, radius: null, intensity: effectTool.intensity })
+                    placeEffect(locationId, levelId, { kind: effectTool.kind, x: null, y: null, w: null, h: null, intensity: effectTool.intensity })
                   )
                 }
                 onIntensity={(id, v) => startTransition(() => changeEffectIntensity(locationId, id, v))}

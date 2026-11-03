@@ -4,15 +4,16 @@ import { useState } from "react";
 import type { MapEffect } from "@/lib/db";
 import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
 
+const round = (n: number) => Math.round(n * 10) / 10;
+
 /** What the next effect will be: its kind, strength, and whether it covers the whole map or a placed circle. */
 export interface EffectTool {
   kind: EffectKind;
   intensity: number;
   wholeMap: boolean;
-  radius: number;
 }
 
-/** Effects layer editor: add built-in animated effects (whole map, or click to place), adjust strength, remove. */
+/** Effects layer editor: add built-in animated effects (whole map, or drag out an area), adjust strength, remove. */
 export default function EffectsEditor({
   tool,
   onToolChange,
@@ -72,19 +73,7 @@ export default function EffectsEditor({
           {tool.wholeMap ? (
             <button type="button" className="btn btn-sm" onClick={onAddToMap}>Add {EFFECT_LABELS[tool.kind].toLowerCase()} to the map</button>
           ) : (
-            <label className="flex items-center gap-1 text-xs">
-              radius
-              <input
-                type="number"
-                min="0.5"
-                step="0.5"
-                aria-label="Effect radius"
-                value={tool.radius}
-                onChange={(e) => onToolChange({ ...tool, radius: Number(e.target.value) || 2 })}
-                className="input input-xs w-16"
-              />
-              cells · click the map to place it
-            </label>
+            <span className="text-xs opacity-70">Drag on the map to mark its area.</span>
           )}
         </div>
       </div>
@@ -100,7 +89,7 @@ export default function EffectsEditor({
                 <div className="flex items-center gap-2">
                   <span className="flex-1 truncate">
                     {EFFECT_LABELS[e.kind]}{" "}
-                    <span className="text-xs opacity-60">{e.x === null ? "whole map" : `at ${Math.floor(e.x)}, ${Math.floor(e.y!)} · radius ${e.radius}`}</span>
+                    <span className="text-xs opacity-60">{e.x === null ? "whole map" : `at ${Math.floor(e.x)}, ${Math.floor(e.y!)} · ${round(e.w!)} × ${round(e.h!)} cells`}</span>
                   </span>
                   <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onRemove(e.id)}>Remove</button>
                 </div>

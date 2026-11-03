@@ -254,6 +254,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
   radius REAL,
   intensity REAL NOT NULL DEFAULT 0.5
 )`);
+addColumn("map_effects", "w", "REAL"); // a placed effect's area: (x, y) top-left, w × h cells
+addColumn("map_effects", "h", "REAL");
+// Effects placed as circles (centre + radius) before areas existed become the square around the circle.
+db.exec("UPDATE map_effects SET x = x - radius, y = y - radius, w = 2 * radius, h = 2 * radius WHERE radius IS NOT NULL AND w IS NULL");
 addColumn("positional_sounds", "loop", "INTEGER NOT NULL DEFAULT 0"); // 1 = plays on a loop
 addColumn("creatures", "height", "REAL NOT NULL DEFAULT 1.8"); // metres, for side-on tokens
 addColumn("characters", "height", "REAL NOT NULL DEFAULT 1.8");
@@ -1307,23 +1311,24 @@ export function saveEncounter(levelId: number, e: EncounterRow | null): void {
 
 // ---------- Effects ----------
 
-/** An animated effect on a level. With no position it covers the whole map; otherwise a circle of `radius` cells. */
+/** An animated effect on a level. With no area it covers the whole map; otherwise the w × h cells from (x, y). */
 export interface MapEffect {
   id: number;
   kind: EffectKind;
   x: number | null;
   y: number | null;
-  radius: number | null;
+  w: number | null;
+  h: number | null;
   intensity: number; // 0..1
 }
 
 export function listEffects(levelId: number): MapEffect[] {
-  return db.prepare<[number], MapEffect>("SELECT id, kind, x, y, radius, intensity FROM map_effects WHERE level_id = ? ORDER BY id").all(levelId);
+  return db.prepare<[number], MapEffect>("SELECT id, kind, x, y, w, h, intensity FROM map_effects WHERE level_id = ? ORDER BY id").all(levelId);
 }
 
 export function addEffect(levelId: number, e: Omit<MapEffect, "id">): void {
   db.prepare<Omit<MapEffect, "id"> & { level_id: number }>(
-    "INSERT INTO map_effects (level_id, kind, x, y, radius, intensity) VALUES (@level_id, @kind, @x, @y, @radius, @intensity)"
+    "INSERT INTO map_effects (level_id, kind, x, y, w, h, intensity) VALUES (@level_id, @kind, @x, @y, @w, @h, @intensity)"
   ).run({ ...e, level_id: levelId });
 }
 
