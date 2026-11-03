@@ -3,10 +3,10 @@ import { TOKEN } from "./script";
 /**
  * Auto-format for game scripts: re-indents blocks 3 spaces per level (keeping the structure the original
  * indentation gave them), spaces operators and commas consistently, and writes WITH / AS / IF / THEN / ELSE in
- * capitals (and ON at the start of a line) and and / or / not / true / false / null in lower case. Comments and strings are kept as written.
+ * capitals (DO too, and ON at the start of a line) and and / or / not / true / false / null in lower case. Comments and strings are kept as written.
  * A line that can't be read is left as it was.
  */
-const BLOCK_KEYWORDS = new Set(["with", "as", "if", "then", "else"]);
+const BLOCK_KEYWORDS = new Set(["with", "as", "if", "then", "else", "do"]);
 const LOWER_WORDS = new Set(["and", "or", "not", "true", "false", "null"]);
 
 type Tok = { t: "num" | "str" | "id" | "op"; v: string };

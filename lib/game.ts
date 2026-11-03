@@ -1,14 +1,16 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listPendingTriggers, markTriggerFired, setTriggerError, type Trigger,
+  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
   addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
-import { Collection, FREEFORM, Method, ScriptError, Tags, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
+import { Collection, FREEFORM, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
+import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, type ObjectiveStatus } from "./story";
+import { objectiveSettled } from "./storyRules";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
 
@@ -82,8 +84,19 @@ export interface ScriptEffect { id: number; name: string; kind: string; intensit
 /** A door as scripts see it. */
 export interface ScriptDoor { id: number; name: string; open: boolean }
 
+/** An objective as scripts see it (by title, e.g. game.objectives['find holmes']). */
+export interface ScriptObjective {
+  id: number;
+  name: string; // the title
+  /** open, succeeded or failed; setting it runs the reward or penalty, as when the GM settles it. */
+  status: ObjectiveStatus;
+  /** The party knows about it. */
+  revealed: boolean;
+}
+
 export interface Game {
   calendar: Calendar;
+  objectives: Collection<ScriptObjective>;
   players: Collection<Player>;
   /** The same list as players (the party's characters). */
   characters: Collection<Player>;
@@ -248,7 +261,23 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   }
   // game.characters.party: the player characters (ticked "In the party" on the character form).
   party.extras.party = () => new Collection("party member", players.filter((p) => inParty.has(p.id)));
-  return [{ players: party, characters: party, vars, locations, calendar: loadCalendar() }, changes];
+  const objectives = new Collection("objective", listObjectives().map(scriptObjective));
+  refCollection(objectives, "game.objectives");
+  return [{ players: party, characters: party, vars, locations, calendar: loadCalendar(), objectives }, changes];
+}
+
+function scriptObjective(o: { id: number; title: string; status: ObjectiveStatus; revealed: 0 | 1 }): ScriptObjective {
+  let status = o.status;
+  const so = { id: o.id, name: o.title, revealed: !!o.revealed } as ScriptObjective;
+  Object.defineProperty(so, "status", {
+    enumerable: true,
+    get: () => status,
+    set(v: unknown) {
+      if (!OBJECTIVE_STATUSES.includes(v as ObjectiveStatus)) throw new ScriptError(`An objective's status is ${OBJECTIVE_STATUSES.map((s) => `'${s}'`).join(", ")}`);
+      status = v as ObjectiveStatus;
+    },
+  });
+  return so;
 }
 
 function loadCalendar(): Calendar {
@@ -307,9 +336,21 @@ function loadCalendar(): Calendar {
   return calendar;
 }
 
-function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef[] = []): void {
+/** Saves what a script changed. Returns the objectives it succeeded or failed, for their rewards and penalties. */
+function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef[] = []): [number, ObjectiveStatus][] {
   const clamp = (n: number) => Math.min(MAX_SCORE, Math.max(MIN_SCORE, Math.round(n)));
+  const before = new Map(listObjectives().map((o) => [o.id, o]));
+  const settled: [number, ObjectiveStatus][] = [];
   transaction(() => {
+    for (const o of game.objectives.items) {
+      const was = before.get(o.id);
+      if (!was) continue;
+      if (was.status !== o.status) {
+        setObjectiveStatus(o.id, o.status);
+        if (o.status !== "open") settled.push([o.id, o.status]);
+      }
+      if (!!was.revealed !== o.revealed) setObjectiveRevealed(o.id, o.revealed);
+    }
     for (const p of game.players.items) {
       const attributes = Object.fromEntries(Object.entries(p.attributes).map(([k, v]) => [k, clamp(v)])) as Attributes;
       saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health), conditions: [...p.conditions.set] });
@@ -320,6 +361,7 @@ function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef
     for (const t of triggers) addTrigger({ ...t, level_id: changes?.levelId ?? null, created: game.calendar.now });
     if (changes && game.locations.current) saveActors(changes, game.locations.current as CurrentLocation);
   });
+  return settled;
 }
 
 /** Numbers from helper arguments, lists spread out. */
@@ -464,11 +506,17 @@ const HELPERS = {
  * Runs a script against the current game state and saves what it changed. Returns the last value.
  * `levelId` is the map level the script runs on (game.locations.current); none for the Session console.
  */
-export function runGameScript(source: string, levelId?: number, depth = 0): unknown {
+export function runGameScript(
+  source: string,
+  levelId?: number,
+  { depth = 0, bind }: { depth?: number; bind?: (name: string, value: unknown) => unknown } = {}
+): unknown {
   const [game, changes] = loadGame(levelId);
   const triggers: TriggerDef[] = [];
-  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) }, { onTrigger: (t) => triggers.push(t) });
-  saveGame(game, changes, triggers);
+  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) }, { onTrigger: (t) => triggers.push(t), bind });
+  const settled = saveGame(game, changes, triggers);
+  // Objectives the script succeeded or failed: rewards and penalties, as when the GM settles one.
+  for (const [id, status] of settled) objectiveSettled(id, status);
   fireTriggers(depth);
   return toPlain(result);
 }
@@ -482,24 +530,40 @@ const MAX_CHAIN = 5;
  */
 export function fireTriggers(depth = 0): void {
   if (depth >= MAX_CHAIN) return;
-  // One at a time, re-reading the list: an action may itself have fired (or added) triggers.
-  for (let last = 0, t: Trigger | undefined; (t = listPendingTriggers().find((x) => x.id > last)); last = t.id) {
+  // One at a time, re-reading the list: an action may itself have checked (or added) triggers.
+  for (let last = 0, t: Trigger | undefined; (t = listActiveTriggers().find((x) => x.id > last)); last = t.id) {
+    const trigger = t;
     const fail = (e: unknown) => {
       if (!(e instanceof ScriptError)) throw e;
-      setTriggerError(t.id, e.message);
+      setTriggerError(trigger.id, e.message);
+    };
+    // Watched names (WITH x.health AS H) are read afresh and compared with the value at the last check.
+    const seen: Record<string, VarValue> = {};
+    const bind = (name: string, v: unknown) => {
+      if (!Object.hasOwn(trigger.watches, name)) return v;
+      const now = (v instanceof Watch ? v.current : v) as VarValue;
+      seen[name] = now ?? null;
+      return new Watch(now, trigger.watches[name]);
     };
     let holds = false;
     try {
-      const [game, changes] = loadGame(t.level_id ?? undefined);
-      holds = truthy(runScript(triggerScript(t.prelude, t.condition), { game, ...HELPERS, ...mapHelpers(game, changes) }));
+      const [game, changes] = loadGame(trigger.level_id ?? undefined);
+      holds = truthy(runScript(triggerScript(trigger.prelude, trigger.condition), { game, ...HELPERS, ...mapHelpers(game, changes) }, { bind }));
     } catch (e) {
       fail(e);
       continue;
     }
-    if (!holds) continue;
-    markTriggerFired(t.id, getGameTime()); // first, so its own action can't set it off again
+    // It goes off when the condition becomes true, not again while it stays true.
+    const fires = holds && !trigger.last;
+    // Saved before the action runs, so the action (and triggers it sets off) see this check as done.
+    setTriggerState(trigger.id, holds, { ...trigger.watches, ...seen }, fires ? getGameTime() : null);
+    if (!fires) continue;
+    const watched = trigger.watches;
     try {
-      runGameScript(triggerScript(t.prelude, t.action), t.level_id ?? undefined, depth + 1);
+      runGameScript(triggerScript(trigger.prelude, trigger.action), trigger.level_id ?? undefined, {
+        depth: depth + 1,
+        bind: (name, v) => (Object.hasOwn(watched, name) ? new Watch(v instanceof Watch ? v.current : v, watched[name]) : v),
+      });
     } catch (e) {
       fail(e);
     }
@@ -508,7 +572,7 @@ export function fireTriggers(depth = 0): void {
 
 /** A trigger as one script, for showing to the GM. */
 export function triggerText(t: Pick<Trigger, "prelude" | "condition" | "action">): string {
-  return triggerScript(t.prelude, `ON ${t.condition} THEN\n${t.action.split("\n").map((l) => `   ${l}`).join("\n")}`);
+  return triggerScript(t.prelude, `ON ${t.condition} DO\n${t.action.split("\n").map((l) => `   ${l}`).join("\n")}`);
 }
 
 /** Runs a game script, returning its value as JSON text, or the script error. */

@@ -5,7 +5,7 @@ import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE } from "./attributes";
  * anything missing here still runs, it just isn't suggested). Types are names like "character" or
  * "coll:light" (a collection of lights); a collection's items are also reachable by name, from ScriptNames.
  */
-export type ItemKind = "character" | "location" | "actor" | "creature" | "light" | "effect" | "door" | "timer";
+export type ItemKind = "character" | "location" | "actor" | "creature" | "light" | "effect" | "door" | "timer" | "objective";
 
 /** Real names to suggest: characters, locations, the level's lights … and game.vars keys. */
 export type ScriptNames = Partial<Record<ItemKind | "var", string[]>>;
@@ -24,7 +24,9 @@ const TYPES: Record<string, Member[]> = {
     { label: "locations", type: "coll:location", detail: "all locations; .current is the button's" },
     { label: "calendar", type: "calendar", detail: "game time and timers" },
     { label: "vars", type: "vars", detail: "your own flags and numbers" },
+    { label: "objectives", type: "coll:objective", detail: "the story's objectives, by title" },
   ],
+  objective: [text("name", "the title, read-only"), text("status", "'open', 'succeeded' or 'failed'"), flag("revealed", "the party knows of it")],
   character: [
     text("name", "read-only"), text("type", "read-only"),
     { label: "attributes", type: "attributes", detail: "might, intellect …" },
@@ -68,6 +70,14 @@ const TYPES: Record<string, Member[]> = {
     num("now", "game minutes since the campaign began"), { label: "timers", type: "coll:timer", detail: "start / stop" },
     { label: "advance", detail: "advance(2, 'hours')", method: true },
   ],
+  // A WITH name for a property's value, watched in an ON trigger (WITH x.health AS H / ON H.changed DO …).
+  ...Object.fromEntries(
+    ["number", "text", "boolean"].map((t) => [
+      t,
+      [{ label: "changed", type: "boolean", detail: "in ON: changed since the last check" }, { label: "current", type: t, detail: "in ON: the value now" },
+       { label: "previous", type: t, detail: "in ON: the value at the last check" }],
+    ])
+  ),
   timer: [
     text("name", "read-only"), num("started", "game minute it started"), num("elapsed", "minutes since; interval(…, 'days')"),
     num("duration", "minutes until it expires (null: never)"), num("remaining", "minutes left"), flag("expired", "has run its duration"),
@@ -134,7 +144,7 @@ export const HELPER_NAMES: Member[] = [
   { label: "move", detail: "move(actor, position) → fall damage", method: true },
 ];
 
-export const KEYWORDS = ["WITH", "AS", "IF", "THEN", "ELSE", "ON", "and", "or", "not", "true", "false", "null"];
+export const KEYWORDS = ["WITH", "AS", "IF", "THEN", "ELSE", "ON", "DO", "and", "or", "not", "true", "false", "null"];
 
 /** Splits a chain like game.locations.current.lights['lamp'] into its steps. */
 function steps(chain: string): { name?: string; index?: string; call?: boolean }[] {

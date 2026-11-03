@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import { checkScript } from "@/lib/script";
-import { checkGameState, tryGameScript } from "@/lib/game";
-import { revealDiscovery } from "@/lib/storyRules";
+import { checkGameState, fireTriggers } from "@/lib/game";
+import { objectiveSettled, revealDiscovery } from "@/lib/storyRules";
 import {
   DISCOVERY_KINDS, OBJECTIVE_STATUSES, RELATIONS, deleteDiscovery, deleteObjective, getDiscovery, getObjective, saveDiscovery,
   saveObjective, setLinks, setObjectiveCharacters, setObjectiveStatus, type DiscoveryKind, type ObjectiveStatus, type Relation,
@@ -122,17 +122,8 @@ export async function settleObjective(objectiveId: number, status: ObjectiveStat
   if (!o) throw new Error("Unknown objective");
   if (o.status === status) return `Already ${status}.`;
   setObjectiveStatus(objectiveId, status);
-  const notes: string[] = [`Marked ${status}.`];
-  if (status === "succeeded" && o.reward_discovery_id) {
-    const r = revealDiscovery(o.reward_discovery_id);
-    notes.push("The party found the reward discovery.");
-    if (r) notes.push(r.ok ? `Its "when found" script ran: ${r.value}` : `Its "when found" script failed: ${r.error}`);
-  }
-  const script = status === "succeeded" ? o.reward_script : status === "failed" ? o.penalty_script : "";
-  if (script.trim()) {
-    const r = tryGameScript(script);
-    notes.push(r.ok ? `${status === "succeeded" ? "Reward" : "Penalty"} script ran: ${r.value}` : `Script error: ${r.error}`);
-  }
+  const notes: string[] = [`Marked ${status}.`, ...objectiveSettled(objectiveId, status)];
+  fireTriggers(); // e.g. ON game.objectives['x'].status = 'failed' DO …
   revalidatePath(`/campaign/story/objectives/${objectiveId}`);
   revalidatePath("/campaign/story");
   return notes.join(" ");

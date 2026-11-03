@@ -1,5 +1,6 @@
 import { getVars, listCharacters, listEffects, listLights, listLocations, listStructures, listTimers, listTokens } from "./db";
 import type { ScriptNames } from "./scriptSchema";
+import { listObjectives } from "./story";
 
 /**
  * Real names for the script editor's autocomplete. With a map level (map button scripts), lights, effects,
@@ -10,6 +11,7 @@ export function scriptNames(levelId?: number): ScriptNames {
     character: listCharacters().map((c) => c.name),
     location: listLocations().map((l) => l.name),
     timer: listTimers().map((t) => t.name),
+    objective: listObjectives().map((o) => o.title),
     var: Object.keys(getVars()),
   };
   if (levelId !== undefined) {

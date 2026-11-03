@@ -271,6 +271,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS triggers (
   fired REAL,
   error TEXT
 )`);
+addColumn("triggers", "watches", "TEXT NOT NULL DEFAULT '{}'"); // JSON: watched WITH names -> value at the last check
+addColumn("triggers", "last", "INTEGER NOT NULL DEFAULT 0"); // 1 = the condition held at the last check
 // Animated effects on a level, drawn in the order added. No position = covers the whole map.
 db.exec(`CREATE TABLE IF NOT EXISTS map_effects (
   id INTEGER PRIMARY KEY,
@@ -1457,37 +1459,36 @@ export interface Trigger {
   prelude: string[]; // WITH lines naming what the trigger refers to
   condition: string;
   action: string;
+  /** Watched WITH names and their values at the last check (H.previous). */
+  watches: Record<string, VarValue>;
   level_id: number | null; // the map level it was made on (game.locations.current)
   created: number; // game time
-  fired: number | null; // game time it ran
+  last: boolean; // the condition held at the last check (it goes off when this turns true)
+  fired: number | null; // game time it last went off
   error: string | null;
 }
-type TriggerRow = Omit<Trigger, "prelude"> & { prelude: string };
-const toTrigger = (r: TriggerRow): Trigger => ({ ...r, prelude: JSON.parse(r.prelude) });
+type TriggerRow = Omit<Trigger, "prelude" | "watches" | "last"> & { prelude: string; watches: string; last: number };
+const toTrigger = (r: TriggerRow): Trigger => ({ ...r, prelude: JSON.parse(r.prelude), watches: JSON.parse(r.watches), last: !!r.last });
 
-export function addTrigger(t: Pick<Trigger, "prelude" | "condition" | "action" | "level_id" | "created">): void {
-  db.prepare<[string, string, string, number | null, number]>("INSERT INTO triggers (prelude, condition, action, level_id, created) VALUES (?, ?, ?, ?, ?)")
-    .run(JSON.stringify(t.prelude), t.condition, t.action, t.level_id, t.created);
+export function addTrigger(t: Pick<Trigger, "prelude" | "condition" | "action" | "level_id" | "created"> & { watches: Record<string, unknown> }): void {
+  db.prepare<[string, string, string, string, number | null, number]>(
+    "INSERT INTO triggers (prelude, condition, action, watches, level_id, created) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(JSON.stringify(t.prelude), t.condition, t.action, JSON.stringify(t.watches), t.level_id, t.created);
 }
 
-/** Waiting triggers, oldest first. */
-export function listPendingTriggers(): Trigger[] {
-  return db.prepare<[], TriggerRow>("SELECT * FROM triggers WHERE fired IS NULL AND error IS NULL ORDER BY id").all().map(toTrigger);
+/** Triggers still watching (not failed), oldest first. */
+export function listActiveTriggers(): Trigger[] {
+  return db.prepare<[], TriggerRow>("SELECT * FROM triggers WHERE error IS NULL ORDER BY id").all().map(toTrigger);
 }
 
-/** Waiting and failed triggers, then the most recently fired. */
 export function listTriggers(): Trigger[] {
-  return db
-    .prepare<[], TriggerRow>(
-      `SELECT * FROM (SELECT * FROM triggers WHERE fired IS NULL OR error IS NOT NULL)
-       UNION ALL SELECT * FROM (SELECT * FROM triggers WHERE fired IS NOT NULL AND error IS NULL ORDER BY id DESC LIMIT 10)`
-    )
-    .all()
-    .map(toTrigger);
+  return db.prepare<[], TriggerRow>("SELECT * FROM triggers ORDER BY id").all().map(toTrigger);
 }
 
-export function markTriggerFired(id: number, at: number): void {
-  db.prepare<[number, number]>("UPDATE triggers SET fired = ? WHERE id = ?").run(at, id);
+/** Records a check: whether the condition held, the watched values seen, and the time if it went off. */
+export function setTriggerState(id: number, last: boolean, watches: Record<string, VarValue>, firedAt: number | null): void {
+  db.prepare<[number, string, number | null, number]>("UPDATE triggers SET last = ?, watches = ?, fired = COALESCE(?, fired) WHERE id = ?")
+    .run(last ? 1 : 0, JSON.stringify(watches), firedAt, id);
 }
 
 export function setTriggerError(id: number, error: string): void {

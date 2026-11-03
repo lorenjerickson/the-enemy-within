@@ -27,6 +27,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   `timers.start('find holmes')` starts (or restarts) one, `timers['find holmes'].elapsed` is the game time since, `timers.stop('find holmes')`.
   `.expires(3, 'days')` gives a timer a duration and returns it; then `duration`, `remaining` (minutes) and `expired` (true once it has run that long).
   Helpers: `interval(minutes, 'days')` converts to minutes/hours/days/weeks; `duration(3, 'days')` is that span in minutes.
+- `game.objectives['title']`: `status` ('open', 'succeeded', 'failed'; succeeding or failing runs the reward or penalty, as when the GM settles it) and `revealed`.
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
 Changes are saved when the script finishes. A failing script saves nothing.
@@ -47,20 +48,25 @@ WITH game.players.each.health as H
    IF sum(H) < 20 THEN game.vars.retreat = true
 ```
 
-### Triggers: ON … THEN
+### Triggers: ON … DO
 
 ```
-WITH game.calendar.timers.start('find holmes').expires(3, 'days') AS T
-   ON T.expired THEN
-      game.characters['Sherlock Holmes'].health = 0
+ON game.calendar.timers['find holmes'].expired DO
+   game.characters['sherlock holmes'].health = 0
+
+WITH game.characters['sherlock holmes'].health AS H
+   ON H.changed DO
+      IF H.current = 0 THEN
+         game.objectives['find holmes'].status = 'failed'
 ```
 
-`ON condition THEN action` doesn't run anything now: it saves a trigger. Triggers are checked after every script runs (console, map buttons, discoveries, rewards) and whenever game time moves. The first time the condition holds, the action runs once and the trigger is done (put another ON in the action to keep watching).
-- WITH names are remembered as what they referred to when the ON ran: `T` above stays that timer, `game.characters.party.random AS P` stays the character picked. A name that can't be found again (a group from `.any` / `.one`, a creature added but not yet saved) is an error.
+`ON condition DO action` doesn't run anything now: it saves a trigger that keeps watching. Triggers are checked after every script runs (console, map buttons, discoveries, rewards), when game time moves and when the GM settles an objective. The action runs each time the condition *becomes* true (not again while it stays true), until the trigger is cancelled in Session › Triggers.
+- WITH names are remembered as what they referred to when the ON ran: a timer stays that timer, `lights.random AS L` stays the light picked. A group (`.any`, `.one`) or a creature added but not yet saved can't be remembered: that's an error.
+- A WITH name for a property's value (`WITH x.health AS H`) is watched: each check reads it afresh. `H.current` is the value now, `H.previous` at the last check, `H.changed` whether it differs; plain `H` means `H.current`. Changes made outside scripts (the character form) are noticed at the next check.
+- In IF and ON conditions `=` means "is equal to" (same as `==`).
 - Made on a map button, `game.locations.current` stays that button's location.
-- Session › Triggers lists waiting, failed and recently run triggers; Cancel removes one. A trigger whose condition or action fails keeps the error and isn't tried again.
-- Conditions only ask (objective checks), so ON can't be used there. Chains of triggers setting off triggers stop after 5.
-- `on` is still usable as a name (`light.on`, `on = false` inside `WITH light`); ON only starts a trigger at the start of a statement.
+- A trigger whose condition or action fails is marked failed with the error and stops. Chains of triggers setting off triggers stop after 5.
+- ON can't be used in objective conditions (they only ask). `on` is still usable as a name (`light.on`); ON only starts a trigger at the start of a statement.
 
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
 Map helpers:

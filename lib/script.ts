@@ -44,6 +44,15 @@ class OneRoll {
 export class Method {
   constructor(public fn: (...args: unknown[]) => unknown) {}
 }
+/**
+ * A value an ON trigger watches (WITH x.health AS H): current, previous (at the last check) and changed.
+ * Used as a plain value it's the current one, so "H < 5" works too.
+ */
+export class Watch {
+  constructor(public current: unknown, public previous: unknown) {}
+}
+const plain = (v: unknown) => (v instanceof Watch ? v.current : v);
+
 /** Objects whose keys scripts may create (game.vars); missing keys read as null. */
 export const FREEFORM = new WeakSet<object>();
 
@@ -60,15 +69,23 @@ export function setRef(v: unknown, ref: string): void {
 }
 export const quote = (s: string) => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 
-/** A trigger made by ON: the WITH lines it needs, its condition, and what it does, as script text. */
+/**
+ * A trigger made by ON: the WITH lines it needs, its condition, and what it does, as script text.
+ * `watches`: WITH names bound to a property's value (WITH x.health AS H), with the value when the ON ran;
+ * when the trigger runs these names are Watches (H.current, H.previous, H.changed).
+ */
 export interface TriggerDef {
   prelude: string[];
   condition: string;
   action: string;
+  watches: Record<string, unknown>;
 }
-/** What running a script may do besides changing the game: here, register ON triggers. */
+/** What running a script may do besides changing the game. */
 export interface Hooks {
+  /** Registers an ON trigger; without it, ON is an error. */
   onTrigger?: (t: TriggerDef) => void;
+  /** Turns what a WITH … AS name is bound to into something else (a trigger's watched values). */
+  bind?: (name: string, value: unknown) => unknown;
 }
 
 // ---------- Tokens ----------
@@ -128,7 +145,7 @@ type Stmt = { line: number } & (
   | { k: "assign"; target: Expr; op: string; value?: Expr }
   | { k: "with"; e: Expr; as?: string; body: Stmt[] }
   | { k: "if"; c: Expr; then: Stmt[]; else?: Stmt[] }
-  | { k: "on"; c: Expr; then: Stmt[] }
+  | { k: "on"; c: Expr; then: Stmt[] } // ON cond DO …
 );
 
 const ASSIGN_OPS = ["=", "+=", "-=", "*=", "/=", "++", "--"];
@@ -146,6 +163,16 @@ function parse(source: string): Stmt[] {
   const eatOp = (v: string) => (isOp(v) ? (p++, true) : false);
   const expectOp = (v: string) => eatOp(v) || fail(`expected "${v}"`);
   const eatKw = (w: string) => (kw(peek(), w) ? (p++, true) : false);
+  /** Inside an IF or ON condition, where "=" can only mean "is equal to". */
+  let inCondition = false;
+  const condition = () => {
+    inCondition = true;
+    try {
+      return expr();
+    } finally {
+      inCondition = false;
+    }
+  };
 
   function block(): Stmt[] {
     if (peek().t !== "indent") fail("expected an indented block");
@@ -176,18 +203,19 @@ function parse(source: string): Stmt[] {
       if (peek().t !== "indent") throw new ScriptError(`Line ${line}: WITH needs an indented block below it`);
       return { k: "with", e, as, body: block(), line };
     }
-    // ON cond THEN …: unless "on" is a name being used (on = false inside WITH light, or on.x).
+    // ON cond DO …: unless "on" is a name being used (on = false inside WITH light, or on.x).
     const isOn = kw(peek(), "on") && !(peek(1).t === "op" && [".", "[", "(", ...ASSIGN_OPS].includes(peek(1).v));
     if (isOn || eatKw("if")) {
       if (isOn) p++;
-      const c = expr();
-      // THEN may follow on the same line, or start an indented line below the IF.
+      const c = condition();
+      // IF … THEN, ON … DO. It may follow on the same line, or start an indented line below.
+      const opener = (t: Tok) => kw(t, isOn ? "do" : "then");
       let indented = false;
-      if (peek().t === "nl" && toks[p + 1]?.t === "indent" && kw(toks[p + 2], "then")) {
+      if (peek().t === "nl" && toks[p + 1]?.t === "indent" && opener(toks[p + 2])) {
         p += 2;
         indented = true;
       }
-      if (!eatKw("then")) fail("expected THEN");
+      if (!eatKw(isOn ? "do" : "then")) fail(isOn ? "expected DO (ON … DO)" : "expected THEN");
       const then = branch();
       let otherwise: Stmt[] | undefined;
       if (kw(peek(), "else") && isOn) fail("ON has no ELSE");
@@ -232,7 +260,12 @@ function parse(source: string): Stmt[] {
   }
   function compare(): Expr {
     let a = sum();
-    while (peek().t === "op" && ["==", "!=", "<", ">", "<=", ">="].includes(peek().v)) a = { k: "bin", op: next().v, a, b: sum() };
+    // eslint-disable-next-line no-constant-condition
+    for (;;) {
+      if (peek().t === "op" && ["==", "!=", "<", ">", "<=", ">="].includes(peek().v)) a = { k: "bin", op: next().v, a, b: sum() };
+      else if (inCondition && isOp("=")) (p++, (a = { k: "bin", op: "==", a, b: sum() }));
+      else return a;
+    }
     return a;
   }
   function sum(): Expr {
@@ -328,7 +361,7 @@ function unparse(stmts: Stmt[], depth = 0): string[] {
           ...(s.else ? [`${pad}ELSE`, ...unparse(s.else, depth + 1)] : []),
         ];
       case "on":
-        return [`${pad}ON ${unparseExpr(s.c)} THEN`, ...unparse(s.then, depth + 1)];
+        return [`${pad}ON ${unparseExpr(s.c)} DO`, ...unparse(s.then, depth + 1)];
     }
   });
 }
@@ -345,7 +378,8 @@ const FORBIDDEN = new Set(["__proto__", "prototype", "constructor"]);
 const READ_ONLY = new Set(["id", "name", "type", "kind"]);
 const TAG_METHODS = ["add", "remove", "has"] as const;
 
-type Scope = { names: Record<string, unknown> } | { with: unknown };
+/** A WITH … AS name; `path` names where its value came from (for a trigger to watch), when it can. */
+type Scope = { names: Record<string, unknown>; path?: string } | { with: unknown };
 
 function describe(v: unknown): string {
   if (v instanceof Collection) return v.kind;
@@ -387,6 +421,12 @@ function getKey(obj: unknown, key: string): unknown {
 
 function readKey(obj: unknown, key: string): unknown {
   if (FORBIDDEN.has(key)) throw new ScriptError(`"${key}" isn't allowed`);
+  if (obj instanceof Watch) {
+    if (key === "current") return obj.current;
+    if (key === "previous") return obj.previous;
+    if (key === "changed") return obj.current !== obj.previous;
+    return readKey(obj.current, key);
+  }
   if (obj instanceof Some) {
     if (obj.mode === "one" && key === "rolls") return new OneRoll(obj.values);
     return new Some(obj.mode, obj.values.map((v) => getKey(v, key)));
@@ -457,6 +497,9 @@ function readKey(obj: unknown, key: string): unknown {
     if (Object.hasOwn(obj, key)) return (obj as Record<string, unknown>)[key];
     if (FREEFORM.has(obj)) return null;
   }
+  if (["changed", "previous", "current"].includes(key) && (obj === null || typeof obj !== "object")) {
+    throw new ScriptError(`"${key}" works in an ON trigger, on a WITH name for a property, e.g. WITH x.health AS H / ON H.changed DO …`);
+  }
   throw new ScriptError(`Can't read "${key}" of ${describe(obj)}`);
 }
 
@@ -492,14 +535,17 @@ function call(callee: unknown, args: unknown[]): unknown {
 }
 
 function num(v: unknown, op: string): number {
+  v = plain(v);
   if (typeof v !== "number") throw new ScriptError(`"${op}" needs numbers, got ${describe(v)}`);
   return v;
 }
 
 /** Truth of a value; a group's (any / one) is true if any member's is. */
-export const truthy = (v: unknown): boolean => (v instanceof Some ? v.values.some(truthy) : !!v);
+export const truthy = (v: unknown): boolean => (v instanceof Some ? v.values.some(truthy) : !!plain(v));
 
 function binary(op: string, a: unknown, b: unknown): unknown {
+  a = plain(a);
+  b = plain(b);
   // A group on either side: comparisons hold if they hold for any member; arithmetic applies to each.
   if (a instanceof Some || b instanceof Some) {
     const group = (a instanceof Some ? a : b) as Some;
@@ -585,12 +631,20 @@ function remember(v: unknown, name: string): string {
 /** Registers an ON trigger: the enclosing WITH names are saved as the things they refer to now. */
 function registerTrigger(s: Extract<Stmt, { k: "on" }>, scopes: Scope[], hooks: Hooks): void {
   if (!hooks.onTrigger) throw new ScriptError("ON can't be used here: this script only answers a question");
-  const prelude = scopes.slice(1).flatMap((sc) =>
-    "names" in sc
-      ? Object.entries(sc.names).map(([name, v]) => `WITH ${remember(v, `"${name}"`)} AS ${name}`)
-      : [`WITH ${remember(sc.with, "what this WITH refers to")}`]
-  );
-  hooks.onTrigger({ prelude, condition: unparseExpr(s.c), action: unparse(s.then).join("\n") });
+  const watches: Record<string, unknown> = {};
+  const prelude = scopes.slice(1).flatMap((sc) => {
+    if (!("names" in sc)) return [`WITH ${remember(sc.with, "what this WITH refers to")}`];
+    return Object.entries(sc.names).map(([name, v]) => {
+      // A property's value (WITH x.health AS H) is watched: the trigger reads it afresh each time.
+      const value = plain(v);
+      if (sc.path && (value === null || typeof value !== "object")) {
+        watches[name] = value ?? null;
+        return `WITH ${sc.path} AS ${name}`;
+      }
+      return `WITH ${remember(v, `"${name}"`)} AS ${name}`;
+    });
+  });
+  hooks.onTrigger({ prelude, condition: unparseExpr(s.c), action: unparse(s.then).join("\n"), watches });
 }
 
 function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
@@ -599,8 +653,18 @@ function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
     try {
       if (s.k === "expr") last = evaluate(s.e, scopes);
       else if (s.k === "with") {
-        const v = evaluate(s.e, scopes);
-        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v } } : { with: v }], hooks);
+        // For WITH x.health AS H, note where the value came from, so a trigger can watch it.
+        let v: unknown;
+        let path: string | undefined;
+        if (s.as && (s.e.k === "mem" || s.e.k === "idx")) {
+          const obj = evaluate(s.e.obj, scopes);
+          const key = s.e.k === "mem" ? s.e.key : String(evaluate(s.e.index, scopes));
+          v = getKey(obj, key);
+          const base = obj && typeof obj === "object" ? REFS.get(obj) : undefined;
+          if (base) path = /^[A-Za-z_]\w*$/.test(key) ? `${base}.${key}` : `${base}[${quote(key)}]`;
+        } else v = evaluate(s.e, scopes);
+        if (s.as && hooks.bind) v = hooks.bind(s.as, v);
+        last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: v }, path } : { with: v }], hooks);
       } else if (s.k === "if") {
         last = truthy(evaluate(s.c, scopes)) ? execute(s.then, scopes, hooks) : s.else ? execute(s.else, scopes, hooks) : null;
       } else if (s.k === "on") {
@@ -611,7 +675,7 @@ function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
         const apply = (old: unknown) => {
           if (s.op === "++") return num(old, "++") + 1;
           if (s.op === "--") return num(old, "--") - 1;
-          const v = evaluate(s.value!, scopes);
+          const v = plain(evaluate(s.value!, scopes));
           return s.op === "=" ? v : binary(s.op[0], old, v);
         };
         // A broadcast target ("lights.all.level += 1") updates each item from its own old value.
@@ -649,7 +713,7 @@ export function runScript(source: string, globals: Record<string, unknown>, hook
 }
 
 /** Helper arguments with lists (coll.each.x) spread out, e.g. sum(G) or max(a, b). */
-export const spread = (args: unknown[]): unknown[] => args.flatMap((a) => (a instanceof Broadcast || a instanceof Some ? a.values : [a]));
+export const spread = (args: unknown[]): unknown[] => args.flatMap((a) => (a instanceof Broadcast || a instanceof Some ? a.values : [plain(a)]));
 
 /** A script value as plain JSON for display. */
 export function toPlain(v: unknown): unknown {
@@ -657,6 +721,7 @@ export function toPlain(v: unknown): unknown {
   if (v instanceof Tags) return [...v.set];
   if (v instanceof Broadcast || v instanceof Some) return v.values.map(toPlain);
   if (v instanceof Method) return "(method)";
+  if (v instanceof Watch) return toPlain(v.current);
   if (Array.isArray(v)) return v.map(toPlain);
   if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toPlain(x)]));
   return v ?? null;

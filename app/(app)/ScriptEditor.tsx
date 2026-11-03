@@ -26,7 +26,7 @@ const scriptLanguage = StreamLanguage.define({
       const before = stream.string.slice(0, stream.start).trimEnd();
       if (before.endsWith(".")) return "propertyName";
       const w = word[0].toLowerCase();
-      if (/^(with|as|if|then|else|and|or|not)$/.test(w)) return "keyword";
+      if (/^(with|as|if|then|else|do|and|or|not)$/.test(w)) return "keyword";
       // ON starts a trigger; "on" elsewhere (on = false inside WITH light) is a name.
       if (w === "on" && !before && !/^\s*(=|\+=|-=|\.|\[)/.test(stream.string.slice(stream.pos))) return "keyword";
       if (/^(true|false|null)$/.test(w)) return "atom";

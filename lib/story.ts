@@ -203,6 +203,10 @@ export function setObjectiveStatus(id: number, status: ObjectiveStatus): void {
   db.prepare<[string, number]>("UPDATE objectives SET status = ? WHERE id = ?").run(status, id);
 }
 
+export function setObjectiveRevealed(id: number, revealed: boolean): void {
+  db.prepare<[number, number]>("UPDATE objectives SET revealed = ? WHERE id = ?").run(revealed ? 1 : 0, id);
+}
+
 export function deleteObjective(id: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM objective_characters WHERE objective_id = ?").run(id);
