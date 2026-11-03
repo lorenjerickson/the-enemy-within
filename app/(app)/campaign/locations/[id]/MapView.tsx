@@ -4,7 +4,7 @@ import { useEffect, useOptimistic, useRef, useState, useTransition } from "react
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import { visibilityPolygon, type Segment } from "@/lib/visibility";
+import { blockingSegments, visibilityPolygon, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import type { AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
@@ -126,6 +126,10 @@ function gridOrigin(state: MapState, w: number, h: number) {
   const first = (start: number, offset: number) => start + (((offset % size) + size) % size);
   return { x0: first(r.x, offsetX), y0: first(r.y, offsetY), size };
 }
+
+/** Walls and closed doors as segments in scene space (they block light and sound). */
+const blockersInScene = (state: MapState, x0: number, y0: number, size: number): Segment[] =>
+  blockingSegments(state.structures).map(({ a, b }) => ({ a: { x: x0 + a.x * size, y: y0 + a.y * size }, b: { x: x0 + b.x * size, y: y0 + b.y * size } }));
 
 /** How many grid cells tall a side-on token stands: the level's figure height for 1.8 m, scaled by the creature's height. */
 const figureCells = (figureHeight: number, t: { height: number }) => (figureHeight * (t.height || 1.8)) / 1.8;
@@ -252,9 +256,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     const { x0, y0, size } = gridOrigin(state, w, h);
     const darkness = 1 - state.illumination;
     // Walls and closed doors block light.
-    const blockers: Segment[] = state.structures
-      .filter((s) => s.kind === "wall" || (s.kind === "door" && !s.open))
-      .map((s) => ({ a: { x: x0 + s.x1 * size, y: y0 + s.y1 * size }, b: { x: x0 + s.x2 * size, y: y0 + s.y2 * size } }));
+    const blockers = blockersInScene(state, x0, y0, size);
     // Flicker: each frame a flickering light gets one random draw that moves its range and its strength
     // together (a flare reaches further and burns brighter), shared by the darkness cut-out and the warm overlay.
     const flicker = new Map(
@@ -341,11 +343,15 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   // Positional sounds: a speaker icon with a faint circle showing the effective range.
   sounds: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
+    // Like light, a positional sound's range is cut off by walls and closed doors.
+    const blockers = blockersInScene(state, x0, y0, size);
     for (const p of state.positional) {
       const cx = x0 + p.x * size, cy = y0 + p.y * size;
+      const heard = visibilityPolygon({ x: cx, y: cy }, p.radius * size, blockers);
       ctx.save();
       ctx.beginPath();
-      ctx.arc(cx, cy, p.radius * size, 0, Math.PI * 2);
+      heard.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.closePath();
       ctx.fillStyle = "rgba(16,185,129,0.10)";
       ctx.fill();
       ctx.setLineDash([4, 4]);
