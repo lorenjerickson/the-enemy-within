@@ -2,15 +2,10 @@
 
 import { useTransition } from "react";
 import { advanceTime } from "./actions";
-import { formatGameTime } from "@/lib/calendar";
+import { formatGameTime, formatSpan } from "@/lib/calendar";
 
 export { formatGameTime };
 
-/** Elapsed game time, e.g. "2 d 3 h 10 m". */
-const formatSpan = (minutes: number) => {
-  const d = Math.floor(minutes / 1440), h = Math.floor((minutes % 1440) / 60), m = Math.floor(minutes % 60);
-  return [d && `${d} d`, h && `${h} h`, `${m} m`].filter(Boolean).join(" ");
-};
 
 const STEPS = [
   { label: "+10 min", minutes: 10 },

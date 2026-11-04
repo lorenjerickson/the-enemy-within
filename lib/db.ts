@@ -1490,29 +1490,64 @@ db.exec(`CREATE TABLE IF NOT EXISTS game_sessions (
   started_at TEXT NOT NULL,   -- real date and time (ISO)
   game_time REAL NOT NULL     -- game time when it started, in minutes
 )`);
+addColumn("game_sessions", "ended_at", "TEXT"); // real time it ended; null while it's running
+addColumn("game_sessions", "start_state", "TEXT"); // JSON snapshot of game state when it started (lib/sessionLog.ts)
+addColumn("game_sessions", "summary", "TEXT"); // JSON summary written when it ended
+// Things that happened during a session that its start and end states can't show (e.g. triggers going off).
+db.exec(`CREATE TABLE IF NOT EXISTS session_events (
+  id INTEGER PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES game_sessions(id),
+  game_time REAL NOT NULL,
+  text TEXT NOT NULL
+)`);
 
 export interface GameSession {
   id: number;
   number: number; // 1 for the first session
   started_at: string;
   game_time: number;
+  ended_at: string | null; // null while it's running
+  start_state: string | null;
+  summary: string | null;
 }
 
 /** Sessions, most recent first. */
 export function listGameSessions(): GameSession[] {
   return db
-    .prepare<[], GameSession>("SELECT id, started_at, game_time, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC")
+    .prepare<[], GameSession>(
+      "SELECT id, started_at, game_time, ended_at, start_state, summary, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC"
+    )
     .all();
+}
+
+/** The session being played, if one is running. */
+export function getOpenGameSession(): GameSession | undefined {
+  return listGameSessions().find((s) => !s.ended_at);
+}
+
+export function endGameSession(id: number, summary: string): void {
+  db.prepare<[string, string, number]>("UPDATE game_sessions SET ended_at = ?, summary = ? WHERE id = ?").run(new Date().toISOString(), summary, id);
+}
+
+/** Notes something that happened in the running session, if there is one. */
+export function logSessionEvent(text: string): void {
+  const open = db.prepare<[], { id: number }>("SELECT id FROM game_sessions WHERE ended_at IS NULL ORDER BY id DESC").get();
+  if (open) db.prepare<[number, number, string]>("INSERT INTO session_events (session_id, game_time, text) VALUES (?, ?, ?)").run(open.id, getGameTime(), text);
+}
+
+export function listSessionEvents(sessionId: number): { game_time: number; text: string }[] {
+  return db.prepare<[number], { game_time: number; text: string }>("SELECT game_time, text FROM session_events WHERE session_id = ? ORDER BY id").all(sessionId);
 }
 
 export function getGameSession(id: number): GameSession | undefined {
   return listGameSessions().find((s) => s.id === id);
 }
 
-/** Starts a session now, at the current game time. Returns its id. */
-export function startGameSession(): number {
+/** Starts a session now, at the current game time, with a snapshot of the game state. Returns its id. */
+export function startGameSession(startState: string): number {
   return Number(
-    db.prepare<[string, number]>("INSERT INTO game_sessions (started_at, game_time) VALUES (?, ?)").run(new Date().toISOString(), getGameTime()).lastInsertRowid
+    db.prepare<[string, number, string]>("INSERT INTO game_sessions (started_at, game_time, start_state) VALUES (?, ?, ?)")
+      .run(new Date().toISOString(), getGameTime(), startState).lastInsertRowid
   );
 }
 

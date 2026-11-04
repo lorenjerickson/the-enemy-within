@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { deleteTrigger, getGameTime, setGameTime, startGameSession } from "@/lib/db";
+import { deleteTrigger, getGameTime, setGameTime } from "@/lib/db";
+import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
 export async function runScript(source: string): Promise<ScriptResult> {
   await requireGm();
@@ -29,9 +30,16 @@ export async function removeTrigger(id: number) {
   revalidatePath("/sessions", "layout");
 }
 
-/** Starts a new session and opens it. */
+/** Starts a new session (ending the running one) and opens it. */
 export async function startSession() {
   await requireGm();
-  const id = startGameSession();
+  const id = start();
   redirect(`/sessions/${id}`);
+}
+
+/** Ends a session; its summary is written from what changed during it. */
+export async function endSession(id: number) {
+  await requireGm();
+  end(Number(id));
+  redirect("/sessions");
 }

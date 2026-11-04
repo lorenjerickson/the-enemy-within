@@ -1,7 +1,7 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
-  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, type Trigger,
+  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, logSessionEvent, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
   addCreatureToken, setTokenHp, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
@@ -581,6 +581,7 @@ export function fireTriggers(depth = 0): void {
     // Saved before the action runs, so the action (and triggers it sets off) see this check as done.
     setTriggerState(trigger.id, holds, { ...trigger.watches, ...seen }, fires ? getGameTime() : null);
     if (!fires) continue;
+    logSessionEvent(`ON ${readableCondition(trigger)} went off.`);
     const watched = trigger.watches;
     try {
       runGameScript(triggerScript(trigger.prelude, trigger.action), trigger.level_id ?? undefined, {
@@ -591,6 +592,16 @@ export function fireTriggers(depth = 0): void {
       fail(e);
     }
   }
+}
+
+/** A trigger's condition with its WITH names written out, e.g. game.calendar.timers['find holmes'].expired. */
+function readableCondition(t: Pick<Trigger, "prelude" | "condition">): string {
+  let text = t.condition;
+  for (const line of t.prelude) {
+    const m = line.match(/^WITH (.+) AS ([A-Za-z_]\w*)$/);
+    if (m) text = text.replace(new RegExp(`(?<![\\w.'"])${m[2]}\\b`, "g"), () => m[1]);
+  }
+  return text;
 }
 
 /** A trigger as one script, for showing to the GM. */
