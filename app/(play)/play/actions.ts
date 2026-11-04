@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { getDoor, getOpenGameSession, getPlayerToken, logSessionEvent, setDoorLocked } from "@/lib/db";
+import { addPing, listPings, type Ping, getDoor, getOpenGameSession, getPlayerToken, logSessionEvent, setDoorLocked } from "@/lib/db";
 import { skillModifiers, type Attributes } from "@/lib/attributes";
 import { REACH, distanceToDoor } from "./reach";
 
@@ -25,4 +25,17 @@ export async function pickLock(doorId: number): Promise<PickLockResult> {
   logSessionEvent(`${me.name} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${roll}${modifier >= 0 ? "+" : ""}${modifier} vs DC ${door.lock_dc})`);
   revalidatePath("/play");
   return { ok: true, roll, modifier, dc: door.lock_dc, success };
+}
+
+/** Points at a spot on the map for everyone in the session. */
+export async function sendPing(levelId: number, x: number, y: number): Promise<void> {
+  const user = await requireUser();
+  if (!getOpenGameSession()?.began_at) return;
+  addPing(Number(levelId), Number(x), Number(y), user);
+}
+
+/** Recent pings on this level after `afterId` (the caller's own are marked, as it has already shown them). */
+export async function pingsSince(levelId: number, afterId: number): Promise<(Ping & { mine: boolean })[]> {
+  const user = await requireUser();
+  return listPings(Number(levelId), Number(afterId)).map((p) => ({ ...p, mine: p.user_id === user.id }));
 }

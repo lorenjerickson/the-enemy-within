@@ -1792,3 +1792,34 @@ export function getPlayerTokenLevelId(playerId: number): number | undefined {
     )
     .get(playerId)?.level_id;
 }
+
+// ---------- Pings ----------
+
+// Someone pressed and held on the map to point at a spot; everyone in the session sees it for a few seconds.
+db.exec(`CREATE TABLE IF NOT EXISTS pings (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  gm INTEGER NOT NULL,
+  created INTEGER NOT NULL
+)`);
+
+export interface Ping { id: number; x: number; y: number; user_id: number; name: string; gm: 0 | 1 }
+
+export function addPing(levelId: number, x: number, y: number, user: { id: number; name: string; role: Role }): void {
+  const now = Date.now();
+  db.prepare("DELETE FROM pings WHERE created < ?").run(now - 60_000);
+  db.prepare("INSERT INTO pings (level_id, x, y, user_id, name, gm, created) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+    levelId, x, y, user.id, user.name, user.role === "gm" ? 1 : 0, now
+  );
+}
+
+/** Pings on a level newer than `afterId`, from the last few seconds. */
+export function listPings(levelId: number, afterId: number): Ping[] {
+  return db
+    .prepare<[number, number, number], Ping>("SELECT id, x, y, user_id, name, gm FROM pings WHERE level_id = ? AND id > ? AND created > ? ORDER BY id")
+    .all(levelId, afterId, Date.now() - 4000);
+}

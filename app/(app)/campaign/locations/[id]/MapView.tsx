@@ -11,6 +11,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
+import { pingsSince, sendPing } from "../../../../(play)/play/actions";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
 import type { ScriptNames } from "@/lib/scriptSchema";
@@ -152,6 +153,10 @@ const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
 };
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
+/** Press-and-hold time before a ping, and how long a ping shows (ms). */
+const HOLD_MS = 500;
+const PING_MS = 3000;
+
 /** How far characters see (grid units): as far as walls allow. */
 const SIGHT = 500;
 
@@ -687,7 +692,23 @@ export default function MapView({
   const drawnEffects = draggingEffect
     ? optimisticEffects.map((e) => (e.id === draggingEffect.id ? { ...e, x: e.x! + draggingEffect.dx, y: e.y! + draggingEffect.dy } : e))
     : optimisticEffects;
-  const frameMs = anyEffect ? 40 : anyFlicker ? 120 : 0;
+  // Pings (in a session): press and hold to point at a spot; everyone's pings are fetched every second.
+  const [pings, setPings] = useState<{ key: string; x: number; y: number; name: string; gm: boolean; at: number }[]>([]);
+  const lastPingId = useRef(0);
+  const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const addPings = (more: typeof pings) => setPings((ps) => [...ps.filter((p) => Date.now() - p.at < PING_MS), ...more]);
+  useEffect(() => {
+    if (!dockSide) return;
+    const timer = setInterval(async () => {
+      const fresh = await pingsSince(levelId, lastPingId.current).catch(() => []);
+      if (!fresh.length) return;
+      lastPingId.current = fresh[fresh.length - 1].id;
+      addPings(fresh.filter((p) => !p.mine).map((p) => ({ key: `p${p.id}`, x: p.x, y: p.y, name: p.name, gm: !!p.gm, at: Date.now() })));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [dockSide, levelId]);
+  const anyPing = pings.some((p) => Date.now() - p.at < PING_MS);
+  const frameMs = anyEffect || anyPing ? 40 : anyFlicker ? 120 : 0;
   useEffect(() => {
     if (!frameMs) return;
     const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
@@ -848,6 +869,20 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
+    if (dockSide && e.button === 0 && (readOnly || (selected === null && !placingChar))) {
+      const { gx, gy } = gridAt(e);
+      if (hold.current) clearTimeout(hold.current.timer);
+      hold.current = {
+        x: e.clientX,
+        y: e.clientY,
+        timer: setTimeout(() => {
+          hold.current = null;
+          addPings([{ key: `me${Date.now()}`, x: gx, y: gy, name: "You", gm: !readOnly, at: Date.now() }]);
+          sendPing(levelId, gx, gy);
+        }, HOLD_MS),
+      };
+    }
     if (readOnly) {
       // Players can only pan (any button).
       drag.current = { x: e.clientX, y: e.clientY };
@@ -1013,6 +1048,10 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > 6) {
+      clearTimeout(hold.current.timer); // moved: it's a drag, not a ping
+      hold.current = null;
+    }
     if (resizingNote) {
       const n = optimisticNotes.find((x) => x.id === resizingNote.id)!;
       const { gx, gy } = gridAt(e);
@@ -1076,6 +1115,10 @@ export default function MapView({
   };
   const onPointerUp = () => {
     drag.current = null;
+    if (hold.current) {
+      clearTimeout(hold.current.timer);
+      hold.current = null;
+    }
     if (resizingNote) {
       const r = resizingNote;
       setResizingNote(null);
@@ -1197,6 +1240,36 @@ export default function MapView({
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
       }
+      // Pings: expanding rings with who pinged, on top of everything (even fog).
+      const drawPings = () => {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        for (const p of pings) {
+          const t = (Date.now() - p.at) / PING_MS;
+          if (t >= 1) continue;
+          const px = x0 + p.x * size, py = y0 + p.y * size;
+          const colour = p.gm ? "250,204,21" : "96,165,250";
+          ctx.save();
+          for (const lag of [0, 0.25]) {
+            const u = ((t * 3 + lag) % 1);
+            ctx.strokeStyle = `rgba(${colour},${(1 - u) * (1 - t * 0.5)})`;
+            ctx.lineWidth = 3 / k;
+            ctx.beginPath();
+            ctx.arc(px, py, (6 + u * 34) / k, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.fillStyle = `rgb(${colour})`;
+          ctx.beginPath();
+          ctx.arc(px, py, 4 / k, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = `bold ${12 / k}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.lineWidth = 3 / k;
+          ctx.strokeStyle = "rgba(0,0,0,0.7)";
+          ctx.strokeText(p.name, px, py - 14 / k);
+          ctx.fillText(p.name, px, py - 14 / k);
+          ctx.restore();
+        }
+      };
       // Fog of war: black where never seen, dimmed where seen before, clear where in sight now.
       if (fogged) {
         fogCanvas.current ??= { fog: document.createElement("canvas"), mask: document.createElement("canvas") };
@@ -1230,6 +1303,7 @@ export default function MapView({
         ctx.drawImage(f, 0, 0);
         ctx.restore();
       }
+      drawPings();
       // Highlight the tile picked in the editor.
       const highlighted = drawnTiles.find((t) => t.id === selectedTileId);
       if (highlighted && selected === "tiles") {
