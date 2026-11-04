@@ -100,7 +100,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    ...(place ? [{ id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} /> }] : []),
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} /> },
   ];
   return (
     <>

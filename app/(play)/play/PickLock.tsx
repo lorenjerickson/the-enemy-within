@@ -2,16 +2,37 @@
 
 import { useState, useTransition } from "react";
 import { pickLock, type PickLockResult } from "./actions";
+import { PLAYER_ACTIONS } from "@/lib/playerActions";
+import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 
-/** Locked doors within reach of the player's character, each with a Pick lock button. */
+/** The player's Actions panel: the standard actions, then anything they can do right here (picking a nearby lock). */
 export default function PickLock({ doors }: { doors: { id: number; name: string }[] }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ door: string; r: PickLockResult } | null>(null);
   return (
-    <div className="space-y-2 text-sm" data-pick-lock>
-      {doors.length === 0 ? (
-        <p className="opacity-60">Nothing to do here. Stand next to a locked door to try its lock.</p>
-      ) : (
+    <div className="space-y-3 text-sm">
+      <ul className="grid grid-cols-3 gap-2" data-player-actions>
+        {PLAYER_ACTIONS.map((a) => (
+          <li key={a.id}>
+            {/* How each action works comes later; for now they're shown but can't be taken. */}
+            <button
+              type="button"
+              data-action={a.id}
+              disabled
+              title={`${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`}
+              className="btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80"
+            >
+              <GameIcon name={a.icon} className="size-7" />
+              <span className="text-xs leading-tight">
+                {a.label}
+                {"hint" in a && <span className="block opacity-60">{a.hint}</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    <div className="space-y-2" data-pick-lock>
+      {doors.length === 0 ? null : (
         <ul className="space-y-1">
           {doors.map((d) => (
             <li key={d.id} className="flex items-center gap-2">
@@ -35,6 +56,7 @@ export default function PickLock({ doors }: { doors: { id: number; name: string 
             : `${result.door}: rolled ${result.r.roll}${result.r.modifier >= 0 ? "+" : ""}${result.r.modifier} = ${result.r.roll + result.r.modifier} vs ${result.r.dc}. ${result.r.success ? "The lock clicks open." : "It won't give."}`}
         </p>
       )}
+    </div>
     </div>
   );
 }
