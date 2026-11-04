@@ -49,7 +49,7 @@ export default async function Sessions() {
                 ) : (
                   <Link href={`/sessions/${s.id}`} className="flex items-center gap-3 p-4 hover:bg-base-300 rounded-box">
                     {heading}
-                    <span className="badge badge-success badge-sm">in progress</span>
+                    <span className={`badge badge-sm ${s.began_at ? "badge-success" : "badge-info"}`}>{s.began_at ? "in progress" : "lobby"}</span>
                   </Link>
                 )}
               </li>

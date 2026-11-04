@@ -1493,6 +1493,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS game_sessions (
 addColumn("game_sessions", "ended_at", "TEXT"); // real time it ended; null while it's running
 addColumn("game_sessions", "start_state", "TEXT"); // JSON snapshot of game state when it started (lib/sessionLog.ts)
 addColumn("game_sessions", "summary", "TEXT"); // JSON summary written when it ended
+addColumn("game_sessions", "began_at", "TEXT"); // when the GM began play; until then the session is in its lobby
+db.exec("UPDATE game_sessions SET began_at = started_at WHERE began_at IS NULL AND ended_at IS NOT NULL"); // sessions from before lobbies
+// Who's in a session's lobby (or game): a player is present while their page keeps checking in.
+db.exec(`CREATE TABLE IF NOT EXISTS session_presence (
+  session_id INTEGER NOT NULL REFERENCES game_sessions(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  last_seen INTEGER NOT NULL, -- epoch ms
+  PRIMARY KEY (session_id, user_id)
+)`);
 // Things that happened during a session that its start and end states can't show (e.g. triggers going off).
 db.exec(`CREATE TABLE IF NOT EXISTS session_events (
   id INTEGER PRIMARY KEY,
@@ -1506,6 +1515,7 @@ export interface GameSession {
   number: number; // 1 for the first session
   started_at: string;
   game_time: number;
+  began_at: string | null; // null while it's in its lobby
   ended_at: string | null; // null while it's running
   start_state: string | null;
   summary: string | null;
@@ -1515,7 +1525,7 @@ export interface GameSession {
 export function listGameSessions(): GameSession[] {
   return db
     .prepare<[], GameSession>(
-      "SELECT id, started_at, game_time, ended_at, start_state, summary, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC"
+      "SELECT id, started_at, game_time, began_at, ended_at, start_state, summary, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC"
     )
     .all();
 }
@@ -1523,6 +1533,29 @@ export function listGameSessions(): GameSession[] {
 /** The session being played, if one is running. */
 export function getOpenGameSession(): GameSession | undefined {
   return listGameSessions().find((s) => !s.ended_at);
+}
+
+/** The GM begins play: the lobby closes. */
+export function beginGameSession(id: number): void {
+  db.prepare<[string, number]>("UPDATE game_sessions SET began_at = COALESCE(began_at, ?) WHERE id = ?").run(new Date().toISOString(), id);
+}
+
+/** A player's page checking in: they're present. */
+export function markPresent(sessionId: number, userId: number): void {
+  db.prepare<[number, number, number]>(
+    "INSERT INTO session_presence (session_id, user_id, last_seen) VALUES (?, ?, ?) ON CONFLICT (session_id, user_id) DO UPDATE SET last_seen = excluded.last_seen"
+  ).run(sessionId, userId, Date.now());
+}
+
+/** How long after a player's last check-in they still count as present. */
+export const PRESENCE_MS = 15_000;
+
+/** The players present in a session now (their pages checked in recently). */
+export function listPresentPlayers(sessionId: number): number[] {
+  return db
+    .prepare<[number, number], { user_id: number }>("SELECT user_id FROM session_presence WHERE session_id = ? AND last_seen > ?")
+    .all(sessionId, Date.now() - PRESENCE_MS)
+    .map((r) => r.user_id);
 }
 
 export function endGameSession(id: number, summary: string): void {

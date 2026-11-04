@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { deleteTrigger, getGameTime, setGameTime } from "@/lib/db";
+import { beginGameSession, deleteTrigger, getGameTime, setGameTime } from "@/lib/db";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
 export async function runScript(source: string): Promise<ScriptResult> {
@@ -35,6 +35,13 @@ export async function startSession() {
   await requireGm();
   const id = start();
   redirect(`/sessions/${id}`);
+}
+
+/** The GM begins play: the lobby closes. */
+export async function beginSession(id: number) {
+  await requireGm();
+  beginGameSession(Number(id));
+  revalidatePath(`/sessions/${id}`);
 }
 
 /** Ends a session; its summary is written from what changed during it. */
