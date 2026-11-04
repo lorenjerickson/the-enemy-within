@@ -150,6 +150,9 @@ const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
 };
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
+/** Layers only the GM ever sees. */
+const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
+
 const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
     ctx.fillStyle = "#15191e";
@@ -504,6 +507,7 @@ export default function MapView({
   partyStart,
   partyStartElsewhere,
   toPlace,
+  readOnly = false,
 }: {
   locationId: number;
   levelId: number;
@@ -526,6 +530,7 @@ export default function MapView({
   partyStart: Area | null; // the party's starting area, when it's on this level
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
+  readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
   lights: LightSource[];
   notes: MapNote[];
   effects: MapEffect[];
@@ -536,7 +541,7 @@ export default function MapView({
   /** What the last clicked control button's script returned. */
   const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
-  const [hiddenSet, setHidden] = useOptimistic(new Set(hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
+  const [hiddenSet, setHidden] = useOptimistic(new Set<MapLayer>(readOnly ? [...hidden, ...GM_ONLY_LAYERS] : hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
     const next = new Set(set);
     if (visible) next.delete(layer);
     else next.add(layer);
@@ -792,6 +797,12 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (readOnly) {
+      // Players can only pan (any button).
+      drag.current = { x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button === 0 && placingChar && optimisticStart) {
       const { gx, gy } = gridAt(e);
       const a = optimisticStart;
@@ -1333,14 +1344,15 @@ export default function MapView({
                   <button type="button" className="btn btn-ghost btn-xs" aria-label="Dismiss" onClick={() => setControlResult(null)}>✕</button>
                 </span>
               )}
-              <span className="opacity-60 mr-1">Scroll to zoom · right-drag to pan</span>
+              <span className="opacity-60 mr-1">Scroll to zoom · {readOnly ? "drag" : "right-drag"} to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
-              <button type="button" className={`btn btn-xs ${focus ? "btn-primary" : ""}`} aria-pressed={focus} onClick={() => setFocus(!focus)} title="Hide the campaign menu to give the map more room">
+              {!readOnly && <button type="button" className={`btn btn-xs ${focus ? "btn-primary" : ""}`} aria-pressed={focus} onClick={() => setFocus(!focus)} title="Hide the campaign menu to give the map more room">
                 Focus
-              </button>
+              </button>}
             </div>
         </div>
+        {!readOnly && (
         <div className="2xl:w-[30rem] shrink-0 flex flex-col gap-3 min-h-0">
         <ul className="grid grid-cols-4 2xl:grid-cols-2 gap-x-1 bg-base-200 rounded-box p-2 text-sm">
           <li className="col-span-full text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
@@ -1515,6 +1527,7 @@ export default function MapView({
           </div>
         )}
         </div>
+        )}
     </div>
   );
 }

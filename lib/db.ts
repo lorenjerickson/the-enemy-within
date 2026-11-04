@@ -1716,3 +1716,12 @@ export function getCurrentLevelId(): number | undefined {
     .get();
   return row?.level_id ?? getPartyStart()?.level_id;
 }
+
+/** The map level a player's character token is on, if the GM has placed it. */
+export function getPlayerTokenLevelId(playerId: number): number | undefined {
+  return db
+    .prepare<[number], { level_id: number }>(
+      "SELECT t.level_id FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+    )
+    .get(playerId)?.level_id;
+}
