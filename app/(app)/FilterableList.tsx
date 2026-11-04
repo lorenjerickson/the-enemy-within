@@ -10,7 +10,7 @@ export interface ListEntry {
   description?: string | null;
   image?: string | null; // undefined = list has no images; null = placeholder
   type?: string;         // shown as a badge and used by the type filter
-  note?: string;         // small text on the right
+  note?: string;         // small text below the description (on the right when there's none)
 }
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -60,8 +60,10 @@ export default function FilterableList({ entries, empty }: { entries: ListEntry[
                     {e.name} {e.type && <span className="badge badge-ghost badge-sm ml-1">{e.type}</span>}
                   </div>
                   {e.description && <div className="text-sm opacity-70">{e.description}</div>}
+                  {/* Below a description, so a long description doesn't squeeze it into a narrow column. */}
+                  {e.note && e.description && <div className="mt-1 text-xs opacity-60">{e.note}</div>}
                 </div>
-                {e.note && <div className="text-xs opacity-60 self-center">{e.note}</div>}
+                {e.note && !e.description && <div className="text-xs opacity-60 self-center whitespace-nowrap">{e.note}</div>}
               </Link>
             </li>
           ))}
