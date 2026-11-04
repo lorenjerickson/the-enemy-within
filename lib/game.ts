@@ -9,7 +9,7 @@ import {
 import { Collection, FREEFORM, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
-import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, type ObjectiveStatus } from "./story";
+import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 import { objectiveSettled } from "./storyRules";
 
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
@@ -539,6 +539,7 @@ export function runGameScript(
   const settled = saveGame(game, changes, triggers);
   // Objectives the script succeeded or failed: rewards and penalties, as when the GM settles one.
   for (const [id, status] of settled) objectiveSettled(id, status);
+  syncObjectiveJournals(); // objectives the script revealed
   fireTriggers(depth);
   return toPlain(result);
 }

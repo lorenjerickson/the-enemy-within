@@ -1,6 +1,6 @@
 import { SKILLS_BY_ATTRIBUTE } from "@/lib/attributes";
-import { listCharacters, listItems, listLocations } from "@/lib/db";
-import { DISCOVERY_KINDS, RELATIONS, listDiscoveries, listLinks, listObjectives, type Discovery } from "@/lib/story";
+import { listCharacters, listItems, listLocations, listPartyMembers } from "@/lib/db";
+import { DISCOVERY_KINDS, RELATIONS, discoveryRecipients, listDiscoveries, listLinks, listObjectives, type Discovery } from "@/lib/story";
 import { removeDiscovery, submitDiscovery } from "./actions";
 import ScriptEditor from "../../ScriptEditor";
 import { scriptNames } from "@/lib/scriptNames";
@@ -12,6 +12,8 @@ const SKILLS = [...new Set(Object.values(SKILLS_BY_ATTRIBUTE).flat())].sort();
 export default function DiscoveryForm({ initial }: { initial?: Discovery }) {
   const others = listDiscoveries().filter((d) => d.id !== initial?.id);
   const names = scriptNames();
+  const party = listPartyMembers();
+  const told = new Set(initial ? discoveryRecipients(initial.id) : []);
   const links = new Map(initial ? listLinks(initial.id).map((l) => [l.other_id, l.relation]) : []);
   const owner = initial?.location_id
     ? `location:${initial.location_id}`
@@ -93,10 +95,27 @@ export default function DiscoveryForm({ initial }: { initial?: Discovery }) {
           <legend className="fieldset-legend">When found (a script, run once when the party finds it)</legend>
           <ScriptEditor name="on_found" label="When found script" placeholder={"e.g. game.calendar.timers.start('find holmes')"} defaultValue={initial?.on_found} names={names} minLines={2} />
         </fieldset>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="found" defaultChecked={!!initial?.found} className="checkbox checkbox-sm" />
-          The party has found this (an objective it assigns becomes known to them)
-        </label>
+        <fieldset className="fieldset">
+          <legend className="fieldset-legend">Revealed to</legend>
+          {party.length === 0 ? (
+            <p className="text-xs opacity-60">No one is in the party yet (tick &quot;In the party&quot; on a character).</p>
+          ) : (
+            <div className="flex flex-wrap gap-x-5 gap-y-1">
+              {party.map((c) => (
+                <label key={c.id} className="flex items-center gap-2 text-sm">
+                  {/* Once revealed it's in their journal for good, so it can't be unticked. */}
+                  <input type="checkbox" name="reveal_to" value={c.id} defaultChecked={told.has(c.id)} disabled={told.has(c.id)} className="checkbox checkbox-sm" />
+                  {c.name}
+                </label>
+              ))}
+            </div>
+          )}
+          <p className="text-xs opacity-60">
+            Ticking someone writes the title and what the party learns into their journal when you save. The first reveal also makes an
+            objective it assigns known and runs its &quot;when found&quot; script.
+            {initial?.found && told.size === 0 && " (Found before journals existed.)"}
+          </p>
+        </fieldset>
       </form>
       <div className="flex gap-2">
         <button form="discovery-form" className="btn btn-primary">Save discovery</button>

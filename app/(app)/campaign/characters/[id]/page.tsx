@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getCharacter, isInParty, listCharacterProfessionIds } from "@/lib/db";
+import { getCharacter, getCharacterPlayer, isInParty, listCharacterProfessionIds, listPlayers } from "@/lib/db";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { submitCharacter } from "../actions";
 import { equippableItems, professionNodes } from "../formOptions";
@@ -23,7 +23,7 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
       submitLabel="Save character"
       extra={
         <>
-          <InPartyInput initial={isInParty(character.id)} />
+          <InPartyInput initial={isInParty(character.id)} players={listPlayers()} player={getCharacterPlayer(character.id)} />
           <ProfessionsInput professions={professionNodes()} initial={listCharacterProfessionIds(character.id)} />
         </>
       }

@@ -8,7 +8,7 @@ import { checkGameState, fireTriggers } from "@/lib/game";
 import { objectiveSettled, revealDiscovery } from "@/lib/storyRules";
 import {
   DISCOVERY_KINDS, OBJECTIVE_STATUSES, RELATIONS, deleteDiscovery, deleteObjective, getDiscovery, getObjective, saveDiscovery,
-  saveObjective, setLinks, setObjectiveCharacters, setObjectiveStatus, type DiscoveryKind, type ObjectiveStatus, type Relation,
+  saveObjective, setLinks, discoveryRecipients, syncObjectiveJournals, setObjectiveCharacters, setObjectiveStatus, type DiscoveryKind, type ObjectiveStatus, type Relation,
 } from "@/lib/story";
 
 const text = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -27,7 +27,9 @@ export async function submitDiscovery(discoveryId: number | null, formData: Form
   const scriptError = checkScript(onFound);
   if (scriptError) throw new Error(`When found script: ${scriptError}`);
   const wasFound = discoveryId !== null && !!getDiscovery(discoveryId)?.found;
-  const found = formData.get("found") === "on";
+  // Party members ticked under "Revealed to" who don't have it yet.
+  const had = new Set(discoveryId === null ? [] : discoveryRecipients(discoveryId));
+  const revealTo = formData.getAll("reveal_to").map(Number).filter((c) => c && !had.has(c));
   const saved = saveDiscovery(discoveryId, {
     title: text(formData, "title") || "Untitled discovery",
     text: text(formData, "text"),
@@ -36,7 +38,7 @@ export async function submitDiscovery(discoveryId: number | null, formData: Form
     character_id: owner("character"),
     item_id: owner("item"),
     objective_id: id(formData, "objective_id"),
-    found: found && wasFound ? 1 : 0, // newly found is applied below, so the "when found" script runs
+    found: wasFound ? 1 : 0, // newly found is applied below, so the "when found" script runs
     reveal: text(formData, "reveal"),
     reveal_skill: text(formData, "reveal_skill") || null,
     reveal_dc: dc === "" ? null : Math.round(Number(dc)) || null,
@@ -47,9 +49,9 @@ export async function submitDiscovery(discoveryId: number | null, formData: Form
     k.startsWith("link:") && RELATIONS.includes(String(v) as Relation) ? [{ other_id: Number(k.slice(5)), relation: String(v) as Relation }] : []
   );
   setLinks(saved, links);
-  if (found && !wasFound) {
-    const r = revealDiscovery(saved); // also makes an objective it assigns known to the party
-    if (r && !r.ok) throw new Error(`Saved and found, but its "when found" script failed: ${r.error}`);
+  if (revealTo.length) {
+    const r = revealDiscovery(saved, revealTo); // the first time, also makes an objective it assigns known
+    if (r && !r.ok) throw new Error(`Saved and revealed, but its "when found" script failed: ${r.error}`);
   }
   revalidatePath("/campaign/story");
   redirect("/campaign/story?tab=discoveries");
@@ -88,6 +90,7 @@ export async function submitObjective(objectiveId: number | null, formData: Form
     details_revealed: formData.get("details_revealed") === "on" ? 1 : 0,
   });
   setObjectiveCharacters(saved, formData.getAll("characters").map(Number).filter(Boolean));
+  syncObjectiveJournals(); // revealed: written into the journals of those it's for
   revalidatePath("/campaign/story");
   redirect("/campaign/story?tab=objectives");
 }

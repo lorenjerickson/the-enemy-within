@@ -27,7 +27,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   `timers.start('find holmes')` starts (or restarts) one, `timers['find holmes'].elapsed` is the game time since, `timers.stop('find holmes')`.
   `.expires(3, 'days')` gives a timer a duration and returns it; then `duration`, `remaining` (minutes) and `expired` (true once it has run that long).
   Helpers: `interval(minutes, 'days')` converts to minutes/hours/days/weeks; `duration(3, 'days')` is that span in minutes.
-- `game.objectives['title']`: `status` ('open', 'succeeded', 'failed'; succeeding or failing runs the reward or penalty, as when the GM settles it) and `revealed`.
+- `game.objectives['title']`: `status` ('open', 'succeeded', 'failed'; succeeding or failing runs the reward or penalty, as when the GM settles it) and `revealed` (revealing writes its title and description into the journals of those it's for).
 - `game.vars.<anything>`: free-form flags for triggers (numbers, text, true/false). Unset = `null` (or 0 for `+=`, `++` …).
 
 Changes are saved when the script finishes. A failing script saves nothing.

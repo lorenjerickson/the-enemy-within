@@ -1,15 +1,19 @@
 import { tryGameScript, type ScriptResult } from "./game";
-import { findDiscovery, getDiscovery, getObjective, type ObjectiveStatus } from "./story";
+import { listPartyMembers } from "./db";
+import { addJournalEntry, findDiscovery, getDiscovery, getObjective, objectiveRecipients, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 
 /**
- * The party finds a discovery: it's marked found (and an objective it assigns becomes known), and its
- * "when found" script runs, e.g. to start a timer. Finding it again does nothing.
- * Returns the script's result, if it had one and ran.
+ * A discovery is revealed to some of the party (by default all of it): its title and text are written into
+ * their journals. The first time it's found, an objective it assigns becomes known and its "when found" script
+ * runs. Returns the script's result, if it ran.
  */
-export function revealDiscovery(id: number): ScriptResult | null {
+export function revealDiscovery(id: number, characterIds?: number[]): ScriptResult | null {
   const d = getDiscovery(id);
-  if (!d || d.found) return null;
+  if (!d) return null;
+  for (const c of characterIds ?? listPartyMembers().map((m) => m.id)) addJournalEntry(c, { discovery_id: id }, d.title, d.text);
+  if (d.found) return null;
   findDiscovery(id);
+  syncObjectiveJournals(); // the objective it assigns, now known
   return d.on_found.trim() ? tryGameScript(d.on_found) : null;
 }
 
@@ -22,8 +26,8 @@ export function objectiveSettled(id: number, status: ObjectiveStatus): string[] 
   if (!o) return [];
   const notes: string[] = [];
   if (status === "succeeded" && o.reward_discovery_id) {
-    const r = revealDiscovery(o.reward_discovery_id);
-    notes.push("The party found the reward discovery.");
+    const r = revealDiscovery(o.reward_discovery_id, objectiveRecipients(id));
+    notes.push("The reward discovery was revealed to those it was for.");
     if (r) notes.push(r.ok ? `Its "when found" script ran: ${r.value}` : `Its "when found" script failed: ${r.error}`);
   }
   const script = status === "succeeded" ? o.reward_script : status === "failed" ? o.penalty_script : "";

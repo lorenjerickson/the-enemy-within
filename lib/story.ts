@@ -1,4 +1,4 @@
-import { addColumn, db } from "./db";
+import { addColumn, db, getGameTime, listPartyMembers } from "./db";
 
 /**
  * The story: discoveries (what the party can learn) and objectives (what it's asked to do).
@@ -60,6 +60,21 @@ db.exec(`
     character_id INTEGER NOT NULL REFERENCES characters(id),
     PRIMARY KEY (objective_id, character_id)
   );
+`);
+
+// Each character's journal: discoveries revealed to them and objectives made known to them (title and text as
+// written when they learned it), with the player's own notes.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS journal_entries (
+    id INTEGER PRIMARY KEY,
+    character_id INTEGER NOT NULL REFERENCES characters(id),
+    discovery_id INTEGER REFERENCES discoveries(id),
+    objective_id INTEGER REFERENCES objectives(id),
+    title TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created REAL NOT NULL                     -- game time it was written
+  )
 `);
 
 addColumn("discoveries", "on_found", "TEXT NOT NULL DEFAULT ''"); // game script run once when the party finds it
@@ -125,6 +140,7 @@ export function deleteDiscovery(id: number): void {
   db.transaction(() => {
     db.prepare<[number, number]>("DELETE FROM discovery_links WHERE from_id = ? OR to_id = ?").run(id, id);
     db.prepare<[number]>("UPDATE objectives SET reward_discovery_id = NULL WHERE reward_discovery_id = ?").run(id);
+    db.prepare<[number]>("UPDATE journal_entries SET discovery_id = NULL WHERE discovery_id = ?").run(id); // journals keep what was written
     db.prepare<[number]>("DELETE FROM discoveries WHERE id = ?").run(id);
   })();
 }
@@ -211,6 +227,7 @@ export function deleteObjective(id: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM objective_characters WHERE objective_id = ?").run(id);
     db.prepare<[number]>("UPDATE discoveries SET objective_id = NULL WHERE objective_id = ?").run(id);
+    db.prepare<[number]>("UPDATE journal_entries SET objective_id = NULL WHERE objective_id = ?").run(id);
     db.prepare<[number]>("DELETE FROM objectives WHERE id = ?").run(id);
   })();
 }
@@ -226,4 +243,57 @@ export function setObjectiveCharacters(id: number, characterIds: number[]): void
     const insert = db.prepare<[number, number]>("INSERT INTO objective_characters (objective_id, character_id) VALUES (?, ?)");
     for (const c of characterIds) insert.run(id, c);
   })();
+}
+
+// ---------- Journals ----------
+
+export interface JournalEntry {
+  id: number;
+  character_id: number;
+  discovery_id: number | null;
+  objective_id: number | null;
+  title: string;
+  text: string;
+  notes: string;
+  created: number; // game time
+}
+
+/** Writes a discovery or objective into a character's journal, once. */
+export function addJournalEntry(characterId: number, source: { discovery_id: number } | { objective_id: number }, title: string, text: string): void {
+  const [column, id] = "discovery_id" in source ? ["discovery_id", source.discovery_id] : ["objective_id", source.objective_id];
+  const has = db.prepare<[number, number], { id: number }>(`SELECT id FROM journal_entries WHERE character_id = ? AND ${column} = ?`).get(characterId, id);
+  if (has) return;
+  db.prepare<[number, number, string, string, number]>(`INSERT INTO journal_entries (character_id, ${column}, title, text, created) VALUES (?, ?, ?, ?, ?)`)
+    .run(characterId, id, title, text, getGameTime());
+}
+
+/** A character's journal, newest first. */
+export function listJournal(characterId: number): JournalEntry[] {
+  return db.prepare<[number], JournalEntry>("SELECT * FROM journal_entries WHERE character_id = ? ORDER BY created DESC, id DESC").all(characterId);
+}
+
+export function getJournalEntry(id: number): JournalEntry | undefined {
+  return db.prepare<[number], JournalEntry>("SELECT * FROM journal_entries WHERE id = ?").get(id);
+}
+
+export function saveJournalNotes(id: number, notes: string): void {
+  db.prepare<[string, number]>("UPDATE journal_entries SET notes = ? WHERE id = ?").run(notes, id);
+}
+
+/** The characters a discovery has been revealed to. */
+export function discoveryRecipients(discoveryId: number): number[] {
+  return db.prepare<[number], { character_id: number }>("SELECT character_id FROM journal_entries WHERE discovery_id = ?").all(discoveryId).map((r) => r.character_id);
+}
+
+/** Who an objective is for: its assigned characters, or the whole party when none are. */
+export function objectiveRecipients(objectiveId: number): number[] {
+  const assigned = listObjectiveCharacters(objectiveId);
+  return assigned.length ? assigned : listPartyMembers().map((c) => c.id);
+}
+
+/** Writes each revealed objective into the journals of everyone it's for who doesn't have it yet. */
+export function syncObjectiveJournals(): void {
+  for (const o of db.prepare<[], { id: number; title: string; description: string }>("SELECT id, title, description FROM objectives WHERE revealed = 1").all()) {
+    for (const c of objectiveRecipients(o.id)) addJournalEntry(c, { objective_id: o.id }, o.title, o.description);
+  }
 }

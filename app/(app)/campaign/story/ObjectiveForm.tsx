@@ -72,8 +72,9 @@ export default function ObjectiveForm({ initial }: { initial?: Objective }) {
           <legend className="fieldset-legend">What the party sees</legend>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="revealed" defaultChecked={!!initial?.revealed} className="checkbox checkbox-sm" />
-            The party knows about this objective (its title and description)
+            Revealed: its title and description are written into the journals of those it&apos;s for
           </label>
+          <p className="text-xs opacity-60">Leave this unticked to assign it without them knowing, and tick it when they should.</p>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="details_revealed" defaultChecked={!!initial?.details_revealed} className="checkbox checkbox-sm" />
             …and its success and failure conditions, reward and penalty

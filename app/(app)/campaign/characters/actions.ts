@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { listProfessionGraph, saveCharacter, setCharacterProfessions, setInParty } from "@/lib/db";
+import { listProfessionGraph, listPlayers, saveCharacter, setCharacterPlayer, setCharacterProfessions, setInParty } from "@/lib/db";
+import { syncObjectiveJournals } from "@/lib/story";
 import { parseCreatureForm } from "@/lib/creatureForm";
 
 /** Creates the character from creatureId's template when id is null, otherwise updates it. */
@@ -20,5 +21,8 @@ export async function submitCharacter(id: number | null, creatureId: number | nu
   const saved = saveCharacter(id, creatureId, await parseCreatureForm(formData));
   setCharacterProfessions(saved, [...chosen]);
   setInParty(saved, formData.get("in_party") === "on");
+  const player = Number(formData.get("player_id")) || null;
+  setCharacterPlayer(saved, player && listPlayers().some((p) => p.id === player) ? player : null);
+  syncObjectiveJournals(); // a new party member learns the whole party's known objectives
   redirect("/campaign/characters");
 }

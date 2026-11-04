@@ -255,6 +255,7 @@ addColumn("characters", "token_overhead", "TEXT");
 addColumn("characters", "token_side", "TEXT");
 addColumn("map_tokens", "hp", "INTEGER");
 addColumn("characters", "in_party", "INTEGER NOT NULL DEFAULT 0"); // 1 = a player character (game.characters.party)
+addColumn("characters", "player_id", "INTEGER REFERENCES users(id)"); // the player who plays it (sees its journal)
 // Game time, in minutes since the campaign began, moved forward by the GM; and named timers measured against it.
 db.exec(`CREATE TABLE IF NOT EXISTS calendar (id INTEGER PRIMARY KEY CHECK (id = 1), now REAL NOT NULL DEFAULT 0)`);
 db.exec("INSERT OR IGNORE INTO calendar (id, now) VALUES (1, 0)");
@@ -1430,6 +1431,25 @@ export function isInParty(characterId: number): boolean {
 
 export function setInParty(characterId: number, inParty: boolean): void {
   db.prepare<[number, number]>("UPDATE characters SET in_party = ? WHERE id = ?").run(inParty ? 1 : 0, characterId);
+}
+
+/** The player who plays a character, if any. */
+export function getCharacterPlayer(characterId: number): number | null {
+  return db.prepare<[number], { player_id: number | null }>("SELECT player_id FROM characters WHERE id = ?").get(characterId)?.player_id ?? null;
+}
+
+export function setCharacterPlayer(characterId: number, playerId: number | null): void {
+  db.prepare<[number | null, number]>("UPDATE characters SET player_id = ? WHERE id = ?").run(playerId, characterId);
+}
+
+/** The party's characters (ticked "In the party"), by name. */
+export function listPartyMembers(): { id: number; name: string; player_id: number | null }[] {
+  return db.prepare<[], { id: number; name: string; player_id: number | null }>("SELECT id, name, player_id FROM characters WHERE in_party = 1 ORDER BY name").all();
+}
+
+/** The characters a player plays. */
+export function listPlayerCharacters(playerId: number): { id: number; name: string }[] {
+  return db.prepare<[number], { id: number; name: string }>("SELECT id, name FROM characters WHERE player_id = ? ORDER BY name").all(playerId);
 }
 
 // ---------- Calendar ----------

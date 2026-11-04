@@ -15,7 +15,9 @@ const GM_NAV = [
   { href: "/users", label: "Users" },
   { href: "/campaign", label: "Campaign" },
   { href: "/session", label: "Session" },
+  { href: "/journal", label: "Journals" },
 ];
+const PLAYER_NAV = [{ href: "/journal", label: "Journal" }];
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   await connection();
@@ -26,15 +28,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <>
       <header className="navbar bg-base-200 px-4">
         <Link href="/" className="text-lg font-bold mr-6">The Enemy Within</Link>
-        {user.role === "gm" && (
-          <nav className="flex-1">
-            <ul className="menu menu-horizontal gap-1">
-              {GM_NAV.map((n) => (
-                <li key={n.href}><Link href={n.href}>{n.label}</Link></li>
-              ))}
-            </ul>
-          </nav>
-        )}
+        <nav className="flex-1">
+          <ul className="menu menu-horizontal gap-1">
+            {(user.role === "gm" ? GM_NAV : PLAYER_NAV).map((n) => (
+              <li key={n.href}><Link href={n.href}>{n.label}</Link></li>
+            ))}
+          </ul>
+        </nav>
         <details className="dropdown dropdown-end ml-auto">
           <summary className="btn btn-ghost btn-sm">{user.name}</summary>
           <ul className="menu dropdown-content bg-base-100 rounded-box z-10 w-40 p-2 shadow">

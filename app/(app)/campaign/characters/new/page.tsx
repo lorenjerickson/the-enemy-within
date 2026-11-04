@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getCreature, listCreatures } from "@/lib/db";
+import { getCreature, listCreatures, listPlayers } from "@/lib/db";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { submitCharacter } from "../actions";
 import { equippableItems, professionNodes } from "../formOptions";
@@ -48,7 +48,7 @@ export default async function NewCharacter({ searchParams }: { searchParams: Pro
       submitLabel="Save character"
       extra={
         <>
-          <InPartyInput />
+          <InPartyInput players={listPlayers()} />
           <ProfessionsInput professions={professionNodes()} />
         </>
       }
