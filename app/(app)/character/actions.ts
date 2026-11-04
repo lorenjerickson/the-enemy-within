@@ -12,5 +12,5 @@ export async function saveNotes(entryId: number, notes: string) {
   if (!entry) throw new Error("Unknown journal entry");
   if (user.role !== "gm" && getCharacterPlayer(entry.character_id) !== user.id) throw new Error("Not your journal");
   saveJournalNotes(entry.id, String(notes).slice(0, 20000));
-  revalidatePath("/journal");
+  revalidatePath(`/campaign/characters/${entry.character_id}`);
 }
