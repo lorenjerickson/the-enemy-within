@@ -15,6 +15,7 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
+import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
 
 /** The running session, full screen: the GM's tools dock on the left, a player's panel on the right. */
@@ -103,6 +104,18 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       ),
     },
     { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} onMap={!!me} /> },
+    {
+      id: "journal",
+      label: "Journal",
+      icon: "book" as const,
+      content: (
+        <div className="space-y-4">
+          {listPlayerCharacters(user.id).map((c) => (
+            <Journal key={c.id} characterId={c.id} name={c.name} inPanel />
+          ))}
+        </div>
+      ),
+    },
   ];
   return (
     <>

@@ -17,6 +17,7 @@ export async function saveNotes(entryId: number, notes: string) {
   if (user.role !== "gm" && getCharacterPlayer(entry.character_id) !== user.id) throw new Error("Not your journal");
   saveJournalNotes(entry.id, String(notes).slice(0, 20000));
   revalidatePath(`/campaign/characters/${entry.character_id}`);
+  revalidatePath("/play");
 }
 
 /** A player creates their own character, from the Human creature; it joins the party and they play it. */
