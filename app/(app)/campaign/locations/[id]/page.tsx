@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listEffects, listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
+import { getPartyStart, listEffects, listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
 import { scriptNames } from "@/lib/scriptNames";
@@ -23,6 +23,7 @@ export default async function EditLocation({
   const { level: levelParam, tab: tabParam } = await searchParams;
   const level = levels.find((l) => l.id === Number(levelParam)) ?? levels[0];
   // One tab per slice of a location's data; the map is where most of the work happens, so it's first.
+  const start = getPartyStart();
   const tab = TABS.find((t) => t.id === tabParam)?.id ?? "map";
 
   return (
@@ -67,6 +68,8 @@ export default async function EditLocation({
             ...listCharacters().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "character" as const, id, name, type, image, token_overhead, token_side, height })),
             ...listCreatures().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "creature" as const, id, name, type, image, token_overhead, token_side, height })),
           ]}
+          partyStart={start && start.level_id === level.id ? { x: start.x, y: start.y, w: start.w, h: start.h } : null}
+          partyStartElsewhere={start && start.level_id !== level.id ? `${start.location} › ${start.level}` : null}
           otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
         />
       </div>

@@ -27,6 +27,11 @@ export default function TokensEditor({
   portrait,
   figureHeight,
   onFigureHeightChange,
+  partyStart,
+  partyStartElsewhere,
+  markingStart,
+  onMarkingStartChange,
+  onClearStart,
 }: {
   creatures: TokenCreature[];
   creature: TokenCreature | null;
@@ -38,6 +43,11 @@ export default function TokensEditor({
   portrait: boolean;
   figureHeight: number;
   onFigureHeightChange: (cells: number) => void;
+  partyStart: { x: number; y: number; w: number; h: number } | null;
+  partyStartElsewhere: string | null;
+  markingStart: boolean;
+  onMarkingStartChange: (on: boolean) => void;
+  onClearStart: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
@@ -117,6 +127,25 @@ export default function TokensEditor({
           <button>close</button>
         </form>
       </dialog>
+
+      <div className="space-y-1" data-party-start>
+        <div className="text-sm font-semibold">Party start</div>
+        <p className="text-xs opacity-60">
+          {partyStart
+            ? `Here: at ${Math.floor(partyStart.x)}, ${Math.floor(partyStart.y)} · ${partyStart.w} × ${partyStart.h} cells. The party's tokens are placed in this area when the campaign begins.`
+            : partyStartElsewhere
+              ? `Marked on ${partyStartElsewhere}. Marking an area here moves it.`
+              : "Not marked yet. The party's tokens are placed in this area when the campaign begins."}
+        </p>
+        <div className="flex items-center gap-2">
+          <button type="button" aria-pressed={markingStart} className={`btn btn-xs ${markingStart ? "btn-primary" : ""}`} onClick={() => onMarkingStartChange(!markingStart)}>
+            {markingStart ? "Drag on the map… (cancel)" : partyStart ? "Re-mark start area" : "Mark start area"}
+          </button>
+          {partyStart && (
+            <button type="button" className="btn btn-ghost btn-xs text-error" onClick={onClearStart}>Clear</button>
+          )}
+        </div>
+      </div>
 
       <div className="space-y-1">
         <div className="text-sm font-semibold">Placed tokens</div>

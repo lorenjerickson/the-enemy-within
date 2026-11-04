@@ -20,9 +20,11 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+type Area = { x: number; y: number; w: number; h: number };
 
 function EyeIcon() {
   return (
@@ -499,6 +501,8 @@ export default function MapView({
   effects,
   controls,
   scriptNames,
+  partyStart,
+  partyStartElsewhere,
 }: {
   locationId: number;
   levelId: number;
@@ -518,6 +522,8 @@ export default function MapView({
   positional: PositionalSound[];
   illumination: number;
   figureHeight: number;
+  partyStart: Area | null; // the party's starting area, when it's on this level
+  partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   lights: LightSource[];
   notes: MapNote[];
   effects: MapEffect[];
@@ -663,6 +669,11 @@ export default function MapView({
     w: Math.abs(d.end.x - d.start.x),
     h: Math.abs(d.end.y - d.start.y),
   });
+
+  // Party start: while marking, dragging on the map outlines the area the party's tokens start in.
+  const [markingStart, setMarkingStart] = useState(false);
+  const [startDrag, setStartDrag] = useState<NonNullable<typeof effectDrag> | null>(null);
+  const [optimisticStart, setStartLocally] = useOptimistic(partyStart, (_: Area | null, a: Area | null) => a);
 
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
@@ -845,6 +856,13 @@ export default function MapView({
       });
       return;
     }
+    if (e.button === 0 && selected === "tokens" && markingStart) {
+      const { gx, gy } = gridAt(e);
+      const corner = { x: quarter(gx), y: quarter(gy) };
+      setStartDrag({ start: corner, end: corner });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button === 0 && selected === "tokens") {
       const { col, row } = tokenAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
@@ -926,6 +944,12 @@ export default function MapView({
       if (dx !== draggingEffect.dx || dy !== draggingEffect.dy) setDraggingEffect({ ...draggingEffect, dx, dy });
       return;
     }
+    if (startDrag) {
+      const { gx, gy } = gridAt(e);
+      const end = { x: quarter(gx), y: quarter(gy) };
+      if (end.x !== startDrag.end.x || end.y !== startDrag.end.y) setStartDrag({ ...startDrag, end });
+      return;
+    }
     if (effectDrag) {
       const { gx, gy } = gridAt(e);
       const end = { x: quarter(gx), y: quarter(gy) };
@@ -991,6 +1015,17 @@ export default function MapView({
           await moveEffectTo(locationId, id, to.x, to.y);
         });
       }
+      return;
+    }
+    if (startDrag) {
+      const area = effectRect(startDrag);
+      setStartDrag(null);
+      if (area.w < 0.25 || area.h < 0.25) return; // a click without a drag marks nothing
+      setMarkingStart(false);
+      startTransition(async () => {
+        setStartLocally(area);
+        await setPartyStart(locationId, levelId, area);
+      });
       return;
     }
     if (effectDrag) {
@@ -1183,6 +1218,25 @@ export default function MapView({
         ctx.strokeRect(x0 + a.x * size, y0 + a.y * size, a.w * size, a.h * size);
         ctx.restore();
       }
+      // Party start area (while on the tokens layer), and one being dragged out.
+      const startArea = startDrag ? effectRect(startDrag) : selected === "tokens" ? optimisticStart : null;
+      if (startArea) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const r = { x: x0 + startArea.x * size, y: y0 + startArea.y * size, w: startArea.w * size, h: startArea.h * size };
+        ctx.save();
+        ctx.fillStyle = "rgba(52,211,153,0.15)";
+        ctx.strokeStyle = "rgb(52,211,153)";
+        ctx.lineWidth = 2 / k;
+        ctx.setLineDash([6 / k, 4 / k]);
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgb(52,211,153)";
+        ctx.font = `${12 / k}px sans-serif`;
+        ctx.textBaseline = "top";
+        ctx.fillText("Party start", r.x + 4 / k, r.y + 4 / k);
+        ctx.restore();
+      }
       // Placement preview: outline of the cells the tile will cover.
       if (placing) {
         const r = cellToRect(state, SCENE.w, SCENE.h, spanOf(placing));
@@ -1352,6 +1406,16 @@ export default function MapView({
                 portrait={portrait}
                 figureHeight={figureHeight}
                 onFigureHeightChange={(cells) => changeFigureHeight(locationId, levelId, cells)}
+                partyStart={optimisticStart}
+                partyStartElsewhere={partyStartElsewhere}
+                markingStart={markingStart}
+                onMarkingStartChange={setMarkingStart}
+                onClearStart={() =>
+                  startTransition(async () => {
+                    setStartLocally(null);
+                    await removePartyStart(locationId);
+                  })
+                }
                 creatures={creatures}
                 creature={tokenCreature}
                 onCreatureChange={setTokenCreature}

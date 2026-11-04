@@ -315,6 +315,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
   turn_order TEXT NOT NULL
 )`);
 
+// Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
+db.exec(`CREATE TABLE IF NOT EXISTS party_start (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL
+)`);
+
 // One-time migration: the old per-profession "ranks" tree becomes linked professions.
 const hasRanks = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ranks'").get();
 if (hasRanks) {
@@ -883,6 +890,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM light_sources WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_effects WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM party_start WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_controls WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM encounters WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
@@ -1091,6 +1099,35 @@ export function getLevelPlace(levelId: number): { location_id: number; location:
       "SELECT l.id AS location_id, l.name AS location, m.name AS level FROM map_levels m JOIN locations l ON l.id = m.location_id WHERE m.id = ?"
     )
     .get(levelId);
+}
+
+export interface PartyStart {
+  level_id: number;
+  location_id: number;
+  location: string;
+  level: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The party's starting area, if the GM has marked one (and its level still exists). */
+export function getPartyStart(): PartyStart | undefined {
+  return db
+    .prepare<[], PartyStart>(
+      `SELECT p.level_id, l.id AS location_id, l.name AS location, m.name AS level, p.x, p.y, p.w, p.h
+       FROM party_start p JOIN map_levels m ON m.id = p.level_id JOIN locations l ON l.id = m.location_id`
+    )
+    .get();
+}
+
+export function savePartyStart(levelId: number, a: { x: number; y: number; w: number; h: number }): void {
+  db.prepare("INSERT OR REPLACE INTO party_start (id, level_id, x, y, w, h) VALUES (1, ?, ?, ?, ?, ?)").run(levelId, a.x, a.y, a.w, a.h);
+}
+
+export function clearPartyStart(): void {
+  db.prepare("DELETE FROM party_start").run();
 }
 
 export function deleteToken(id: number): void {
