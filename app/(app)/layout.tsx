@@ -12,7 +12,6 @@ async function doLogout() {
 }
 
 const GM_NAV = [
-  { href: "/users", label: "Users" },
   { href: "/campaign", label: "Campaign" },
   { href: "/sessions", label: "Sessions" },
 ];

@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireGm } from "@/lib/auth";
-import { createUser } from "@/lib/db";
+import { createUser, deletePlayer, updatePlayer } from "@/lib/db";
 import { sendMail } from "@/lib/mail";
 
 /** Invites a player: creates their account with a temporary password and emails them how to log in. */
@@ -24,5 +25,17 @@ export async function invitePlayer(formData: FormData) {
     `Hi ${name},\n\nYou've been added to the game.\n\nLog in at: ${base}/login\nUsername: ${name}\nTemporary password: ${password}\n`
   );
   revalidatePath("/campaign/players");
-  revalidatePath("/users");
+}
+
+export async function savePlayer(id: number, formData: FormData) {
+  await requireGm();
+  updatePlayer(id, String(formData.get("name") ?? "").trim(), String(formData.get("contact") ?? "").trim());
+  redirect("/campaign/players");
+}
+
+/** Removes a player's account; characters they played are kept, with no player. */
+export async function removePlayer(id: number) {
+  await requireGm();
+  deletePlayer(Number(id));
+  redirect("/campaign/players");
 }

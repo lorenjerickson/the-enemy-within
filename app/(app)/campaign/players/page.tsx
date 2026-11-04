@@ -15,7 +15,7 @@ export default async function Players() {
         empty="No players yet."
         entries={listPlayers().map((p) => {
           const plays = listPlayerCharacters(p.id).map((c) => c.name);
-          return { id: p.id, href: `/users/${p.id}`, name: p.name, description: p.contact, note: plays.length ? `plays ${plays.join(", ")}` : undefined };
+          return { id: p.id, href: `/campaign/players/${p.id}`, name: p.name, description: p.contact, note: plays.length ? `plays ${plays.join(", ")}` : undefined };
         })}
       />
       <form action={invitePlayer} className="space-y-2">

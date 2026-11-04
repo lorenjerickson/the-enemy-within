@@ -428,6 +428,17 @@ export function updatePlayer(id: number, name: string, contact: string): void {
   ).run(name, name, contact, id);
 }
 
+/** Deletes a player's account (never the GM's): their logins and presence go too; characters they played lose their player. */
+export function deletePlayer(id: number): void {
+  db.transaction(() => {
+    if (!db.prepare<[number], { id: number }>("SELECT id FROM users WHERE id = ? AND role = 'player'").get(id)) return;
+    db.prepare<[number]>("DELETE FROM sessions WHERE user_id = ?").run(id);
+    db.prepare<[number]>("DELETE FROM session_presence WHERE user_id = ?").run(id);
+    db.prepare<[number]>("UPDATE characters SET player_id = NULL WHERE player_id = ?").run(id);
+    db.prepare<[number]>("DELETE FROM users WHERE id = ?").run(id);
+  })();
+}
+
 export function listPlayers(): User[] {
   return db
     .prepare<[], User>(`SELECT ${USER_COLUMNS} FROM users WHERE role = 'player' ORDER BY name`)
