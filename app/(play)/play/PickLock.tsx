@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickLock, type PickLockResult } from "./actions";
+import { pickLock } from "./actions";
 import { PLAYER_ACTIONS } from "@/lib/playerActions";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 
 /** The player's Actions panel: the standard actions, then anything they can do right here (picking a nearby lock). */
 export default function PickLock({ doors }: { doors: { id: number; name: string }[] }) {
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ door: string; r: PickLockResult } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   return (
     <div className="space-y-3 text-sm">
       <ul className="grid grid-cols-3 gap-2" data-player-actions>
@@ -31,9 +31,8 @@ export default function PickLock({ doors }: { doors: { id: number; name: string 
           </li>
         ))}
       </ul>
-    <div className="space-y-2" data-pick-lock>
-      {doors.length === 0 ? null : (
-        <ul className="space-y-1">
+      {doors.length > 0 && (
+        <ul className="space-y-1" data-pick-lock>
           {doors.map((d) => (
             <li key={d.id} className="flex items-center gap-2">
               <span className="flex-1">{d.name} <span className="opacity-60">(locked)</span></span>
@@ -41,7 +40,7 @@ export default function PickLock({ doors }: { doors: { id: number; name: string 
                 type="button"
                 className="btn btn-sm"
                 disabled={pending}
-                onClick={() => startTransition(async () => setResult({ door: d.name, r: await pickLock(d.id) }))}
+                onClick={() => startTransition(async () => setError((await pickLock(d.id)).error ?? null))}
               >
                 Pick lock
               </button>
@@ -49,14 +48,7 @@ export default function PickLock({ doors }: { doors: { id: number; name: string 
           ))}
         </ul>
       )}
-      {result && (
-        <p data-pick-result className={result.r.ok && result.r.success ? "text-success" : "text-warning"}>
-          {!result.r.ok
-            ? result.r.error
-            : `${result.door}: rolled ${result.r.roll}${result.r.modifier >= 0 ? "+" : ""}${result.r.modifier} = ${result.r.roll + result.r.modifier} vs ${result.r.dc}. ${result.r.success ? "The lock clicks open." : "It won't give."}`}
-        </p>
-      )}
-    </div>
+      {error && <p className="text-warning">{error}</p>}
     </div>
   );
 }

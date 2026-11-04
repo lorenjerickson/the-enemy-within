@@ -2,29 +2,57 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { addPing, listPings, type Ping, getDoor, getOpenGameSession, getPlayerToken, logSessionEvent, setDoorLocked } from "@/lib/db";
-import { skillModifiers, type Attributes } from "@/lib/attributes";
+import {
+  addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked,
+} from "@/lib/db";
+import type { Attributes } from "@/lib/attributes";
+import { scoreRoll, skillCheck } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 
-export type PickLockResult = { ok: true; roll: number; modifier: number; dc: number; success: boolean } | { ok: false; error: string };
-
-/** A player tries to pick a locked door next to their character: d20 + sleight of hand against the lock's DC. */
-export async function pickLock(doorId: number): Promise<PickLockResult> {
+/** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
+export async function pickLock(doorId: number): Promise<{ error?: string }> {
   const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { ok: false, error: "Only during a session" };
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
   const door = getDoor(Number(doorId));
-  if (!me || !door || door.level_id !== me.level_id) return { ok: false, error: "That door isn't here" };
-  if (!door.locked) return { ok: false, error: "It isn't locked" };
-  if (distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, door) > REACH) return { ok: false, error: "You're too far away" };
-  const modifier = skillModifiers(JSON.parse(me.attributes) as Attributes).find((s) => s.skill === "sleight of hand")?.modifier ?? 0;
-  const roll = 1 + Math.floor(Math.random() * 20);
-  const success = roll + modifier >= door.lock_dc;
-  if (success) setDoorLocked(door.id, false);
-  const name = door.name ?? `Door ${door.id}`;
-  logSessionEvent(`${me.name} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${roll}${modifier >= 0 ? "+" : ""}${modifier} vs DC ${door.lock_dc})`);
+  if (!me || !door || door.level_id !== me.level_id) return { error: "That door isn't here" };
+  if (!door.locked) return { error: "It isn't locked" };
+  if (distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, door) > REACH) return { error: "You're too far away" };
+  const spec = skillCheck("sleight of hand", JSON.parse(me.attributes) as Attributes, characterModifiers(me.character_id, "skill:sleight of hand"));
+  spec.label = `Pick the lock on ${door.name ?? `Door ${door.id}`}: ${spec.label}`;
+  requestRoll(user.id, me.character_id, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
   revalidatePath("/play");
-  return { ok: true, roll, modifier, dc: door.lock_dc, success };
+  return {};
+}
+
+/** The player's dice have landed: check they fit the roll, score it, and settle what it was for. */
+export async function submitRoll(requestId: number, thrown: number[][]): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const req = getOpenRollRequest(user.id);
+  if (!req || req.id !== Number(requestId) || req.result) return { error: "Nothing to roll" };
+  const scored = scoreRoll(req.spec, thrown);
+  if (!scored) return { error: "Those dice don't fit this roll" };
+  let success = false, outcome = "";
+  const a = req.action;
+  if (a.kind === "pickLock") {
+    const door = getDoor(a.doorId);
+    const name = door?.name ?? `Door ${a.doorId}`;
+    success = scored.total >= a.dc;
+    if (success && door?.locked) setDoorLocked(door.id, false);
+    outcome = success ? `The lock on ${name} clicks open.` : `The lock on ${name} won't give.`;
+    logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${scored.total} vs DC ${a.dc})`);
+    outcome += ` (${scored.total} vs ${a.dc})`;
+  }
+  saveRollResult(req.id, { ...scored, outcome, success });
+  revalidatePath("/play");
+  return {};
+}
+
+export async function closeRoll(requestId: number): Promise<void> {
+  const user = await requireUser();
+  closeRollRequest(Number(requestId), user.id);
+  revalidatePath("/play");
 }
 
 /** Points at a spot on the map for everyone in the session. */

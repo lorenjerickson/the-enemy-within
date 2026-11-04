@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -14,6 +14,7 @@ import { endSession } from "../../(app)/sessions/actions";
 import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
+import RollPrompt from "./RollPrompt";
 import { REACH, distanceToDoor } from "./reach";
 
 /** The running session, full screen: the GM's tools dock on the left, a player's panel on the right. */
@@ -75,6 +76,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   markPresent(session.id, user.id);
   const levelId = getPlayerTokenLevelId(user.id);
   const place = levelId === undefined ? undefined : getLevelPlace(levelId);
+  const roll = getOpenRollRequest(user.id); // a roll they're being asked to make
   // Locked doors within reach of their character.
   const me = getPlayerToken(user.id);
   const lockedNearby = me
@@ -105,6 +107,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   return (
     <>
       <AutoRefresh checkIn={checkIn} />
+      <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
         <LevelMap readOnly fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
       ) : (

@@ -1,3 +1,4 @@
+import type { RollSpec, RolledPart } from "@/lib/rolls";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -1822,4 +1823,65 @@ export function listPings(levelId: number, afterId: number): Ping[] {
   return db
     .prepare<[number, number, number], Ping>("SELECT id, x, y, user_id, name, gm FROM pings WHERE level_id = ? AND id > ? AND created > ? ORDER BY id")
     .all(levelId, afterId, Date.now() - 4000);
+}
+
+// ---------- Roll requests ----------
+
+// A roll a player has to make (e.g. picking a lock): shown to them as a prompt until they roll it and close it.
+// `action` says what the result is for, so the server settles it once rolled.
+db.exec(`CREATE TABLE IF NOT EXISTS roll_requests (
+  id INTEGER PRIMARY KEY,
+  player_id INTEGER NOT NULL REFERENCES users(id),
+  character_id INTEGER NOT NULL,
+  spec TEXT NOT NULL,
+  action TEXT NOT NULL,
+  result TEXT,
+  done INTEGER NOT NULL DEFAULT 0
+)`);
+
+export interface RollRequest {
+  id: number;
+  player_id: number;
+  character_id: number;
+  spec: RollSpec;
+  action: RollAction;
+  result: { total: number; parts: RolledPart[]; outcome: string; success: boolean } | null;
+}
+
+/** What a roll is for. */
+export type RollAction = { kind: "pickLock"; doorId: number; dc: number };
+
+type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
+const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
+
+/** Asks a player to roll; replaces any roll they haven't made yet. */
+export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
+  db.transaction(() => {
+    db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ? AND result IS NULL").run(playerId);
+    db.prepare("INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ?, ?)").run(playerId, characterId, JSON.stringify(spec), JSON.stringify(action));
+  })();
+}
+
+/** The roll a player is being asked for (or has just rolled and not yet closed). */
+export function getOpenRollRequest(playerId: number): RollRequest | undefined {
+  const r = db.prepare<[number], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE player_id = ? AND done = 0 ORDER BY id DESC LIMIT 1").get(playerId);
+  return r && parseRequest(r);
+}
+
+export function saveRollResult(id: number, result: NonNullable<RollRequest["result"]>): void {
+  db.prepare("UPDATE roll_requests SET result = ? WHERE id = ?").run(JSON.stringify(result), id);
+}
+
+export function closeRollRequest(id: number, playerId: number): void {
+  db.prepare("UPDATE roll_requests SET done = 1 WHERE id = ? AND player_id = ?").run(id, playerId);
+}
+
+/** A character's profession modifiers to one target, e.g. "skill:sleight of hand". */
+export function characterModifiers(characterId: number, target: string): { profession: string; value: string }[] {
+  return db
+    .prepare<[number, string], { profession: string; value: string }>(
+      `SELECT p.name AS profession, m.value FROM character_professions cp JOIN professions p ON p.id = cp.profession_id
+       JOIN profession_modifiers m ON m.profession_id = p.id WHERE cp.character_id = ? AND m.target = ? ORDER BY p.name`
+    )
+    .all(characterId, target);
 }
