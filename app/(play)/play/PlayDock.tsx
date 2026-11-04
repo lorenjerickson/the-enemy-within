@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /** One tool in the in-session dock: an icon on the rail, and what opens beside it. */
 export interface DockTool {
@@ -15,12 +15,30 @@ export interface DockTool {
  * Progressive disclosure: a slim rail of tool icons is always there; one tool's panel is open at a time,
  * and clicking the open tool again (or ») collapses back to the rail.
  */
-export default function PlayDock({ side, tools, initial = null }: { side: "left" | "right"; tools: DockTool[]; initial?: string | null }) {
+export default function PlayDock({
+  side,
+  tools,
+  initial = null,
+  onWidth,
+}: {
+  side: "left" | "right";
+  tools: DockTool[];
+  initial?: string | null;
+  onWidth?: (px: number) => void; // reports how wide the dock is (rail, plus the open panel), so map overlays can keep clear
+}) {
   const [open, setOpen] = useState<string | null>(initial);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!onWidth || !root.current) return;
+    const el = root.current;
+    const observer = new ResizeObserver(() => onWidth(el.getBoundingClientRect().width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onWidth]);
   const tool = tools.find((t) => t.id === open);
   const left = side === "left";
   return (
-    <div data-dock={side} className={`pointer-events-none fixed inset-y-0 z-20 flex ${left ? "left-0" : "right-0 flex-row-reverse"}`}>
+    <div ref={root} data-dock={side} className={`pointer-events-none fixed inset-y-0 z-20 flex ${left ? "left-0" : "right-0 flex-row-reverse"}`}>
       <nav className="pointer-events-auto flex w-12 flex-col items-center gap-1 bg-base-200/90 py-2 shadow-xl backdrop-blur">
         {tools.map((t) => (
           <button

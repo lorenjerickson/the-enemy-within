@@ -560,6 +560,7 @@ export default function MapView({
   /** What the last clicked control button's script returned. */
   const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
+  const [dockWidth, setDockWidth] = useState(0); // in a session: how much of the screen edge the dock covers
   const [hiddenSet, setHidden] = useOptimistic(new Set<MapLayer>(readOnly ? [...hidden, ...GM_ONLY_LAYERS] : hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
     const next = new Set(set);
     if (visible) next.delete(layer);
@@ -1399,6 +1400,7 @@ export default function MapView({
               <ControlButtons
                 controls={controls}
                 size={canvasSize}
+                inset={{ left: dockSide === "left" ? dockWidth : 0, right: dockSide === "right" ? dockWidth : 0 }}
                 onRun={(c) =>
                   startTransition(async () => {
                     const r = await runControl(locationId, c.id);
@@ -1625,7 +1627,7 @@ export default function MapView({
       <div className="fixed inset-0 overflow-hidden bg-base-300">
         {surface}
         <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
-        <PlayDock side={dockSide} tools={tools} initial={dockInitial} />
+        <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} />
       </div>
     );
   }
@@ -1656,10 +1658,12 @@ export default function MapView({
 function ControlButtons({
   controls,
   size,
+  inset = { left: 0, right: 0 },
   onRun,
 }: {
   controls: MapControl[];
   size: { w: number; h: number };
+  inset?: { left: number; right: number }; // pixels covered by docked UI on each side; buttons stay clear of it
   onRun: (control: MapControl) => void;
 }) {
   const MARGIN = 12, GAP = 6, B = 26;
@@ -1667,12 +1671,12 @@ function ControlButtons({
     const row = controls.filter((c) => c.edge === edge);
     const horizontal = edge === "top" || edge === "bottom";
     const total = row.length * B + Math.max(0, row.length - 1) * GAP;
-    const start = ((horizontal ? size.w : size.h) - total) / 2;
-    const inset = MARGIN;
+    const free = size.w - inset.left - inset.right; // the visible width between docked UI
+    const start = horizontal ? inset.left + (free - total) / 2 : (size.h - total) / 2;
     return row.map((c, i) => {
       const along = start + i * (B + GAP);
-      const x = horizontal ? along : edge === "left" ? inset : size.w - inset - B;
-      const y = horizontal ? (edge === "top" ? inset : size.h - inset - B) : along;
+      const x = horizontal ? along : edge === "left" ? inset.left + MARGIN : size.w - inset.right - MARGIN - B;
+      const y = horizontal ? (edge === "top" ? MARGIN : size.h - MARGIN - B) : along;
       return { c, x, y, edge };
     });
   });
@@ -1691,7 +1695,7 @@ function ControlButtons({
             data-control-button={c.label}
             aria-label={c.label}
             onClick={() => onRun(c)}
-            className="flex items-center justify-center rounded-md border border-white/70 bg-transparent text-white/90 hover:border-white hover:text-white"
+            className="flex items-center justify-center rounded-md border border-white/70 bg-black/50 text-white/90 shadow hover:border-white hover:bg-black/70 hover:text-white"
             style={{ width: B, height: B }}
           >
             <GameIcon name={c.icon} className="size-4" />
