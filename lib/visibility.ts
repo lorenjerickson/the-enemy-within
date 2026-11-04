@@ -19,7 +19,9 @@ function hit(o: Point, dx: number, dy: number, s: Segment): number | null {
  */
 export function visibilityPolygon(origin: Point, radius: number, walls: Segment[]): Point[] {
   const angles: number[] = [];
-  for (let i = 0; i < 96; i++) angles.push((i / 96) * Math.PI * 2);
+  // Same range as Math.atan2 below (−π..π), so sorting puts every ray in order around the origin;
+  // mixing ranges made a self-crossing polygon that point-in-polygon tests got wrong.
+  for (let i = 0; i < 96; i++) angles.push(-Math.PI + (i / 96) * Math.PI * 2);
   for (const w of walls) {
     for (const p of [w.a, w.b]) {
       if (Math.hypot(p.x - origin.x, p.y - origin.y) > radius * 1.5) continue;
