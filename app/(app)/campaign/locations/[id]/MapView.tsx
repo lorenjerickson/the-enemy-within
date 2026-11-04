@@ -21,7 +21,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -48,6 +48,7 @@ interface MapState {
   tiles: MapTile[];
   tileImages: Map<string, HTMLImageElement>;
   structures: MapStructure[];
+  showWalls: boolean; // wall lines: GM only, and only while not hidden (they're still walls either way)
   tokens: MapToken[];
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
@@ -182,6 +183,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.save();
     ctx.lineCap = "round";
     for (const s of state.structures) {
+      if (s.kind === "wall" && !state.showWalls) continue;
       if (s.kind === "staircase") {
         const r = cellToRect(state, w, h, { col: s.x1, row: s.y1, cols: 1, rows: 1 });
         ctx.fillStyle = "rgba(17,24,39,0.7)";
@@ -502,6 +504,7 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  hideWalls,
   dockSide,
   dockTools = [],
   dockInitial = null,
@@ -528,6 +531,7 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
+  hideWalls: boolean; // the GM has hidden wall lines from their view
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -677,6 +681,9 @@ export default function MapView({
     h: Math.abs(d.end.y - d.start.y),
   });
 
+  // Wall lines hidden from the GM's view (shown straight away, saved in the background).
+  const [optimisticHideWalls, setHideWallsLocally] = useOptimistic(hideWalls, (_: boolean, v: boolean) => v);
+
   // Party start: while marking, dragging on the map outlines the area the party's tokens start in.
   const [markingStart, setMarkingStart] = useState(false);
   const [startDrag, setStartDrag] = useState<NonNullable<typeof effectDrag> | null>(null);
@@ -706,6 +713,7 @@ export default function MapView({
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
+    showWalls: !readOnly && !optimisticHideWalls,
     tokens: drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: shownIllumination, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
     effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
@@ -1494,6 +1502,13 @@ export default function MapView({
                 onToolChange={setStructureTool}
                 levels={otherLevels}
                 pieces={optimisticStructures}
+                wallsShown={!optimisticHideWalls}
+                onWallsShownChange={(shown) =>
+                  startTransition(async () => {
+                    setHideWallsLocally(!shown);
+                    await setWallsHidden(locationId, levelId, !shown);
+                  })
+                }
                 selectedId={selectedStructureId}
                 onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
                 onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}

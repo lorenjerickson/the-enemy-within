@@ -19,6 +19,8 @@ export default function StructureEditor({
   gridless,
   levels,
   pieces,
+  wallsShown,
+  onWallsShownChange,
   selectedId,
   onSelect,
   onDelete,
@@ -31,6 +33,8 @@ export default function StructureEditor({
   gridless: boolean; // no grid to snap to
   levels: { id: number; name: string }[]; // other levels a staircase can lead to
   pieces: MapStructure[];
+  wallsShown: boolean;
+  onWallsShownChange: (shown: boolean) => void;
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
@@ -39,6 +43,10 @@ export default function StructureEditor({
 }) {
   return (
     <div className="space-y-3">
+      <label className="label cursor-pointer gap-2 text-sm" title="Players never see wall lines. Hidden walls still block.">
+        <input type="checkbox" className="toggle toggle-sm" aria-label="Show wall lines" checked={wallsShown} onChange={(e) => onWallsShownChange(e.target.checked)} />
+        Show wall lines <span className="text-xs opacity-60">(GM only; hidden walls are still walls)</span>
+      </label>
       <div className="flex flex-wrap items-center gap-2">
         <div className="join">
           {STRUCTURE_KINDS.filter((k) => portrait || k !== "stairs").map((k) => (

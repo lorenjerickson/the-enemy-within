@@ -315,6 +315,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
   turn_order TEXT NOT NULL
 )`);
 
+addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
 db.exec(`CREATE TABLE IF NOT EXISTS party_start (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -832,6 +833,7 @@ export interface MapLevel {
   templateColors: TemplateColors;
   illumination: number; // global light level, 0 (dark) .. 1 (full)
   figure_height: number; // portrait maps: how many grid cells tall a 1.8 m figure stands
+  hide_walls: 0 | 1; // the GM has hidden wall lines from their own view (players never see them)
   hidden: MapLayer[];
 }
 
@@ -840,8 +842,8 @@ export function listLevels(locationId: number): MapLevel[] {
   const select = () =>
     db.prepare<
       [number],
-      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null; illumination: number; figure_height: number }
-    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors, illumination, figure_height FROM map_levels WHERE location_id = ? ORDER BY position DESC"
+      { id: number; location_id: number; name: string; position: number; background: string | null; map_image: string | null; grid: string | null; template_colors: string | null; illumination: number; figure_height: number; hide_walls: 0 | 1 }
+    >("SELECT id, location_id, name, position, background, map_image, grid, template_colors, illumination, figure_height, hide_walls FROM map_levels WHERE location_id = ? ORDER BY position DESC"
     ).all(locationId);
   let rows = select();
   if (rows.length === 0) {
@@ -1237,6 +1239,10 @@ export function setSoundVolume(table: "ambient_sounds" | "positional_sounds", id
 
 export function saveFigureHeight(levelId: number, cells: number): void {
   db.prepare<[number, number]>("UPDATE map_levels SET figure_height = ? WHERE id = ?").run(Math.min(20, Math.max(0.1, cells)), levelId);
+}
+
+export function saveHideWalls(levelId: number, hide: boolean): void {
+  db.prepare<[number, number]>("UPDATE map_levels SET hide_walls = ? WHERE id = ?").run(hide ? 1 : 0, levelId);
 }
 
 export function saveIllumination(levelId: number, illumination: number): void {
