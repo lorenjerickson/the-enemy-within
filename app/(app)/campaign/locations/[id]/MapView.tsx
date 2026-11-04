@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import { blockingSegments, visibilityPolygon, type Segment } from "@/lib/visibility";
+import { blockingSegments, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import type { MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
@@ -152,6 +152,19 @@ const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
 };
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
+/** How far characters see (grid units): as far as walls allow. */
+const SIGHT = 500;
+
+/** Whether a point lies inside a polygon (ray casting). */
+function insidePolygon(p: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
 /** Layers only the GM ever sees. */
 const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
 
@@ -504,6 +517,7 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  fog,
   hideWalls,
   dockSide,
   dockTools = [],
@@ -532,6 +546,7 @@ export default function MapView({
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
   hideWalls: boolean; // the GM has hidden wall lines from their view
+  fog?: { viewers: number[]; explored: Point[] }; // a player's fog of war: their characters, and where they've stood before
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -710,11 +725,28 @@ export default function MapView({
     ? optimisticNotes.map((n) => (n.id === resizingNote.id ? { ...n, w: resizingNote.w, h: resizingNote.h } : n))
     : optimisticNotes;
 
+  // Fog of war (players; not side-on maps): what their characters see now, past walls and closed doors, and what they saw before.
+  const fogged = useMemo(() => {
+    if (!fog || mapImage.perspective === "portrait") return null; // side-on maps have no fog
+    const walls = blockingSegments(optimisticStructures);
+    const centre = (t: MapToken) => ({ x: t.col + 0.5, y: t.row + 0.5 });
+    const own = drawnTokens.filter((t) => t.character_id !== null && fog.viewers.includes(t.character_id));
+    const visible = own.map((t) => visibilityPolygon(centre(t), SIGHT, walls));
+    const seen = new Map(fog.explored.map((p) => [`${p.x},${p.y}`, p]));
+    for (const t of own) seen.delete(`${centre(t).x},${centre(t).y}`); // already in `visible`
+    const explored = [...seen.values()].map((p) => visibilityPolygon(p, SIGHT, walls));
+    // Only tokens in sight are shown (and their own, always).
+    const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
+    return { visible, explored, tokens };
+  }, [fog, mapImage.perspective, optimisticStructures, drawnTokens]);
+  const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
+
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     showWalls: !readOnly && !optimisticHideWalls,
-    tokens: drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: shownIllumination, figureHeight,
+    // The GM sees the whole map fully lit; darkness and fog are for players.
+    tokens: fogged ? fogged.tokens : drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
     effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
@@ -1153,6 +1185,39 @@ export default function MapView({
       ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (view.x + view.zoom * fit.ox), dpr * (view.y + view.zoom * fit.oy));
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
+      }
+      // Fog of war: black where never seen, dimmed where seen before, clear where in sight now.
+      if (fogged) {
+        fogCanvas.current ??= { fog: document.createElement("canvas"), mask: document.createElement("canvas") };
+        const { fog: f, mask: m } = fogCanvas.current;
+        const t = ctx.getTransform();
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const shapes = (polys: Point[][]) => {
+          const p = new Path2D();
+          for (const poly of polys) {
+            poly.forEach((pt, i) => (i ? p.lineTo(x0 + pt.x * size, y0 + pt.y * size) : p.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
+            p.closePath();
+          }
+          return p;
+        };
+        for (const c of [f, m]) { c.width = canvas.width; c.height = canvas.height; }
+        const fc = f.getContext("2d")!, mc = m.getContext("2d")!;
+        fc.fillStyle = "#000";
+        fc.fillRect(0, 0, f.width, f.height);
+        // Explored areas, merged on their own canvas first so overlaps don't clear twice.
+        mc.setTransform(t);
+        mc.fillStyle = "#fff";
+        mc.fill(shapes(fogged.explored));
+        fc.globalCompositeOperation = "destination-out";
+        fc.globalAlpha = 0.45;
+        fc.drawImage(m, 0, 0);
+        fc.globalAlpha = 1;
+        fc.setTransform(t);
+        fc.fill(shapes(fogged.visible));
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(f, 0, 0);
+        ctx.restore();
       }
       // Highlight the tile picked in the editor.
       const highlighted = drawnTiles.find((t) => t.id === selectedTileId);

@@ -9,12 +9,14 @@ export default function LevelMap({
   level,
   levels,
   readOnly = false,
+  fog,
   dock,
 }: {
   locationId: number;
   level: MapLevel;
   levels: MapLevel[];
   readOnly?: boolean;
+  fog?: { viewers: number[]; explored: { x: number; y: number }[] }; // a player's fog of war
   dock?: { side: "left" | "right"; tools: DockTool[]; initial?: string | null }; // in a session: full screen, with this dock
 }) {
   // A player's view gets nothing GM-only (notes, controls, scripts, sounds, the creature list).
@@ -22,7 +24,7 @@ export default function LevelMap({
   const start = getPartyStart();
   const placement = getPartyPlacement();
   return (
-    <MapView hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView fog={fog} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

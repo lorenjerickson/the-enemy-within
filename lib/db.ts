@@ -1086,11 +1086,13 @@ export function getTokenLevel(id: number): number | undefined {
 export function placeCharacterToken(levelId: number, characterId: number, col: number, row: number): number {
   return db.transaction(() => {
     db.prepare<[number]>("DELETE FROM map_tokens WHERE character_id = ?").run(characterId);
-    return Number(
+    const id = Number(
       db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, character_id, col, row) VALUES (?, ?, ?, ?)").run(
         levelId, characterId, col, row
       ).lastInsertRowid
     );
+    recordSighting(id);
+    return id;
   })();
 }
 
@@ -1138,6 +1140,31 @@ export function deleteToken(id: number): void {
 
 export function moveToken(id: number, col: number, row: number): void {
   db.prepare<[number, number, number]>("UPDATE map_tokens SET col = ?, row = ? WHERE id = ?").run(col, row, id);
+  recordSighting(id);
+}
+
+// Fog of war: every spot a character's token has stood on a level (its centre, grid units); what was seen from them stays explored.
+db.exec(`CREATE TABLE IF NOT EXISTS sightings (
+  character_id INTEGER NOT NULL,
+  level_id INTEGER NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  PRIMARY KEY (character_id, level_id, x, y)
+)`);
+
+function recordSighting(tokenId: number): void {
+  db.prepare<[number]>(
+    "INSERT OR IGNORE INTO sightings SELECT character_id, level_id, col + 0.5, row + 0.5 FROM map_tokens WHERE id = ? AND character_id IS NOT NULL"
+  ).run(tokenId);
+}
+
+/** Where a player's characters have stood on this level (fog of war viewpoints). */
+export function listSightings(playerId: number, levelId: number): { x: number; y: number }[] {
+  return db
+    .prepare<[number, number], { x: number; y: number }>(
+      "SELECT DISTINCT s.x, s.y FROM sightings s JOIN characters c ON c.id = s.character_id WHERE c.player_id = ? AND s.level_id = ?"
+    )
+    .all(playerId, levelId);
 }
 
 export interface AmbientClip {
