@@ -440,13 +440,6 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.fillText(t.name[0]?.toUpperCase() ?? "?", cx, cy);
       }
       ctx.restore();
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = t.character_id ? "#93c5fd" : "#fca5a5";
-      ctx.stroke();
-      ctx.restore();
     }
   },
   map: (state) => (ctx, w, h) => {
@@ -1199,11 +1192,22 @@ export default function MapView({
       const token = drawnTokens.find((t) => t.id === selectedTokenId);
       if (token && selected === "tokens") {
         const r = cellToRect(state, SCENE.w, SCENE.h, { col: token.col, row: token.row, cols: 1, rows: 1 });
+        const sideOn = state.mapImage.perspective === "portrait" && token.token_side && state.tokenImages.get(token.token_side);
         ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        if (sideOn) {
+          // Side-on figures aren't round: outline their cell.
+          ctx.strokeStyle = "rgb(129,140,248)";
+          ctx.lineWidth = 3 / k;
+          ctx.setLineDash([6 / k, 4 / k]);
+          ctx.strokeRect(r.x, r.y, r.w, r.h);
+        } else {
+          // A 4px ring (on screen, whatever the zoom) around the round token.
+          ctx.strokeStyle = token.character_id ? "#93c5fd" : "#fca5a5";
+          ctx.lineWidth = 4 / k;
+          ctx.beginPath();
+          ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.42, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
       // Structure: preview of the line being drawn, and highlight of the selected piece.
