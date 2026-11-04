@@ -11,6 +11,7 @@ const CAMPAIGN_NAV = [
   { href: "/campaign/characters", label: "Characters" },
   { href: "/campaign/locations", label: "Locations" },
   { href: "/campaign/story", label: "Story" },
+  { href: "/campaign/players", label: "Players" },
 ];
 
 export default async function CampaignLayout({ children }: { children: ReactNode }) {
