@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { revealDiscovery } from "@/lib/storyRules";
+import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -507,4 +508,25 @@ export async function placeInStartArea(locationId: number, characterId: number, 
   placeCharacterToken(level_id, characterId, across(level_id, c), settle(level_id, across(level_id, c), r));
   revalidatePath(`/campaign/locations/${locationId}`);
   revalidatePath("/sessions", "layout");
+}
+
+/** GM places a hidden thing on the map (optionally a story discovery). */
+export async function placeSecret(locationId: number, levelId: number, s: { x: number; y: number; name: string; text: string; discovery_id: number | null }) {
+  await requireGm();
+  addSecret(levelId, { x: Number(s.x), y: Number(s.y), name: String(s.name).trim() || "Something hidden", text: String(s.text ?? "").trim(), discovery_id: s.discovery_id ? Number(s.discovery_id) : null });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeSecret(locationId: number, id: number) {
+  await requireGm();
+  deleteSecret(Number(id));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM reveals (or hides again) a secret; revealing one that's a discovery also reveals the discovery to the party. */
+export async function revealSecret(locationId: number, id: number, revealed: boolean, discoveryId: number | null) {
+  await requireGm();
+  setSecretRevealed(Number(id), !!revealed);
+  if (revealed && discoveryId) revealDiscovery(Number(discoveryId));
+  revalidatePath(`/campaign/locations/${locationId}`);
 }

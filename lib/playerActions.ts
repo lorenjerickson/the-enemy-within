@@ -14,3 +14,7 @@ export const PLAYER_ACTIONS = [
 ] as const;
 
 export type PlayerActionId = (typeof PLAYER_ACTIONS)[number]["id"];
+
+/** Search: an Investigation check against this DC reveals hidden things within SEARCH_RANGE grid squares (5 ft each). */
+export const SEARCH_DC = 14;
+export const SEARCH_RANGE = 2; // 10 ft

@@ -6,12 +6,13 @@ import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { blockingSegments, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
-import type { MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { pingsSince, sendPing } from "../../../../(play)/play/actions";
+import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
 import type { ScriptNames } from "@/lib/scriptSchema";
@@ -22,7 +23,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -58,6 +59,7 @@ interface MapState {
   lights: LightSource[];
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
+  secrets: MapSecret[];
   effects: MapEffect[];
   time: number; // seconds, drives animated effects
   showEffectAreas: boolean; // outline placed effects (while editing effects)
@@ -279,6 +281,38 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.strokeRect(area.x, area.y, area.w, area.h);
         ctx.restore();
       }
+    }
+  },
+  // Secrets: the GM sees every one (a dashed ring with "?", solid with "!" once revealed); players get only revealed ones.
+  secrets: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const s of state.secrets) {
+      const x = x0 + s.x * size, y = y0 + s.y * size, r = size * 0.28;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = s.revealed ? "rgba(245,158,11,0.9)" : "rgba(168,85,247,0.25)";
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, size * 0.04);
+      ctx.strokeStyle = s.revealed ? "#fde68a" : "#c084fc";
+      if (!s.revealed) ctx.setLineDash([size * 0.08, size * 0.06]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = s.revealed ? "#1f2937" : "#e9d5ff";
+      ctx.font = `bold ${r * 1.2}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(s.revealed ? "!" : "?", x, y + r * 0.05);
+      // A short label under it, scaled to the grid (long discovery titles are cut).
+      const label = s.name.length > 24 ? `${s.name.slice(0, 23)}…` : s.name;
+      ctx.font = `${size * 0.18}px sans-serif`;
+      ctx.textBaseline = "top";
+      ctx.lineWidth = size * 0.03;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText(label, x, y + r * 1.15);
+      ctx.fillStyle = "#f9fafb";
+      ctx.fillText(label, x, y + r * 1.15);
+      ctx.restore();
     }
   },
   notes: (state) => (ctx, w, h) => {
@@ -532,6 +566,8 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  secrets,
+  discoveries = [],
   fog,
   hideWalls,
   dockSide,
@@ -560,6 +596,8 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
+  secrets: MapSecret[]; // hidden things (players get only the revealed ones)
+  discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
   fog?: { viewers: number[]; explored: Point[] }; // a player's fog of war: their characters, and where they've stood before
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
@@ -740,6 +778,13 @@ export default function MapView({
   const [placingId, setPlacingId] = useState<number | null>(null);
   const placingChar = placedLocally.find((c) => c.id === placingId) ?? placedLocally[0] ?? null;
 
+  // Secrets: describe it, then click the map; shown straight away (optimistic).
+  const [secretDraft, setSecretDraft] = useState<SecretDraft>({ name: "", text: "", discoveryId: null });
+  type SecretChange = { add: MapSecret } | { remove: number } | { reveal: { id: number; revealed: boolean } };
+  const [optimisticSecrets, changeSecrets] = useOptimistic(secrets, (ss: MapSecret[], c: SecretChange) =>
+    "add" in c ? [...ss, c.add] : "remove" in c ? ss.filter((s) => s.id !== c.remove) : ss.map((s) => (s.id === c.reveal.id ? { ...s, revealed: c.reveal.revealed ? (1 as const) : (0 as const) } : s))
+  );
+
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
@@ -779,7 +824,7 @@ export default function MapView({
     showWalls: !readOnly && !optimisticHideWalls,
     // The GM sees the whole map fully lit; darkness and fog are for players.
     tokens: fogged ? fogged.tokens : drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets,
     effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
@@ -899,6 +944,18 @@ export default function MapView({
       startTransition(async () => {
         markPlaced(c.id);
         await placeInStartArea(locationId, c.id, col, row);
+      });
+      return;
+    }
+    if (e.button === 0 && selected === "secrets") {
+      const d = secretDraft;
+      if (!d.name.trim()) return;
+      const { gx, gy } = gridAt(e);
+      const placed = { x: gx, y: gy, name: d.name.trim(), text: d.text.trim(), discovery_id: d.discoveryId };
+      setSecretDraft({ name: "", text: "", discoveryId: null });
+      startTransition(async () => {
+        changeSecrets({ add: { id: -Date.now(), ...placed, revealed: 0 } });
+        await placeSecret(locationId, levelId, placed);
       });
       return;
     }
@@ -1555,6 +1612,25 @@ export default function MapView({
               <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
             ) : selected === "controls" ? (
               <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} names={scriptNames} />
+            ) : selected === "secrets" ? (
+              <SecretsEditor
+                draft={secretDraft}
+                onDraftChange={setSecretDraft}
+                discoveries={discoveries}
+                secrets={optimisticSecrets}
+                onReveal={(s, revealed) =>
+                  startTransition(async () => {
+                    changeSecrets({ reveal: { id: s.id, revealed } });
+                    await revealSecret(locationId, s.id, revealed, s.discovery_id);
+                  })
+                }
+                onRemove={(id) =>
+                  startTransition(async () => {
+                    changeSecrets({ remove: id });
+                    await removeSecret(locationId, id);
+                  })
+                }
+              />
             ) : selected === "notes" ? (
               <NotesEditor
                 draft={noteDraft}

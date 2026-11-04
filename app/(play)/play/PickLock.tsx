@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickLock } from "./actions";
+import { pickLock, search } from "./actions";
 import { PLAYER_ACTIONS } from "@/lib/playerActions";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 
 /** The player's Actions panel: the standard actions, then anything they can do right here (picking a nearby lock). */
-export default function PickLock({ doors }: { doors: { id: number; name: string }[] }) {
+export default function PickLock({ doors, onMap }: { doors: { id: number; name: string }[]; onMap: boolean }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -14,12 +14,13 @@ export default function PickLock({ doors }: { doors: { id: number; name: string 
       <ul className="grid grid-cols-3 gap-2" data-player-actions>
         {PLAYER_ACTIONS.map((a) => (
           <li key={a.id}>
-            {/* How each action works comes later; for now they're shown but can't be taken. */}
+            {/* Actions switch on as they're built; the rest are shown but can't be taken yet. */}
             <button
               type="button"
               data-action={a.id}
-              disabled
-              title={`${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`}
+              disabled={a.id !== "search" || !onMap || pending}
+              onClick={a.id === "search" ? () => startTransition(async () => setError((await search()).error ?? null)) : undefined}
+              title={a.id === "search" ? (onMap ? "Search: Investigation check (DC 14) for anything hidden within 10 ft" : "You're not on the map yet") : `${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`}
               className="btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80"
             >
               <GameIcon name={a.icon} className="size-7" />

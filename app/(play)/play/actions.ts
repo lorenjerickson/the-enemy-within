@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked,
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed,
 } from "@/lib/db";
+import { revealDiscovery } from "@/lib/storyRules";
+import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll, skillCheck } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -22,6 +24,19 @@ export async function pickLock(doorId: number): Promise<{ error?: string }> {
   const spec = skillCheck("sleight of hand", JSON.parse(me.attributes) as Attributes, characterModifiers(me.character_id, "skill:sleight of hand"));
   spec.label = `Pick the lock on ${door.name ?? `Door ${door.id}`}: ${spec.label}`;
   requestRoll(user.id, me.character_id, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
+  revalidatePath("/play");
+  return {};
+}
+
+/** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */
+export async function search(): Promise<{ error?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  const spec = skillCheck("investigation", JSON.parse(me.attributes) as Attributes, characterModifiers(me.character_id, "skill:investigation"));
+  spec.label = `Search: ${spec.label}`;
+  requestRoll(user.id, me.character_id, spec, { kind: "search", dc: SEARCH_DC });
   revalidatePath("/play");
   return {};
 }
@@ -43,6 +58,20 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     outcome = success ? `The lock on ${name} clicks open.` : `The lock on ${name} won't give.`;
     logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${scored.total} vs DC ${a.dc})`);
     outcome += ` (${scored.total} vs ${a.dc})`;
+  }
+  if (a.kind === "search") {
+    const me = getPlayerToken(user.id);
+    success = scored.total >= a.dc;
+    const found = success && me
+      ? listSecrets(me.level_id).filter((s) => !s.revealed && Math.hypot(s.x - (me.col + 0.5), s.y - (me.row + 0.5)) <= SEARCH_RANGE + 0.5)
+      : [];
+    for (const s of found) {
+      setSecretRevealed(s.id, true);
+      if (s.discovery_id) revealDiscovery(s.discovery_id); // into the party's journals
+    }
+    // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
+    outcome = found.length ? `You find: ${found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)).join("; ")}` : "You search but find nothing.";
+    logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${found.length ? `found ${found.map((s) => s.name).join(", ")}` : success ? "nothing there" : "failed"}`);
   }
   saveRollResult(req.id, { ...scored, outcome, success });
   revalidatePath("/play");

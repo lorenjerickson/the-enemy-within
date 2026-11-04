@@ -896,6 +896,7 @@ export function removeLevel(levelId: number): void {
     db.prepare<[number]>("DELETE FROM map_notes WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_effects WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM party_start WHERE level_id = ?").run(levelId);
+    db.prepare<[number]>("DELETE FROM map_secrets WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM map_controls WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("DELETE FROM encounters WHERE level_id = ?").run(levelId);
     db.prepare<[number]>("UPDATE map_structures SET target_level_id = NULL WHERE target_level_id = ?").run(levelId);
@@ -1849,7 +1850,7 @@ export interface RollRequest {
 }
 
 /** What a roll is for. */
-export type RollAction = { kind: "pickLock"; doorId: number; dc: number };
+export type RollAction = { kind: "pickLock"; doorId: number; dc: number } | { kind: "search"; dc: number };
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
@@ -1884,4 +1885,49 @@ export function characterModifiers(characterId: number, target: string): { profe
        JOIN profession_modifiers m ON m.profession_id = p.id WHERE cp.character_id = ? AND m.target = ? ORDER BY p.name`
     )
     .all(characterId, target);
+}
+
+// ---------- Secrets ----------
+
+// Hidden things on a map (a trapdoor, a note under the rug), optionally a story discovery. The GM sees them all;
+// players see one once it's revealed (by a successful Search nearby, or by the GM).
+db.exec(`CREATE TABLE IF NOT EXISTS map_secrets (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  name TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  discovery_id INTEGER,
+  revealed INTEGER NOT NULL DEFAULT 0
+)`);
+
+export interface MapSecret {
+  id: number;
+  x: number;
+  y: number;
+  name: string;
+  text: string;
+  discovery_id: number | null;
+  revealed: 0 | 1;
+}
+
+export function listSecrets(levelId: number): MapSecret[] {
+  return db.prepare<[number], MapSecret>("SELECT id, x, y, name, text, discovery_id, revealed FROM map_secrets WHERE level_id = ? ORDER BY id").all(levelId);
+}
+
+export function addSecret(levelId: number, s: Omit<MapSecret, "id" | "revealed">): void {
+  db.prepare("INSERT INTO map_secrets (level_id, x, y, name, text, discovery_id) VALUES (?, ?, ?, ?, ?, ?)").run(levelId, s.x, s.y, s.name, s.text, s.discovery_id);
+}
+
+export function deleteSecret(id: number): void {
+  db.prepare("DELETE FROM map_secrets WHERE id = ?").run(id);
+}
+
+export function setSecretRevealed(id: number, revealed: boolean): void {
+  db.prepare("UPDATE map_secrets SET revealed = ? WHERE id = ?").run(revealed ? 1 : 0, id);
+}
+
+export function getSecretLevel(id: number): number | undefined {
+  return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_secrets WHERE id = ?").get(id)?.level_id;
 }

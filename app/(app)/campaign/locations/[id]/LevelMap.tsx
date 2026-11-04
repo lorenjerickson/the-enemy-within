@@ -1,4 +1,5 @@
-import { getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel } from "@/lib/db";
+import { listDiscoveries } from "@/lib/story";
+import { listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel } from "@/lib/db";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
 import type { DockTool } from "../../../../(play)/play/PlayDock";
@@ -24,7 +25,7 @@ export default function LevelMap({
   const start = getPartyStart();
   const placement = getPartyPlacement();
   return (
-    <MapView fog={fog} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}
