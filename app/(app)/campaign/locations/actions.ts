@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -473,4 +473,19 @@ export async function removePartyStart(locationId: number) {
   clearPartyStart();
   revalidatePath(`/campaign/locations/${locationId}`);
   revalidatePath("/campaign");
+}
+
+/** First session: the GM places a player's character inside the party's start area. */
+export async function placeInStartArea(locationId: number, characterId: number, col: number, row: number) {
+  await requireGm();
+  const p = getPartyPlacement();
+  if (!p || !p.unplaced.some((c) => c.id === characterId)) return;
+  const { level_id, x, y, w, h } = p.start;
+  // Keep the whole token inside the area.
+  const lo = (v: number) => Math.ceil(v), hi = (v: number, size: number) => Math.max(Math.ceil(v), Math.floor(v + size) - 1);
+  const c = Math.min(Math.max(Number(col), lo(x)), hi(x, w));
+  const r = Math.min(Math.max(Number(row), lo(y)), hi(y, h));
+  placeCharacterToken(level_id, characterId, across(level_id, c), settle(level_id, across(level_id, c), r));
+  revalidatePath(`/campaign/locations/${locationId}`);
+  revalidatePath("/sessions", "layout");
 }

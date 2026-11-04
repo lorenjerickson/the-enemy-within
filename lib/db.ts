@@ -1678,3 +1678,30 @@ export function setTriggerError(id: number, error: string): void {
 export function deleteTrigger(id: number): void {
   db.prepare<[number]>("DELETE FROM triggers WHERE id = ?").run(id);
 }
+
+// ---------- Party placement ----------
+
+export interface UnplacedCharacter {
+  id: number;
+  name: string;
+  image: string | null;
+  player: string;
+}
+
+/**
+ * Once the first session has begun: the party's start area, and the players' characters with no token on any map yet.
+ * Undefined when there's nothing to place (no first session running, no start area, or everyone is placed).
+ */
+export function getPartyPlacement(): { start: PartyStart; unplaced: UnplacedCharacter[] } | undefined {
+  const session = getOpenGameSession();
+  if (!session || session.number !== 1 || !session.began_at) return undefined;
+  const start = getPartyStart();
+  if (!start) return undefined;
+  const unplaced = db
+    .prepare<[], UnplacedCharacter>(
+      `SELECT c.id, c.name, c.image, u.name AS player FROM characters c JOIN users u ON u.id = c.player_id
+       WHERE NOT EXISTS (SELECT 1 FROM map_tokens t WHERE t.character_id = c.id) ORDER BY u.name, c.name`
+    )
+    .all();
+  return unplaced.length ? { start, unplaced } : undefined;
+}

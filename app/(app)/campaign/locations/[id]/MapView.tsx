@@ -20,7 +20,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -503,6 +503,7 @@ export default function MapView({
   scriptNames,
   partyStart,
   partyStartElsewhere,
+  toPlace,
 }: {
   locationId: number;
   levelId: number;
@@ -524,6 +525,7 @@ export default function MapView({
   figureHeight: number;
   partyStart: Area | null; // the party's starting area, when it's on this level
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
+  toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   lights: LightSource[];
   notes: MapNote[];
   effects: MapEffect[];
@@ -674,6 +676,10 @@ export default function MapView({
   const [markingStart, setMarkingStart] = useState(false);
   const [startDrag, setStartDrag] = useState<NonNullable<typeof effectDrag> | null>(null);
   const [optimisticStart, setStartLocally] = useOptimistic(partyStart, (_: Area | null, a: Area | null) => a);
+  // First session: characters still to be placed, one at a time, by clicking inside the start area.
+  const [placedLocally, markPlaced] = useOptimistic(toPlace, (cs: typeof toPlace, id: number) => cs.filter((c) => c.id !== id));
+  const [placingId, setPlacingId] = useState<number | null>(null);
+  const placingChar = placedLocally.find((c) => c.id === placingId) ?? placedLocally[0] ?? null;
 
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
@@ -786,6 +792,19 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button === 0 && placingChar && optimisticStart) {
+      const { gx, gy } = gridAt(e);
+      const a = optimisticStart;
+      if (gx < a.x || gx > a.x + a.w || gy < a.y || gy > a.y + a.h) return; // only inside the start area
+      const { col, row } = tokenAt(e);
+      const c = placingChar;
+      setPlacingId(null);
+      startTransition(async () => {
+        markPlaced(c.id);
+        await placeInStartArea(locationId, c.id, col, row);
+      });
+      return;
+    }
     if (e.button === 0 && selected === "notes") {
       // Grabbing a note's folded corner resizes it (topmost note first).
       const { gx, gy } = gridAt(e);
@@ -1219,7 +1238,7 @@ export default function MapView({
         ctx.restore();
       }
       // Party start area (while on the tokens layer), and one being dragged out.
-      const startArea = startDrag ? effectRect(startDrag) : selected === "tokens" ? optimisticStart : null;
+      const startArea = startDrag ? effectRect(startDrag) : selected === "tokens" || placingChar ? optimisticStart : null;
       if (startArea) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         const r = { x: x0 + startArea.x * size, y: y0 + startArea.y * size, w: startArea.w * size, h: startArea.h * size };
@@ -1268,6 +1287,22 @@ export default function MapView({
     <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
         <div className="flex-1 min-w-0 flex flex-col gap-1">
             <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
+            {placingChar && (
+              <div data-place-party className="absolute left-2 right-2 top-2 z-10 rounded-box bg-base-100/90 p-2 text-sm shadow space-y-1">
+                <div>
+                  <span className="font-semibold">Place the party.</span> Click inside the green start area to place{" "}
+                  <span className="font-semibold">{placingChar.name}</span> <span className="opacity-60">({placingChar.player})</span>.
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {placedLocally.map((c) => (
+                    <button key={c.id} type="button" aria-pressed={c.id === placingChar.id} className={`btn btn-xs ${c.id === placingChar.id ? "btn-primary" : ""}`} onClick={() => setPlacingId(c.id)}>
+                      {c.image && <img src={c.image} alt="" className="size-4 rounded-full object-cover" />}
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Control buttons float above every layer, along the scene's edges (they move with zoom/pan). */}
             {!hiddenSet.has("controls") && (
               <ControlButtons

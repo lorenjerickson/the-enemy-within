@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getGameSession, getGameTime, listTimers, listTriggers } from "@/lib/db";
+import { getPartyPlacement, getGameSession, getGameTime, listTimers, listTriggers } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import { CalendarPanel } from "../CalendarPanel";
@@ -58,6 +58,19 @@ export default async function Session({ params }: { params: Promise<{ id: string
           <PlayerPresence sessionId={session.id} />
         </div>
       )}
+      {!lobby && !session.ended_at && (() => {
+        const p = getPartyPlacement();
+        return p ? (
+          <div role="alert" className="alert alert-info max-w-3xl" data-place-party>
+            <span>
+              Place the party: {p.unplaced.map((c) => c.name).join(", ")} {p.unplaced.length === 1 ? "has" : "have"} no token yet.
+            </span>
+            <Link className="btn btn-sm" href={`/campaign/locations/${p.start.location_id}?level=${p.start.level_id}`}>
+              Open {p.start.location} › {p.start.level}
+            </Link>
+          </div>
+        ) : null;
+      })()}
       {!lobby && (
         <>
           <CalendarPanel now={getGameTime()} timers={listTimers()} />
