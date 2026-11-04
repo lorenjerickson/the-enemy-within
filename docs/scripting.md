@@ -60,7 +60,7 @@ WITH game.characters['sherlock holmes'].health AS H
          game.objectives['find holmes'].status = 'failed'
 ```
 
-`ON condition DO action` doesn't run anything now: it saves a trigger that keeps watching. Triggers are checked after every script runs (console, map buttons, discoveries, rewards), when game time moves and when the GM settles an objective. The action runs each time the condition *becomes* true (not again while it stays true), until the trigger is cancelled in Session › Triggers.
+`ON condition DO action` doesn't run anything now: it saves a trigger that keeps watching. Triggers are checked after every script runs (console, map buttons, discoveries, rewards), when game time moves and when the GM settles an objective. The action runs each time the condition *becomes* true (not again while it stays true), until the trigger is cancelled (Sessions › a session › Triggers).
 - WITH names are remembered as what they referred to when the ON ran: a timer stays that timer, `lights.random AS L` stays the light picked. A group (`.any`, `.one`) or a creature added but not yet saved can't be remembered: that's an error.
 - A WITH name for a property's value (`WITH x.health AS H`) is watched: each check reads it afresh. `H.current` is the value now, `H.previous` at the last check, `H.changed` whether it differs; plain `H` means `H.current`. Changes made outside scripts (the character form) are noticed at the next check.
 - In IF and ON conditions `=` means "is equal to" (same as `==`).

@@ -1,15 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { deleteTrigger, getGameTime, setGameTime } from "@/lib/db";
+import { deleteTrigger, getGameTime, setGameTime, startGameSession } from "@/lib/db";
 
 export async function runScript(source: string): Promise<ScriptResult> {
   await requireGm();
   const result = tryGameScript(source);
   revalidatePath("/campaign/characters");
-  revalidatePath("/session");
+  revalidatePath("/sessions", "layout");
   return result;
 }
 
@@ -25,5 +26,12 @@ export async function advanceTime(minutes: number) {
 export async function removeTrigger(id: number) {
   await requireGm();
   deleteTrigger(Number(id));
-  revalidatePath("/session");
+  revalidatePath("/sessions", "layout");
+}
+
+/** Starts a new session and opens it. */
+export async function startSession() {
+  await requireGm();
+  const id = startGameSession();
+  redirect(`/sessions/${id}`);
 }

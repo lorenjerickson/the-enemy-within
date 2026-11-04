@@ -1482,6 +1482,40 @@ export function saveTimers(timers: Timer[]): void {
   })();
 }
 
+// ---------- Sessions (game nights) ----------
+
+// Not "sessions": that table holds login tokens.
+db.exec(`CREATE TABLE IF NOT EXISTS game_sessions (
+  id INTEGER PRIMARY KEY,
+  started_at TEXT NOT NULL,   -- real date and time (ISO)
+  game_time REAL NOT NULL     -- game time when it started, in minutes
+)`);
+
+export interface GameSession {
+  id: number;
+  number: number; // 1 for the first session
+  started_at: string;
+  game_time: number;
+}
+
+/** Sessions, most recent first. */
+export function listGameSessions(): GameSession[] {
+  return db
+    .prepare<[], GameSession>("SELECT id, started_at, game_time, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC")
+    .all();
+}
+
+export function getGameSession(id: number): GameSession | undefined {
+  return listGameSessions().find((s) => s.id === id);
+}
+
+/** Starts a session now, at the current game time. Returns its id. */
+export function startGameSession(): number {
+  return Number(
+    db.prepare<[string, number]>("INSERT INTO game_sessions (started_at, game_time) VALUES (?, ?)").run(new Date().toISOString(), getGameTime()).lastInsertRowid
+  );
+}
+
 // ---------- Triggers ----------
 
 export interface Trigger {

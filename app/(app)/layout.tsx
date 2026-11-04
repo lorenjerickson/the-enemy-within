@@ -14,7 +14,7 @@ async function doLogout() {
 const GM_NAV = [
   { href: "/users", label: "Users" },
   { href: "/campaign", label: "Campaign" },
-  { href: "/session", label: "Session" },
+  { href: "/sessions", label: "Sessions" },
 ];
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
