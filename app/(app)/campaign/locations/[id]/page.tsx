@@ -2,11 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getPartyPlacement, getPartyStart, listEffects, listCharacters, getLocation, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listLevels, listStructures, listTiles, listTokens } from "@/lib/db";
+import { getLocation, listLevels } from "@/lib/db";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
-import { scriptNames } from "@/lib/scriptNames";
-import MapView from "./MapView";
+import LevelMap from "./LevelMap";
 
 export default async function EditLocation({
   params,
@@ -23,8 +22,6 @@ export default async function EditLocation({
   const { level: levelParam, tab: tabParam } = await searchParams;
   const level = levels.find((l) => l.id === Number(levelParam)) ?? levels[0];
   // One tab per slice of a location's data; the map is where most of the work happens, so it's first.
-  const start = getPartyStart();
-  const placement = getPartyPlacement();
   const tab = TABS.find((t) => t.id === tabParam)?.id ?? "map";
 
   return (
@@ -50,30 +47,7 @@ export default async function EditLocation({
         <div className="max-w-4xl">
           <LevelBar locationId={location.id} levels={levels.map(({ id, name }) => ({ id, name }))} currentId={level.id} />
         </div>
-        <MapView key={level.id} locationId={location.id} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
-          tileAssets={listAssets({ type: "image", usage: "tile" })}
-          tiles={listTiles(level.id)}
-          structures={listStructures(level.id)}
-          tokens={listTokens(level.id)}
-          sounds={listAmbientSounds(level.id)}
-          positional={listPositionalSounds(level.id)}
-          illumination={level.illumination}
-          figureHeight={level.figure_height}
-          lights={listLights(level.id)}
-          notes={listNotes(level.id)}
-          effects={listEffects(level.id)}
-          scriptNames={scriptNames(level.id)}
-          controls={listControls(level.id)}
-          audioAssets={listAssets({ type: "audio", usage: "ambient" })}
-          creatures={[
-            ...listCharacters().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "character" as const, id, name, type, image, token_overhead, token_side, height })),
-            ...listCreatures().map(({ id, name, type, image, token_overhead, token_side, height }) => ({ kind: "creature" as const, id, name, type, image, token_overhead, token_side, height })),
-          ]}
-          toPlace={placement && placement.start.level_id === level.id ? placement.unplaced : []}
-          partyStart={start && start.level_id === level.id ? { x: start.x, y: start.y, w: start.w, h: start.h } : null}
-          partyStartElsewhere={start && start.level_id !== level.id ? `${start.location} › ${start.level}` : null}
-          otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
-        />
+        <LevelMap locationId={location.id} level={level} levels={levels} />
       </div>
       )}
     </div>

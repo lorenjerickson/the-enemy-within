@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getPartyPlacement, getGameSession, getGameTime, listTimers, listTriggers } from "@/lib/db";
+import { getCurrentLevelId, getLevelPlace, listLevels, getGameSession, getGameTime, listTimers, listTriggers } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import { CalendarPanel } from "../CalendarPanel";
@@ -10,6 +10,7 @@ import { ScriptConsole } from "../ScriptConsole";
 import { TriggersPanel } from "../TriggersPanel";
 import { beginSession, endSession } from "../actions";
 import AutoRefresh from "../../AutoRefresh";
+import LevelMap from "../../campaign/locations/[id]/LevelMap";
 import PlayerPresence from "../PlayerPresence";
 import SessionSummary from "../SessionSummary";
 
@@ -58,19 +59,7 @@ export default async function Session({ params }: { params: Promise<{ id: string
           <PlayerPresence sessionId={session.id} />
         </div>
       )}
-      {!lobby && !session.ended_at && (() => {
-        const p = getPartyPlacement();
-        return p ? (
-          <div role="alert" className="alert alert-info max-w-3xl" data-place-party>
-            <span>
-              Place the party: {p.unplaced.map((c) => c.name).join(", ")} {p.unplaced.length === 1 ? "has" : "have"} no token yet.
-            </span>
-            <Link className="btn btn-sm" href={`/campaign/locations/${p.start.location_id}?level=${p.start.level_id}`}>
-              Open {p.start.location} › {p.start.level}
-            </Link>
-          </div>
-        ) : null;
-      })()}
+      {!lobby && !session.ended_at && <CurrentMap />}
       {!lobby && (
         <>
           <CalendarPanel now={getGameTime()} timers={listTimers()} />
@@ -78,6 +67,27 @@ export default async function Session({ params }: { params: Promise<{ id: string
           <ScriptConsole names={scriptNames()} />
         </>
       )}
+    </div>
+  );
+}
+
+/** The map and level the party is on, loaded for the GM as soon as they open a running session. */
+function CurrentMap() {
+  const levelId = getCurrentLevelId();
+  const place = levelId === undefined ? undefined : getLevelPlace(levelId);
+  if (!place) {
+    return <p className="text-sm opacity-60">No current map: mark the party start area on a location&apos;s map (Tokens layer).</p>;
+  }
+  const levels = listLevels(place.location_id);
+  const level = levels.find((l) => l.id === levelId)!;
+  return (
+    <div className="space-y-2" data-current-map>
+      <div className="text-sm">
+        <Link className="link link-hover font-semibold" href={`/campaign/locations/${place.location_id}?level=${levelId}`}>
+          {place.location} › {place.level}
+        </Link>
+      </div>
+      <LevelMap locationId={place.location_id} level={level} levels={levels} />
     </div>
   );
 }

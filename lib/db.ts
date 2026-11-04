@@ -1705,3 +1705,14 @@ export function getPartyPlacement(): { start: PartyStart; unplaced: UnplacedChar
     .all();
   return unplaced.length ? { start, unplaced } : undefined;
 }
+
+/** Where the party is now: the level holding the most player characters' tokens, else the party start level. */
+export function getCurrentLevelId(): number | undefined {
+  const row = db
+    .prepare<[], { level_id: number }>(
+      `SELECT t.level_id FROM map_tokens t JOIN characters c ON c.id = t.character_id
+       WHERE c.player_id IS NOT NULL GROUP BY t.level_id ORDER BY COUNT(*) DESC, MAX(t.id) DESC LIMIT 1`
+    )
+    .get();
+  return row?.level_id ?? getPartyStart()?.level_id;
+}
