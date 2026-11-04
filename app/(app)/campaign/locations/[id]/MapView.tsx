@@ -452,7 +452,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   // columns (horizontal movement distance) for portrait maps, nothing for scenic maps.
   grid: (state) => (ctx, w, h) => {
     const perspective = state.mapImage.perspective;
-    if (perspective === "scenic") return;
+    if (perspective === "scenic" || state.grid.gridless) return;
     const { size, color, offsetX, offsetY } = state.grid;
     const first = (start: number, offset: number) => start + (((offset % size) + size) % size);
     const p = state.background.padding;
@@ -584,6 +584,7 @@ export default function MapView({
   );
   /** On portrait maps a placed token drops to the floor below (the server does the same). */
   const portrait = mapImage.perspective === "portrait";
+  const gridless = !!grid.gridless;
   const settle = (col: number, row: number) => (portrait ? landingRow(optimisticStructures, col, row) : row);
 
   // Token placement: pick a creature, then click a cell.
@@ -708,7 +709,7 @@ export default function MapView({
    */
   const cornerAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { gx, gy } = gridAt(e);
-    if (structureTool.snap !== e.altKey) return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
+    if (!gridless && structureTool.snap !== e.altKey) return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
     const ends = optimisticStructures.filter((s) => s.kind !== "staircase").flatMap((s) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]);
     const near = ends
       .map((p) => ({ p, d: Math.hypot(p.x - gx, p.y - gy) }))
@@ -719,7 +720,13 @@ export default function MapView({
   /** Where a token under the pointer goes: its cell, or on portrait maps its column with the pointer at its middle. */
   const tokenAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { gx, gy } = gridAt(e);
+    if (gridless) return { col: snapHeight(gx - 0.5), row: snapHeight(gy - 0.5) }; // centred under the pointer
     return { col: Math.floor(gx), row: portrait ? snapHeight(gy - 0.5) : Math.floor(gy) };
+  };
+  /** Where a light or sound goes: the middle of the cell under the pointer, or right there on gridless maps. */
+  const spotAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { gx, gy } = gridAt(e);
+    return gridless ? { x: snapHeight(gx), y: snapHeight(gy) } : { x: Math.floor(gx) + 0.5, y: Math.floor(gy) + 0.5 };
   };
 
   const spanOf = (p: NonNullable<typeof placing>): CellRect => ({
@@ -787,9 +794,8 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "lighting") {
-      const { col, row } = cellAt(e);
       const t = lightTool;
-      const placed = { kind: t.kind, x: col + 0.5, y: row + 0.5, radius: t.radius, angle: t.angle, spread: t.spread, flicker: t.flicker };
+      const placed = { kind: t.kind, ...spotAt(e), radius: t.radius, angle: t.angle, spread: t.spread, flicker: t.flicker };
       startTransition(async () => {
         changeLights({ add: { id: -Date.now(), ...placed, flicker: placed.flicker ? 1 : 0, name: "New light", enabled: 1 } });
         await placeLight(locationId, levelId, placed);
@@ -825,8 +831,7 @@ export default function MapView({
       }
       const a = positionalTool.asset;
       if (!a) return;
-      const { col, row } = cellAt(e);
-      const placed = { x: col + 0.5, y: row + 0.5, radius: positionalTool.radius };
+      const placed = { ...spotAt(e), radius: positionalTool.radius };
       startTransition(async () => {
         changePositional({ add: { id: -Date.now(), asset_id: a.id, name: a.name, url: a.url, volume: 1, loop: 0, ...placed } });
         await placePositionalSound(locationId, levelId, a.id, placed.x, placed.y, placed.radius);
@@ -836,10 +841,10 @@ export default function MapView({
     if (e.button === 0 && selected === "tokens") {
       const { col, row } = tokenAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
-      const { gy } = gridAt(e);
+      const { gx, gy } = gridAt(e);
       // A side-on figure can be taller than its cell: it can be grabbed anywhere up to the top of its head.
       const top = (t: MapToken) => (portrait && t.token_side ? t.row + 1 - Math.max(1, figureCells(figureHeight, t)) : t.row);
-      const hit = [...optimisticTokens].reverse().find((t) => t.col === col && gy >= top(t) && gy < t.row + 1);
+      const hit = [...optimisticTokens].reverse().find((t) => gx >= t.col && gx < t.col + 1 && gy >= top(t) && gy < t.row + 1);
       if (hit) {
         setSelectedTokenId(hit.id);
         setDraggingToken({ id: hit.id, col: hit.col, row: hit.row });
@@ -920,8 +925,8 @@ export default function MapView({
       return;
     }
     if (draggingSound) {
-      const { col, row } = cellAt(e);
-      if (col + 0.5 !== draggingSound.x || row + 0.5 !== draggingSound.y) setDraggingSound({ ...draggingSound, x: col + 0.5, y: row + 0.5 });
+      const { x, y } = spotAt(e);
+      if (x !== draggingSound.x || y !== draggingSound.y) setDraggingSound({ ...draggingSound, x, y });
       return;
     }
     if (draggingToken) {
@@ -1355,6 +1360,7 @@ export default function MapView({
             ) : selected === "structure" ? (
               <StructureEditor
                 portrait={portrait}
+                gridless={gridless}
                 tool={structureTool}
                 onToolChange={setStructureTool}
                 levels={otherLevels}

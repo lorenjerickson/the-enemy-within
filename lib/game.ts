@@ -3,7 +3,7 @@ import { rollDice } from "./dice";
 import {
   getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
-  addCreatureToken, setTokenHp, isPortraitLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, setTokenHp, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import { Collection, FREEFORM, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
@@ -113,6 +113,7 @@ interface ActorChanges {
   startHp: Map<Actor, number | null>; // creature tokens' saved health
   encounter: () => EncounterState | null;
   portrait: boolean; // gravity applies
+  gridless: boolean; // positions anywhere, distances in straight lines
   structures: MapStructure[];
 }
 
@@ -121,7 +122,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   if (!place) throw new ScriptError("This map level no longer exists");
   const changes: ActorChanges = {
     levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null,
-    portrait: isPortraitLevel(levelId), structures: listStructures(levelId),
+    portrait: isPortraitLevel(levelId), gridless: isGridlessLevel(levelId), structures: listStructures(levelId),
   };
   const templates = listCreatures();
   const characters = listCharacterStates();
@@ -400,12 +401,19 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
     return game.locations.current as CurrentLocation;
   };
   const portrait = !!changes?.portrait;
+  const gridless = !!changes?.gridless;
   const structures = changes?.structures ?? [];
-  /** Whether an actor already occupies this spot (same column, overlapping height). */
+  /** How far apart two positions are: in a straight line on gridless maps, otherwise in squares (diagonals count 1). */
+  const distance = (a: Cell, b: Cell) =>
+    gridless ? Math.hypot(a.col - b.col, a.row - b.row) : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
+  /** Whether an actor already occupies this spot (same column, overlapping height; on gridless maps, within a token's width). */
   const taken = (c: Cell) =>
-    location().actors.items.some((a) => a.position && a.position.col === c.col && Math.abs(a.position.row - c.row) < 0.5);
-  /** A position from script values: whole cells, except heights on portrait maps. */
-  const toCell = (at: Cell): Cell => ({ col: Math.round(at.col), row: portrait ? snapHeight(at.row) : Math.round(at.row) });
+    location().actors.items.some((a) =>
+      a.position && (gridless ? Math.hypot(a.position.col - c.col, a.position.row - c.row) < 0.9 : a.position.col === c.col && Math.abs(a.position.row - c.row) < 0.5)
+    );
+  /** A position from script values: whole cells, except heights on portrait maps and anything on gridless maps. */
+  const toCell = (at: Cell): Cell =>
+    gridless ? { col: snapHeight(at.col), row: snapHeight(at.row) } : { col: Math.round(at.col), row: portrait ? snapHeight(at.row) : Math.round(at.row) };
   /** Where something here comes to rest: on portrait maps it falls to the floor below. */
   const settle = (c: Cell): Cell => (portrait ? { col: c.col, row: landingRow(structures, c.col, c.row) } : c);
   const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
@@ -422,6 +430,18 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
       const best = Math.min(...free.map(distance));
       return pick(free.filter((s) => distance(s) === best));
     }
+    if (gridless) {
+      // Anywhere around it: a random direction, a token's width away, then further out.
+      for (let r = 1; r <= 20; r += 0.5) {
+        const turn = Math.random() * Math.PI * 2;
+        for (let i = 0; i < 16; i++) {
+          const a = turn + (i / 16) * Math.PI * 2;
+          const c = toCell({ col: col + Math.cos(a) * r, row: row + Math.sin(a) * r });
+          if (c.col >= 0 && c.row >= 0 && !taken(c)) return c;
+        }
+      }
+      throw new ScriptError("No free spot near that position");
+    }
     for (let r = 1; r <= 20; r++) {
       const free: Cell[] = [];
       for (let dc = -r; dc <= r; dc++)
@@ -436,6 +456,8 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
   return {
     /** A random free cell next to a position, actor or group. */
     near: new Method((pos) => freeNear(asCell(pos, "near()"))),
+    /** distance(a, b) between positions or actors: squares on grid maps, a straight line on gridless ones. */
+    distance: new Method((a, b) => distance(asCell(a, "distance()"), asCell(b, "distance()"))),
     /**
      * Puts an actor, or each of a group, at a position: setting up the scene, so no fall damage.
      * On portrait maps it drops to the floor below. The first goes there if it's free; the rest

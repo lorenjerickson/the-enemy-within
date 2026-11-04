@@ -140,7 +140,8 @@ export const HELPER_NAMES: Member[] = [
   { label: "sum", detail: "sum(list)", method: true }, { label: "avg", detail: "avg(list)", method: true },
   { label: "count", detail: "count(list)", method: true },
   { label: "interval", detail: "interval(minutes, 'days')", method: true }, { label: "duration", detail: "duration(3, 'days') → minutes", method: true },
-  { label: "near", detail: "near(position or actor)", method: true }, { label: "place", detail: "place(actor, position)", method: true },
+  { label: "near", detail: "near(position or actor)", method: true },
+  { label: "distance", detail: "distance(a, b): squares, or straight line if gridless", method: true }, { label: "place", detail: "place(actor, position)", method: true },
   { label: "move", detail: "move(actor, position) → fall damage", method: true },
 ];
 

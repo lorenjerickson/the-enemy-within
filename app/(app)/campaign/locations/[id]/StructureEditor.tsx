@@ -16,6 +16,7 @@ export default function StructureEditor({
   tool,
   onToolChange,
   portrait,
+  gridless,
   levels,
   pieces,
   selectedId,
@@ -27,6 +28,7 @@ export default function StructureEditor({
   tool: StructureTool;
   onToolChange: (tool: StructureTool) => void;
   portrait: boolean; // side-on map: offers stairs
+  gridless: boolean; // no grid to snap to
   levels: { id: number; name: string }[]; // other levels a staircase can lead to
   pieces: MapStructure[];
   selectedId: number | null;
@@ -51,7 +53,7 @@ export default function StructureEditor({
             </button>
           ))}
         </div>
-        {tool.kind !== "staircase" && (
+        {tool.kind !== "staircase" && !gridless && (
           <label className="label cursor-pointer gap-2 text-sm">
             <input type="checkbox" className="toggle toggle-sm" checked={tool.snap} onChange={(e) => onToolChange({ ...tool, snap: e.target.checked })} />
             Snap to grid
@@ -78,10 +80,11 @@ export default function StructureEditor({
             : "Click a grid cell to place a level link (stairs to the chosen level)."
           : tool.kind === "stairs"
             ? "Drag from the top step to the bottom step of a flight. Tokens stand on it part way down."
-            : tool.snap
+            : tool.snap && !gridless
               ? `Click and drag between grid corners to draw a ${tool.kind}.`
               : `Click and drag anywhere to draw a ${tool.kind}; ends near another piece's end join it.`}{" "}
-        Hold Alt while drawing to {tool.snap ? "draw off the grid" : "snap to the grid"}, Shift to keep it straight across or up and down.{" "}
+        {!gridless && `Hold Alt while drawing to ${tool.snap ? "draw off the grid" : "snap to the grid"}. `}
+        Hold Shift to keep a line straight across or up and down.{" "}
         Walls and closed doors block light.{portrait && " Horizontal walls, windows and closed doors are floors."}
       </p>
 

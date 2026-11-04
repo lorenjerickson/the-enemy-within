@@ -71,6 +71,9 @@ WITH game.characters['sherlock holmes'].health AS H
 Operators: `+ - * / %`, `== != < > <= >=`, `and or not` (or `&& || !`). Keywords are case-insensitive. `#` or `//` start a comment.
 Map helpers:
 - `near(x)`: a random free cell next to a position, actor or group.
+- `distance(a, b)`: between positions or actors, in squares (diagonals count 1); on gridless maps in a straight line.
+
+Gridless maps (Grid layer › Gridless): positions are anywhere (to 1/20 of a unit, so `col`/`row` can be fractional), `near()` picks a free spot in any direction, and distances are straight lines. The grid size is the unit of distance.
 - `place(actor or group, position)`: sets up the scene (a group spreads out around the position). No fall damage.
 - `move(actor, position)`: movement during play. Returns any fall damage taken.
 

@@ -52,9 +52,14 @@ export interface MapGrid {
   color: string; // #rrggbb
   offsetX: number; // shifts lines right (pixels)
   offsetY: number; // shifts lines down (pixels)
+  /**
+   * No grid: nothing is drawn or snapped, things sit anywhere, and distances are straight lines in any direction.
+   * `size` is then just the scale: pixels per unit of distance (what a square would be).
+   */
+  gridless?: boolean;
 }
 
-export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff", offsetX: 0, offsetY: 0 };
+export const DEFAULT_GRID: MapGrid = { size: 50, color: "#ffffff", offsetX: 0, offsetY: 0, gridless: false };
 
 /** Templates layer settings: the colour used to draw each kind of template. */
 export const TEMPLATE_KINDS = ["movement", "aoe", "vision"] as const;

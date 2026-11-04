@@ -1046,6 +1046,12 @@ export function isPortraitLevel(levelId: number): boolean {
   return !!row?.map_image && JSON.parse(row.map_image).perspective === "portrait";
 }
 
+/** A gridless level: positions anywhere, distances in straight lines (MapGrid.gridless). */
+export function isGridlessLevel(levelId: number): boolean {
+  const row = db.prepare<[number], { grid: string | null }>("SELECT grid FROM map_levels WHERE id = ?").get(levelId);
+  return !!row?.grid && !!JSON.parse(row.grid).gridless;
+}
+
 export function getTokenLevel(id: number): number | undefined {
   return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(id)?.level_id;
 }

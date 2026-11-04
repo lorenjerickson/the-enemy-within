@@ -21,6 +21,10 @@ export default function GridEditor({
 }) {
   return (
     <form action={submitGrid.bind(null, locationId, levelId)} className="space-y-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input name="gridless" type="checkbox" className="toggle toggle-sm" defaultChecked={!!grid.gridless} />
+        Gridless: place things anywhere; distances are straight lines in any direction
+      </label>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <label className="flex items-center gap-2">
           Size (pixels)
@@ -39,7 +43,9 @@ export default function GridEditor({
           <input name="color" type="color" defaultValue={grid.color} className="h-8 w-14 cursor-pointer rounded" />
         </label>
       </div>
-      <p className="text-xs opacity-60">{HINTS[perspective]}</p>
+      <p className="text-xs opacity-60">
+        {HINTS[perspective]} Gridless maps draw no grid; the size is then the scale, pixels per unit of distance.
+      </p>
       <button className="btn btn-primary btn-sm">Save grid</button>
     </form>
   );

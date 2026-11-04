@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -82,6 +82,7 @@ export async function submitGrid(locationId: number, levelId: number, formData: 
     color,
     offsetX: Math.round(Number(formData.get("offsetX")) || 0),
     offsetY: Math.round(Number(formData.get("offsetY")) || 0),
+    gridless: formData.get("gridless") === "on",
   });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
@@ -182,7 +183,7 @@ export async function changeFigureHeight(locationId: number, levelId: number, ce
 export async function placeCharacterTokenAt(locationId: number, levelId: number, characterId: number, col: number, row: number) {
   await requireGm();
   if (!getCharacter(characterId)) throw new Error("Unknown character");
-  placeCharacterToken(levelId, characterId, Math.round(col), settle(levelId, Math.round(col), row));
+  placeCharacterToken(levelId, characterId, across(levelId, col), settle(levelId, across(levelId, col), row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -190,7 +191,7 @@ export async function placeCharacterTokenAt(locationId: number, levelId: number,
 export async function placeCreatureToken(locationId: number, levelId: number, creatureId: number, col: number, row: number) {
   await requireGm();
   if (!getCreature(creatureId)) throw new Error("Unknown creature");
-  addCreatureToken(levelId, creatureId, Math.round(col), settle(levelId, Math.round(col), row));
+  addCreatureToken(levelId, creatureId, across(levelId, col), settle(levelId, across(levelId, col), row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -204,16 +205,22 @@ export async function moveTokenTo(locationId: number, id: number, col: number, r
   await requireGm();
   const levelId = getTokenLevel(id);
   if (levelId === undefined) return;
-  moveToken(id, Math.round(col), settle(levelId, Math.round(col), row));
+  moveToken(id, across(levelId, col), settle(levelId, across(levelId, col), row));
   revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** A token's column: a whole cell, or anywhere (to 1/20) on gridless maps. */
+function across(levelId: number, col: number): number {
+  return isGridlessLevel(levelId) ? snapHeight(Number(col)) : Math.round(Number(col));
 }
 
 /**
  * Where the GM's placed token comes to rest: on portrait maps it drops to the floor below (no fall damage),
- * at any height; elsewhere it sits in a whole cell.
+ * at any height; elsewhere it sits in a whole cell, or anywhere on gridless maps.
  */
 function settle(levelId: number, col: number, row: number): number {
-  return isPortraitLevel(levelId) ? landingRow(listStructures(levelId), col, snapHeight(Number(row))) : Math.round(row);
+  if (isPortraitLevel(levelId)) return landingRow(listStructures(levelId), col, snapHeight(Number(row)));
+  return isGridlessLevel(levelId) ? snapHeight(Number(row)) : Math.round(row);
 }
 
 export async function submitAmbientSound(locationId: number, levelId: number, formData: FormData) {
