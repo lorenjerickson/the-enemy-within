@@ -151,15 +151,14 @@ export async function placeStructure(
   if (piece.kind === "staircase" && !levels.some((l) => l.id === piece.target_level_id && l.id !== levelId)) {
     throw new Error("A staircase needs another level to lead to");
   }
-  const int = (n: number) => Math.round(Number(n));
-  // Portrait maps: columns across, but any height (so floors can follow the art).
-  const height = isPortraitLevel(levelId) && piece.kind !== "staircase" ? (n: number) => snapHeight(Number(n)) : int;
+  // Level links sit in a cell; lines may be off the grid (irregular maps), to 1/20 of a cell.
+  const at = piece.kind === "staircase" ? (n: number) => Math.round(Number(n)) : (n: number) => snapHeight(Number(n));
   addStructure(levelId, {
     kind: piece.kind,
-    x1: int(piece.x1),
-    y1: height(piece.y1),
-    x2: int(piece.x2),
-    y2: height(piece.y2),
+    x1: at(piece.x1),
+    y1: at(piece.y1),
+    x2: at(piece.x2),
+    y2: at(piece.y2),
     target_level_id: piece.kind === "staircase" ? piece.target_level_id : null,
   });
   revalidatePath(`/campaign/locations/${locationId}`);

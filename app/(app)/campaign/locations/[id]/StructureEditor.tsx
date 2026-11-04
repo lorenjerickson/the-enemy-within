@@ -7,6 +7,8 @@ import NameInput from "./NameInput";
 export interface StructureTool {
   kind: StructureKind;
   targetLevelId: number | null;
+  /** Line ends snap to grid corners. Off for irregular maps; holding Alt while drawing does the opposite. */
+  snap: boolean;
 }
 
 /** Structure layer editor: pick what to place, and list / delete what's placed. */
@@ -49,6 +51,12 @@ export default function StructureEditor({
             </button>
           ))}
         </div>
+        {tool.kind !== "staircase" && (
+          <label className="label cursor-pointer gap-2 text-sm">
+            <input type="checkbox" className="toggle toggle-sm" checked={tool.snap} onChange={(e) => onToolChange({ ...tool, snap: e.target.checked })} />
+            Snap to grid
+          </label>
+        )}
         {tool.kind === "staircase" && (
           <select
             aria-label="Leads to"
@@ -70,7 +78,10 @@ export default function StructureEditor({
             : "Click a grid cell to place a level link (stairs to the chosen level)."
           : tool.kind === "stairs"
             ? "Drag from the top step to the bottom step of a flight. Tokens stand on it part way down."
-            : `Click and drag between grid corners to draw a ${tool.kind}.`}{" "}
+            : tool.snap
+              ? `Click and drag between grid corners to draw a ${tool.kind}.`
+              : `Click and drag anywhere to draw a ${tool.kind}; ends near another piece's end join it.`}{" "}
+        Hold Alt while drawing to {tool.snap ? "draw off the grid" : "snap to the grid"}, Shift to keep it straight across or up and down.{" "}
         Walls and closed doors block light.{portrait && " Horizontal walls, windows and closed doors are floors."}
       </p>
 
@@ -87,7 +98,7 @@ export default function StructureEditor({
                   <span className="text-xs opacity-60">
                     {s.kind === "staircase"
                       ? `cell ${s.x1}, ${s.y1} → ${s.target_name ?? "(missing level)"}`
-                      : `(${s.x1}, ${s.y1}) – (${s.x2}, ${s.y2})`}
+                      : `(${+s.x1.toFixed(2)}, ${+s.y1.toFixed(2)}) – (${+s.x2.toFixed(2)}, ${+s.y2.toFixed(2)})`}
                   </span>
                 </button>
                 {s.kind === "door" && <NameInput label="Door name" value={s.name ?? `Door ${s.id}`} onRename={(name) => onRenameDoor(s.id, name)} />}

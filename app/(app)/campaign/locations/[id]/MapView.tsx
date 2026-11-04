@@ -117,6 +117,8 @@ function noteLayout(ctx: CanvasRenderingContext2D, note: Pick<MapNote, "text" | 
  * (1408×792 is the size the first levels were drawn at.)
  */
 const SCENE = { w: 1408, h: 792 };
+/** Drawing structures without the grid: an end this close (in cells) to another piece's end joins it. */
+const JOIN_DISTANCE = 0.3;
 
 /** How the scene is scaled (s) and centred (ox, oy) to fit a canvas of this CSS size. */
 function fitScene(w: number, h: number) {
@@ -573,7 +575,7 @@ export default function MapView({
     ? optimisticTiles.map((t) => (t.id === selectedTileId ? { ...t, col: t.col + moving.delta.col, row: t.row + moving.delta.row } : t))
     : optimisticTiles;
   // Structure placement: lines between grid corners, or a staircase in a cell.
-  const [structureTool, setStructureTool] = useState<StructureTool>({ kind: "wall", targetLevelId: otherLevels[0]?.id ?? null });
+  const [structureTool, setStructureTool] = useState<StructureTool>({ kind: "wall", targetLevelId: otherLevels[0]?.id ?? null, snap: true });
   const [drawingLine, setDrawingLine] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(null);
   type StructureChange = { add: MapStructure } | { remove: number };
@@ -699,10 +701,20 @@ export default function MapView({
     const { gx, gy } = gridAt(e);
     return { col: Math.floor(gx), row: Math.floor(gy) };
   };
-  /** Nearest grid corner to the pointer. On portrait maps only across: heights follow the pointer. */
+  /**
+   * Where a structure line starts or ends. Snapping on: the nearest grid corner (on portrait maps only across;
+   * heights follow the pointer). Snapping off (or Alt held): where the pointer is, to 1/20 of a cell, joining
+   * the end of a nearby piece so walls drawn on irregular maps meet without gaps.
+   */
   const cornerAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { gx, gy } = gridAt(e);
-    return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
+    if (structureTool.snap !== e.altKey) return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
+    const ends = optimisticStructures.filter((s) => s.kind !== "staircase").flatMap((s) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]);
+    const near = ends
+      .map((p) => ({ p, d: Math.hypot(p.x - gx, p.y - gy) }))
+      .filter(({ d }) => d < JOIN_DISTANCE)
+      .sort((a, b) => a.d - b.d)[0];
+    return near ? near.p : { x: snapHeight(gx), y: snapHeight(gy) };
   };
   /** Where a token under the pointer goes: its cell, or on portrait maps its column with the pointer at its middle. */
   const tokenAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -918,7 +930,12 @@ export default function MapView({
       return;
     }
     if (drawingLine) {
-      const corner = cornerAt(e);
+      let corner = cornerAt(e);
+      // Shift: a straight line across or up and down, whichever way it's mostly going.
+      if (e.shiftKey) {
+        const { start } = drawingLine;
+        corner = Math.abs(corner.x - start.x) >= Math.abs(corner.y - start.y) ? { x: corner.x, y: start.y } : { x: start.x, y: corner.y };
+      }
       if (corner.x !== drawingLine.end.x || corner.y !== drawingLine.end.y) setDrawingLine({ ...drawingLine, end: corner });
       return;
     }
