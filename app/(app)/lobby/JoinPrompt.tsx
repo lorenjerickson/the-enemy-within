@@ -25,7 +25,8 @@ export default function JoinPrompt({ initial }: { initial: Waiting }) {
     return () => clearInterval(timer);
   }, []);
 
-  if (!waiting || waiting.id === dismissed || pathname === "/lobby") return null;
+  // Not on the pages that join (the lobby, and creating a character first).
+  if (!waiting || waiting.id === dismissed || pathname === "/lobby" || pathname === "/character/new") return null;
   const notNow = () => {
     setDismissed(waiting.id);
     try {

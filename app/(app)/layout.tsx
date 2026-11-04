@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { getGm, getOpenGameSession } from "@/lib/db";
+import { getGm, getOpenGameSession, listPresentPlayers } from "@/lib/db";
 import JoinPrompt from "./lobby/JoinPrompt";
 import { logout, requireUser } from "@/lib/auth";
 
@@ -21,7 +21,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   await connection();
   if (!getGm()) redirect("/setup");
   const user = await requireUser();
-  const open = user.role === "player" ? getOpenGameSession() : undefined;
+  // A session open that this player hasn't joined (they're asked to).
+  const session = user.role === "player" ? getOpenGameSession() : undefined;
+  const open = session && !listPresentPlayers(session.id).includes(user.id) ? session : undefined;
 
   return (
     <>

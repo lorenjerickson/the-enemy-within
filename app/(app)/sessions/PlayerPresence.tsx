@@ -14,7 +14,7 @@ export default function PlayerPresence({ sessionId }: { sessionId: number }) {
           <li key={p.id} className="list-row items-center" data-player={p.name} data-present={here}>
             <span className={`size-2.5 rounded-full ${here ? "bg-success" : "bg-base-content/20"}`} />
             <span className="font-medium">{p.name}</span>
-            <span className="text-sm opacity-60">{plays.length ? plays.join(", ") : "no character yet"}</span>
+            <span className="text-sm opacity-60">{plays.length ? plays.join(", ") : here ? "creating a character" : "no character yet"}</span>
             <span className={`badge badge-sm ${here ? "badge-success" : "badge-ghost"}`}>{here ? "here" : "not here yet"}</span>
           </li>
         );

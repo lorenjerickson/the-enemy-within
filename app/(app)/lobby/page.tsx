@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getOpenGameSession, markPresent } from "@/lib/db";
+import { getOpenGameSession, listPlayerCharacters, markPresent } from "@/lib/db";
 import AutoRefresh from "../AutoRefresh";
 import PlayerPresence from "../sessions/PlayerPresence";
 import { checkIn } from "./actions";
@@ -12,6 +12,8 @@ export default async function Lobby() {
   const user = await requireUser();
   if (user.role === "gm") redirect("/sessions");
   const session = getOpenGameSession();
+  // Joining without a character: make one first.
+  if (session && !listPlayerCharacters(user.id).length) redirect("/character/new");
   if (session) markPresent(session.id, user.id);
   return (
     <div className="max-w-xl space-y-4">

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireGm } from "@/lib/auth";
+import { requireGm, requireUser } from "@/lib/auth";
 import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage } from "@/lib/db";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
@@ -32,7 +32,9 @@ export async function generateArtwork(
   name: string,
   description: string
 ): Promise<{ url?: string; error?: string }> {
-  await requireGm();
+  // Players may make art for the character they're creating; everything else is the GM's.
+  const user = await requireUser();
+  if (user.role !== "gm" && !["creature", "overhead token", "side token"].includes(kind)) throw new Error("Not allowed");
   try {
     const url = await generateImage(`${PROMPTS[kind]} ${kind[0].toUpperCase() + kind.slice(1)}: ${name}. ${description}`, {
       token: kind.endsWith("token"),
