@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { getGm } from "@/lib/db";
+import { getGm, getOpenGameSession } from "@/lib/db";
+import JoinPrompt from "./lobby/JoinPrompt";
 import { logout, requireUser } from "@/lib/auth";
 
 async function doLogout() {
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   await connection();
   if (!getGm()) redirect("/setup");
   const user = await requireUser();
+  const open = user.role === "player" ? getOpenGameSession() : undefined;
 
   return (
     <>
@@ -46,6 +48,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </details>
       </header>
       <main className="p-8 in-data-focus:p-4">{children}</main>
+      {user.role === "player" && <JoinPrompt initial={open ? { id: open.id, number: open.number, began: !!open.began_at } : null} />}
     </>
   );
 }
