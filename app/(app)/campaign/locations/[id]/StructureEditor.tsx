@@ -26,6 +26,8 @@ export default function StructureEditor({
   onDelete,
   onToggleDoor,
   onRenameDoor,
+  onLockDoor,
+  onLockDc,
 }: {
   tool: StructureTool;
   onToolChange: (tool: StructureTool) => void;
@@ -40,6 +42,8 @@ export default function StructureEditor({
   onDelete: (id: number) => void;
   onToggleDoor: (id: number, open: boolean) => void;
   onRenameDoor: (id: number, name: string) => void;
+  onLockDoor: (id: number, locked: boolean) => void;
+  onLockDc: (id: number, dc: number) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -105,7 +109,7 @@ export default function StructureEditor({
             {pieces.map((s) => (
               <li key={s.id} className={`flex items-center gap-2 px-2 py-1 ${s.id === selectedId ? "bg-primary/20" : ""}`}>
                 <button type="button" data-structure={s.id} onClick={() => onSelect(s.id)} className="flex flex-1 items-center gap-2 text-left">
-                  <span>{STRUCTURE_LABELS[s.kind]}{s.kind === "door" && (s.open ? " (open)" : " (closed)")}</span>
+                  <span>{STRUCTURE_LABELS[s.kind]}{s.kind === "door" && (s.locked ? " (locked)" : s.open ? " (open)" : " (closed)")}</span>
                   <span className="text-xs opacity-60">
                     {s.kind === "staircase"
                       ? `cell ${s.x1}, ${s.y1} → ${s.target_name ?? "(missing level)"}`
@@ -114,9 +118,20 @@ export default function StructureEditor({
                 </button>
                 {s.kind === "door" && <NameInput label="Door name" value={s.name ?? `Door ${s.id}`} onRename={(name) => onRenameDoor(s.id, name)} />}
                 {s.kind === "door" && (
-                  <button type="button" className="btn btn-xs" onClick={() => onToggleDoor(s.id, !s.open)}>
+                  <button type="button" className="btn btn-xs" disabled={!!s.locked} title={s.locked ? "Unlock it first" : undefined} onClick={() => onToggleDoor(s.id, !s.open)}>
                     {s.open ? "Close" : "Open"}
                   </button>
+                )}
+                {s.kind === "door" && (
+                  <button type="button" className={`btn btn-xs ${s.locked ? "btn-warning" : ""}`} data-lock={s.id} onClick={() => onLockDoor(s.id, !s.locked)}>
+                    {s.locked ? "Unlock" : "Lock"}
+                  </button>
+                )}
+                {s.kind === "door" && !!s.locked && (
+                  <label className="flex items-center gap-1 text-xs" title="What a pick lock roll must reach">
+                    DC
+                    <input type="number" min="1" max="40" aria-label="Lock DC" defaultValue={s.lock_dc} onBlur={(e) => Number(e.target.value) > 0 && Number(e.target.value) !== s.lock_dc && onLockDc(s.id, Number(e.target.value))} className="input input-xs w-14" />
+                  </label>
                 )}
                 {s.id === selectedId && (
                   <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onDelete(s.id)}>

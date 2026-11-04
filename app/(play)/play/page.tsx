@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -13,6 +13,8 @@ import { TriggersPanel } from "../../(app)/sessions/TriggersPanel";
 import { endSession } from "../../(app)/sessions/actions";
 import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
+import PickLock from "./PickLock";
+import { REACH, distanceToDoor } from "./reach";
 
 /** The running session, full screen: the GM's tools dock on the left, a player's panel on the right. */
 export default async function Play() {
@@ -73,6 +75,13 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   markPresent(session.id, user.id);
   const levelId = getPlayerTokenLevelId(user.id);
   const place = levelId === undefined ? undefined : getLevelPlace(levelId);
+  // Locked doors within reach of their character.
+  const me = getPlayerToken(user.id);
+  const lockedNearby = me
+    ? listStructures(me.level_id)
+        .filter((s) => s.kind === "door" && s.locked && distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, s) <= REACH)
+        .map((s) => ({ id: s.id, name: s.name ?? `Door ${s.id}` }))
+    : [];
   const tools: DockTool[] = [
     {
       id: "me",
@@ -91,6 +100,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
+    ...(place ? [{ id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} /> }] : []),
   ];
   return (
     <>

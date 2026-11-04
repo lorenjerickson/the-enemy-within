@@ -16,7 +16,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   - `illumination`: the level's overall light, 0 (dark) to 1.
   - `lights`: `name`, `kind`, `range` (cells), `flicker`, `on`. e.g. `L.lights.all.on = false`, `L.lights['lamp'].range = 2`
   - `effects`: `name`, `kind`, `intensity` (0 to 1), `on`. e.g. `L.effects['storm'].on = true`
-  - `doors`: `name`, `open`. e.g. `L.doors['cellar door'].open = false`
+  - `doors`: `name`, `open`, `locked` (locking shuts it; a locked door won't open). e.g. `L.doors['cellar door'].locked = true`
 - Actors have `rolls.initiative` (1d20 + agility modifier, rolled fresh each read).
 - `L.encounter` on the current location: `active`, `round`, `actor` (whose turn), `order`;
   `begin(actors, initiatives)` (initiatives optional, one per actor), `next()`, `end()`.

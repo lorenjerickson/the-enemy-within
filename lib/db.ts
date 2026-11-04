@@ -315,6 +315,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
   turn_order TEXT NOT NULL
 )`);
 
+addColumn("map_structures", "locked", "INTEGER NOT NULL DEFAULT 0"); // doors: 1 = locked (only the GM or a successful pick lock opens it)
+addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors: what a pick lock roll must reach
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
 db.exec(`CREATE TABLE IF NOT EXISTS party_start (
@@ -1001,19 +1003,21 @@ export interface MapStructure {
   target_name: string | null;
   open: 0 | 1; // doors only
   name: string | null; // doors only, for scripts
+  locked: 0 | 1; // doors only: a locked door stays shut until the GM or a successful pick lock unlocks it
+  lock_dc: number; // doors only: the roll a pick lock needs
 }
 
 export function listStructures(levelId: number): MapStructure[] {
   return db
     .prepare<[number], MapStructure>(
-      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name, s.open, s.name
+      `SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target_name, s.open, s.name, s.locked, s.lock_dc
        FROM map_structures s LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE s.level_id = ? ORDER BY s.id`
     )
     .all(levelId);
 }
 
-export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name" | "open" | "name">): void {
-  db.prepare<Omit<MapStructure, "id" | "target_name" | "open" | "name"> & { level_id: number }>(
+export function addStructure(levelId: number, s: Omit<MapStructure, "id" | "target_name" | "open" | "name" | "locked" | "lock_dc">): void {
+  db.prepare<Omit<MapStructure, "id" | "target_name" | "open" | "name" | "locked" | "lock_dc"> & { level_id: number }>(
     `INSERT INTO map_structures (level_id, kind, x1, y1, x2, y2, target_level_id)
      VALUES (@level_id, @kind, @x1, @y1, @x2, @y2, @target_level_id)`
   ).run({ ...s, level_id: levelId });
@@ -1328,8 +1332,38 @@ export function deleteLight(id: number): void {
   db.prepare<[number]>("DELETE FROM light_sources WHERE id = ?").run(id);
 }
 
+/** Opens or closes a door. A locked door can't be opened (unlock it first). */
 export function setDoorOpen(id: number, open: boolean): void {
-  db.prepare<[number, number]>("UPDATE map_structures SET open = ? WHERE id = ? AND kind = 'door'").run(open ? 1 : 0, id);
+  db.prepare<[number, number, number]>("UPDATE map_structures SET open = ? WHERE id = ? AND kind = 'door' AND (locked = 0 OR ? = 0)").run(open ? 1 : 0, id, open ? 1 : 0);
+}
+
+/** Locks (and shuts) or unlocks a door. */
+export function setDoorLocked(id: number, locked: boolean): void {
+  db.prepare<[number, number, number]>(
+    "UPDATE map_structures SET locked = ?, open = CASE WHEN ? = 1 THEN 0 ELSE open END WHERE id = ? AND kind = 'door'"
+  ).run(locked ? 1 : 0, locked ? 1 : 0, id);
+}
+
+export function setLockDc(id: number, dc: number): void {
+  db.prepare<[number, number]>("UPDATE map_structures SET lock_dc = ? WHERE id = ? AND kind = 'door'").run(Math.max(1, Math.round(dc)), id);
+}
+
+/** A door as the structure list stores it, with its level (for pick lock). */
+export function getDoor(id: number): (MapStructure & { level_id: number }) | undefined {
+  return db
+    .prepare<[number], MapStructure & { level_id: number }>(
+      "SELECT id, kind, x1, y1, x2, y2, target_level_id, NULL AS target_name, open, name, locked, lock_dc, level_id FROM map_structures WHERE id = ? AND kind = 'door'"
+    )
+    .get(id);
+}
+
+/** A player's character token: where it stands. */
+export function getPlayerToken(playerId: number): { character_id: number; name: string; attributes: string; level_id: number; col: number; row: number } | undefined {
+  return db
+    .prepare<[number], { character_id: number; name: string; attributes: string; level_id: number; col: number; row: number }>(
+      "SELECT c.id AS character_id, c.name, c.attributes, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+    )
+    .get(playerId);
 }
 
 /** A GM-only sticky note on the map. */

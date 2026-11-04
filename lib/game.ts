@@ -2,7 +2,7 @@ import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import {
   getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, logSessionEvent, type Trigger,
-  getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen,
+  getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen, setDoorLocked,
   addCreatureToken, setTokenHp, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
@@ -82,7 +82,7 @@ export interface ScriptLight { id: number; name: string; kind: string; range: nu
 /** An effect as scripts see it. */
 export interface ScriptEffect { id: number; name: string; kind: string; intensity: number; on: boolean }
 /** A door as scripts see it. */
-export interface ScriptDoor { id: number; name: string; open: boolean }
+export interface ScriptDoor { id: number; name: string; open: boolean; locked: boolean }
 
 /** An objective as scripts see it (by title, e.g. game.objectives['find holmes']). */
 export interface ScriptObjective {
@@ -184,7 +184,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   const effects = listEffects(levelId).map((e): ScriptEffect => ({ id: e.id, name: e.name, kind: e.kind, intensity: e.intensity, on: !!e.enabled }));
   const doors = changes.structures
     .filter((s) => s.kind === "door")
-    .map((s): ScriptDoor => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open }));
+    .map((s): ScriptDoor => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open, locked: !!s.locked }));
   return [
     {
       id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter,
@@ -218,7 +218,10 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
   saveIllumination(changes.levelId, location.illumination);
   for (const l of location.lights.items) updateLight(l.id, { radius: l.range, flicker: l.flicker, on: l.on });
   for (const f of location.effects.items) updateEffect(f.id, { intensity: f.intensity, on: f.on });
-  for (const d of location.doors.items) setDoorOpen(d.id, d.open);
+  for (const d of location.doors.items) {
+    setDoorLocked(d.id, d.locked); // locking shuts it; unlock before opening
+    setDoorOpen(d.id, d.open && !d.locked);
+  }
 }
 
 function loadGame(levelId?: number): [Game, ActorChanges | null] {

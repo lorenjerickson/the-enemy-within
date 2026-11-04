@@ -21,7 +21,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -240,6 +240,16 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.moveTo(x0 + s.x1 * size, y0 + s.y1 * size);
         ctx.lineTo(x0 + s.x2 * size, y0 + s.y2 * size);
         ctx.stroke();
+        if (s.kind === "door" && s.locked && state.showWalls) {
+          // GM only: a padlock dot at the middle of a locked door.
+          const mx = x0 + ((s.x1 + s.x2) / 2) * size, my = y0 + ((s.y1 + s.y2) / 2) * size;
+          ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "#facc15";
+          ctx.beginPath();
+          ctx.arc(mx, my, style.width, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
     ctx.restore();
@@ -973,7 +983,7 @@ export default function MapView({
         const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
         const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
         startTransition(async () => {
-          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0, name: null } });
+          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0, name: null, locked: 0, lock_dc: 15 } });
           await placeStructure(locationId, levelId, piece);
         });
       } else {
@@ -1139,7 +1149,7 @@ export default function MapView({
       const level = portrait && structureTool.kind !== "stairs" && start.x !== end.x && Math.abs(end.y - start.y) <= 0.25;
       const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: level ? start.y : end.y, target_level_id: null };
       startTransition(async () => {
-        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0, name: null } });
+        changeStructures({ add: { id: -Date.now(), ...piece, target_name: null, open: 0, name: null, locked: 0, lock_dc: 15 } });
         await placeStructure(locationId, levelId, piece);
       });
       return;
@@ -1580,6 +1590,8 @@ export default function MapView({
                 onSelect={(id) => setSelectedStructureId(id === selectedStructureId ? null : id)}
                 onToggleDoor={(id, open) => toggleDoor(locationId, id, open)}
                 onRenameDoor={(id, name) => startTransition(() => renameThing(locationId, "map_structures", id, name))}
+                onLockDoor={(id, locked) => startTransition(() => lockDoor(locationId, id, locked))}
+                onLockDc={(id, dc) => startTransition(() => changeLockDc(locationId, id, dc))}
                 onDelete={(id) =>
                   startTransition(async () => {
                     changeStructures({ remove: id });
