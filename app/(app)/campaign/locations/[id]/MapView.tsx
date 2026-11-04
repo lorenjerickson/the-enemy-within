@@ -10,6 +10,7 @@ import type { MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, 
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
+import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
 import type { ScriptNames } from "@/lib/scriptSchema";
@@ -501,6 +502,9 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  dockSide,
+  dockTools = [],
+  dockInitial = null,
 }: {
   locationId: number;
   levelId: number;
@@ -524,6 +528,9 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
+  dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
+  dockTools?: DockTool[]; // more dock tools after the map layers
+  dockInitial?: string | null; // the dock tool open at first
   lights: LightSource[];
   notes: MapNote[];
   effects: MapEffect[];
@@ -1296,14 +1303,10 @@ export default function MapView({
     });
   }
 
-  return (
-    // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
-    // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
-    <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-            <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
+  const surface = (
+    <>
             {placingChar && (
-              <div data-place-party className="absolute left-2 right-2 top-2 z-10 rounded-box bg-base-100/90 p-2 text-sm shadow space-y-1">
+              <div data-place-party className="absolute left-1/2 top-2 z-10 w-[min(36rem,calc(100%-1rem))] -translate-x-1/2 rounded-box bg-base-100/90 p-2 text-sm shadow space-y-1">
                 <div>
                   <span className="font-semibold">Place the party.</span> Click inside the green start area to place{" "}
                   <span className="font-semibold">{placingChar.name}</span> <span className="opacity-60">({placingChar.player})</span>.
@@ -1340,7 +1343,9 @@ export default function MapView({
               onContextMenu={(e) => e.preventDefault()}
               className="absolute inset-0 size-full touch-none"
             />
-            </div>
+    </>
+  );
+  const footer = (
             <div className="flex items-center justify-end gap-1 text-xs">
               {controlResult && (
                 <span data-control-result className={`mr-auto truncate ${controlResult.ok ? "" : "text-error"}`} title={controlResult.text}>
@@ -1351,14 +1356,14 @@ export default function MapView({
               <span className="opacity-60 mr-1">Scroll to zoom · {readOnly ? "drag" : "right-drag"} to pan</span>
               <span className="badge badge-neutral" data-zoom>{Math.round(view.zoom * 100)}%</span>
               <button type="button" className="btn btn-xs" onClick={() => setView({ zoom: 1, x: 0, y: 0 })}>Reset view</button>
-              {!readOnly && <button type="button" className={`btn btn-xs ${focus ? "btn-primary" : ""}`} aria-pressed={focus} onClick={() => setFocus(!focus)} title="Hide the campaign menu to give the map more room">
+              {!readOnly && !dockSide && <button type="button" className={`btn btn-xs ${focus ? "btn-primary" : ""}`} aria-pressed={focus} onClick={() => setFocus(!focus)} title="Hide the campaign menu to give the map more room">
                 Focus
               </button>}
             </div>
-        </div>
-        {!readOnly && (
-        <div className="2xl:w-[30rem] shrink-0 flex flex-col gap-3 min-h-0">
-        <ul className="grid grid-cols-4 2xl:grid-cols-2 gap-x-1 bg-base-200 rounded-box p-2 text-sm">
+  );
+  const layersPanel = (
+    <>
+        <ul className={`grid ${dockSide ? "grid-cols-2" : "grid-cols-4 2xl:grid-cols-2"} gap-x-1 bg-base-200 rounded-box p-2 text-sm`}>
           <li className="col-span-full text-xs opacity-60 px-1 pb-1">Layers (top first)</li>
           {[...MAP_LAYERS].reverse().map((layer) => (
             <li key={layer}>
@@ -1530,6 +1535,34 @@ export default function MapView({
             )}
           </div>
         )}
+    </>
+  );
+
+  // In a session: the map fills the browser, with the UI as overlays and the tools in a dock on one edge.
+  if (dockSide) {
+    const tools: DockTool[] = [...(readOnly ? [] : [{ id: "map", label: "Map layers", icon: "layers" as const, content: layersPanel }]), ...dockTools];
+    return (
+      <div className="fixed inset-0 overflow-hidden bg-base-300">
+        {surface}
+        <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
+        <PlayDock side={dockSide} tools={tools} initial={dockInitial} />
+      </div>
+    );
+  }
+
+  return (
+    // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
+    // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
+    <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
+            {surface}
+            </div>
+            {footer}
+        </div>
+        {!readOnly && (
+        <div className="2xl:w-[30rem] shrink-0 flex flex-col gap-3 min-h-0">
+          {layersPanel}
         </div>
         )}
     </div>

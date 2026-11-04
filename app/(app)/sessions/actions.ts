@@ -41,7 +41,7 @@ export async function startSession() {
 export async function beginSession(id: number) {
   await requireGm();
   beginGameSession(Number(id));
-  revalidatePath(`/sessions/${id}`);
+  redirect("/play");
 }
 
 /** Ends a session; its summary is written from what changed during it. */
