@@ -46,7 +46,7 @@ const TYPES: Record<string, Member[]> = {
     { label: "actors", type: "coll:actor", detail: "everything on the level" },
     { label: "creatures", type: "coll:creature", detail: "creatures on the level; add('giant rat', 2)" },
     { label: "encounter", type: "encounter", detail: "begin / next / end" },
-    num("illumination", "overall light, 0 to 1"),
+    num("illumination", "overall light, 0 to 100 (%)"),
     { label: "lights", type: "coll:light", detail: "light sources" },
     { label: "effects", type: "coll:effect", detail: "animated effects" },
     { label: "doors", type: "coll:door", detail: "doors" },

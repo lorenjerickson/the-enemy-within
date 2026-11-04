@@ -70,7 +70,7 @@ export interface CurrentLocation extends GameLocation {
   creatures: Collection<Actor>;
   /** The encounter on this level: active, round, actor, order, begin(actors, rolls), next(), end(). */
   encounter: Record<string, unknown>;
-  /** The level's overall light, 0 (dark) to 1 (full): the Lighting layer's global illumination. */
+  /** The level's overall light as a percentage, 0 (dark) to 100 (full): the Lighting layer's global illumination. */
   illumination: number;
   lights: Collection<ScriptLight>;
   effects: Collection<ScriptEffect>;
@@ -188,7 +188,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   return [
     {
       id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter,
-      illumination: getIllumination(levelId),
+      illumination: Math.round(getIllumination(levelId) * 100),
       lights: new Collection("light", lights),
       effects: new Collection("effect", effects),
       doors: new Collection("door", doors),
@@ -215,7 +215,7 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
   const e = changes.encounter();
   saveEncounter(changes.levelId, e && { round: e.round, turn: e.turn, order: e.order.map((o) => ({ token_id: o.actor.id, initiative: o.initiative })) });
   // Lighting, effects and doors (small lists, so simply written back).
-  saveIllumination(changes.levelId, location.illumination);
+  saveIllumination(changes.levelId, Number(location.illumination) / 100); // scripts use percent; stored as 0..1
   for (const l of location.lights.items) updateLight(l.id, { radius: l.range, flicker: l.flicker, on: l.on });
   for (const f of location.effects.items) updateEffect(f.id, { intensity: f.intensity, on: f.on });
   for (const d of location.doors.items) {
