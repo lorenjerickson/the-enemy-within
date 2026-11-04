@@ -77,7 +77,7 @@ export default function StructureEditor({
         {tool.kind === "staircase"
           ? levels.length === 0
             ? "Add another level first — a level link leads from this level to another."
-            : "Click a grid cell to place a level link (stairs to the chosen level)."
+            : `Click ${gridless ? "the map" : "a grid cell"} to place a level link (stairs to the chosen level).`
           : tool.kind === "stairs"
             ? "Drag from the top step to the bottom step of a flight. Tokens stand on it part way down."
             : tool.snap && !gridless

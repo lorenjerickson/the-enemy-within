@@ -956,6 +956,10 @@ export function addTile(levelId: number, t: Omit<MapTile, "id" | "url" | "name">
   ).run({ ...t, level_id: levelId });
 }
 
+export function getTileLevel(id: number): number | undefined {
+  return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tiles WHERE id = ?").get(id)?.level_id;
+}
+
 export function moveTile(id: number, col: number, row: number): void {
   db.prepare<[number, number, number]>("UPDATE map_tiles SET col = ?, row = ? WHERE id = ?").run(col, row, id);
 }

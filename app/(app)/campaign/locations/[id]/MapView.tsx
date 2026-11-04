@@ -655,7 +655,8 @@ export default function MapView({
   const [effectTool, setEffectTool] = useState<EffectTool>({ kind: "rain", intensity: 0.5, wholeMap: true });
   // Dragging out a placed effect's area, corner to corner, in grid units.
   const [effectDrag, setEffectDrag] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
-  const quarter = (v: number) => Math.round(v * 4) / 4;
+  // Effect areas snap to quarter cells, or 1/20 of a unit on gridless maps.
+  const quarter = (v: number) => (gridless ? snapHeight(v) : Math.round(v * 4) / 4);
   const effectRect = (d: NonNullable<typeof effectDrag>) => ({
     x: Math.min(d.start.x, d.end.x),
     y: Math.min(d.start.y, d.end.y),
@@ -729,12 +730,18 @@ export default function MapView({
     return gridless ? { x: snapHeight(gx), y: snapHeight(gy) } : { x: Math.floor(gx) + 0.5, y: Math.floor(gy) + 0.5 };
   };
 
+  /** A tile's area: the cells from start to end, or on gridless maps the rectangle between the two points. */
   const spanOf = (p: NonNullable<typeof placing>): CellRect => ({
     col: Math.min(p.start.col, p.end.col),
     row: Math.min(p.start.row, p.end.row),
-    cols: Math.abs(p.end.col - p.start.col) + 1,
-    rows: Math.abs(p.end.row - p.start.row) + 1,
+    cols: Math.abs(p.end.col - p.start.col) + (gridless ? 0 : 1),
+    rows: Math.abs(p.end.row - p.start.row) + (gridless ? 0 : 1),
   });
+  /** Tiles: the cell under the pointer, or on gridless maps the point itself (to 1/20 of a unit). */
+  const tilePointAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { gx, gy } = gridAt(e);
+    return gridless ? { col: snapHeight(gx), row: snapHeight(gy) } : { col: Math.floor(gx), row: Math.floor(gy) };
+  };
   // On the light selected row a dark hover would hide the dark text, so darken the tint slightly instead.
   const hoverBg = (layer: MapLayer) => (selected === layer ? "hover:bg-black/15" : "hover:bg-base-300");
 
@@ -872,7 +879,8 @@ export default function MapView({
     if (e.button === 0 && selected === "structure") {
       if (structureTool.kind === "staircase") {
         if (!structureTool.targetLevelId) return;
-        const cell = cellAt(e);
+        // A level link fills a cell, or on gridless maps a unit square centred on the pointer.
+        const cell = gridless ? tokenAt(e) : cellAt(e);
         const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
         const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
         startTransition(async () => {
@@ -887,16 +895,16 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "tiles" && selectedTile) {
-      const cell = cellAt(e);
+      const { gx, gy } = gridAt(e);
       const t = selectedTile;
-      if (cell.col >= t.col && cell.col < t.col + t.cols && cell.row >= t.row && cell.row < t.row + t.rows) {
-        setMoving({ grab: cell, delta: { col: 0, row: 0 } });
+      if (gx >= t.col && gx < t.col + t.cols && gy >= t.row && gy < t.row + t.rows) {
+        setMoving({ grab: tilePointAt(e), delta: { col: 0, row: 0 } });
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
     }
     if (e.button === 0 && selected === "tiles" && tileAsset) {
-      const cell = cellAt(e);
+      const cell = tilePointAt(e);
       setPlacing({ start: cell, end: cell });
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -945,13 +953,13 @@ export default function MapView({
       return;
     }
     if (moving) {
-      const cell = cellAt(e);
-      const delta = { col: cell.col - moving.grab.col, row: cell.row - moving.grab.row };
+      const cell = tilePointAt(e);
+      const delta = { col: snapHeight(cell.col - moving.grab.col), row: snapHeight(cell.row - moving.grab.row) };
       if (delta.col !== moving.delta.col || delta.row !== moving.delta.row) setMoving({ ...moving, delta });
       return;
     }
     if (placing) {
-      const cell = cellAt(e);
+      const cell = tilePointAt(e);
       if (cell.col !== placing.end.col || cell.row !== placing.end.row) setPlacing({ ...placing, end: cell });
       return;
     }
@@ -1045,6 +1053,7 @@ export default function MapView({
     if (placing && tileAsset) {
       const span = spanOf(placing);
       setPlacing(null);
+      if (gridless && (span.cols < 0.25 || span.rows < 0.25)) return; // gridless: a click without a drag places nothing
       startTransition(async () => {
         changeTiles({ add: { id: -Date.now(), asset_id: tileAsset.id, name: tileAsset.name, url: tileAsset.url, ...span } });
         await placeTile(locationId, levelId, { asset_id: tileAsset.id, ...span });
@@ -1380,6 +1389,7 @@ export default function MapView({
             ) : selected === "tiles" ? (
               <TilesEditor
                 locationId={locationId}
+                gridless={gridless}
                 assets={tileAssets}
                 asset={tileAsset}
                 onAssetChange={setTileAsset}

@@ -9,6 +9,7 @@ import AssetPicker from "./AssetPicker";
 /** Tiles layer editor: choose (or upload / generate) the tile asset that clicks on the map will place. */
 export default function TilesEditor({
   locationId,
+  gridless,
   assets,
   asset,
   onAssetChange: setAsset,
@@ -18,6 +19,7 @@ export default function TilesEditor({
   onDeleteTile,
 }: {
   locationId: number;
+  gridless: boolean; // placed anywhere, any size
   assets: Asset[];
   asset: Asset | null;
   onAssetChange: (asset: Asset) => void;
@@ -66,7 +68,11 @@ export default function TilesEditor({
         </form>
       </details>
 
-      {asset && <p className="text-xs opacity-60">Click a grid cell to place it, or click and drag to cover several cells.</p>}
+      {asset && (
+        <p className="text-xs opacity-60">
+          {gridless ? "Click and drag to cover an area with it." : "Click a grid cell to place it, or click and drag to cover several cells."}
+        </p>
+      )}
 
       <div className="space-y-1">
         <div className="text-sm font-semibold">Placed tiles</div>
@@ -80,8 +86,8 @@ export default function TilesEditor({
                   <img src={t.url} alt="" className="size-6 rounded object-cover" />
                   <span>{t.name}</span>
                   <span className="text-xs opacity-60">
-                    col {t.col}, row {t.row}
-                    {(t.cols > 1 || t.rows > 1) && ` · ${t.cols}×${t.rows}`}
+                    {gridless ? `x ${t.col}, y ${t.row} · ${t.cols}×${t.rows}` : `col ${t.col}, row ${t.row}`}
+                    {!gridless && (t.cols > 1 || t.rows > 1) && ` · ${t.cols}×${t.rows}`}
                   </span>
                 </button>
                 {t.id === selectedTileId && (

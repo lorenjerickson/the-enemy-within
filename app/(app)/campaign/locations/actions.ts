@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
@@ -119,19 +119,25 @@ export async function placeTile(
 ) {
   await requireGm();
   const int = (n: number) => Math.round(Number(n));
+  // Whole cells, or anywhere and any size (to 1/20 of a unit) on gridless maps.
+  const gridless = isGridlessLevel(levelId);
+  const at = gridless ? (n: number) => snapHeight(Number(n)) : int;
+  const min = gridless ? 0.25 : 1;
   addTile(levelId, {
     asset_id: int(tile.asset_id),
-    col: int(tile.col),
-    row: int(tile.row),
-    cols: Math.max(1, int(tile.cols)),
-    rows: Math.max(1, int(tile.rows)),
+    col: at(tile.col),
+    row: at(tile.row),
+    cols: Math.max(min, at(tile.cols)),
+    rows: Math.max(min, at(tile.rows)),
   });
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
 export async function moveTileTo(locationId: number, tileId: number, col: number, row: number) {
   await requireGm();
-  moveTile(tileId, Math.round(col), Math.round(row));
+  const levelId = getTileLevel(tileId);
+  const at = levelId !== undefined && isGridlessLevel(levelId) ? (n: number) => snapHeight(Number(n)) : (n: number) => Math.round(Number(n));
+  moveTile(tileId, at(col), at(row));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -152,8 +158,8 @@ export async function placeStructure(
   if (piece.kind === "staircase" && !levels.some((l) => l.id === piece.target_level_id && l.id !== levelId)) {
     throw new Error("A staircase needs another level to lead to");
   }
-  // Level links sit in a cell; lines may be off the grid (irregular maps), to 1/20 of a cell.
-  const at = piece.kind === "staircase" ? (n: number) => Math.round(Number(n)) : (n: number) => snapHeight(Number(n));
+  // Level links sit in a cell (anywhere on gridless maps); lines may be off the grid (irregular maps), to 1/20 of a cell.
+  const at = piece.kind === "staircase" && !isGridlessLevel(levelId) ? (n: number) => Math.round(Number(n)) : (n: number) => snapHeight(Number(n));
   addStructure(levelId, {
     kind: piece.kind,
     x1: at(piece.x1),
