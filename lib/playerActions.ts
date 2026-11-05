@@ -26,3 +26,9 @@ export const TARGETED_ACTIONS: PlayerActionId[] = ["attack", "evade", "pursue"];
 
 /** Evade and Pursue: movement that follows the target, re-decided every second, for the rest of the round. */
 export const CHASE_ACTIONS: PlayerActionId[] = ["evade", "pursue"];
+
+/**
+ * Actions that need their target within a range (grid squares; 1 = next to them). Declared on someone out of reach,
+ * the actor pursues them first, for as long as that still leaves time to do the action.
+ */
+export const ACTION_RANGE: Partial<Record<PlayerActionId, number>> = { attack: 1 };

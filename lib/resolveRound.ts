@@ -1,5 +1,5 @@
 import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
-import { CHASE_ACTIONS } from "@/lib/playerActions";
+import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type PlanStep } from "@/lib/roundPlan";
 import type { Segment } from "@/lib/visibility";
 
@@ -92,23 +92,23 @@ export function resolveMovement(
   const pos = new Map(order.map((m) => [m.tokenId, m.start]));
   const same = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) < 0.9 : a.col === b.col && a.row === b.row);
   const log: string[] = [];
-  // Actions by the second they finish in (order within a second = initiative order).
-  type Act = { m: Mover; start: number; step: Extract<PlanStep, { kind: "action" }> };
-  const actionsAt = new Map<number, Act[]>();
-  for (const m of order) {
-    for (const s of timeline(m.plan, m.walking).steps) {
-      if (s.step.kind === "action") {
-        const sec = Math.max(1, Math.ceil(s.end - 1e-9));
-        actionsAt.set(sec, [...(actionsAt.get(sec) ?? []), { m, start: s.start, step: s.step }]);
-      }
-    }
-  }
+  // Each mover's actions in its own plan time. An action finishes when the mover's plan clock (seconds minus the
+  // seconds it was held back or spent closing in) passes its end; order within a second = initiative order.
+  type Act = { start: number; end: number; step: Extract<PlanStep, { kind: "action" }> };
+  const acts = new Map<number, Act[]>(
+    order.map((m) => [
+      m.tokenId,
+      timeline(m.plan, m.walking).steps.flatMap((s) => (s.step.kind === "action" ? [{ start: s.start, end: s.end, step: s.step }] : [])),
+    ])
+  );
+  const finished = new Set<Act>();
+  const begun = new Set<Act>(); // ranged actions that started in reach (no more closing in for them)
   const hp = new Map([...fighters].map(([id, f]) => [id, f.hp]));
   const down = new Set([...hp].filter(([, h]) => h <= 0).map(([id]) => id));
   const hitAt = new Map<number, number[]>(); // seconds each was hit in
   const where = (id: number) => pos.get(id) ?? bystanders.find((b) => b.tokenId === id)?.at;
-  const inReach = (a: Pos, b: Pos) =>
-    (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.5 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1) &&
+  const inReach = (a: Pos, b: Pos, range = 1) =>
+    (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= range + 0.5 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= range) &&
     clearPath({ x: a.col + 0.5, y: a.row + 0.5 }, { x: b.col + 0.5, y: b.row + 0.5 }, walls); // not through a wall
 
   // What each second ended with, for playing the round back: everyone's spot, who's down, and what happened.
@@ -172,14 +172,41 @@ export function resolveMovement(
     return { col: best.col, row: best.row };
   }
 
+  const closingIn = new Set<number>(); // who has been told they're closing in (logged once)
+  const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
+    const lagBefore = new Map(lag);
+    const autoPursue = new Set<number>(); // closing in on an out-of-reach target this second (their plan waits)
     // Evaluation: where each would like to be at the end of this second (Evade / Pursue decided afresh from where their target is now).
     const proposed = new Map(
       order.map((m) => {
         const here = pos.get(m.tokenId)!;
         if (down.has(m.tokenId)) return [m.tokenId, here];
         const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
+        // A ranged action due now on someone out of reach: pursue them first, while that still leaves time to do it.
+        const tp = t - 1;
+        const due = acts.get(m.tokenId)!.find((a) => ACTION_RANGE[a.step.action] && a.step.target && !begun.has(a) && !finished.has(a) && a.start <= tp + 1e-9 && tp < a.end);
+        if (due) {
+          const them = where(due.step.target!.id);
+          if (them && !down.has(due.step.target!.id) && !inReach(here, them, ACTION_RANGE[due.step.action])) {
+            if (ROUND_SECONDS - sec >= due.end - due.start - 1e-9) {
+              autoPursue.add(m.tokenId);
+              if (!closingIn.has(m.tokenId)) log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
+              closingIn.add(m.tokenId);
+              return [m.tokenId, chaseStep(m, here, them, true)];
+            }
+          } else begun.add(due);
+        }
+        // Having closed in, they stay where that got them: moves planned for later this round are skipped.
+        if (closingIn.has(m.tokenId) && !(c && t > c.start)) {
+          const planned = wants.get(m.tokenId)!;
+          if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
+            skipped.add(m.tokenId);
+            log.push(`${sec} s: ${m.name}'s planned move is skipped: they closed in instead.`);
+          }
+          return [m.tokenId, here];
+        }
         if (c && t > c.start) {
           // Chasing (or done chasing, which ends the round's movement: they stay where it left them).
           const them = where(c.target.id);
@@ -211,6 +238,8 @@ export function resolveMovement(
         settled.push({ id: m.tokenId, at: want });
       }
     }
+    // Closing in pauses the rest of their plan (unless being held back already did).
+    for (const id of autoPursue) if (lag.get(id) === lagBefore.get(id)) lag.set(id, lag.get(id)! + 1);
     // Result.
     for (const s of settled) pos.set(s.id, s.at);
     // Anyone left sharing a spot (a held-back mover whose spot was taken): the GM decides.
@@ -220,8 +249,15 @@ export function resolveMovement(
         log.push(`${sec} s: ${a} and ${b} end up in the same spot — GM to decide.`);
       }
     }
-    // Actions finishing this second.
-    for (const { m, start, step } of actionsAt.get(sec) ?? []) {
+    // Actions finishing this second: their end passed on the mover's own plan clock.
+    const finishing = order.flatMap((m) => {
+      const from = sec - 1 - lagBefore.get(m.tokenId)!, to = sec - lag.get(m.tokenId)!;
+      return acts.get(m.tokenId)!.filter((a) => !finished.has(a) && a.end > from + 1e-9 && a.end <= to + 1e-9).map((a) => ({ m, a }));
+    });
+    for (const { m, a: act } of finishing) {
+      finished.add(act);
+      const { step } = act;
+      const start = act.start + lag.get(m.tokenId)!; // when it really started
       const say = (text: string) => log.push(`${sec} s: ${text}`);
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
       if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t <= sec)) {
@@ -240,7 +276,7 @@ export function resolveMovement(
         say(`${m.name}'s attack fails: no target.`);
       } else if (down.has(target.id)) {
         say(`${m.name}'s attack fails: ${target.name} is already down.`);
-      } else if (!inReach(pos.get(m.tokenId)!, at)) {
+      } else if (!inReach(pos.get(m.tokenId)!, at, ACTION_RANGE.attack)) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
       } else {
         const a = me.attack(), d = them.defense();
@@ -267,6 +303,11 @@ export function resolveMovement(
       }
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")) });
+  }
+  // Actions pushed past the end of the round (by closing in or being held back) don't happen.
+  for (const m of order) {
+    if (down.has(m.tokenId)) continue;
+    for (const a of acts.get(m.tokenId)!) if (!finished.has(a) && !CHASE_ACTIONS.includes(a.step.action)) log.push(`${m.name}'s ${a.step.action} runs out of time this round.`);
   }
   for (const m of order) {
     const end = pos.get(m.tokenId)!;
