@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { pickLock, search } from "./actions";
+import { setMoveMode, useMoveMode } from "./moveMode";
 import { PLAYER_ACTIONS } from "@/lib/playerActions";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 
 /** The player's Actions panel: the standard actions, then anything they can do right here (picking a nearby lock). */
-export default function PickLock({ doors, onMap }: { doors: { id: number; name: string }[]; onMap: boolean }) {
+export default function PickLock({ doors, onMap, moveLeft }: { doors: { id: number; name: string }[]; onMap: boolean; moveLeft: number }) {
+  const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -18,15 +20,25 @@ export default function PickLock({ doors, onMap }: { doors: { id: number; name: 
             <button
               type="button"
               data-action={a.id}
-              disabled={a.id !== "search" || !onMap || pending}
-              onClick={a.id === "search" ? () => startTransition(async () => setError((await search()).error ?? null)) : undefined}
-              title={a.id === "search" ? (onMap ? "Search: Investigation check (DC 14) for anything hidden within 10 ft" : "You're not on the map yet") : `${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`}
-              className="btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80"
+              disabled={!(a.id === "search" || a.id === "move") || !onMap || pending}
+              aria-pressed={a.id === "move" ? moving : undefined}
+              onClick={
+                a.id === "search" ? () => startTransition(async () => setError((await search()).error ?? null))
+                : a.id === "move" ? () => setMoveMode(!moving)
+                : undefined
+              }
+              title={
+                !onMap ? "You're not on the map yet"
+                : a.id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
+                : a.id === "move" ? `Move: show how far you can walk (${moveLeft} ft left)`
+                : `${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`
+              }
+              className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${a.id === "move" && moving ? "btn-primary" : ""}`}
             >
               <GameIcon name={a.icon} className="size-7" />
               <span className="text-xs leading-tight">
                 {a.label}
-                {"hint" in a && <span className="block opacity-60">{a.hint}</span>}
+                {a.id === "move" && onMap ? <span className="block opacity-60">{moveLeft} ft left</span> : "hint" in a && <span className="block opacity-60">{a.hint}</span>}
               </span>
             </button>
           </li>

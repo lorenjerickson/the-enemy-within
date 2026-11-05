@@ -12,6 +12,8 @@ import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { useMoveMode } from "../../../../(play)/play/moveMode";
+import { FEET_PER_SQUARE, reachableSquares } from "@/lib/movement";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
@@ -599,7 +601,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[] }; // a player's fog of war: their characters, and where they've stood before
+  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number } | null }; // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -816,6 +818,18 @@ export default function MapView({
     const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
     return { visible, explored, tokens };
   }, [fog, mapImage.perspective, optimisticStructures, drawnTokens]);
+  // Move (players): while it's on, show how far their character can walk with the movement they have left.
+  const moveOn = useMoveMode();
+  const reach = useMemo(() => {
+    const m = fog?.move;
+    if (!moveOn || !m || mapImage.perspective === "portrait") return null;
+    const t = drawnTokens.find((x) => x.character_id === m.characterId);
+    if (!t) return null;
+    const walls = blockingSegments(optimisticStructures);
+    const squares = m.feet / FEET_PER_SQUARE;
+    if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t };
+    return { kind: "squares" as const, cells: [...reachableSquares({ col: t.col, row: t.row }, squares, walls).values()], feet: m.feet, at: t };
+  }, [moveOn, fog?.move, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
   const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
 
   const state: MapState = {
@@ -1358,6 +1372,39 @@ export default function MapView({
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(f, 0, 0);
+        ctx.restore();
+      }
+      // Movement overlay: reachable squares (grid) or the reachable area (gridless), over the fog, with feet left.
+      if (reach) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        ctx.save();
+        ctx.fillStyle = "rgba(56,189,248,0.22)";
+        ctx.strokeStyle = "rgba(125,211,252,0.85)";
+        ctx.lineWidth = 1 / k;
+        if (reach.kind === "squares") {
+          for (const c of reach.cells) {
+            const r = cellToRect(state, SCENE.w, SCENE.h, { col: c.col, row: c.row, cols: 1, rows: 1 });
+            ctx.fillRect(r.x, r.y, r.w, r.h);
+            ctx.strokeRect(r.x, r.y, r.w, r.h);
+          }
+        } else {
+          const p = new Path2D();
+          reach.poly.forEach((pt, i) => (i ? p.lineTo(x0 + pt.x * size, y0 + pt.y * size) : p.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
+          p.closePath();
+          ctx.fill(p);
+          ctx.lineWidth = 2 / k;
+          ctx.setLineDash([6 / k, 4 / k]);
+          ctx.stroke(p);
+          ctx.setLineDash([]);
+        }
+        const tx = x0 + (reach.at.col + 0.5) * size, ty = y0 + reach.at.row * size;
+        ctx.font = `bold ${12 / k}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.lineWidth = 3 / k;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        ctx.strokeText(`${reach.feet} ft`, tx, ty - 4 / k);
+        ctx.fillStyle = "#e0f2fe";
+        ctx.fillText(`${reach.feet} ft`, tx, ty - 4 / k);
         ctx.restore();
       }
       drawPings();

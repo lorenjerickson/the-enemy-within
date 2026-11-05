@@ -17,7 +17,7 @@ export default function LevelMap({
   level: MapLevel;
   levels: MapLevel[];
   readOnly?: boolean;
-  fog?: { viewers: number[]; explored: { x: number; y: number }[] }; // a player's fog of war
+  fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { characterId: number; feet: number } | null }; // a player's fog of war (and movement left)
   dock?: { side: "left" | "right"; tools: DockTool[]; initial?: string | null }; // in a session: full screen, with this dock
 }) {
   // A player's view gets nothing GM-only (notes, controls, scripts, sounds, the creature list).

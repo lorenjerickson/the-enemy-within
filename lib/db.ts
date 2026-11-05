@@ -318,6 +318,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
 
 addColumn("map_structures", "locked", "INTEGER NOT NULL DEFAULT 0"); // doors: 1 = locked (only the GM or a successful pick lock opens it)
 addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors: what a pick lock roll must reach
+addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
 db.exec(`CREATE TABLE IF NOT EXISTS party_start (
@@ -1360,10 +1361,10 @@ export function getDoor(id: number): (MapStructure & { level_id: number }) | und
 }
 
 /** A player's character token: where it stands. */
-export function getPlayerToken(playerId: number): { character_id: number; name: string; attributes: string; level_id: number; col: number; row: number } | undefined {
+export function getPlayerToken(playerId: number): { character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number } | undefined {
   return db
-    .prepare<[number], { character_id: number; name: string; attributes: string; level_id: number; col: number; row: number }>(
-      "SELECT c.id AS character_id, c.name, c.attributes, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+    .prepare<[number], { character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number }>(
+      "SELECT c.id AS character_id, c.name, c.attributes, c.movement, t.moved, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
     )
     .get(playerId);
 }
