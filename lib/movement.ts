@@ -55,3 +55,81 @@ export function routeTo(reach: Reach, key: string): { col: number; row: number }
 
 /** Whether a straight move from a to b is clear of walls and closed doors (gridless maps). */
 export const clearPath = (a: Point, b: Point, walls: Segment[]) => !walls.some((w) => crosses(a, b, w));
+
+/**
+ * Free movement on grid maps: the shortest route of squares (8-way steps, walls and closed doors block) from start to
+ * goal, only through squares `allowed` says the player may enter (e.g. ones they've seen). Null if there's none.
+ */
+export function squareRoute(
+  start: { col: number; row: number },
+  goal: { col: number; row: number },
+  walls: Segment[],
+  allowed: (col: number, row: number) => boolean,
+  maxSquares = 40000,
+): { col: number; row: number }[] | null {
+  const prev = new Map<string, string | null>([[squareKey(start.col, start.row), null]]);
+  let frontier = [start];
+  const goalKey = squareKey(goal.col, goal.row);
+  while (frontier.length && prev.size < maxSquares) {
+    const next: typeof frontier = [];
+    for (const f of frontier) {
+      for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+        if (!dc && !dr) continue;
+        const c = f.col + dc, r = f.row + dr, k = squareKey(c, r);
+        if (prev.has(k) || !allowed(c, r)) continue;
+        if (walls.some((w) => crosses({ x: f.col + 0.5, y: f.row + 0.5 }, { x: c + 0.5, y: r + 0.5 }, w))) continue;
+        prev.set(k, squareKey(f.col, f.row));
+        if (k === goalKey) {
+          const route: { col: number; row: number }[] = [];
+          for (let at: string | null = k; at; at = prev.get(at) ?? null) {
+            const [cc, rr] = at.split(",").map(Number);
+            route.unshift({ col: cc, row: rr });
+          }
+          return route;
+        }
+        next.push({ col: c, row: r });
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+/**
+ * Free movement on gridless maps: the shortest path from a to b around walls and closed doors, through points
+ * `allowed` says are fine (e.g. seen). Waypoints sit just off wall ends, so paths hug corners. Null if there's none.
+ */
+export function shortestPath(a: Point, b: Point, walls: Segment[], allowed: (p: Point) => boolean): Point[] | null {
+  if (clearPath(a, b, walls)) return [a, b];
+  const OFF = 0.35;
+  const nodes: Point[] = [a, b];
+  for (const w of walls) {
+    for (const p of [w.a, w.b]) {
+      for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const n = { x: p.x + dx * OFF, y: p.y + dy * OFF };
+        if (allowed(n)) nodes.push(n);
+      }
+    }
+  }
+  // Dijkstra over straight, clear hops between nodes.
+  const dist = nodes.map(() => Infinity), from = nodes.map(() => -1), done = nodes.map(() => false);
+  dist[0] = 0;
+  for (;;) {
+    let u = -1;
+    for (let i = 0; i < nodes.length; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0) return null;
+    if (u === 1) break;
+    done[u] = true;
+    for (let v = 0; v < nodes.length; v++) {
+      if (done[v] || v === u) continue;
+      const d = dist[u] + Math.hypot(nodes[v].x - nodes[u].x, nodes[v].y - nodes[u].y);
+      if (d < dist[v] && clearPath(nodes[u], nodes[v], walls)) {
+        dist[v] = d;
+        from[v] = u;
+      }
+    }
+  }
+  const path: Point[] = [];
+  for (let i = 1; i >= 0; i = from[i]) path.unshift(nodes[i]);
+  return path;
+}

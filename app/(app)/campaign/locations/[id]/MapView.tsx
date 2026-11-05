@@ -11,7 +11,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { moveMyToken, pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { freeMove, moveMyToken, pingsSince, sendPing } from "../../../../(play)/play/actions";
 import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
@@ -601,7 +601,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number } | null }; // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean } | null }; // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -822,7 +822,7 @@ export default function MapView({
   const moveOn = useMoveMode();
   const reach = useMemo(() => {
     const m = fog?.move;
-    if (!moveOn || !m || mapImage.perspective === "portrait") return null;
+    if (!moveOn || !m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
     const t = drawnTokens.find((x) => x.character_id === m.characterId);
     if (!t) return null;
     const walls = blockingSegments(optimisticStructures);
@@ -852,8 +852,24 @@ export default function MapView({
     const t = setInterval(() => (walkDone(walking) ? setWalking(null) : setFlickerTick((n) => n + 1)), 16);
     return () => clearInterval(t);
   }, [walking]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Free movement: a click anywhere they've seen walks them there; the server finds the route and may stop it early. */
+  function walkFree(gx: number, gy: number) {
+    const m = fog?.move, t = m && drawnTokens.find((x) => x.character_id === m.characterId);
+    if (!t || !fogged) return;
+    if (![...fogged.visible, ...fogged.explored].some((poly) => insidePolygon({ x: gx, y: gy }, poly))) return;
+    startTransition(async () => {
+      const r = await freeMove(gx, gy);
+      if (r.error) return setControlResult({ label: "Move", ok: false, text: r.error });
+      if (!r.route || r.route.length < 2) return;
+      const end = r.route[r.route.length - 1];
+      setWalking({ id: t.id, route: r.route, started: performance.now() });
+      changeTokens({ move: { id: t.id, col: end.x, row: end.y } });
+      if (r.stopped) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
+    });
+  }
   /** A click inside the movement overlay walks the player's character there. */
   function walkTo(gx: number, gy: number) {
+    if (fog?.move?.free) return walkFree(gx, gy);
     if (!reach) return;
     const t = reach.at;
     let route: Point[], col: number, row: number;
@@ -1241,7 +1257,7 @@ export default function MapView({
     drag.current = null;
     const p = press.current;
     press.current = null;
-    if (p && e && readOnly && reach && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
+    if (p && e && readOnly && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
     if (hold.current) {
       clearTimeout(hold.current.timer);
       hold.current = null;

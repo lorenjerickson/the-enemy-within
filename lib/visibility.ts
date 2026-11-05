@@ -62,3 +62,13 @@ export function audible(source: Point, radius: number, listener: Point, walls: S
     return t !== null && t < dist;
   });
 }
+
+/** Whether a point lies inside a polygon (ray casting). */
+export function insidePolygon(p: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}

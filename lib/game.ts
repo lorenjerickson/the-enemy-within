@@ -554,8 +554,10 @@ const MAX_CHAIN = 5;
  * Runs each waiting ON trigger whose condition now holds, once. Called after every game script and when game
  * time moves. A trigger whose condition or action fails keeps its error, for the GM to see, and isn't tried again.
  */
-export function fireTriggers(depth = 0): void {
-  if (depth >= MAX_CHAIN) return;
+/** Checks the waiting triggers and runs any that go off; returns the conditions of those that went off. */
+export function fireTriggers(depth = 0): string[] {
+  const went: string[] = [];
+  if (depth >= MAX_CHAIN) return went;
   // One at a time, re-reading the list: an action may itself have checked (or added) triggers.
   for (let last = 0, t: Trigger | undefined; (t = listActiveTriggers().find((x) => x.id > last)); last = t.id) {
     const trigger = t;
@@ -585,6 +587,7 @@ export function fireTriggers(depth = 0): void {
     setTriggerState(trigger.id, holds, { ...trigger.watches, ...seen }, fires ? getGameTime() : null);
     if (!fires) continue;
     logSessionEvent(`ON ${readableCondition(trigger)} went off.`);
+    went.push(readableCondition(trigger));
     const watched = trigger.watches;
     try {
       runGameScript(triggerScript(trigger.prelude, trigger.action), trigger.level_id ?? undefined, {
@@ -595,6 +598,7 @@ export function fireTriggers(depth = 0): void {
       fail(e);
     }
   }
+  return went;
 }
 
 /** A trigger's condition with its WITH names written out, e.g. game.calendar.timers['find holmes'].expired. */

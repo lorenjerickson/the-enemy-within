@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken,
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken,
 } from "@/lib/db";
-import { blockingSegments } from "@/lib/visibility";
-import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
+import { fireTriggers } from "@/lib/game";
+import { snapHeight } from "@/lib/gravity";
+import { blockingSegments, insidePolygon, visibilityPolygon, type Point } from "@/lib/visibility";
+import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import type { Attributes } from "@/lib/attributes";
@@ -109,6 +111,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   const me = getPlayerToken(user.id);
   if (!me) return { error: "You're not on the map yet" };
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
+  if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
   const left = Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved);
   const walls = blockingSegments(listStructures(me.level_id));
   let feet: number;
@@ -129,4 +132,56 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   walkToken(me.token_id, Number(col), Number(row), feet);
   revalidatePath("/play");
   return {};
+}
+
+/**
+ * Free movement (outside encounters): the player's character walks to any spot they've seen that they can get to,
+ * by the shortest route, without spending movement. It walks step by step and stops early where a map event
+ * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
+ */
+export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, movement is limited" };
+  const walls = blockingSegments(listStructures(me.level_id));
+  const here = { x: me.col + 0.5, y: me.row + 0.5 };
+  // What they've seen: from where they stand now and everywhere they've stood on this level.
+  const seen = [here, ...listSightings(user.id, me.level_id)].map((p) => visibilityPolygon(p, 500, walls));
+  const revealed = (p: Point) => seen.some((poly) => insidePolygon(p, poly));
+  const target = { x: Number(gx), y: Number(gy) };
+
+  let route: Point[]; // token corners (col, row) to step through, start first
+  if (isGridlessLevel(me.level_id)) {
+    if (!revealed(target)) return { error: "You haven't seen that spot" };
+    const path = shortestPath(here, target, walls, revealed);
+    if (!path) return { error: "You can't get there" };
+    // Step about one unit (5 ft) at a time along the path, so map events can stop the walk on the way.
+    route = [{ x: me.col, y: me.row }];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1], b = path[i], n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+      for (let s = 1; s <= n; s++) route.push({ x: snapHeight(a.x + ((b.x - a.x) * s) / n - 0.5), y: snapHeight(a.y + ((b.y - a.y) * s) / n - 0.5) });
+    }
+  } else {
+    const goal = { col: Math.floor(target.x), row: Math.floor(target.y) };
+    if (!revealed({ x: goal.col + 0.5, y: goal.row + 0.5 })) return { error: "You haven't seen that spot" };
+    const squares = squareRoute({ col: me.col, row: me.row }, goal, walls, (c, r) => revealed({ x: c + 0.5, y: r + 0.5 }));
+    if (!squares) return { error: "You can't get there" };
+    route = squares.map((s) => ({ x: s.col, y: s.row }));
+  }
+
+  const walked: Point[] = [route[0]];
+  let stopped = false;
+  for (const step of route.slice(1)) {
+    moveToken(me.token_id, step.x, step.y); // also remembers what they saw from here
+    walked.push(step);
+    if (fireTriggers().length) {
+      stopped = true; // the player isn't told which trigger (that's the GM's script)
+      break;
+    }
+  }
+  revalidatePath("/play");
+  return { route: walked, stopped };
 }

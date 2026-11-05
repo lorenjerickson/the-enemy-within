@@ -7,7 +7,7 @@ import { PLAYER_ACTIONS } from "@/lib/playerActions";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 
 /** The player's Actions panel: the standard actions, then anything they can do right here (picking a nearby lock). */
-export default function PickLock({ doors, onMap, moveLeft }: { doors: { id: number; name: string }[]; onMap: boolean; moveLeft: number }) {
+export default function PickLock({ doors, onMap, moveLeft, freeMovement }: { doors: { id: number; name: string }[]; onMap: boolean; moveLeft: number; freeMovement: boolean }) {
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export default function PickLock({ doors, onMap, moveLeft }: { doors: { id: numb
               title={
                 !onMap ? "You're not on the map yet"
                 : a.id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
-                : a.id === "move" ? `Move: show how far you can walk (${moveLeft} ft left)`
+                : a.id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move: show how far you can walk (${moveLeft} ft left)`)
                 : `${a.label}${"hint" in a ? ` (${a.hint})` : ""}: not available yet`
               }
               className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${a.id === "move" && moving ? "btn-primary" : ""}`}
@@ -38,7 +38,7 @@ export default function PickLock({ doors, onMap, moveLeft }: { doors: { id: numb
               <GameIcon name={a.icon} className="size-7" />
               <span className="text-xs leading-tight">
                 {a.label}
-                {a.id === "move" && onMap ? <span className="block opacity-60">{moveLeft} ft left</span> : "hint" in a && <span className="block opacity-60">{a.hint}</span>}
+                {a.id === "move" && onMap ? <span className="block opacity-60">{freeMovement ? "free" : `${moveLeft} ft left`}</span> : "hint" in a && <span className="block opacity-60">{a.hint}</span>}
               </span>
             </button>
           </li>
