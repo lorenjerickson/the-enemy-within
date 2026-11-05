@@ -6,6 +6,7 @@ import {
   getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
 } from "@/lib/db";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
+import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
 /**
  * Starts an encounter on the party's map: every player character there is asked to roll initiative, and the GM's
@@ -42,5 +43,29 @@ export async function endEncounter() {
   saveEncounter(levelId, null);
   clearRoundPlans(levelId);
   logSessionEvent("The encounter ended.");
+  revalidatePath("/play");
+}
+
+/** The GM plans a creature's round (same rules as players). */
+export async function gmPlanStep(tokenId: number, step: StepRequest): Promise<{ error?: string }> {
+  await requireGm();
+  const p = tokenPlanner(Number(tokenId));
+  if (!p) return { error: "Not in an encounter" };
+  const error = addPlanStep(p, step);
+  revalidatePath("/play");
+  return error ? { error } : {};
+}
+
+export async function gmUndoStep(tokenId: number) {
+  await requireGm();
+  const p = tokenPlanner(Number(tokenId));
+  if (p) undoPlanStep(p);
+  revalidatePath("/play");
+}
+
+export async function gmSetReady(tokenId: number, ready: boolean) {
+  await requireGm();
+  const p = tokenPlanner(Number(tokenId));
+  if (p) setReady(p, ready);
   revalidatePath("/play");
 }

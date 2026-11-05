@@ -6,8 +6,7 @@ import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan,
 } from "@/lib/db";
-import { cannotAdd, planEnd, timeline, type PlanStep } from "@/lib/roundPlan";
-import type { PlayerActionId } from "@/lib/playerActions";
+import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, visibilityPolygon, type Point } from "@/lib/visibility";
@@ -200,55 +199,33 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   return { route: walked, stopped };
 }
 
-/** The player's character in a running encounter, with its plan for this round. */
+/** The player's character's planner in a running encounter. */
 function planner(userId: number) {
   const me = getPlayerToken(userId);
-  if (!me || !getEncounter(me.level_id)) return null;
-  return { me, walking: JSON.parse(me.movement).walking ?? 0, ...getRoundPlan(me.level_id, me.token_id) };
+  return me ? tokenPlanner(me.token_id) : null;
 }
 
 /** Round planning: add an action, or a move to a square (reachable from where the plan leaves them, in the time left). */
-export async function planStep(step: { kind: "action"; action: PlayerActionId } | { kind: "move"; col: number; row: number }): Promise<{ error?: string }> {
+export async function planStep(step: StepRequest): Promise<{ error?: string }> {
   const user = await requireUser();
   const p = planner(user.id);
   if (!p) return { error: "Not in an encounter" };
-  if (p.ready) return { error: "You're ready; undo that to change your plan" };
-  let add: PlanStep;
-  if (step.kind === "move") {
-    const from = planEnd(p.plan, { col: p.me.col, row: p.me.row });
-    const feetLeft = (timeline(p.plan, p.walking).left * p.walking) / 6;
-    const walls = blockingSegments(listStructures(p.me.level_id));
-    if (isGridlessLevel(p.me.level_id)) {
-      const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
-      const feet = Math.round(Math.hypot(to.col - from.col, to.row - from.row) * FEET_PER_SQUARE * 10) / 10;
-      if (feet > feetLeft + 0.05 || !clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls)) return { error: "You can't get there in time" };
-      add = { kind: "move", to, feet };
-    } else {
-      const sq = reachableSquares(from, feetLeft / FEET_PER_SQUARE, walls).get(squareKey(Math.round(Number(step.col)), Math.round(Number(step.row))));
-      if (!sq || !sq.steps) return { error: "You can't get there in time" };
-      add = { kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE };
-    }
-  } else {
-    add = { kind: "action", action: step.action };
-  }
-  const why = cannotAdd(p.plan, add, p.walking);
-  if (why) return { error: why };
-  saveRoundPlan(p.me.level_id, p.me.token_id, [...p.plan, add], false);
+  const error = addPlanStep(p, step);
   revalidatePath("/play");
-  return {};
+  return error ? { error } : {};
 }
 
 /** Takes the last step off the plan (and un-readies). */
 export async function undoStep(): Promise<void> {
   const user = await requireUser();
   const p = planner(user.id);
-  if (p) saveRoundPlan(p.me.level_id, p.me.token_id, p.plan.slice(0, -1), false);
+  if (p) undoPlanStep(p);
   revalidatePath("/play");
 }
 
 export async function setPlanReady(ready: boolean): Promise<void> {
   const user = await requireUser();
   const p = planner(user.id);
-  if (p) saveRoundPlan(p.me.level_id, p.me.token_id, p.plan, !!ready);
+  if (p) setReady(p, ready);
   revalidatePath("/play");
 }

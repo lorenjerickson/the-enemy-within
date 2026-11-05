@@ -17,6 +17,7 @@ import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
 import { planEnd, timeline } from "@/lib/roundPlan";
+import { planView } from "@/lib/roundPlanServer";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
 
@@ -73,11 +74,19 @@ function GmView({ session }: { session: GameSession }) {
     );
   }
   const levels = listLevels(place.location_id);
+  // In an encounter: where each of the GM's creatures' plans leaves it, and the feet it can still move (for planning moves on the map).
+  const enc = getEncounter(levelId!);
+  const gmPlans = Object.fromEntries(
+    (enc?.order ?? []).flatMap((o) => {
+      const v = planView(o.token_id);
+      return v ? [[o.token_id, { from: v.from, feetLeft: v.ready ? 0 : v.feetLeft }]] : [];
+    })
+  );
   return (
     <>
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
-      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} />
+      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} gmPlans={gmPlans} />
     </>
   );
 }

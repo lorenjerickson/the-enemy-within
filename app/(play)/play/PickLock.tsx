@@ -4,10 +4,11 @@ import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import { PLAYER_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { ACTION_SECONDS, ROUND_SECONDS, type PlanStep } from "@/lib/roundPlan";
+import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
+import RoundPlanView from "./RoundPlanView";
 
-type TimedStep = PlanStep & { start: number; end: number };
+import type { TimedStep } from "./RoundPlanView";
 
 /**
  * The player's Actions panel. Out of an encounter, actions happen straight away (Move is free, Search rolls).
@@ -45,7 +46,7 @@ export default function PickLock({
 
   return (
     <div className="space-y-3 text-sm">
-      {plan && <RoundPlan plan={plan} pending={pending} run={run} label={label} />}
+      {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} />}
       <ul className="grid grid-cols-3 gap-2" data-player-actions>
         {PLAYER_ACTIONS.map((a) => (
           <li key={a.id}>
@@ -86,42 +87,3 @@ export default function PickLock({
   );
 }
 
-/** This round's plan: a six-second timeline with each step in order, Undo, and Ready. */
-function RoundPlan({ plan, pending, run, label }: {
-  plan: { steps: TimedStep[]; used: number; ready: boolean };
-  pending: boolean;
-  run: (f: () => Promise<{ error?: string } | void>) => void;
-  label: (id: PlayerActionId) => string;
-}) {
-  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : label(s.action));
-  return (
-    <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
-      <div className="flex items-baseline gap-2">
-        <span className="font-semibold">This round</span>
-        <span className="ml-auto text-xs opacity-70">{+plan.used.toFixed(1)} of {ROUND_SECONDS} s</span>
-      </div>
-      <div className="relative h-6 overflow-hidden rounded bg-base-300" aria-label="Timeline">
-        {Array.from({ length: ROUND_SECONDS - 1 }, (_, i) => (
-          <div key={i} className="absolute inset-y-0 w-px bg-base-content/20" style={{ left: `${((i + 1) / ROUND_SECONDS) * 100}%` }} />
-        ))}
-        {plan.steps.map((s, i) => (
-          <div
-            key={i}
-            title={`${name(s)}: ${+s.start.toFixed(1)}–${+s.end.toFixed(1)} s`}
-            className={`absolute inset-y-0.5 truncate rounded px-1 text-[10px] leading-5 ${s.kind === "move" ? "bg-sky-500/70" : "bg-amber-500/80 text-black"}`}
-            style={{ left: `${(s.start / ROUND_SECONDS) * 100}%`, width: `${((s.end - s.start) / ROUND_SECONDS) * 100}%` }}
-          >
-            {name(s)}
-          </div>
-        ))}
-      </div>
-      {plan.steps.length === 0 && <p className="text-xs opacity-60">Add steps in order: an action below, or Move then click the map.</p>}
-      <div className="flex gap-2">
-        <button type="button" className="btn btn-xs" disabled={pending || plan.ready || !plan.steps.length} onClick={() => run(undoStep)}>Undo last</button>
-        <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending} onClick={() => run(() => setPlanReady(!plan.ready))}>
-          {plan.ready ? "Ready ✓ (change plan)" : "Ready"}
-        </button>
-      </div>
-    </div>
-  );
-}

@@ -13,6 +13,8 @@ import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { freeMove, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
 import { useMoveMode } from "../../../../(play)/play/moveMode";
+import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
+import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -568,6 +570,7 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  gmPlans,
   secrets,
   discoveries = [],
   fog,
@@ -598,6 +601,7 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
+  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
@@ -820,17 +824,20 @@ export default function MapView({
   }, [fog, mapImage.perspective, optimisticStructures, drawnTokens]);
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
+  // The GM planning a creature's round: its reach from where its plan leaves it.
+  const gmSel = useGmPlanToken();
+  const gmPlan = !readOnly && gmSel !== null ? gmPlans?.[gmSel] : undefined;
   const reach = useMemo(() => {
-    const m = fog?.move;
-    if (!moveOn || !m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
-    const token = drawnTokens.find((x) => x.character_id === m.characterId);
+    const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false } : moveOn ? fog?.move : null;
+    if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
+    const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
     const walls = blockingSegments(optimisticStructures);
     const squares = m.feet / FEET_PER_SQUARE;
     if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t, token };
     return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t, token };
-  }, [moveOn, fog?.move, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
+  }, [moveOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   const [walking, setWalking] = useState<{ id: number; route: Point[]; started: number } | null>(null);
   const WALK_MS = 140; // per square (or per unit on gridless maps)
@@ -876,7 +883,7 @@ export default function MapView({
     const col = reach.kind === "squares" ? Math.floor(gx) : snapHeight(gx - 0.5), row = reach.kind === "squares" ? Math.floor(gy) : snapHeight(gy - 0.5);
     if (reach.kind === "squares" ? !reach.cells.get(squareKey(col, row))?.steps : !insidePolygon({ x: gx, y: gy }, reach.poly)) return;
     startTransition(async () => {
-      const r = await planStep({ kind: "move", col, row });
+      const r = gmPlan && gmSel !== null ? await gmPlanStep(gmSel, { kind: "move", col, row }) : await planStep({ kind: "move", col, row });
       if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
     });
   }
@@ -983,6 +990,8 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // The GM planning a creature: a click (no drag, not a hold) plans its move; remember the press.
+    if (gmPlan && e.button === 0 && selected === null) press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
     if (dockSide && e.button === 0 && (readOnly || (selected === null && !placingChar))) {
       const { gx, gy } = gridAt(e);
@@ -1244,7 +1253,7 @@ export default function MapView({
     drag.current = null;
     const p = press.current;
     press.current = null;
-    if (p && e && readOnly && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
+    if (p && e && (readOnly || gmPlan) && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
     if (hold.current) {
       clearTimeout(hold.current.timer);
       hold.current = null;

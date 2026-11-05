@@ -1,5 +1,7 @@
-import { getCurrentLevelId, getEncounter, getEncounterWaiting, listTokens, readyTokens } from "@/lib/db";
+import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, listTokens, readyTokens } from "@/lib/db";
 import { endEncounter, rollInitiative } from "./gmActions";
+import { planView } from "@/lib/roundPlanServer";
+import CreaturePlans from "./CreaturePlans";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
 export default function EncounterPanel() {
@@ -7,7 +9,17 @@ export default function EncounterPanel() {
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
   const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);
-  const names = new Map(levelId === undefined ? [] : listTokens(levelId).map((t) => [t.id, { name: t.name, player: t.character_id !== null }]));
+  // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
+  const tokens = levelId === undefined ? [] : listTokens(levelId);
+  const count = new Map<string, number>(), seen = new Map<string, number>();
+  for (const t of tokens) count.set(t.name, (count.get(t.name) ?? 0) + 1);
+  const names = new Map(
+    tokens.map((t) => {
+      const n = (seen.get(t.name) ?? 0) + 1;
+      seen.set(t.name, n);
+      return [t.id, { name: count.get(t.name)! > 1 ? `${t.name} ${n}` : t.name, player: t.character_id !== null && getCharacterPlayer(t.character_id) !== null }];
+    })
+  );
   return (
     <div className="space-y-3 text-sm" data-encounter-panel>
       <form action={rollInitiative}>
@@ -36,6 +48,14 @@ export default function EncounterPanel() {
               </li>
             ))}
           </ol>
+          <CreaturePlans
+            creatures={enc.order
+              .filter((o) => names.get(o.token_id) && !names.get(o.token_id)!.player)
+              .flatMap((o) => {
+                const v = planView(o.token_id);
+                return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready } }] : [];
+              })}
+          />
           <form action={endEncounter}>
             <button className="btn btn-ghost btn-sm text-error">End encounter</button>
           </form>

@@ -1981,3 +1981,13 @@ export function readyTokens(levelId: number): Set<number> {
 export function clearRoundPlans(levelId: number): void {
   db.prepare("DELETE FROM round_plans WHERE level_id = ?").run(levelId);
 }
+
+/** A token as a mover in an encounter: where it is and its creature's or character's movement (JSON). */
+export function getTokenMover(tokenId: number): { token_id: number; level_id: number; col: number; row: number; movement: string } | undefined {
+  return db
+    .prepare<[number], { token_id: number; level_id: number; col: number; row: number; movement: string }>(
+      `SELECT t.id AS token_id, t.level_id, t.col, t.row, COALESCE(ch.movement, cr.movement, '{}') AS movement
+       FROM map_tokens t LEFT JOIN characters ch ON ch.id = t.character_id LEFT JOIN creatures cr ON cr.id = t.creature_id WHERE t.id = ?`
+    )
+    .get(tokenId);
+}
