@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
+  getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels,
 } from "@/lib/db";
+import { resolveMovement, type Mover } from "@/lib/resolveRound";
+import { blockingSegments } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
@@ -67,5 +70,42 @@ export async function gmSetReady(tokenId: number, ready: boolean) {
   await requireGm();
   const p = tokenPlanner(Number(tokenId));
   if (p) setReady(p, ready);
+  revalidatePath("/play");
+}
+
+/**
+ * Resolves the round: everyone's plan (ready or not) runs second by second (movement for now, initiative breaking
+ * ties), tokens end where it leaves them, and the next round begins with empty plans.
+ */
+export async function resolveRound() {
+  await requireGm();
+  const levelId = getCurrentLevelId();
+  const enc = levelId === undefined ? undefined : getEncounter(levelId);
+  if (levelId === undefined || !enc) return;
+  const tokens = listTokens(levelId);
+  const initiative = new Map(enc.order.map((o) => [o.token_id, o.initiative]));
+  const labels = tokenLabels(levelId);
+  const taking = new Set([...enc.order.map((o) => o.token_id), ...getEncounterWaiting(levelId)]);
+  const movers: Mover[] = tokens
+    .filter((t) => taking.has(t.id))
+    .map((t) => ({
+      tokenId: t.id,
+      name: labels.get(t.id) ?? t.name,
+      initiative: initiative.get(t.id) ?? -1000, // hasn't rolled: loses every tie
+      start: { col: t.col, row: t.row },
+      plan: getRoundPlan(levelId, t.id).plan,
+      walking: JSON.parse(getTokenMover(t.id)?.movement ?? "{}").walking ?? 0,
+    }));
+  const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ col: t.col, row: t.row }));
+  const { final, log } = resolveMovement(movers, bystanders, blockingSegments(listStructures(levelId)), isGridlessLevel(levelId));
+  for (const m of movers) {
+    const end = final.get(m.tokenId)!;
+    if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);
+  }
+  const lines = log.length ? log : ["Nothing happened."];
+  logSessionEvent(`Round ${enc.round}: ${lines.join(" ")}`);
+  saveEncounter(levelId, { ...enc, round: enc.round + 1 });
+  setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
+  clearRoundPlans(levelId);
   revalidatePath("/play");
 }

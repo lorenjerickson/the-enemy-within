@@ -319,6 +319,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
 
 addColumn("map_structures", "locked", "INTEGER NOT NULL DEFAULT 0"); // doors: 1 = locked (only the GM or a successful pick lock opens it)
 addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors: what a pick lock roll must reach
+addColumn("encounters", "last_log", "TEXT NOT NULL DEFAULT '[]'"); // JSON lines: what happened in the last resolved round
 addColumn("encounters", "waiting", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids still to roll initiative (players)
 addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
@@ -1990,4 +1991,27 @@ export function getTokenMover(tokenId: number): { token_id: number; level_id: nu
        FROM map_tokens t LEFT JOIN characters ch ON ch.id = t.character_id LEFT JOIN creatures cr ON cr.id = t.creature_id WHERE t.id = ?`
     )
     .get(tokenId);
+}
+
+export function getLastRoundLog(levelId: number): string[] {
+  const row = db.prepare<[number], { last_log: string }>("SELECT last_log FROM encounters WHERE level_id = ?").get(levelId);
+  return row ? JSON.parse(row.last_log) : [];
+}
+
+export function setLastRoundLog(levelId: number, lines: string[]): void {
+  db.prepare<[string, number]>("UPDATE encounters SET last_log = ? WHERE level_id = ?").run(JSON.stringify(lines), levelId);
+}
+
+/** Token names on a level, with several of the same name numbered (Human 1, Human 2) so they can be told apart. */
+export function tokenLabels(levelId: number): Map<number, string> {
+  const tokens = listTokens(levelId);
+  const count = new Map<string, number>(), seen = new Map<string, number>();
+  for (const t of tokens) count.set(t.name, (count.get(t.name) ?? 0) + 1);
+  return new Map(
+    tokens.map((t) => {
+      const n = (seen.get(t.name) ?? 0) + 1;
+      seen.set(t.name, n);
+      return [t.id, count.get(t.name)! > 1 ? `${t.name} ${n}` : t.name];
+    })
+  );
 }

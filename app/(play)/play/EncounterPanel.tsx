@@ -1,5 +1,5 @@
-import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, listTokens, readyTokens } from "@/lib/db";
-import { endEncounter, rollInitiative } from "./gmActions";
+import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, listTokens, readyTokens, tokenLabels } from "@/lib/db";
+import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
 
@@ -10,15 +10,9 @@ export default function EncounterPanel() {
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
   const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);
   // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
-  const tokens = levelId === undefined ? [] : listTokens(levelId);
-  const count = new Map<string, number>(), seen = new Map<string, number>();
-  for (const t of tokens) count.set(t.name, (count.get(t.name) ?? 0) + 1);
+  const labels = levelId === undefined ? new Map<number, string>() : tokenLabels(levelId);
   const names = new Map(
-    tokens.map((t) => {
-      const n = (seen.get(t.name) ?? 0) + 1;
-      seen.set(t.name, n);
-      return [t.id, { name: count.get(t.name)! > 1 ? `${t.name} ${n}` : t.name, player: t.character_id !== null && getCharacterPlayer(t.character_id) !== null }];
-    })
+    (levelId === undefined ? [] : listTokens(levelId)).map((t) => [t.id, { name: labels.get(t.id)!, player: t.character_id !== null && getCharacterPlayer(t.character_id) !== null }])
   );
   return (
     <div className="space-y-3 text-sm" data-encounter-panel>
@@ -56,6 +50,24 @@ export default function EncounterPanel() {
                 return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready } }] : [];
               })}
           />
+          <form action={resolveRound} className="space-y-1">
+            {(() => {
+              const notReady = [...enc.order.map((o) => o.token_id), ...waiting].filter((id) => !ready.has(id)).length;
+              return (
+                <>
+                  <button className="btn btn-primary btn-sm w-full" data-resolve-round>Resolve round {enc.round}</button>
+                  {notReady > 0 && <p className="text-xs opacity-60">{notReady} not ready yet; their plans so far will be used.</p>}
+                </>
+              );
+            })()}
+          </form>
+          {levelId !== undefined && getLastRoundLog(levelId).length > 0 && (
+            <div className="space-y-1 rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
+              {getLastRoundLog(levelId).map((line, i) => (
+                <p key={i} className={i === 0 ? "font-semibold" : line.includes("GM to decide") ? "text-warning" : ""}>{line}</p>
+              ))}
+            </div>
+          )}
           <form action={endEncounter}>
             <button className="btn btn-ghost btn-sm text-error">End encounter</button>
           </form>
