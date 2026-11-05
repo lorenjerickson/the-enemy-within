@@ -16,6 +16,7 @@ import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
@@ -570,6 +571,8 @@ export default function MapView({
   partyStartElsewhere,
   toPlace,
   readOnly = false,
+  replay = null,
+  replayName = null,
   gmPlans,
   secrets,
   discoveries = [],
@@ -602,6 +605,8 @@ export default function MapView({
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
+  replay?: Replay | null; // the last resolved round, played back second by second
+  replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
@@ -692,9 +697,20 @@ export default function MapView({
   );
   // Dragging a token: which one, and the cell it's currently over.
   const [draggingToken, setDraggingToken] = useState<{ id: number; col: number; row: number } | null>(null);
-  const drawnTokens = draggingToken
-    ? optimisticTokens.map((t) => (t.id === draggingToken.id ? { ...t, col: draggingToken.col, row: draggingToken.row } : t))
+  // Playing back a resolved round: each second's spots shown for a real second, from the shared start time.
+  const replayFrame = (() => {
+    if (!replay) return null;
+    const t = Date.now() - replay.starts;
+    if (t >= (replay.frames.length + 1) * 1000) return null; // done (the last second is held one more)
+    if (t < 0) return { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[], startsIn: Math.ceil(-t / 1000) };
+    return { ...replay.frames[Math.min(replay.frames.length - 1, Math.floor(t / 1000))], startsIn: 0 };
+  })();
+  const replayedTokens = replayFrame
+    ? optimisticTokens.map((t) => (replayFrame.pos[t.id] ? { ...t, ...replayFrame.pos[t.id] } : t))
     : optimisticTokens;
+  const drawnTokens = draggingToken
+    ? replayedTokens.map((t) => (t.id === draggingToken.id ? { ...t, col: draggingToken.col, row: draggingToken.row } : t))
+    : replayedTokens;
 
   // Positional sound placement: choose audio + range, then click the map (snaps to the cell centre).
   const [positionalTool, setPositionalTool] = useState<PositionalTool>({ asset: null, radius: 3 });
@@ -752,7 +768,8 @@ export default function MapView({
     return () => clearInterval(timer);
   }, [dockSide, levelId]);
   const anyPing = pings.some((p) => Date.now() - p.at < PING_MS);
-  const frameMs = anyEffect || anyPing ? 40 : anyFlicker ? 120 : 0;
+  const replaying = !!replay && Date.now() < replay.starts + (replay.frames.length + 1) * 1000;
+  const frameMs = anyEffect || anyPing ? 40 : replaying ? 100 : anyFlicker ? 120 : 0;
   useEffect(() => {
     if (!frameMs) return;
     const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
@@ -1650,6 +1667,16 @@ export default function MapView({
 
   const surface = (
     <>
+            {replayFrame && replay && (
+              <div data-replay className="pointer-events-none absolute left-1/2 top-2 z-10 w-[min(32rem,calc(100%-8rem))] -translate-x-1/2 rounded-box bg-base-100/90 p-2 text-sm shadow">
+                <div className="font-semibold">
+                  Round {replay.round}{replayFrame.startsIn ? ` plays in ${replayFrame.startsIn}…` : ` · ${replayFrame.sec} s`}
+                </div>
+                {replayFrame.lines
+                  .filter((l) => !replayName || l.includes(replayName)) // players see what involves them; the GM sees it all
+                  .map((l, i) => <p key={i} className="text-xs">{l}</p>)}
+              </div>
+            )}
             {placingChar && (
               <div data-place-party className="absolute left-1/2 top-2 z-10 w-[min(36rem,calc(100%-1rem))] -translate-x-1/2 rounded-box bg-base-100/90 p-2 text-sm shadow space-y-1">
                 <div>

@@ -46,6 +46,22 @@ function planner(m: Mover, walls: Segment[], gridless: boolean): (t: number) => 
   };
 }
 
+/** One second of a resolved round, for playback. */
+export interface ReplayFrame {
+  sec: number;
+  pos: Record<number, Pos>;
+  down: number[];
+  lines: string[];
+}
+
+/** A resolved round to play back: frames shown one a second from `starts` (ms since epoch). */
+export interface Replay {
+  round: number;
+  starts: number;
+  start: Record<number, Pos>; // where everyone was before the round
+  frames: ReplayFrame[];
+}
+
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
 export interface Combatant {
   hp: number;
@@ -94,7 +110,10 @@ export function resolveMovement(
     (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.5 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1) &&
     clearPath({ x: a.col + 0.5, y: a.row + 0.5 }, { x: b.col + 0.5, y: b.row + 0.5 }, walls); // not through a wall
 
+  // What each second ended with, for playing the round back: everyone's spot, who's down, and what happened.
+  const frames: ReplayFrame[] = [];
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
+    const logFrom = log.length;
     // Evaluation: where each would like to be at the end of this second.
     const proposed = new Map(order.map((m) => [m.tokenId, down.has(m.tokenId) ? pos.get(m.tokenId)! : wants.get(m.tokenId)!(sec - lag.get(m.tokenId)!)]));
     // Reconciliation, highest initiative first.
@@ -165,10 +184,11 @@ export function resolveMovement(
         }
       }
     }
+    frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")) });
   }
   for (const m of order) {
     const end = pos.get(m.tokenId)!;
     if (!same(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log };
+  return { final: pos, hp, log, frames };
 }

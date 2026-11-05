@@ -1,5 +1,6 @@
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
+import type { Replay } from "@/lib/resolveRound";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -319,6 +320,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
 
 addColumn("map_structures", "locked", "INTEGER NOT NULL DEFAULT 0"); // doors: 1 = locked (only the GM or a successful pick lock opens it)
 addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors: what a pick lock roll must reach
+addColumn("encounters", "replay", "TEXT"); // JSON Replay of the last resolved round (lib/resolveRound.ts)
 addColumn("encounters", "last_log", "TEXT NOT NULL DEFAULT '[]'"); // JSON lines: what happened in the last resolved round
 addColumn("encounters", "waiting", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids still to roll initiative (players)
 addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
@@ -2014,4 +2016,13 @@ export function tokenLabels(levelId: number): Map<number, string> {
       return [t.id, count.get(t.name)! > 1 ? `${t.name} ${n}` : t.name];
     })
   );
+}
+
+export function getReplay(levelId: number): Replay | null {
+  const row = db.prepare<[number], { replay: string | null }>("SELECT replay FROM encounters WHERE level_id = ?").get(levelId);
+  return row?.replay ? JSON.parse(row.replay) : null;
+}
+
+export function setReplay(levelId: number, replay: Replay): void {
+  db.prepare<[string, number]>("UPDATE encounters SET replay = ? WHERE level_id = ?").run(JSON.stringify(replay), levelId);
 }

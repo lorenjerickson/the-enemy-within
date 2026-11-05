@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels,
+  getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
 } from "@/lib/db";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
 import { fightersOn, saveHp } from "@/lib/combat";
@@ -99,7 +99,7 @@ export async function resolveRound() {
     }));
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
-  const { final, hp, log } = resolveMovement(movers, bystanders, blockingSegments(listStructures(levelId)), isGridlessLevel(levelId), fighters);
+  const { final, hp, log, frames } = resolveMovement(movers, bystanders, blockingSegments(listStructures(levelId)), isGridlessLevel(levelId), fighters);
   for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
@@ -110,5 +110,10 @@ export async function resolveRound() {
   saveEncounter(levelId, { ...enc, round: enc.round + 1 });
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
+  // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
+  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), frames });
   revalidatePath("/play");
 }
+
+/** How long after resolving the playback starts (players' screens refresh every 3 s). */
+const REPLAY_DELAY_MS = 3500;
