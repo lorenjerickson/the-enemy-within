@@ -7,6 +7,7 @@ import {
   getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels,
 } from "@/lib/db";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
+import { fightersOn, saveHp } from "@/lib/combat";
 import { blockingSegments } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
@@ -96,8 +97,10 @@ export async function resolveRound() {
       plan: getRoundPlan(levelId, t.id).plan,
       walking: JSON.parse(getTokenMover(t.id)?.movement ?? "{}").walking ?? 0,
     }));
-  const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ col: t.col, row: t.row }));
-  const { final, log } = resolveMovement(movers, bystanders, blockingSegments(listStructures(levelId)), isGridlessLevel(levelId));
+  const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
+  const fighters = fightersOn(levelId);
+  const { final, hp, log } = resolveMovement(movers, bystanders, blockingSegments(listStructures(levelId)), isGridlessLevel(levelId), fighters);
+  for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
     if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);

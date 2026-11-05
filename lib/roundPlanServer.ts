@@ -1,4 +1,4 @@
-import { getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan } from "@/lib/db";
+import { getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
 import type { PlayerActionId } from "@/lib/playerActions";
@@ -13,7 +13,7 @@ export function tokenPlanner(tokenId: number) {
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
-export type StepRequest = { kind: "action"; action: PlayerActionId } | { kind: "move"; col: number; row: number };
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number } | { kind: "move"; col: number; row: number };
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -34,7 +34,9 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       add = { kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE };
     }
   } else {
-    add = { kind: "action", action: step.action };
+    const name = step.target !== undefined ? tokenLabels(p.tok.level_id).get(Number(step.target)) : undefined;
+    if (step.target !== undefined && (!name || Number(step.target) === p.tok.token_id)) return "Pick someone else on this map";
+    add = { kind: "action", action: step.action, ...(name ? { target: { id: Number(step.target), name } } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;

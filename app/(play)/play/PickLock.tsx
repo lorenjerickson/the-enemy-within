@@ -7,6 +7,7 @@ import { PLAYER_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
+import TargetPicker from "./TargetPicker";
 
 import type { TimedStep } from "./RoundPlanView";
 
@@ -16,14 +17,16 @@ import type { TimedStep } from "./RoundPlanView";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [],
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
   moveLeft: number;
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
+  targets?: { id: number; name: string }[]; // who they can see, to attack
 }) {
+  const [choosing, setChoosing] = useState(false); // picking who to attack
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +37,7 @@ export default function PickLock({
   const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready : id === "move" || id === "search");
   const press = (id: PlayerActionId) => {
     if (id === "move") return setMoveMode(!moving);
+    if (plan && id === "attack") return setChoosing(true);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
   };
@@ -46,6 +50,16 @@ export default function PickLock({
 
   return (
     <div className="space-y-3 text-sm">
+      {plan && choosing && (
+        <TargetPicker
+          targets={targets}
+          onCancel={() => setChoosing(false)}
+          onPick={(target) => {
+            setChoosing(false);
+            run(() => planStep({ kind: "action", action: "attack", target }));
+          }}
+        />
+      )}
       {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} />}
       <ul className="grid grid-cols-3 gap-2" data-player-actions>
         {PLAYER_ACTIONS.map((a) => (

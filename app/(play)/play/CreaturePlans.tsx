@@ -8,6 +8,7 @@ import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
 import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
+import TargetPicker from "./TargetPicker";
 
 export interface CreaturePlan {
   tokenId: number;
@@ -16,7 +17,8 @@ export interface CreaturePlan {
 }
 
 /** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
-export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[] }) {
+export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string }[] }) {
+  const [choosing, setChoosing] = useState(false); // picking who to attack
   const selected = useGmPlanToken();
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
@@ -56,6 +58,16 @@ export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[]
             onUndo={() => run(() => gmUndoStep(current.tokenId))}
             onReady={() => run(() => gmSetReady(current.tokenId, !current.plan.ready))}
           />
+          {choosing && (
+            <TargetPicker
+              targets={targets.filter((t) => t.id !== current.tokenId)}
+              onCancel={() => setChoosing(false)}
+              onPick={(target) => {
+                setChoosing(false);
+                run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", target }));
+              }}
+            />
+          )}
           {/* The same actions players have: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           <div className="grid grid-cols-4 gap-1">
             {PLAYER_ACTIONS.map((a) => (
@@ -67,7 +79,11 @@ export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[]
                 aria-pressed={a.id === "move" ? moving : undefined}
                 disabled={pending || current.plan.ready || a.id === "dash"}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
-                onClick={() => (a.id === "move" ? setMoveMode(!moving) : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id })))}
+                onClick={() =>
+                  a.id === "move" ? setMoveMode(!moving)
+                  : a.id === "attack" ? setChoosing(true)
+                  : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))
+                }
               >
                 <GameIcon name={a.icon} className="size-4" />
                 <span className="text-[10px] leading-tight">

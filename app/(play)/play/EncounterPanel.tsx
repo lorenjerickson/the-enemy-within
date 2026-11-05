@@ -43,6 +43,7 @@ export default function EncounterPanel() {
             ))}
           </ol>
           <CreaturePlans
+            targets={[...names].map(([id, n]) => ({ id, name: n.name }))}
             creatures={enc.order
               .filter((o) => names.get(o.token_id) && !names.get(o.token_id)!.player)
               .flatMap((o) => {

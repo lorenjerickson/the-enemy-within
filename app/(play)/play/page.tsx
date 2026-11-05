@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -18,6 +18,7 @@ import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
 import { planEnd, timeline } from "@/lib/roundPlan";
 import { planView } from "@/lib/roundPlanServer";
+import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
 
@@ -101,6 +102,14 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   // In an encounter: their round plan (laid out in time) and where it leaves them.
   const walking: number = me ? JSON.parse(me.movement).walking ?? 0 : 0;
   const rp = me && getEncounter(me.level_id) ? getRoundPlan(me.level_id, me.token_id) : null;
+  // Who they can see (to pick who to attack): other tokens in their line of sight.
+  const targets = rp && me
+    ? (() => {
+        const seen = visibilityPolygon({ x: me.col + 0.5, y: me.row + 0.5 }, 500, blockingSegments(listStructures(me.level_id)));
+        const labels = tokenLabels(me.level_id);
+        return listTokens(me.level_id).filter((t) => t.id !== me.token_id && insidePolygon({ x: t.col + 0.5, y: t.row + 0.5 }, seen)).map((t) => ({ id: t.id, name: labels.get(t.id)! }));
+      })()
+    : [];
   const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
@@ -125,7 +134,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

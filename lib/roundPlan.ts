@@ -9,7 +9,9 @@ export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
 };
 
 /** One step of a round plan, in the order declared. */
-export type PlanStep = { kind: "move"; to: { col: number; row: number }; feet: number } | { kind: "action"; action: PlayerActionId };
+export type PlanStep =
+  | { kind: "move"; to: { col: number; row: number }; feet: number }
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string } }; // attacks have a target
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
@@ -31,6 +33,7 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
   if (step.kind === "action" && plan.some((s) => s.kind === "action")) return "You've already planned your action this round";
+  if (step.kind === "action" && step.action === "attack" && !step.target) return "Pick who to attack";
   if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;
 }

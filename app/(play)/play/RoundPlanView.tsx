@@ -14,7 +14,7 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
   onReady: () => void;
   title?: string;
 }) {
-  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : label(s.action));
+  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${label(s.action)}${s.target ? ` ${s.target.name}` : ""}`);
   return (
     <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
       <div className="flex items-baseline gap-2">

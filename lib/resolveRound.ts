@@ -1,4 +1,4 @@
-import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import { ROUND_SECONDS, timeline, type PlanStep } from "@/lib/roundPlan";
 import type { Segment } from "@/lib/visibility";
 
@@ -46,31 +46,57 @@ function planner(m: Mover, walls: Segment[], gridless: boolean): (t: number) => 
   };
 }
 
+/** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
+export interface Combatant {
+  hp: number;
+  attack: () => { total: number; text: string };
+  defense: () => { total: number; text: string };
+  damage: () => { total: number; text: string };
+}
+
 /**
- * Resolves a round's movement second by second: evaluation (each mover's proposed spot at the end of the second),
+ * Resolves a round second by second. Movement: evaluation (each mover's proposed spot at the end of the second),
  * reconciliation (in initiative order, nobody ends a second where someone already is; the loser is held back a
- * second), result (positions applied). Actions are only logged for now. Returns final spots and a log.
+ * second), result (positions applied). Then actions finishing that second, in initiative order: an attack hits if
+ * its target is still in reach (1 square) and the roll beats their defense; an attacker hit while their action is
+ * under way loses it; anyone down (0 health) does nothing more. Other actions only log for now.
+ * Returns final spots, health and a log.
  */
-export function resolveMovement(movers: Mover[], bystanders: Pos[], walls: Segment[], gridless: boolean) {
+export function resolveMovement(
+  movers: Mover[],
+  bystanders: { tokenId: number; name: string; at: Pos }[],
+  walls: Segment[],
+  gridless: boolean,
+  fighters: Map<number, Combatant> = new Map(),
+) {
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
   const lag = new Map(order.map((m) => [m.tokenId, 0])); // seconds each has been held back
   const pos = new Map(order.map((m) => [m.tokenId, m.start]));
   const same = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) < 0.9 : a.col === b.col && a.row === b.row);
   const log: string[] = [];
-  const actionsAt = new Map<number, string[]>(); // second → actions finishing then
+  // Actions by the second they finish in (order within a second = initiative order).
+  type Act = { m: Mover; start: number; step: Extract<PlanStep, { kind: "action" }> };
+  const actionsAt = new Map<number, Act[]>();
   for (const m of order) {
     for (const s of timeline(m.plan, m.walking).steps) {
       if (s.step.kind === "action") {
         const sec = Math.max(1, Math.ceil(s.end - 1e-9));
-        actionsAt.set(sec, [...(actionsAt.get(sec) ?? []), `${m.name}: ${s.step.action} (not resolved yet)`]);
+        actionsAt.set(sec, [...(actionsAt.get(sec) ?? []), { m, start: s.start, step: s.step }]);
       }
     }
   }
+  const hp = new Map([...fighters].map(([id, f]) => [id, f.hp]));
+  const down = new Set([...hp].filter(([, h]) => h <= 0).map(([id]) => id));
+  const hitAt = new Map<number, number[]>(); // seconds each was hit in
+  const where = (id: number) => pos.get(id) ?? bystanders.find((b) => b.tokenId === id)?.at;
+  const inReach = (a: Pos, b: Pos) =>
+    (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.5 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1) &&
+    clearPath({ x: a.col + 0.5, y: a.row + 0.5 }, { x: b.col + 0.5, y: b.row + 0.5 }, walls); // not through a wall
 
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     // Evaluation: where each would like to be at the end of this second.
-    const proposed = new Map(order.map((m) => [m.tokenId, wants.get(m.tokenId)!(sec - lag.get(m.tokenId)!)]));
+    const proposed = new Map(order.map((m) => [m.tokenId, down.has(m.tokenId) ? pos.get(m.tokenId)! : wants.get(m.tokenId)!(sec - lag.get(m.tokenId)!)]));
     // Reconciliation, highest initiative first.
     const settled: { id: number; at: Pos }[] = [];
     for (const m of order) {
@@ -83,7 +109,7 @@ export function resolveMovement(movers: Mover[], bystanders: Pos[], walls: Segme
       const blocker =
         settled.find((s) => same(s.at, want)) ??
         stillUnmoved.map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
-        (bystanders.some((b) => same(b, want)) ? { id: -1, at: want } : undefined);
+        (bystanders.some((b) => same(b.at, want)) ? { id: -1, at: want } : undefined);
       if (blocker) {
         lag.set(m.tokenId, lag.get(m.tokenId)! + 1);
         const who = order.find((o) => o.tokenId === blocker.id)?.name ?? "someone";
@@ -102,11 +128,47 @@ export function resolveMovement(movers: Mover[], bystanders: Pos[], walls: Segme
         log.push(`${sec} s: ${a} and ${b} end up in the same spot — GM to decide.`);
       }
     }
-    for (const line of actionsAt.get(sec) ?? []) log.push(`${sec} s: ${line}`);
+    // Actions finishing this second.
+    for (const { m, start, step } of actionsAt.get(sec) ?? []) {
+      const say = (text: string) => log.push(`${sec} s: ${text}`);
+      if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
+      if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t <= sec)) {
+        say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
+        continue;
+      }
+      if (step.action !== "attack") {
+        say(`${m.name}: ${step.action} (no effect yet).`);
+        continue;
+      }
+      const target = step.target;
+      const me = fighters.get(m.tokenId), them = target && fighters.get(target.id);
+      const at = target && where(target.id);
+      if (!target || !me || !them || !at) {
+        say(`${m.name}'s attack fails: no target.`);
+      } else if (down.has(target.id)) {
+        say(`${m.name}'s attack fails: ${target.name} is already down.`);
+      } else if (!inReach(pos.get(m.tokenId)!, at)) {
+        say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
+      } else {
+        const a = me.attack(), d = them.defense();
+        if (a.total < d.total) say(`${m.name} attacks ${target.name}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
+        else {
+          const dmg = me.damage();
+          const left = Math.max(0, hp.get(target.id)! - dmg.total);
+          hp.set(target.id, left);
+          hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
+          say(`${m.name} attacks ${target.name}: ${a.total} vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
+          if (left <= 0) {
+            down.add(target.id);
+            say(`${target.name} is down.`);
+          }
+        }
+      }
+    }
   }
   for (const m of order) {
     const end = pos.get(m.tokenId)!;
     if (!same(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, log };
+  return { final: pos, hp, log };
 }
