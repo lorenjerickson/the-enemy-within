@@ -15,6 +15,7 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
+import EncounterPanel from "./EncounterPanel";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
 
@@ -34,6 +35,7 @@ function NoMap({ children }: { children: React.ReactNode }) {
 
 function GmView({ session }: { session: GameSession }) {
   const tools: DockTool[] = [
+    { id: "encounter", label: "Encounter", icon: "swords", content: <EncounterPanel /> },
     { id: "time", label: "Time", icon: "clock", content: <CalendarPanel now={getGameTime()} timers={listTimers()} /> },
     {
       id: "triggers",

@@ -318,6 +318,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS encounters (
 
 addColumn("map_structures", "locked", "INTEGER NOT NULL DEFAULT 0"); // doors: 1 = locked (only the GM or a successful pick lock opens it)
 addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors: what a pick lock roll must reach
+addColumn("encounters", "waiting", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids still to roll initiative (players)
 addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
@@ -1851,7 +1852,7 @@ export interface RollRequest {
 }
 
 /** What a roll is for. */
-export type RollAction = { kind: "pickLock"; doorId: number; dc: number } | { kind: "search"; dc: number };
+export type RollAction = { kind: "pickLock"; doorId: number; dc: number } | { kind: "search"; dc: number } | { kind: "initiative"; levelId: number; tokenId: number };
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
@@ -1937,4 +1938,14 @@ export function getSecretLevel(id: number): number | undefined {
 export function walkToken(id: number, col: number, row: number, feet: number): void {
   db.prepare<[number, number]>("UPDATE map_tokens SET moved = moved + ? WHERE id = ?").run(feet, id);
   moveToken(id, col, row);
+}
+
+/** Players' tokens still to roll initiative in the level's encounter (they join the turn order once they roll). */
+export function getEncounterWaiting(levelId: number): number[] {
+  const row = db.prepare<[number], { waiting: string }>("SELECT waiting FROM encounters WHERE level_id = ?").get(levelId);
+  return row ? JSON.parse(row.waiting) : [];
+}
+
+export function setEncounterWaiting(levelId: number, tokenIds: number[]): void {
+  db.prepare<[string, number]>("UPDATE encounters SET waiting = ? WHERE level_id = ?").run(JSON.stringify(tokenIds), levelId);
 }

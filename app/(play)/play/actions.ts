@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken,
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter,
 } from "@/lib/db";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
@@ -76,6 +76,18 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = found.length ? `You find: ${found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)).join("; ")}` : "You search but find nothing.";
     logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${found.length ? `found ${found.map((s) => s.name).join(", ")}` : success ? "nothing there" : "failed"}`);
+  }
+  if (a.kind === "initiative") {
+    // Into the turn order, highest first (a re-roll replaces an earlier one).
+    const enc = getEncounter(a.levelId);
+    if (enc) {
+      const order = [...enc.order.filter((o) => o.token_id !== a.tokenId), { token_id: a.tokenId, initiative: scored.total }].sort((x, y) => y.initiative - x.initiative);
+      saveEncounter(a.levelId, { ...enc, order });
+      setEncounterWaiting(a.levelId, getEncounterWaiting(a.levelId).filter((id) => id !== a.tokenId));
+    }
+    success = true;
+    outcome = `Initiative ${scored.total}.`;
+    logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} rolled ${scored.total} for initiative.`);
   }
   saveRollResult(req.id, { ...scored, outcome, success });
   revalidatePath("/play");

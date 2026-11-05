@@ -72,7 +72,7 @@ export default function PlayDock({
   );
 }
 
-export type DockIcon = "layers" | "clock" | "bolt" | "code" | "flag" | "user" | "book";
+export type DockIcon = "layers" | "clock" | "bolt" | "code" | "flag" | "user" | "book" | "swords";
 
 const PATHS: Record<DockIcon, ReactNode> = {
   layers: <path d="M12 3 2 8l10 5 10-5-10-5zM2 13l10 5 10-5M2 18l10 5 10-5" />,
@@ -81,6 +81,7 @@ const PATHS: Record<DockIcon, ReactNode> = {
   code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
   flag: <path d="M5 21V4h11l-2 4 2 4H5" />,
   user: (<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>),
+  swords: <path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2" />,
   book: <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5zM4 21a2 2 0 0 1 2-2h13v2H6M8 7h7" />,
 };
 

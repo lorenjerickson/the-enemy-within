@@ -98,3 +98,17 @@ export function skillCheck(
   for (const p of professionMods) if (p.value.trim() && p.value.trim() !== "0") parts.push({ formula: p.value.replace(/^\+/, "").trim(), source: p.profession });
   return { label: `${cap(skill)} check`, parts, mode };
 }
+
+/** Initiative: d20 + agility modifier. */
+export function initiativeRoll(attributes: Attributes, mode: RollMode = "normal"): RollSpec {
+  const m = modifier(attributes.agility ?? 10);
+  const parts: RollPart[] = [{ formula: "1d20", source: "Initiative" }];
+  if (m !== 0) parts.push({ formula: String(m), source: `Agility ${attributes.agility} (${formatModifier(m)})` });
+  return { label: "Roll initiative", parts, mode };
+}
+
+/** Rolls a spec on the server, for the GM's creatures (players roll their own dice). */
+export function rollSpec(spec: RollSpec): { total: number; parts: RolledPart[] } {
+  const thrown = diceToThrow(spec).map((t) => (t ? Array.from({ length: t.count }, () => 1 + Math.floor(Math.random() * t.sides)) : []));
+  return scoreRoll(spec, thrown)!;
+}
