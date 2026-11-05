@@ -1,4 +1,5 @@
-import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
+import { CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type PlanStep } from "@/lib/roundPlan";
 import type { Segment } from "@/lib/visibility";
 
@@ -112,10 +113,82 @@ export function resolveMovement(
 
   // What each second ended with, for playing the round back: everyone's spot, who's down, and what happened.
   const frames: ReplayFrame[] = [];
+  // Evade / Pursue: from when each starts (in its own plan time), its target, and whether it's over (within 5 ft).
+  const chases = new Map<number, { start: number; action: string; target: { id: number; name: string } }>();
+  for (const m of order) {
+    for (const s of timeline(m.plan, m.walking).steps) {
+      if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) chases.set(m.tokenId, { start: s.start, action: s.step.action, target: s.step.target });
+    }
+  }
+  const chaseOver = new Set<number>();
+  const close = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.05 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1);
+  const dist = (a: Pos, b: Pos) => Math.hypot(a.col - b.col, a.row - b.row);
+  const budget = new Map(order.map((m) => [m.tokenId, 0])); // squares (or units) of chase movement banked
+  /** One second of Evade / Pursue from `from` with the target at `them`: toward by the most direct route, or as far away as it can get. */
+  function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean): Pos {
+    const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
+    const b = budget.get(m.tokenId)! + perSecond;
+    if (gridless) {
+      budget.set(m.tokenId, 0);
+      if (pursue) {
+        const path = shortestPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: them.col + 0.5, y: them.row + 0.5 }, walls, () => true) ?? [];
+        let left = b, at = { x: from.col + 0.5, y: from.row + 0.5 };
+        for (const p of path.slice(1)) {
+          const d = Math.hypot(p.x - at.x, p.y - at.y);
+          const goal = Math.hypot(them.col + 0.5 - at.x, them.row + 0.5 - at.y);
+          const step = Math.min(left, d, Math.max(0, goal - 1)); // stop 5 ft short of them
+          at = { x: at.x + ((p.x - at.x) / (d || 1)) * step, y: at.y + ((p.y - at.y) / (d || 1)) * step };
+          left -= step;
+          if (left <= 1e-6 || step < d) break;
+        }
+        return { col: Math.round((at.x - 0.5) * 20) / 20, row: Math.round((at.y - 0.5) * 20) / 20 };
+      }
+      // Evade: of 16 directions (clear of walls), the one ending furthest away.
+      let best = from;
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2, to = { col: from.col + Math.cos(a) * b, row: from.row + Math.sin(a) * b };
+        if (clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls) && dist(to, them) > dist(best, them)) best = to;
+      }
+      return { col: Math.round(best.col * 20) / 20, row: Math.round(best.row * 20) / 20 };
+    }
+    const squares = Math.floor(b + 1e-9);
+    budget.set(m.tokenId, b - squares);
+    if (!squares) return from;
+    const reach = reachableSquares(from, squares, walls); // where they can get to this second
+    if (pursue) {
+      // Steps from each square to the target (searching out from the target), so the next spot is the one on the
+      // shortest route; equally short ones go to whichever is nearest in a straight line (the most direct).
+      const toThem = reachableSquares({ col: Math.round(them.col), row: Math.round(them.row) }, 60, walls);
+      let best: Pos = from, bestKey = [toThem.get(squareKey(from.col, from.row))?.steps ?? Infinity, dist(from, them)];
+      for (const sq of reach.values()) {
+        if (sq.col === Math.round(them.col) && sq.row === Math.round(them.row)) continue; // not onto them
+        const k = [toThem.get(squareKey(sq.col, sq.row))?.steps ?? Infinity, dist(sq, them)];
+        if (k[0] < bestKey[0] || (k[0] === bestKey[0] && k[1] < bestKey[1] - 1e-9)) [best, bestKey] = [sq, k];
+      }
+      return { col: best.col, row: best.row };
+    }
+    let best = { ...from, steps: 0 };
+    for (const s of reach.values()) if (dist(s, them) > dist(best, them) + 1e-9) best = s;
+    return { col: best.col, row: best.row };
+  }
+
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
-    // Evaluation: where each would like to be at the end of this second.
-    const proposed = new Map(order.map((m) => [m.tokenId, down.has(m.tokenId) ? pos.get(m.tokenId)! : wants.get(m.tokenId)!(sec - lag.get(m.tokenId)!)]));
+    // Evaluation: where each would like to be at the end of this second (Evade / Pursue decided afresh from where their target is now).
+    const proposed = new Map(
+      order.map((m) => {
+        const here = pos.get(m.tokenId)!;
+        if (down.has(m.tokenId)) return [m.tokenId, here];
+        const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
+        if (c && t > c.start) {
+          // Chasing (or done chasing, which ends the round's movement: they stay where it left them).
+          const them = where(c.target.id);
+          if (chaseOver.has(m.tokenId) || !them || down.has(c.target.id) || close(here, them)) return [m.tokenId, here];
+          return [m.tokenId, chaseStep(m, here, them, c.action === "pursue")];
+        }
+        return [m.tokenId, wants.get(m.tokenId)!(t)];
+      })
+    );
     // Reconciliation, highest initiative first.
     const settled: { id: number; at: Pos }[] = [];
     for (const m of order) {
@@ -155,6 +228,7 @@ export function resolveMovement(
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
         continue;
       }
+      if (CHASE_ACTIONS.includes(step.action)) continue; // movement, handled above
       if (step.action !== "attack") {
         say(`${m.name}: ${step.action} (no effect yet).`);
         continue;
@@ -182,6 +256,14 @@ export function resolveMovement(
             say(`${target.name} is down.`);
           }
         }
+      }
+    }
+    // Evade / Pursue end once the two are within 5 ft (or the target is down).
+    for (const [id, c] of chases) {
+      const them = where(c.target.id);
+      if (!chaseOver.has(id) && sec - lag.get(id)! > c.start && them && (close(pos.get(id)!, them) || down.has(c.target.id))) {
+        chaseOver.add(id);
+        log.push(`${sec} s: ${order.find((o) => o.tokenId === id)!.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
       }
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")) });

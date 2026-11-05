@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { PLAYER_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
@@ -18,7 +18,7 @@ export interface CreaturePlan {
 
 /** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
 export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string }[] }) {
-  const [choosing, setChoosing] = useState(false); // picking who to attack
+  const [choosing, setChoosing] = useState<PlayerActionId | null>(null); // picking a target for this action
   const selected = useGmPlanToken();
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
@@ -60,11 +60,13 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           />
           {choosing && (
             <TargetPicker
+              title={`${label(choosing)} who?`}
               targets={targets.filter((t) => t.id !== current.tokenId)}
-              onCancel={() => setChoosing(false)}
+              onCancel={() => setChoosing(null)}
               onPick={(target) => {
-                setChoosing(false);
-                run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", target }));
+                const action = choosing;
+                setChoosing(null);
+                run(() => gmPlanStep(current.tokenId, { kind: "action", action, target }));
               }}
             />
           )}
@@ -74,21 +76,21 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               <button
                 key={a.id}
                 type="button"
-                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
+                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone for the rest of the round (until within 5 ft)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
                 disabled={pending || current.plan.ready || a.id === "dash"}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
                   a.id === "move" ? setMoveMode(!moving)
-                  : a.id === "attack" ? setChoosing(true)
+                  : TARGETED_ACTIONS.includes(a.id) ? setChoosing(a.id)
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))
                 }
               >
                 <GameIcon name={a.icon} className="size-4" />
                 <span className="text-[10px] leading-tight">
                   {a.label}
-                  <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : "hint" in a ? a.hint : ""}</span>
+                  <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : CHASE_ACTIONS.includes(a.id) ? "rest" : "hint" in a ? a.hint : ""}</span>
                 </span>
               </button>
             ))}

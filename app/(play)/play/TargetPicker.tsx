@@ -1,11 +1,11 @@
 "use client";
 
-/** Who to attack: the targets offered (those in sight, or for the GM anyone on the map). */
-export default function TargetPicker({ targets, onPick, onCancel }: { targets: { id: number; name: string }[]; onPick: (id: number) => void; onCancel: () => void }) {
+/** Who an action is aimed at (attack, evade, pursue): the targets offered (those in sight, or for the GM anyone on the map). */
+export default function TargetPicker({ targets, onPick, onCancel, title = "Attack who?" }: { targets: { id: number; name: string }[]; onPick: (id: number) => void; onCancel: () => void; title?: string }) {
   return (
     <div className="space-y-1 rounded-box bg-base-100/70 p-2" data-target-picker>
       <div className="flex items-center text-xs">
-        <span className="font-semibold">Attack who?</span>
+        <span className="font-semibold">{title}</span>
         <button type="button" className="btn btn-ghost btn-xs ml-auto" onClick={onCancel}>Cancel</button>
       </div>
       {targets.length === 0 ? (

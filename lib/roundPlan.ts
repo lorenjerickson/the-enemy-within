@@ -1,4 +1,4 @@
-import type { PlayerActionId } from "@/lib/playerActions";
+import { CHASE_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 
 /** A combat round lasts six seconds; everyone plans theirs at once (see the project's encounters doc). */
 export const ROUND_SECONDS = 6;
@@ -24,7 +24,8 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
   let t = 0;
   const steps = plan.map((step) => {
     const start = t;
-    t += stepSeconds(step, walkingFeet);
+    // Evade / Pursue run for the rest of the round (they stop early once within 5 ft of the target).
+    t += step.kind === "action" && CHASE_ACTIONS.includes(step.action) ? Math.max(0, ROUND_SECONDS - t) : stepSeconds(step, walkingFeet);
     return { step, start, end: t };
   });
   return { steps, used: t, left: Math.max(0, ROUND_SECONDS - t) };
@@ -33,7 +34,8 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
   if (step.kind === "action" && plan.some((s) => s.kind === "action")) return "You've already planned your action this round";
-  if (step.kind === "action" && step.action === "attack" && !step.target) return "Pick who to attack";
+  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target) return "Pick a target";
+  if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkingFeet).left <= 0) return "No time left this round";
   if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;
 }

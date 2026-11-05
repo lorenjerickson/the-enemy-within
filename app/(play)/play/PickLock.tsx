@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
-import { PLAYER_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
@@ -26,7 +26,7 @@ export default function PickLock({
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string }[]; // who they can see, to attack
 }) {
-  const [choosing, setChoosing] = useState(false); // picking who to attack
+  const [choosing, setChoosing] = useState<PlayerActionId | null>(null); // picking a target for this action
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +34,16 @@ export default function PickLock({
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
-  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready : id === "move" || id === "search");
+  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
     if (id === "move") return setMoveMode(!moving);
-    if (plan && id === "attack") return setChoosing(true);
+    if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
   };
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
-    : plan ? (id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for the rest of the round (until within 5 ft)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
     : `${base}: not available yet`;
@@ -52,11 +52,13 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {plan && choosing && (
         <TargetPicker
+          title={`${label(choosing)} who?`}
           targets={targets}
-          onCancel={() => setChoosing(false)}
+          onCancel={() => setChoosing(null)}
           onPick={(target) => {
-            setChoosing(false);
-            run(() => planStep({ kind: "action", action: "attack", target }));
+            const action = choosing;
+            setChoosing(null);
+            run(() => planStep({ kind: "action", action, target }));
           }}
         />
       )}
@@ -79,6 +81,7 @@ export default function PickLock({
                 <span className="block opacity-60">
                   {a.id === "move" && onMap && !plan ? (freeMovement ? "free" : `${moveLeft} ft left`)
                     : plan && ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s`
+                    : plan && CHASE_ACTIONS.includes(a.id) ? "rest of round"
                     : "hint" in a ? a.hint : ""}
                 </span>
               </span>
