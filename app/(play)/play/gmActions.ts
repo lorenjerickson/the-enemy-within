@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
-  getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting,
+  getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
 } from "@/lib/db";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 
@@ -29,6 +29,7 @@ export async function rollInitiative() {
   }
   order.sort((a, b) => b.initiative - a.initiative);
   saveEncounter(levelId, { round: 1, turn: 0, order });
+  clearRoundPlans(levelId);
   setEncounterWaiting(levelId, waiting);
   logSessionEvent("The GM called for initiative.");
   revalidatePath("/play");
@@ -39,6 +40,7 @@ export async function endEncounter() {
   const levelId = getCurrentLevelId();
   if (levelId === undefined) return;
   saveEncounter(levelId, null);
+  clearRoundPlans(levelId);
   logSessionEvent("The encounter ended.");
   revalidatePath("/play");
 }

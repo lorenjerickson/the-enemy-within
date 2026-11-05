@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -16,6 +16,7 @@ import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
+import { planEnd, timeline } from "@/lib/roundPlan";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
 
@@ -88,6 +89,10 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   const roll = getOpenRollRequest(user.id); // a roll they're being asked to make
   // Locked doors within reach of their character.
   const me = getPlayerToken(user.id);
+  // In an encounter: their round plan (laid out in time) and where it leaves them.
+  const walking: number = me ? JSON.parse(me.movement).walking ?? 0 : 0;
+  const rp = me && getEncounter(me.level_id) ? getRoundPlan(me.level_id, me.token_id) : null;
+  const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
         .filter((s) => s.kind === "door" && s.locked && distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, s) <= REACH)
@@ -111,7 +116,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -130,7 +135,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       <AutoRefresh checkIn={checkIn} />
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
-        <LevelMap readOnly fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && { characterId: me.character_id, feet: Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved), free: !getEncounter(me.level_id) } }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
+        <LevelMap readOnly fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>

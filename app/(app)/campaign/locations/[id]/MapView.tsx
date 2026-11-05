@@ -11,7 +11,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, moveMyToken, pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { freeMove, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
 import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
@@ -601,7 +601,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean } | null }; // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number } } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -823,12 +823,13 @@ export default function MapView({
   const reach = useMemo(() => {
     const m = fog?.move;
     if (!moveOn || !m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
-    const t = drawnTokens.find((x) => x.character_id === m.characterId);
-    if (!t) return null;
+    const token = drawnTokens.find((x) => x.character_id === m.characterId);
+    if (!token) return null;
+    const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
     const walls = blockingSegments(optimisticStructures);
     const squares = m.feet / FEET_PER_SQUARE;
-    if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t };
-    return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t };
+    if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t, token };
+    return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t, token };
   }, [moveOn, fog?.move, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   const [walking, setWalking] = useState<{ id: number; route: Point[]; started: number } | null>(null);
@@ -871,26 +872,12 @@ export default function MapView({
   function walkTo(gx: number, gy: number) {
     if (fog?.move?.free) return walkFree(gx, gy);
     if (!reach) return;
-    const t = reach.at;
-    let route: Point[], col: number, row: number;
-    if (reach.kind === "squares") {
-      const key = squareKey(Math.floor(gx), Math.floor(gy));
-      const square = reach.cells.get(key);
-      if (!square || square.steps === 0) return;
-      route = routeTo(reach.cells, key).map((s) => ({ x: s.col, y: s.row }));
-      col = square.col;
-      row = square.row;
-    } else {
-      if (!insidePolygon({ x: gx, y: gy }, reach.poly)) return;
-      col = snapHeight(gx - 0.5);
-      row = snapHeight(gy - 0.5);
-      route = [{ x: t.col, y: t.row }, { x: col, y: row }]; // straight there: the shortest path
-    }
-    setWalking({ id: t.id, route, started: performance.now() });
+    // In an encounter a click plans the move (it happens when the round resolves).
+    const col = reach.kind === "squares" ? Math.floor(gx) : snapHeight(gx - 0.5), row = reach.kind === "squares" ? Math.floor(gy) : snapHeight(gy - 0.5);
+    if (reach.kind === "squares" ? !reach.cells.get(squareKey(col, row))?.steps : !insidePolygon({ x: gx, y: gy }, reach.poly)) return;
     startTransition(async () => {
-      changeTokens({ move: { id: t.id, col, row } });
-      const r = await moveMyToken(col, row);
-      if (r.error) setControlResult({ label: "Move", ok: false, text: r.error });
+      const r = await planStep({ kind: "move", col, row });
+      if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
     });
   }
   const press = useRef<{ x: number; y: number; t: number; gx: number; gy: number } | null>(null);
@@ -1467,6 +1454,20 @@ export default function MapView({
           ctx.lineWidth = 2 / k;
           ctx.setLineDash([6 / k, 4 / k]);
           ctx.stroke(p);
+          ctx.setLineDash([]);
+        }
+        // Where the plan has them so far: a dashed ring, joined to the token.
+        if (reach.at.col !== reach.token.col || reach.at.row !== reach.token.row) {
+          ctx.setLineDash([4 / k, 3 / k]);
+          ctx.lineWidth = 2 / k;
+          ctx.strokeStyle = "rgba(186,230,253,0.95)";
+          ctx.beginPath();
+          ctx.moveTo(x0 + (reach.token.col + 0.5) * size, y0 + (reach.token.row + 0.5) * size);
+          ctx.lineTo(x0 + (reach.at.col + 0.5) * size, y0 + (reach.at.row + 0.5) * size);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(x0 + (reach.at.col + 0.5) * size, y0 + (reach.at.row + 0.5) * size, size * 0.42, 0, Math.PI * 2);
+          ctx.stroke();
           ctx.setLineDash([]);
         }
         const tx = x0 + (reach.at.col + 0.5) * size, ty = y0 + reach.at.row * size;

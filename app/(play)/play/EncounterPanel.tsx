@@ -1,4 +1,4 @@
-import { getCurrentLevelId, getEncounter, getEncounterWaiting, listTokens } from "@/lib/db";
+import { getCurrentLevelId, getEncounter, getEncounterWaiting, listTokens, readyTokens } from "@/lib/db";
 import { endEncounter, rollInitiative } from "./gmActions";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
@@ -6,6 +6,7 @@ export default function EncounterPanel() {
   const levelId = getCurrentLevelId();
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
+  const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);
   const names = new Map(levelId === undefined ? [] : listTokens(levelId).map((t) => [t.id, { name: t.name, player: t.character_id !== null }]));
   return (
     <div className="space-y-3 text-sm" data-encounter-panel>
@@ -21,7 +22,9 @@ export default function EncounterPanel() {
               <li key={o.token_id} className={`flex items-center gap-2 rounded px-2 py-1 ${i === enc.turn ? "bg-primary/25" : "bg-base-100/60"}`}>
                 <span className="w-6 text-right font-mono">{o.initiative}</span>
                 <span className="flex-1">{names.get(o.token_id)?.name ?? "(gone)"}</span>
-                {names.get(o.token_id)?.player && <span className="badge badge-ghost badge-sm">player</span>}
+                {names.get(o.token_id)?.player && (
+                  <span className={`badge badge-sm ${ready.has(o.token_id) ? "badge-success" : "badge-ghost"}`}>{ready.has(o.token_id) ? "ready" : "planning"}</span>
+                )}
               </li>
             ))}
             {waiting.map((id) => (
@@ -29,6 +32,7 @@ export default function EncounterPanel() {
                 <span className="w-6 text-right">…</span>
                 <span className="flex-1">{names.get(id)?.name ?? "(gone)"}</span>
                 <span className="text-xs">rolling</span>
+                <span className={`badge badge-sm ${ready.has(id) ? "badge-success" : "badge-ghost"}`}>{ready.has(id) ? "ready" : "planning"}</span>
               </li>
             ))}
           </ol>

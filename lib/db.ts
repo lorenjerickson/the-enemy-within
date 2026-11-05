@@ -1,4 +1,5 @@
 import type { RollSpec, RolledPart } from "@/lib/rolls";
+import type { PlanStep } from "@/lib/roundPlan";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -1948,4 +1949,35 @@ export function getEncounterWaiting(levelId: number): number[] {
 
 export function setEncounterWaiting(levelId: number, tokenIds: number[]): void {
   db.prepare<[string, number]>("UPDATE encounters SET waiting = ? WHERE level_id = ?").run(JSON.stringify(tokenIds), levelId);
+}
+
+// ---------- Round plans ----------
+
+// What each creature in an encounter plans to do this round (steps in order) and whether its planner is ready.
+db.exec(`CREATE TABLE IF NOT EXISTS round_plans (
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  plan TEXT NOT NULL DEFAULT '[]',
+  ready INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (level_id, token_id)
+)`);
+
+export function getRoundPlan(levelId: number, tokenId: number): { plan: PlanStep[]; ready: boolean } {
+  const r = db.prepare<[number, number], { plan: string; ready: number }>("SELECT plan, ready FROM round_plans WHERE level_id = ? AND token_id = ?").get(levelId, tokenId);
+  return { plan: r ? JSON.parse(r.plan) : [], ready: !!r?.ready };
+}
+
+export function saveRoundPlan(levelId: number, tokenId: number, plan: PlanStep[], ready: boolean): void {
+  db.prepare("INSERT INTO round_plans (level_id, token_id, plan, ready) VALUES (?, ?, ?, ?) ON CONFLICT(level_id, token_id) DO UPDATE SET plan = excluded.plan, ready = excluded.ready").run(
+    levelId, tokenId, JSON.stringify(plan), ready ? 1 : 0
+  );
+}
+
+/** Which tokens on the level are ready with their round plan. */
+export function readyTokens(levelId: number): Set<number> {
+  return new Set(db.prepare<[number], { token_id: number }>("SELECT token_id FROM round_plans WHERE level_id = ? AND ready = 1").all(levelId).map((r) => r.token_id));
+}
+
+export function clearRoundPlans(levelId: number): void {
+  db.prepare("DELETE FROM round_plans WHERE level_id = ?").run(levelId);
 }
