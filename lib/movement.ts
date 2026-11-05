@@ -4,7 +4,7 @@ import type { Point, Segment } from "@/lib/visibility";
 export const FEET_PER_SQUARE = 5;
 
 /** Whether segment p–q touches segment s (endpoints included, so squeezing past a wall's corner is blocked). */
-function crosses(p: Point, q: Point, s: Segment): boolean {
+export function crosses(p: Point, q: Point, s: Segment): boolean {
   const d = (a: Point, b: Point, c: Point) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   const d1 = d(s.a, s.b, p), d2 = d(s.a, s.b, q), d3 = d(p, q, s.a), d4 = d(p, q, s.b);
   if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
@@ -17,9 +17,12 @@ function crosses(p: Point, q: Point, s: Segment): boolean {
  * A step goes to any of the 8 neighbours and costs one square (diagonals too, as in D&D 5e);
  * walls and closed doors block a step whose centre-to-centre line touches them.
  */
-export function reachableSquares(start: { col: number; row: number }, squares: number, walls: Segment[]): Map<string, { col: number; row: number; steps: number }> {
-  const key = (c: number, r: number) => `${c},${r}`;
-  const seen = new Map([[key(start.col, start.row), { col: start.col, row: start.row, steps: 0 }]]);
+export type Reach = Map<string, { col: number; row: number; steps: number; prev: string | null }>;
+export const squareKey = (c: number, r: number) => `${c},${r}`;
+
+export function reachableSquares(start: { col: number; row: number }, squares: number, walls: Segment[]): Reach {
+  const key = squareKey;
+  const seen: Reach = new Map([[key(start.col, start.row), { col: start.col, row: start.row, steps: 0, prev: null }]]);
   let frontier = [{ col: start.col, row: start.row }];
   for (let step = 1; step <= Math.floor(squares); step++) {
     const next: typeof frontier = [];
@@ -30,7 +33,7 @@ export function reachableSquares(start: { col: number; row: number }, squares: n
         if (seen.has(key(c, r))) continue;
         const from = { x: f.col + 0.5, y: f.row + 0.5 }, to = { x: c + 0.5, y: r + 0.5 };
         if (walls.some((w) => crosses(from, to, w))) continue;
-        seen.set(key(c, r), { col: c, row: r, steps: step });
+        seen.set(key(c, r), { col: c, row: r, steps: step, prev: key(f.col, f.row) });
         next.push({ col: c, row: r });
       }
     }
@@ -38,3 +41,17 @@ export function reachableSquares(start: { col: number; row: number }, squares: n
   }
   return seen;
 }
+
+/** The squares walked from the start to `key` (start first), following the shortest route found. */
+export function routeTo(reach: Reach, key: string): { col: number; row: number }[] {
+  const route: { col: number; row: number }[] = [];
+  for (let k: string | null = key; k; k = reach.get(k)?.prev ?? null) {
+    const s = reach.get(k);
+    if (!s) break;
+    route.unshift({ col: s.col, row: s.row });
+  }
+  return route;
+}
+
+/** Whether a straight move from a to b is clear of walls and closed doors (gridless maps). */
+export const clearPath = (a: Point, b: Point, walls: Segment[]) => !walls.some((w) => crosses(a, b, w));

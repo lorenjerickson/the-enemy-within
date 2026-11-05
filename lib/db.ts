@@ -1361,10 +1361,10 @@ export function getDoor(id: number): (MapStructure & { level_id: number }) | und
 }
 
 /** A player's character token: where it stands. */
-export function getPlayerToken(playerId: number): { character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number } | undefined {
+export function getPlayerToken(playerId: number): { token_id: number; character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number } | undefined {
   return db
-    .prepare<[number], { character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number }>(
-      "SELECT c.id AS character_id, c.name, c.attributes, c.movement, t.moved, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+    .prepare<[number], { token_id: number; character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number }>(
+      "SELECT t.id AS token_id, c.id AS character_id, c.name, c.attributes, c.movement, t.moved, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
     )
     .get(playerId);
 }
@@ -1931,4 +1931,10 @@ export function setSecretRevealed(id: number, revealed: boolean): void {
 
 export function getSecretLevel(id: number): number | undefined {
   return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_secrets WHERE id = ?").get(id)?.level_id;
+}
+
+/** A token spends movement: it moves to (col, row) and `feet` is added to what it has moved this turn. */
+export function walkToken(id: number, col: number, row: number, feet: number): void {
+  db.prepare<[number, number]>("UPDATE map_tokens SET moved = moved + ? WHERE id = ?").run(feet, id);
+  moveToken(id, col, row);
 }

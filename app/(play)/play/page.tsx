@@ -70,7 +70,13 @@ function GmView({ session }: { session: GameSession }) {
     );
   }
   const levels = listLevels(place.location_id);
-  return <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} />;
+  return (
+    <>
+      {/* Players move their own tokens now, so the GM's map keeps up. */}
+      <AutoRefresh />
+      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} />
+    </>
+  );
 }
 
 function PlayerView({ session, user }: { session: GameSession; user: User }) {
@@ -103,7 +109,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} onMap={!!me} moveLeft={me ? Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock doors={lockedNearby} onMap={!!me} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

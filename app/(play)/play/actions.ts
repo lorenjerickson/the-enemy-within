@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed,
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken,
 } from "@/lib/db";
+import { blockingSegments } from "@/lib/visibility";
+import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import type { Attributes } from "@/lib/attributes";
@@ -95,4 +97,36 @@ export async function sendPing(levelId: number, x: number, y: number): Promise<v
 export async function pingsSince(levelId: number, afterId: number): Promise<(Ping & { mine: boolean })[]> {
   const user = await requireUser();
   return listPings(Number(levelId), Number(afterId)).map((p) => ({ ...p, mine: p.user_id === user.id }));
+}
+
+/**
+ * Move: the player's character walks to (col, row) if their movement left reaches it: on grid maps a square in
+ * reach (costing 5 ft per step on the shortest route), on gridless maps a point in a clear straight line.
+ */
+export async function moveMyToken(col: number, row: number): Promise<{ error?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
+  const left = Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved);
+  const walls = blockingSegments(listStructures(me.level_id));
+  let feet: number;
+  if (isGridlessLevel(me.level_id)) {
+    const from = { x: me.col + 0.5, y: me.row + 0.5 }, to = { x: Number(col) + 0.5, y: Number(row) + 0.5 };
+    feet = Math.round(Math.hypot(to.x - from.x, to.y - from.y) * FEET_PER_SQUARE * 10) / 10;
+    if (feet > left + 0.05) return { error: "Too far" };
+    if (!clearPath(from, to, walls)) return { error: "Something's in the way" };
+  } else {
+    const c = Math.round(Number(col)), r = Math.round(Number(row));
+    const square = reachableSquares({ col: me.col, row: me.row }, left / FEET_PER_SQUARE, walls).get(squareKey(c, r));
+    if (!square) return { error: "You can't reach that square" };
+    feet = square.steps * FEET_PER_SQUARE;
+    col = c;
+    row = r;
+  }
+  if (feet <= 0) return {};
+  walkToken(me.token_id, Number(col), Number(row), feet);
+  revalidatePath("/play");
+  return {};
 }

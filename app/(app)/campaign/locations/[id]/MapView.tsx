@@ -11,9 +11,9 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { moveMyToken, pingsSince, sendPing } from "../../../../(play)/play/actions";
 import { useMoveMode } from "../../../../(play)/play/moveMode";
-import { FEET_PER_SQUARE, reachableSquares } from "@/lib/movement";
+import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
@@ -828,8 +828,56 @@ export default function MapView({
     const walls = blockingSegments(optimisticStructures);
     const squares = m.feet / FEET_PER_SQUARE;
     if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t };
-    return { kind: "squares" as const, cells: [...reachableSquares({ col: t.col, row: t.row }, squares, walls).values()], feet: m.feet, at: t };
+    return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t };
   }, [moveOn, fog?.move, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
+  // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
+  const [walking, setWalking] = useState<{ id: number; route: Point[]; started: number } | null>(null);
+  const WALK_MS = 140; // per square (or per unit on gridless maps)
+  const walkAt = (w: NonNullable<typeof walking>): Point => {
+    const lengths = w.route.slice(1).map((p, i) => Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y));
+    let d = (performance.now() - w.started) / WALK_MS;
+    for (let i = 0; i < lengths.length; i++) {
+      if (d <= lengths[i]) {
+        const a = w.route[i], b = w.route[i + 1], f = lengths[i] ? d / lengths[i] : 1;
+        return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+      }
+      d -= lengths[i];
+    }
+    return w.route[w.route.length - 1];
+  };
+  const walkDone = (w: NonNullable<typeof walking>) =>
+    performance.now() - w.started >= WALK_MS * w.route.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y), 0);
+  useEffect(() => {
+    if (!walking) return;
+    const t = setInterval(() => (walkDone(walking) ? setWalking(null) : setFlickerTick((n) => n + 1)), 16);
+    return () => clearInterval(t);
+  }, [walking]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** A click inside the movement overlay walks the player's character there. */
+  function walkTo(gx: number, gy: number) {
+    if (!reach) return;
+    const t = reach.at;
+    let route: Point[], col: number, row: number;
+    if (reach.kind === "squares") {
+      const key = squareKey(Math.floor(gx), Math.floor(gy));
+      const square = reach.cells.get(key);
+      if (!square || square.steps === 0) return;
+      route = routeTo(reach.cells, key).map((s) => ({ x: s.col, y: s.row }));
+      col = square.col;
+      row = square.row;
+    } else {
+      if (!insidePolygon({ x: gx, y: gy }, reach.poly)) return;
+      col = snapHeight(gx - 0.5);
+      row = snapHeight(gy - 0.5);
+      route = [{ x: t.col, y: t.row }, { x: col, y: row }]; // straight there: the shortest path
+    }
+    setWalking({ id: t.id, route, started: performance.now() });
+    startTransition(async () => {
+      changeTokens({ move: { id: t.id, col, row } });
+      const r = await moveMyToken(col, row);
+      if (r.error) setControlResult({ label: "Move", ok: false, text: r.error });
+    });
+  }
+  const press = useRef<{ x: number; y: number; t: number; gx: number; gy: number } | null>(null);
   const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
 
   const state: MapState = {
@@ -837,7 +885,11 @@ export default function MapView({
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     showWalls: !readOnly && !optimisticHideWalls,
     // The GM sees the whole map fully lit; darkness and fog are for players.
-    tokens: fogged ? fogged.tokens : drawnTokens, tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
+    tokens: (fogged ? fogged.tokens : drawnTokens).map((t) => {
+      if (walking?.id !== t.id) return t;
+      const at = walkAt(walking);
+      return { ...t, col: at.x, row: at.y };
+    }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets,
     effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
@@ -943,7 +995,8 @@ export default function MapView({
       };
     }
     if (readOnly) {
-      // Players can only pan (any button).
+      // Players pan (any button); a click (left, no drag, not a hold) inside the movement overlay moves them.
+      if (e.button === 0) press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
       drag.current = { x: e.clientX, y: e.clientY };
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
@@ -1184,8 +1237,11 @@ export default function MapView({
     drag.current = { x: e.clientX, y: e.clientY };
     setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
     drag.current = null;
+    const p = press.current;
+    press.current = null;
+    if (p && e && readOnly && reach && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
     if (hold.current) {
       clearTimeout(hold.current.timer);
       hold.current = null;
@@ -1382,7 +1438,7 @@ export default function MapView({
         ctx.strokeStyle = "rgba(125,211,252,0.85)";
         ctx.lineWidth = 1 / k;
         if (reach.kind === "squares") {
-          for (const c of reach.cells) {
+          for (const c of reach.cells.values()) {
             const r = cellToRect(state, SCENE.w, SCENE.h, { col: c.col, row: c.row, cols: 1, rows: 1 });
             ctx.fillRect(r.x, r.y, r.w, r.h);
             ctx.strokeRect(r.x, r.y, r.w, r.h);
@@ -1398,13 +1454,14 @@ export default function MapView({
           ctx.setLineDash([]);
         }
         const tx = x0 + (reach.at.col + 0.5) * size, ty = y0 + reach.at.row * size;
+        const label = `${Math.floor(reach.feet)} ft`;
         ctx.font = `bold ${12 / k}px sans-serif`;
         ctx.textAlign = "center";
         ctx.lineWidth = 3 / k;
         ctx.strokeStyle = "rgba(0,0,0,0.75)";
-        ctx.strokeText(`${reach.feet} ft`, tx, ty - 4 / k);
+        ctx.strokeText(label, tx, ty - 4 / k);
         ctx.fillStyle = "#e0f2fe";
-        ctx.fillText(`${reach.feet} ft`, tx, ty - 4 / k);
+        ctx.fillText(label, tx, ty - 4 / k);
         ctx.restore();
       }
       drawPings();
