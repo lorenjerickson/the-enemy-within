@@ -826,7 +826,7 @@ export default function MapView({
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.
   const gmSel = useGmPlanToken();
-  const gmPlan = !readOnly && gmSel !== null ? gmPlans?.[gmSel] : undefined;
+  const gmPlan = !readOnly && gmSel !== null && moveOn ? gmPlans?.[gmSel] : undefined; // only while Move is on
   const reach = useMemo(() => {
     const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false } : moveOn ? fog?.move : null;
     if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay

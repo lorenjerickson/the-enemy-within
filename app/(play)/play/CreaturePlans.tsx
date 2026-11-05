@@ -6,6 +6,7 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
 import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
+import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 
 export interface CreaturePlan {
@@ -17,6 +18,7 @@ export interface CreaturePlan {
 /** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
 export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[] }) {
   const selected = useGmPlanToken();
+  const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
@@ -34,7 +36,10 @@ export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[]
               type="button"
               data-plan-creature={c.tokenId}
               className={`btn btn-xs ${selected === c.tokenId ? "btn-primary" : c.plan.ready ? "btn-success btn-outline" : ""}`}
-              onClick={() => setGmPlanToken(selected === c.tokenId ? null : c.tokenId)}
+              onClick={() => {
+                setMoveMode(false); // a newly picked creature starts with no move being planned
+                setGmPlanToken(selected === c.tokenId ? null : c.tokenId);
+              }}
             >
               {c.name} {c.plan.ready ? "✓" : ""}
             </button>
@@ -51,20 +56,24 @@ export default function CreaturePlans({ creatures }: { creatures: CreaturePlan[]
             onUndo={() => run(() => gmUndoStep(current.tokenId))}
             onReady={() => run(() => gmSetReady(current.tokenId, !current.plan.ready))}
           />
-          <p className="text-xs opacity-60">Click the map to plan a move (the reach is drawn from where its plan leaves it).</p>
-          <div className="grid grid-cols-5 gap-1">
-            {PLAYER_ACTIONS.filter((a) => ACTION_SECONDS[a.id]).map((a) => (
+          {/* The same actions players have: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
+          <div className="grid grid-cols-4 gap-1">
+            {PLAYER_ACTIONS.map((a) => (
               <button
                 key={a.id}
                 type="button"
-                title={`${a.label} (${ACTION_SECONDS[a.id]} s)`}
+                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
                 data-gm-action={a.id}
-                disabled={pending || current.plan.ready}
-                className="btn btn-xs h-auto flex-col py-1"
-                onClick={() => run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))}
+                aria-pressed={a.id === "move" ? moving : undefined}
+                disabled={pending || current.plan.ready || a.id === "dash"}
+                className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
+                onClick={() => (a.id === "move" ? setMoveMode(!moving) : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id })))}
               >
                 <GameIcon name={a.icon} className="size-4" />
-                <span className="text-[10px]">{a.label}</span>
+                <span className="text-[10px] leading-tight">
+                  {a.label}
+                  <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : "hint" in a ? a.hint : ""}</span>
+                </span>
               </button>
             ))}
           </div>
