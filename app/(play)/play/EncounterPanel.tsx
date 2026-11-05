@@ -1,7 +1,8 @@
-import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, listTokens, readyTokens, tokenLabels } from "@/lib/db";
+import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
 import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
+import RoundScrubber from "./RoundScrubber";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
 export default function EncounterPanel() {
@@ -62,6 +63,10 @@ export default function EncounterPanel() {
               );
             })()}
           </form>
+          {levelId !== undefined && (() => {
+            const r = getReplay(levelId);
+            return r ? <RoundScrubber round={r.round} seconds={r.frames.length} /> : null;
+          })()}
           {levelId !== undefined && getLastRoundLog(levelId).length > 0 && (
             <div className="space-y-1 rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
               {getLastRoundLog(levelId).map((line, i) => (

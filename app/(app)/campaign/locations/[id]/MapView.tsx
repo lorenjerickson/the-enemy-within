@@ -15,6 +15,7 @@ import { freeMove, planStep, pingsSince, sendPing } from "../../../../(play)/pla
 import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
+import { useScrub } from "../../../../(play)/play/scrub";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
@@ -698,8 +699,13 @@ export default function MapView({
   // Dragging a token: which one, and the cell it's currently over.
   const [draggingToken, setDraggingToken] = useState<{ id: number; col: number; row: number } | null>(null);
   // Playing back a resolved round: each second's spots shown for a real second, from the shared start time.
+  const scrub = useScrub(); // the GM stepping through the last round (their map only)
   const replayFrame = (() => {
     if (!replay) return null;
+    if (!readOnly && scrub !== null) {
+      const f = scrub === 0 ? { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[] } : replay.frames[Math.min(scrub, replay.frames.length) - 1];
+      return { ...f, startsIn: 0, scrubbing: true };
+    }
     const t = Date.now() - replay.starts;
     if (t >= (replay.frames.length + 1) * 1000) return null; // done (the last second is held one more)
     if (t < 0) return { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[], startsIn: Math.ceil(-t / 1000) };
@@ -1668,9 +1674,15 @@ export default function MapView({
   const surface = (
     <>
             {replayFrame && replay && (
-              <div data-replay className="pointer-events-none absolute left-1/2 top-2 z-10 w-[min(32rem,calc(100%-8rem))] -translate-x-1/2 rounded-box bg-base-100/90 p-2 text-sm shadow">
+              <div
+                data-replay
+                className="pointer-events-none absolute top-2 z-10 w-[min(32rem,calc(100%-8rem))] -translate-x-1/2 rounded-box bg-base-100/90 p-2 text-sm shadow"
+                // Centred on the part of the map the dock leaves visible.
+                style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
+              >
                 <div className="font-semibold">
-                  Round {replay.round}{replayFrame.startsIn ? ` plays in ${replayFrame.startsIn}…` : ` · ${replayFrame.sec} s`}
+                  Round {replay.round}{replayFrame.startsIn ? ` plays in ${replayFrame.startsIn}…` : replayFrame.sec === 0 ? " · before it" : ` · ${replayFrame.sec} s`}
+                  {"scrubbing" in replayFrame && <span className="ml-2 badge badge-warning badge-sm">replay (only you see this)</span>}
                 </div>
                 {replayFrame.lines
                   .filter((l) => !replayName || l.includes(replayName)) // players see what involves them; the GM sees it all
