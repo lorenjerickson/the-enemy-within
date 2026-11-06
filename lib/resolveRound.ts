@@ -1,4 +1,4 @@
-import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 
@@ -112,7 +112,7 @@ export function resolveMovement(
   const where = (id: number) => pos.get(id) ?? bystanders.find((b) => b.tokenId === id)?.at;
   const inReach = (a: Pos, b: Pos, range = 1) =>
     (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= range + 0.5 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= range) &&
-    clearPath({ x: a.col + 0.5, y: a.row + 0.5 }, { x: b.col + 0.5, y: b.row + 0.5 }, walls); // not through a wall
+    !walls.some((w) => crosses({ x: a.col + 0.5, y: a.row + 0.5 }, { x: b.col + 0.5, y: b.row + 0.5 }, w)); // not through a wall
 
   // What each second ended with, for playing the round back: everyone's spot, who's down, and what happened.
   const frames: ReplayFrame[] = [];

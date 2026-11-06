@@ -28,7 +28,8 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     if (isGridlessLevel(p.tok.level_id)) {
       const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
       const feet = Math.round(Math.hypot(to.col - from.col, to.row - from.row) * FEET_PER_SQUARE * 10) / 10;
-      if (feet > feetLeft + 0.05 || !clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls)) return "Can't get there in time";
+      if (feet > feetLeft + 0.05) return "Can't get there in time";
+      if (!clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls)) return "Something's in the way (go around it in two moves)";
       add = { kind: "move", to, feet };
     } else {
       const sq = reachableSquares(from, feetLeft / FEET_PER_SQUARE, walls).get(squareKey(Math.round(Number(step.col)), Math.round(Number(step.row))));

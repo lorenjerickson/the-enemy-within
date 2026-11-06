@@ -53,8 +53,29 @@ export function routeTo(reach: Reach, key: string): { col: number; row: number }
   return route;
 }
 
-/** Whether a straight move from a to b is clear of walls and closed doors (gridless maps). */
-export const clearPath = (a: Point, b: Point, walls: Segment[]) => !walls.some((w) => crosses(a, b, w));
+/** How close a token's centre may come to a wall on gridless maps: tokens are about a unit (5 ft) across, so their body
+ * doesn't slide over a free-standing wall's end; a little under half, so a one-unit doorway still fits. */
+export const BODY = 0.4;
+
+const pointToSegment = (p: Point, a: Point, b: Point) => {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = dx || dy ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+};
+/** The closest a segment p–q comes to segment s. */
+const segmentGap = (p: Point, q: Point, s: Segment) =>
+  crosses(p, q, s) ? 0 : Math.min(pointToSegment(p, s.a, s.b), pointToSegment(q, s.a, s.b), pointToSegment(s.a, p, q), pointToSegment(s.b, p, q));
+
+/**
+ * Whether a straight move from a to b is clear of walls and closed doors (gridless maps): it doesn't cross one, and the
+ * token's body (BODY from its centre) doesn't pass over one. A token already standing that close may still move away.
+ */
+export const clearPath = (a: Point, b: Point, walls: Segment[]) =>
+  !walls.some((w) => {
+    if (crosses(a, b, w)) return true;
+    const gap = segmentGap(a, b, w);
+    return gap < BODY && gap < pointToSegment(a, w.a, w.b) - 1e-6;
+  });
 
 /**
  * Free movement on grid maps: the shortest route of squares (8-way steps, walls and closed doors block) from start to
@@ -101,7 +122,7 @@ export function squareRoute(
  */
 export function shortestPath(a: Point, b: Point, walls: Segment[], allowed: (p: Point) => boolean): Point[] | null {
   if (clearPath(a, b, walls)) return [a, b];
-  const OFF = 0.35;
+  const OFF = BODY + 0.15; // diagonally off each wall end, clear of the token's body
   const nodes: Point[] = [a, b];
   for (const w of walls) {
     for (const p of [w.a, w.b]) {
