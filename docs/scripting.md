@@ -112,6 +112,17 @@ WITH select(game.locations.current.actors, 'Who is healed?') AS A
 The script runs again from the start once the GM has answered (nothing is saved until it finishes), so `roll()`s before a
 `select()` are rolled again. `select()` and `ask()` can't be used in an ON trigger, since no one is there to answer.
 
+**Effects with `fx()`.** Plays a visual effect on every map in the session (it changes nothing; pair it with what does):
+
+```
+fx('slash', A, B)            # or 'arrow'; a 4th argument 'hit' (default), 'miss' or 'down' picks the impact
+fx('circle', where, 10)      # where: an actor or a position; radius in feet
+fx('cone', A, towards, 15)   # or 'line'; from A towards an actor or position, length in feet
+```
+
+They play about 1.5 s after the script finishes, so everyone's map catches them together. Players see those that
+involve someone, or start somewhere, they can see. They need the session's map (the console or a map button in `/play`).
+
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).

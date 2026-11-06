@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan,
-} from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
@@ -112,6 +111,12 @@ export async function sendPing(levelId: number, x: number, y: number): Promise<v
 export async function pingsSince(levelId: number, afterId: number): Promise<(Ping & { mine: boolean })[]> {
   const user = await requireUser();
   return listPings(Number(levelId), Number(afterId)).map((p) => ({ ...p, mine: p.user_id === user.id }));
+}
+
+/** Effects scripts played on a level since the last one this map saw (polled each second, with pings). */
+export async function fxSince(levelId: number, afterId: number) {
+  await requireUser();
+  return listMapFx(Number(levelId), Number(afterId));
 }
 
 /**

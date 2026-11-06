@@ -1,10 +1,16 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
+import { AREA_SHAPES, placeArea, type AreaShape } from "./aoe";
+import type { AttackFx, Fx } from "./vfx";
+import type { Point } from "./visibility";
+
+/** How far ahead a script's effects are scheduled, so every map in the session (polling each second) catches them together. */
+const FX_LEAD_MS = 1500;
 import { characterHealth, saveCharacterHealth, saveTokenHealth, tokenHealth } from "./health";
 import {
   getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, logSessionEvent, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen, setDoorLocked,
-  addCreatureToken, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, addMapFx, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
 import type { ScriptAnswers, ScriptPrompt } from "./scriptPrompt";
@@ -119,6 +125,7 @@ interface ActorChanges {
   portrait: boolean; // gravity applies
   gridless: boolean; // positions anywhere, distances in straight lines
   structures: MapStructure[];
+  fx: (() => Fx)[]; // effects the script played, made when saving (so new creatures have their token ids)
 }
 
 /** Fresh health for a new creature: the maximum rolled from its formula. */
@@ -131,7 +138,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   const place = getLevelPlace(levelId);
   if (!place) throw new ScriptError("This map level no longer exists");
   const changes: ActorChanges = {
-    levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null,
+    levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null, fx: [],
     portrait: isPortraitLevel(levelId), gridless: isGridlessLevel(levelId), structures: listStructures(levelId),
   };
   const templates = listCreatures();
@@ -224,6 +231,9 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
   }
   // After the inserts above, so new creatures have their token ids.
   const e = changes.encounter();
+  // Effects the script played: drawn on every map in the session, a moment from now so they all catch it together.
+  const starts = Date.now() + FX_LEAD_MS;
+  for (const make of changes.fx) addMapFx(changes.levelId, starts, make());
   saveEncounter(changes.levelId, e && { round: e.round, turn: e.turn, order: e.order.map((o) => ({ token_id: o.actor.id, initiative: o.initiative })) });
   // Lighting, effects and doors (small lists, so simply written back).
   saveIllumination(changes.levelId, Number(location.illumination) / 100); // scripts use percent; stored as 0..1
@@ -469,7 +479,41 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
     }
     throw new ScriptError("No free cell near that position");
   };
+  /** An actor (by its token) or a position, as a point on the map (a token's centre). */
+  const point = (v: unknown, what: string): Point => {
+    const c = asCell(v, what);
+    return { x: c.col + 0.5, y: c.row + 0.5 };
+  };
+  const actorOf = (v: unknown, what: string): Actor => {
+    if (!v || typeof v !== "object" || !("position" in v) || !location().actors.items.includes(v as Actor)) throw new ScriptError(`${what} needs an actor on this map`);
+    if (!(v as Actor).position) throw new ScriptError(`${what}: ${(v as Actor).name} isn't placed on the map`);
+    return v as Actor;
+  };
   return {
+    /**
+     * Plays a visual effect on everyone's map (it doesn't change anything):
+     * fx('slash' | 'arrow', attacker, target, 'hit' | 'miss' | 'down') · fx('circle', where, radius ft)
+     * · fx('cone' | 'line', from, towards, length ft). `where` / `from` / `towards`: an actor or a position.
+     */
+    fx: new Method((look, from, to, extra) => {
+      if (!changes) throw new ScriptError("fx() needs a map; run this from a map button or the session console");
+      const kind = String(look);
+      if (kind === "slash" || kind === "arrow") {
+        const a = actorOf(from, `fx('${kind}')`), b = actorOf(to, `fx('${kind}')`);
+        const outcome = extra === undefined || extra === null ? "hit" : String(extra);
+        if (!["hit", "miss", "down"].includes(outcome)) throw new ScriptError("fx(): the outcome is 'hit', 'miss' or 'down'");
+        changes.fx.push(() => ({ look: kind, from: a.id, to: b.id, outcome: outcome as AttackFx["outcome"] }));
+      } else if ((AREA_SHAPES as readonly string[]).includes(kind)) {
+        const shape = kind as AreaShape;
+        const origin = point(from, `fx('${kind}')`);
+        const ft = shape === "circle" ? (typeof to === "number" ? to : 10) : typeof extra === "number" ? extra : shape === "cone" ? 15 : 30;
+        if (!(ft > 0 && ft <= 500)) throw new ScriptError("fx(): the size is in feet, from 1 to 500");
+        const towards = shape === "circle" ? origin : point(to, `fx('${kind}')`);
+        const area = placeArea(shape, ft, origin, shape === "circle" ? origin : towards);
+        changes.fx.push(() => ({ look: "area", from: 0, area, hits: [] }));
+      } else throw new ScriptError(`fx() looks: 'slash', 'arrow', 'circle', 'cone', 'line' (not '${kind}')`);
+      return null;
+    }),
     /** A random free cell next to a position, actor or group. */
     near: new Method((pos) => freeNear(asCell(pos, "near()"))),
     /** distance(a, b) between positions or actors: squares on grid maps, a straight line on gridless ones. */

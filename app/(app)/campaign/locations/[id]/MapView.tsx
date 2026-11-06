@@ -11,7 +11,8 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { freeMove, fxSince, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
+import type { Fx } from "@/lib/vfx";
 import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
@@ -214,6 +215,7 @@ function drawSkull(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: n
 /** Press-and-hold time before a ping, and how long a ping shows (ms). */
 const HOLD_MS = 500;
 const PING_MS = 3000;
+const FX_MS = 1000; // how long a script's effect plays
 
 /** How far characters see (grid units): as far as walls allow. */
 const SIGHT = 500;
@@ -839,10 +841,19 @@ export default function MapView({
   const [pings, setPings] = useState<{ key: string; x: number; y: number; name: string; gm: boolean; at: number }[]>([]);
   const lastPingId = useRef(0);
   const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  // One-off effects played by scripts: each is drawn for FX_MS from its start.
+  const [scriptFx, setScriptFx] = useState<{ id: number; starts: number; fx: Fx }[]>([]);
+  const lastFxId = useRef(0); // only those still playing are kept, so old ones aren't replayed
   const addPings = (more: typeof pings) => setPings((ps) => [...ps.filter((p) => Date.now() - p.at < PING_MS), ...more]);
   useEffect(() => {
     if (!dockSide) return;
     const timer = setInterval(async () => {
+      // Effects scripts played (scheduled a moment ahead, so every map catches them together).
+      const moreFx = await fxSince(levelId, lastFxId.current).catch(() => []);
+      if (moreFx.length) {
+        lastFxId.current = moreFx[moreFx.length - 1].id;
+        setScriptFx((fs) => [...fs.filter((f) => Date.now() < f.starts + FX_MS), ...moreFx.filter((f) => Date.now() < f.starts + FX_MS)]);
+      }
       const fresh = await pingsSince(levelId, lastPingId.current).catch(() => []);
       if (!fresh.length) return;
       lastPingId.current = fresh[fresh.length - 1].id;
@@ -851,8 +862,9 @@ export default function MapView({
     return () => clearInterval(timer);
   }, [dockSide, levelId]);
   const anyPing = pings.some((p) => Date.now() - p.at < PING_MS);
+  const anyFx = scriptFx.some((f) => Date.now() < f.starts + FX_MS);
   const replaying = !!replay && Date.now() < replay.starts + (replay.frames.length + 1) * 1000;
-  const frameMs = anyEffect || anyPing || replaying ? 33 : anyFlicker ? 120 : 0; // a replay redraws often so tokens glide
+  const frameMs = anyEffect || anyPing || replaying || anyFx ? 33 : anyFlicker ? 120 : 0; // a replay redraws often so tokens glide
   useEffect(() => {
     if (!frameMs) return;
     const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
@@ -1636,19 +1648,25 @@ export default function MapView({
       }
       // Round playback: attacks landing this second (a slash or an arrow, then a hit burst or a miss), as far through as
       // the second is; scrubbing shows them at impact. Players see those involving someone they can see.
-      if (replayFrame && "fx" in replayFrame && replayFrame.fx?.length) {
+      // Script effects (fx(…)) play the same way, for a second from their start.
+      const fxNow = [
+        ...(replayFrame && "fx" in replayFrame && replayFrame.fx?.length
+          ? replayFrame.fx.map((f) => ({ f, k: "scrubbing" in replayFrame ? 0.7 : "k" in replayFrame ? replayFrame.k : 1 }))
+          : []),
+        ...scriptFx.filter((s) => Date.now() >= s.starts && Date.now() < s.starts + FX_MS).map((s) => ({ f: s.fx, k: (Date.now() - s.starts) / FX_MS })),
+      ];
+      if (fxNow.length) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        const k = "scrubbing" in replayFrame ? 0.7 : "k" in replayFrame ? replayFrame.k : 1;
         const at = (id: number) => {
           const t = state.tokens.find((x) => x.id === id);
-          const p = t ?? replayFrame.pos[id];
+          const p = t ?? replayFrame?.pos[id];
           return p && { x: x0 + (p.col + 0.5) * size, y: y0 + (p.row + 0.5) * size, seen: !!t };
         };
         const toPx = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
-        for (const f of replayFrame.fx) {
+        for (const { f, k } of fxNow) {
           if (f.look === "area") {
-            // Players see an area that touches anyone they can see (or that they can see where it starts).
-            const shown = !readOnly || [f.from, ...f.hits.map((h) => h.id)].some((id) => at(id)?.seen);
+            // Players see an area that touches anyone they can see, or that starts where they can see.
+            const shown = !readOnly || [f.from, ...f.hits.map((h) => h.id)].some((id) => at(id)?.seen) || !!fogged?.visible.some((poly) => insidePolygon(f.area.origin, poly));
             if (!shown) continue;
             const o = toPx(f.area.origin);
             const clip = visibilityPolygon(o, f.area.size * size + 2, blockersInScene(state, x0, y0, size));

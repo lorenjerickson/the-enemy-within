@@ -1,6 +1,7 @@
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
+import type { Fx } from "@/lib/vfx";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -1830,6 +1831,29 @@ export function getPlayerTokenLevelId(playerId: number): number | undefined {
     .map((r) => r.level_id);
   const active = getGmLevelId();
   return active !== undefined && levels.includes(active) ? active : levels[0];
+}
+
+// ---------- Effects played by scripts ----------
+
+// A one-off visual effect a script played (fx('arrow', A, B)): every map in the session draws it from `starts` (ms).
+db.exec(`CREATE TABLE IF NOT EXISTS map_fx (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  starts INTEGER NOT NULL,
+  fx TEXT NOT NULL
+)`);
+
+export function addMapFx(levelId: number, starts: number, fx: Fx): void {
+  db.prepare("DELETE FROM map_fx WHERE starts < ?").run(Date.now() - 60_000);
+  db.prepare("INSERT INTO map_fx (level_id, starts, fx) VALUES (?, ?, ?)").run(levelId, starts, JSON.stringify(fx));
+}
+
+/** Effects on a level after the given id (the last one a map has seen), from the last minute. */
+export function listMapFx(levelId: number, afterId: number): { id: number; starts: number; fx: Fx }[] {
+  return db
+    .prepare<[number, number, number], { id: number; starts: number; fx: string }>("SELECT id, starts, fx FROM map_fx WHERE level_id = ? AND id > ? AND starts > ? ORDER BY id")
+    .all(levelId, afterId, Date.now() - 60_000)
+    .map((r) => ({ ...r, fx: JSON.parse(r.fx) }));
 }
 
 // ---------- Pings ----------
