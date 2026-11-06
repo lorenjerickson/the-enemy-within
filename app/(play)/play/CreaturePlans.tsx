@@ -5,7 +5,7 @@ import { CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } 
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
-import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
+import { useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
@@ -15,11 +15,12 @@ import { setTargetMode, useTargetMode } from "./targetMode";
 export interface CreaturePlan {
   tokenId: number;
   name: string;
+  player: string | null; // a player's character the GM is planning for (absent or AFK)
   plan: { steps: TimedStep[]; used: number; ready: boolean };
   gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
 }
 
-/** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
+/** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
 export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string }[] }) {
   const selected = useGmPlanToken();
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
@@ -32,32 +33,13 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
   const current = creatures.find((c) => c.tokenId === selected);
-  const allReady = creatures.length > 0 && creatures.every((c) => c.plan.ready);
   if (!creatures.length) return null;
   return (
     <div className="space-y-2" data-creature-plans>
-      <div className="font-semibold">Your creatures {allReady && <span className="badge badge-success badge-sm">all ready</span>}</div>
-      <ul className="flex flex-wrap gap-1">
-        {creatures.map((c) => (
-          <li key={c.tokenId}>
-            <button
-              type="button"
-              data-plan-creature={c.tokenId}
-              className={`btn btn-xs ${selected === c.tokenId ? "btn-primary" : c.plan.ready ? "btn-success btn-outline" : ""}`}
-              onClick={() => {
-                setMoveMode(false); // a newly picked creature starts with no move being planned
-                setGmPlanToken(selected === c.tokenId ? null : c.tokenId);
-              }}
-            >
-              {c.name} {c.plan.ready ? "✓" : ""}
-            </button>
-          </li>
-        ))}
-      </ul>
       {current ? (
         <div className="space-y-2">
           <RoundPlanView
-            title={`${current.name}'s round`}
+            title={`${current.name}'s round${current.player ? ` (planning for ${current.player})` : ""}`}
             plan={current.plan}
             pending={pending}
             label={label}
@@ -105,7 +87,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           </div>
         </div>
       ) : (
-        <p className="text-xs opacity-60">Pick a creature to plan its round.</p>
+        <p className="text-xs opacity-60">Click someone in the initiative order to plan their round.</p>
       )}
       {error && <p className="text-sm text-warning">{error}</p>}
     </div>
