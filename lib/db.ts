@@ -2041,3 +2041,15 @@ export function getGmLevelId(): number | undefined {
   const loaded = db.prepare<[], { level_id: number | null }>("SELECT m.id AS level_id FROM gm_view g JOIN map_levels m ON m.id = g.level_id").get()?.level_id;
   return loaded ?? getCurrentLevelId();
 }
+
+/** Every player's character and where its token is (location and level), or nowhere yet. */
+export function listPlayerPlaces(): { character: string; player: string; level_id: number | null; location: string | null; level: string | null }[] {
+  return db
+    .prepare<[], { character: string; player: string; level_id: number | null; location: string | null; level: string | null }>(
+      `SELECT c.name AS character, u.name AS player, t.level_id, l.name AS location, m.name AS level
+       FROM characters c JOIN users u ON u.id = c.player_id
+       LEFT JOIN map_tokens t ON t.character_id = c.id LEFT JOIN map_levels m ON m.id = t.level_id LEFT JOIN locations l ON l.id = m.location_id
+       ORDER BY u.name, c.name`
+    )
+    .all();
+}
