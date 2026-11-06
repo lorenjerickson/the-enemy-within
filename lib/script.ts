@@ -780,19 +780,18 @@ function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
         last = null;
       } else {
         const [obj, key] = assignTarget(s.target, scopes);
-        const apply = (old: unknown) => {
-          if (s.op === "++") return num(old, "++") + 1;
-          if (s.op === "--") return num(old, "--") - 1;
-          const v = plain(evaluate(s.value!, scopes));
-          return s.op === "=" ? v : binary(s.op[0], old, v);
-        };
         // A broadcast target ("lights.all.level += 1") updates each item from its own old value.
         const targets = obj instanceof Broadcast ? obj.values : [obj];
-        for (const o of targets) {
+        const value = s.value ? plain(evaluate(s.value, scopes)) : undefined;
+        // A list of values for a list of targets ("A.each.health.current = A.each.health.maximum") goes item by item.
+        const valueFor = (i: number) => (value instanceof Broadcast && value.values.length === targets.length ? plain(value.values[i]) : value);
+        targets.forEach((o, i) => {
           // An unset game.vars counter starts from 0, so "game.vars.rolls += 1" just works.
-          const old = s.op === "=" ? undefined : getKey(o, key);
-          setKey(o, key, apply(old === null && FREEFORM.has(o as object) ? 0 : old));
-        }
+          let old = s.op === "=" ? undefined : getKey(o, key);
+          if (old === null && FREEFORM.has(o as object)) old = 0;
+          const v = valueFor(i);
+          setKey(o, key, s.op === "++" ? num(old, "++") + 1 : s.op === "--" ? num(old, "--") - 1 : s.op === "=" ? v : binary(s.op[0], old, v));
+        });
         last = null;
       }
     } catch (err) {

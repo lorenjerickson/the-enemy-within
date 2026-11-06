@@ -11,6 +11,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   while `x.health.current = 4` sets current exactly. Restore: `x.health = x.health.maximum`. Temporary health: `x.health.temporary = 5`.
 - `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health.current` → `[25, 7]`.
   Assigning to it sets it on each: `game.players.all.health += 5`.
+  A list assigned to a list goes item by item: `X.each.health.current = X.each.health.maximum` restores each to its own maximum.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.locations`: every location by name. `game.locations.current` is the map the party is on (in the script console), or the button's location (map buttons), with `level`, `actors` (everything on that level) and `creatures`.
