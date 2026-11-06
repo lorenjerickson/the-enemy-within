@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import type { AmbientSound, Asset, PositionalSound } from "@/lib/db";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
-import { playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
+import { dropAmbientClip, dropAmbientSound, playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
 import { changePositionalLoop, addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
 import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 
@@ -96,7 +96,7 @@ export default function SoundsEditor({
                     ▶ Play loop
                   </button>
                 )}
-                <form action={removeAmbientSound.bind(null, locationId, s.id)}>
+                <form action={removeAmbientSound.bind(null, locationId, s.id)} onSubmit={() => dropAmbientSound(s.id)}>
                   <button className="btn btn-ghost btn-sm text-error">Remove</button>
                 </form>
               </div>
@@ -112,12 +112,23 @@ export default function SoundsEditor({
                     {c.mode !== "loop" && c.mode !== "layer" && (
                       <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume))}>▶</button>
                     )}
-                    <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => removeAmbientClip(locationId, c.id)}>✕</button>
+                    <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => {
+                        dropAmbientClip(c.id);
+                        removeAmbientClip(locationId, c.id);
+                      }}>✕</button>
                   </div>
                   <select
                     aria-label="Mode"
                     value={c.mode}
-                    onChange={(e) => changeClipMode(locationId, c.id, e.target.value as ClipMode)}
+                    onChange={(e) => {
+                      const mode = e.target.value as ClipMode;
+                      // Playing: start again with the clips in their new roles (a clip no longer loop / layer drops out).
+                      if (playing) {
+                        const clips = s.clips.map((x) => (x.id === c.id ? { ...x, mode } : x));
+                        playSequence(s.id, clips.filter((x) => x.mode === "loop"), vol(`ambient:${s.id}`, s.volume), clips.filter((x) => x.mode === "layer"));
+                      }
+                      changeClipMode(locationId, c.id, mode);
+                    }}
                     className="select select-xs ml-7 w-[calc(100%-1.75rem)]"
                   >
                     {CLIP_MODES.map((m) => (

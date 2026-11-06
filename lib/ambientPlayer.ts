@@ -11,6 +11,7 @@ type Now = { soundId: number; clipId: number | null; layerIds: number[] } | null
 
 let audio: HTMLAudioElement | null = null;
 let layers: HTMLAudioElement[] = [];
+let sequence: { id: number; url: string }[] = []; // the loop clips, played in turn
 let volume = 1;
 let now: Now = null;
 const listeners = new Set<() => void>();
@@ -27,6 +28,7 @@ export function stopAmbient() {
   a.pause();
   for (const l of layers) l.pause();
   layers = [];
+  sequence = [];
   now = null;
   emit();
 }
@@ -69,10 +71,47 @@ export function playSequence(
     void l.play().catch(() => {});
     return l;
   });
-  if (clips.length) {
-    const step = (i: number) => play(clips[i], () => step((i + 1) % clips.length));
-    step(0);
-  } else emit();
+  sequence = [...clips];
+  if (sequence.length) step(0);
+  else emit();
+}
+
+/** Plays the sequence's clip at i, then the next (wrapping round). */
+function step(i: number) {
+  if (!sequence.length) return;
+  const at = i % sequence.length;
+  play(sequence[at], () => step(at + 1));
+}
+
+/** A clip removed from its sound (or no longer a loop / layer clip): it stops, and the rest play on. */
+export function dropAmbientClip(clipId: number) {
+  if (!now) return;
+  const li = now.layerIds.indexOf(clipId);
+  if (li >= 0) {
+    layers[li].pause();
+    layers = layers.filter((_, i) => i !== li);
+    now = { ...now, layerIds: now.layerIds.filter((id) => id !== clipId) };
+  }
+  const si = sequence.findIndex((c) => c.id === clipId);
+  if (si >= 0) {
+    sequence = sequence.filter((c) => c.id !== clipId);
+    if (now.clipId === clipId) {
+      if (sequence.length) step(si); // the clip after it (now at its place)
+      else {
+        const a = player();
+        a.onended = null;
+        a.pause();
+        now = { ...now, clipId: null };
+      }
+    }
+  } else if (now.clipId === clipId) return stopAmbient(); // a single clip played once
+  if (now && !sequence.length && !layers.length) return stopAmbient();
+  emit();
+}
+
+/** A sound removed: stops it if it's the one playing. */
+export function dropAmbientSound(soundId: number) {
+  if (now?.soundId === soundId) stopAmbient();
 }
 
 /** Plays a single clip once (manual or event clips). */
