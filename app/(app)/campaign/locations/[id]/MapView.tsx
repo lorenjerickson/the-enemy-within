@@ -246,7 +246,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     ctx.save();
     ctx.lineCap = "round";
     for (const s of state.structures) {
-      if (s.kind === "wall" && !state.showWalls) continue;
+      if ((s.kind === "wall" || s.kind === "window") && !state.showWalls) continue; // GM only (windows are drawn on the map art)
       if (s.kind === "staircase") {
         const r = cellToRect(state, w, h, { col: s.x1, row: s.y1, cols: 1, rows: 1 });
         ctx.fillStyle = "rgba(17,24,39,0.7)";
