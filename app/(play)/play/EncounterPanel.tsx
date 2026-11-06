@@ -1,4 +1,4 @@
-import { getCharacterPlayer, getCurrentLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
+import { getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
 import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
@@ -6,7 +6,7 @@ import RoundScrubber from "./RoundScrubber";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
 export default function EncounterPanel() {
-  const levelId = getCurrentLevelId();
+  const levelId = getGmLevelId();
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
   const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);

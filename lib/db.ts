@@ -2026,3 +2026,18 @@ export function getReplay(levelId: number): Replay | null {
 export function setReplay(levelId: number, replay: Replay): void {
   db.prepare<[string, number]>("UPDATE encounters SET replay = ? WHERE level_id = ?").run(JSON.stringify(replay), levelId);
 }
+
+// ---------- The GM's map ----------
+
+// The level the GM has loaded in the session (null = follow the party). Players are unaffected.
+db.exec("CREATE TABLE IF NOT EXISTS gm_view (id INTEGER PRIMARY KEY CHECK (id = 1), level_id INTEGER)");
+
+export function setGmViewLevel(levelId: number | null): void {
+  db.prepare("INSERT OR REPLACE INTO gm_view (id, level_id) VALUES (1, ?)").run(levelId);
+}
+
+/** The map the GM is working on: the level they loaded, else the party's. Encounters and the console use it. */
+export function getGmLevelId(): number | undefined {
+  const loaded = db.prepare<[], { level_id: number | null }>("SELECT m.id AS level_id FROM gm_view g JOIN map_levels m ON m.id = g.level_id").get()?.level_id;
+  return loaded ?? getCurrentLevelId();
+}

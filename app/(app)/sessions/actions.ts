@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { beginGameSession, deleteTrigger, getCurrentLevelId, getGameTime, setGameTime } from "@/lib/db";
+import { beginGameSession, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
 export async function runScript(source: string): Promise<ScriptResult> {
   await requireGm();
-  const result = tryGameScript(source, getCurrentLevelId()); // the console works on the map the party is on
+  const result = tryGameScript(source, getGmLevelId()); // the console works on the map the GM has loaded (normally the party's)
   revalidatePath("/play");
   revalidatePath("/campaign/characters");
   revalidatePath("/sessions", "layout");

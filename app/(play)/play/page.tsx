@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getCurrentLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -16,6 +16,7 @@ import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
+import LocationsPanel from "./LocationsPanel";
 import { planEnd, timeline } from "@/lib/roundPlan";
 import { planView } from "@/lib/roundPlanServer";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
@@ -38,6 +39,7 @@ function NoMap({ children }: { children: React.ReactNode }) {
 
 function GmView({ session }: { session: GameSession }) {
   const tools: DockTool[] = [
+    { id: "locations", label: "Locations", icon: "map", content: <LocationsPanel /> },
     { id: "encounter", label: "Encounter", icon: "swords", content: <EncounterPanel /> },
     { id: "time", label: "Time", icon: "clock", content: <CalendarPanel now={getGameTime()} timers={listTimers()} /> },
     {
@@ -64,7 +66,7 @@ function GmView({ session }: { session: GameSession }) {
       ),
     },
   ];
-  const levelId = getCurrentLevelId();
+  const levelId = getGmLevelId(); // the map the GM has loaded, else the party's
   const place = levelId === undefined ? undefined : getLevelPlace(levelId);
   if (!place) {
     return (

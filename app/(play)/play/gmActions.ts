@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
-  getCharacter, getCharacterPlayer, getCreature, getCurrentLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
+  setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
   getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
 } from "@/lib/db";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
@@ -18,7 +18,7 @@ import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } f
  */
 export async function rollInitiative() {
   await requireGm();
-  const levelId = getCurrentLevelId();
+  const levelId = getGmLevelId();
   if (levelId === undefined) return;
   const order: { token_id: number; initiative: number }[] = [];
   const waiting: number[] = [];
@@ -42,7 +42,7 @@ export async function rollInitiative() {
 
 export async function endEncounter() {
   await requireGm();
-  const levelId = getCurrentLevelId();
+  const levelId = getGmLevelId();
   if (levelId === undefined) return;
   saveEncounter(levelId, null);
   clearRoundPlans(levelId);
@@ -80,7 +80,7 @@ export async function gmSetReady(tokenId: number, ready: boolean) {
  */
 export async function resolveRound() {
   await requireGm();
-  const levelId = getCurrentLevelId();
+  const levelId = getGmLevelId();
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
   if (levelId === undefined || !enc) return;
   const tokens = listTokens(levelId);
@@ -117,3 +117,10 @@ export async function resolveRound() {
 
 /** How long after resolving the playback starts (players' screens refresh every 3 s). */
 const REPLAY_DELAY_MS = 3500;
+
+/** The GM loads a location's level on their map (null = back to the party's). */
+export async function loadLevel(levelId: number | null) {
+  await requireGm();
+  setGmViewLevel(levelId === null ? null : Number(levelId));
+  revalidatePath("/play");
+}
