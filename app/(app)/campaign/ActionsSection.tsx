@@ -11,6 +11,7 @@ const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** One-line summary, e.g. "disadvantage · to hit -1 · 3d6 fire · split within 3 m · +2 Stealth (skill) · 1 hour". */
 function summary(a: Action): string {
+  const fromItem = a.item_id !== null;
   return [
     (a.attack || a.damage) && a.roll !== "normal" && a.roll,
     a.attack && `to hit ${a.attack}`,
@@ -21,7 +22,7 @@ function summary(a: Action): string {
     a.area_shape && a.area_lasts ? "stays" : "",
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
-    a.range_ft > 5 ? `range ${a.range_ft} ft` : "reach",
+    a.range_ft > 5 ? `range ${a.range_ft} ft` : a.range_ft === 0 && fromItem ? "weapon's range" : "reach",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -79,8 +80,8 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
       </label>
       <label className="flex items-center gap-2 text-sm">
         Range
-        <input name="range_ft" type="number" min="5" step="5" defaultValue={initial?.range_ft ?? 5} className="input input-sm w-24" />
-        ft (5 = within reach)
+        <input name="range_ft" type="number" min="0" step="5" placeholder={"item_id" in owner ? "weapon's" : "5"} defaultValue={initial ? initial.range_ft || "" : "item_id" in owner ? "" : 5} className="input input-sm w-24" />
+        ft {"item_id" in owner ? "(blank = the weapon's range; 5 = within reach)" : "(5 = within reach)"}
       </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       {(["self", "target"] as const).map((on) => {

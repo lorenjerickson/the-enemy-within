@@ -92,7 +92,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     radius: Math.max(0, Number(formData.get("radius")) || 0),
     split: formData.get("split") === "on" ? 1 : 0,
     seconds: Math.min(6, Math.max(0.5, Number(formData.get("seconds")) || 2)),
-    range_ft: Math.max(5, Number(formData.get("range_ft")) || 5),
+    range_ft: Math.max(0, Number(formData.get("range_ft")) || 0), // 0: an item's action uses the item's range (else within reach)
     ...areaFields(formData),
     boosts,
     roll_grants,

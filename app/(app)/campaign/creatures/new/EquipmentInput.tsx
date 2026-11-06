@@ -10,7 +10,10 @@ export interface EquippableItem {
   name: string;
   slots: EquipSlot[];
   defense: string | null;
+  hands?: 0 | 1 | 2; // 2 = held in both hands: the other hand stays empty
 }
+
+const OTHER_HAND: Partial<Record<EquipSlot, EquipSlot>> = { "main hand": "off hand", "off hand": "main hand" };
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -38,6 +41,10 @@ export default function EquipmentInput({ items, initial = {} }: { items: Equippa
         {EQUIP_SLOTS.map((slot) => {
           const on = enabled.has(slot);
           const compatible = items.filter((i) => i.slots.includes(slot));
+          // The other hand holds something two-handed: this one is taken by it.
+          const other = OTHER_HAND[slot];
+          const both = other && enabled.has(other) ? byId.get(equipped[other] ?? -1) : undefined;
+          const heldByBoth = both?.hands === 2 ? both : undefined;
           return (
             <div key={slot} className="flex items-center gap-2">
               <label className="flex items-center gap-2 w-32 cursor-pointer">
@@ -46,10 +53,15 @@ export default function EquipmentInput({ items, initial = {} }: { items: Equippa
               </label>
               <select
                 name={`item:${slot}`}
-                disabled={!on}
-                value={equipped[slot] ?? ""}
-                onChange={(e) => setEquipped({ ...equipped, [slot]: Number(e.target.value) || null })} className="select select-sm flex-1">
-                <option value="">{compatible.length ? "Empty" : "No compatible items"}</option>
+                disabled={!on || !!heldByBoth}
+                value={heldByBoth ? "" : equipped[slot] ?? ""}
+                onChange={(e) => {
+                  const id = Number(e.target.value) || null;
+                  // Picking something two-handed empties the other hand.
+                  setEquipped({ ...equipped, [slot]: id, ...(other && id && byId.get(id)?.hands === 2 ? { [other]: null } : {}) });
+                }}
+                className="select select-sm flex-1">
+                <option value="">{heldByBoth ? `Holding ${heldByBoth.name} (both hands)` : compatible.length ? "Empty" : "No compatible items"}</option>
                 {compatible.map((i) => (
                   <option key={i.id} value={i.id}>{i.name}</option>
                 ))}

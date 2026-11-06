@@ -37,6 +37,12 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
     }
     equipment[slot] = itemId;
   }
+  // Something held in both hands leaves no hand for anything else.
+  for (const [hand, other] of [["main hand", "off hand"], ["off hand", "main hand"]] as const) {
+    const held = equipment[hand] ? items.get(equipment[hand]!) : undefined;
+    const otherId = equipment[other];
+    if (held?.hands === 2 && otherId && otherId !== held.id) throw new Error(`${held.name} needs both hands; take ${items.get(otherId)?.name ?? "the other item"} out of the ${other}`);
+  }
 
   return {
     name: text("name"),

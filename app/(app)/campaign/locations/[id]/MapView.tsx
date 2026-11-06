@@ -13,8 +13,8 @@ import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { freeMove, fxSince, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
-import { useMoveMode } from "../../../../(play)/play/moveMode";
-import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
+import { setMoveMode, useMoveMode } from "../../../../(play)/play/moveMode";
+import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
 import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
@@ -791,6 +791,15 @@ export default function MapView({
     const k = i === Math.floor(t / 1000) ? (t - i * 1000) / 1000 : 1;
     return { ...replay.frames[i], startsIn: 0, from, k };
   })();
+  // When a round's playback starts, everything picked or being planned is let go, so nothing gets in the way of watching.
+  useEffect(() => {
+    if (!replay || Date.now() > replay.starts + (replay.frames.length + 1) * 1000) return;
+    setGmPlanToken(null);
+    setTargetMode(null);
+    setMoveMode(false);
+    setSelectedTokenId(null);
+    setAimAt(null);
+  }, [replay?.starts]); // eslint-disable-line react-hooks/exhaustive-deps
   const replayedTokens = replayFrame
     ? optimisticTokens.map((t) => {
         const to = replayFrame.pos[t.id];

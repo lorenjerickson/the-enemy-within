@@ -318,6 +318,8 @@ addColumn("actions", "save_attr", "TEXT NOT NULL DEFAULT 'agility'");
 addColumn("actions", "save_half", "INTEGER NOT NULL DEFAULT 1"); // 1 = a successful save takes half damage, 0 = none
 addColumn("actions", "area_lasts", "INTEGER NOT NULL DEFAULT 0"); // 1 = the area stays on the map for the duration
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
+addColumn("items", "range_ft", "REAL NOT NULL DEFAULT 5"); // weapons: how far they reach (5 = melee)
+addColumn("items", "hands", "INTEGER NOT NULL DEFAULT 0"); // held in 0 (not held), 1 or 2 hands
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
 addColumn("characters", "hp_temp", "INTEGER"); // temporary health, lost before current
@@ -496,9 +498,11 @@ export interface Item {
   max_stack: number | null; // consumables only; 1 = not stackable
   capacity: number | null; // containers only; number of item slots (a stack fills one slot)
   slots: EquipSlot[]; // slots this item can be equipped in; empty = not equippable
+  range_ft: number; // weapons: effective range (5 = melee reach)
+  hands: 0 | 1 | 2; // held in one hand, both hands, or not held
 }
 
-const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots";
+const ITEM_COLUMNS = "id, name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots, range_ft, hands";
 
 type ItemRow = Omit<Item, "slots"> & { slots: string };
 
@@ -518,14 +522,14 @@ export function saveItem(id: number | null, item: Omit<Item, "id">): void {
   const params = { ...item, slots: JSON.stringify(item.slots) };
   if (id === null) {
     db.prepare<Omit<ItemRow, "id">>(
-      `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots)
-       VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots)`
+      `INSERT INTO items (name, description, image, type, weight, value, rarity, durability, defense, damage, attack, max_stack, capacity, slots, range_ft, hands)
+       VALUES (@name, @description, @image, @type, @weight, @value, @rarity, @durability, @defense, @damage, @attack, @max_stack, @capacity, @slots, @range_ft, @hands)`
     ).run(params);
   } else {
     db.prepare<ItemRow>(
       `UPDATE items SET name = @name, description = @description, image = @image, type = @type, weight = @weight,
          value = @value, rarity = @rarity, durability = @durability, defense = @defense, damage = @damage,
-         attack = @attack, max_stack = @max_stack, capacity = @capacity, slots = @slots
+         attack = @attack, max_stack = @max_stack, capacity = @capacity, slots = @slots, range_ft = @range_ft, hands = @hands
        WHERE id = @id`
     ).run({ ...params, id });
   }

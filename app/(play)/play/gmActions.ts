@@ -10,7 +10,7 @@ import {
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
-import { fightersOn, saveHp } from "@/lib/combat";
+import { attackRange, fightersOn, saveHp } from "@/lib/combat";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
@@ -100,6 +100,7 @@ export async function resolveRound() {
       start: { col: t.col, row: t.row },
       plan: getRoundPlan(levelId, t.id).plan,
       walking: JSON.parse(getTokenMover(t.id)?.movement ?? "{}").walking ?? 0,
+      attackRange: attackRange(t.id),
     }));
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);

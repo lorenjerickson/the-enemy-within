@@ -48,6 +48,8 @@ export async function submitItem(id: number | null, formData: FormData) {
     max_stack,
     capacity,
     slots,
+    range_ft: type === "weapon" ? Math.max(5, Math.round(num("range_ft") / 5) * 5 || 5) : 5,
+    hands: ([0, 1, 2].includes(num("hands")) ? num("hands") : 0) as 0 | 1 | 2,
   });
   redirect("/campaign/items");
 }

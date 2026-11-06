@@ -4,7 +4,7 @@ import { listItems, listProfessionGraph } from "@/lib/db";
 export const equippableItems = () =>
   listItems()
     .filter((i) => i.slots.length > 0)
-    .map(({ id, name, slots, defense }) => ({ id, name, slots, defense }));
+    .map(({ id, name, slots, defense, hands }) => ({ id, name, slots, defense, hands }));
 
 /** The professions ticked on a character form, checked: each needs one of its prerequisites ticked too. */
 export function chosenProfessions(formData: FormData): number[] {

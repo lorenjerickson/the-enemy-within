@@ -8,7 +8,9 @@ import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
-const rangeOf = (step: Extract<PlanStep, { kind: "action" }>) => step.use?.range ?? ACTION_RANGE[step.action];
+/** How far an action reaches (squares): a gear action's own range, a plain Attack the mover's weapon's. */
+const rangeOf = (step: Extract<PlanStep, { kind: "action" }>, m?: Mover) =>
+  step.use?.range ?? (step.action === "attack" && m?.attackRange ? m.attackRange : ACTION_RANGE[step.action]);
 import type { Segment } from "@/lib/visibility";
 
 type Pos = { col: number; row: number };
@@ -21,6 +23,7 @@ export interface Mover {
   start: Pos;
   plan: PlanStep[];
   walking: number; // feet per round
+  attackRange?: number; // squares a plain Attack reaches (their main-hand weapon's range); 1 = within reach
 }
 
 /** Where a plan puts a mover at time t (seconds into the round), ignoring everyone else. */
@@ -251,10 +254,10 @@ export function resolveMovement(
         const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
         // A ranged action due now on someone out of reach: pursue them first, while that still leaves time to do it.
         const tp = t - 1;
-        const due = acts.get(m.tokenId)!.find((a) => rangeOf(a.step) && a.step.target && !begun.has(a) && !finished.has(a) && a.start <= tp + 1e-9 && tp < a.end);
+        const due = acts.get(m.tokenId)!.find((a) => rangeOf(a.step, m) && a.step.target && !begun.has(a) && !finished.has(a) && a.start <= tp + 1e-9 && tp < a.end);
         if (due) {
           const them = where(due.step.target!.id);
-          if (them && !down.has(due.step.target!.id) && !inReach(here, them, rangeOf(due.step))) {
+          if (them && !down.has(due.step.target!.id) && !inReach(here, them, rangeOf(due.step, m))) {
             if (ROUND_SECONDS - sec >= due.end - due.start - 1e-9) {
               autoPursue.add(m.tokenId);
               if (!closingIn.has(m.tokenId)) log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
@@ -367,12 +370,12 @@ export function resolveMovement(
         say(`${m.name}'s attack fails: no target.`);
       } else if (down.has(target.id)) {
         say(`${m.name}'s attack fails: ${target.name} is already down.`);
-      } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step))) {
+      } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step, m))) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
       } else {
         const a = me.attack(step.use, them), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
-        const look = (rangeOf(step) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
+        const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         if (a.total < d.total) shown("miss");
         if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);

@@ -96,6 +96,14 @@ function statusesOf(a: { name: string; boosts: Boost[]; roll_grants: RollGrant[]
   return { statuses: { ...(self ? { self } : {}), ...(target ? { target } : {}), minutes: durationMinutes(a.duration_amount, a.duration_unit) || 0.1 } };
 }
 
+/** How far a token's plain Attack reaches, in squares: its main-hand weapon's range (1 = within reach). */
+export function attackRange(tokenId: number): number {
+  const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const who = t?.character_id ? getCharacter(t.character_id) : t?.creature_id ? getCreature(t.creature_id) : undefined;
+  const weapon = who?.equipment?.["main hand"] ? getItem(who.equipment["main hand"]!) : undefined;
+  return Math.max(1, Math.round((weapon?.range_ft ?? 5) / 5));
+}
+
 /** How long an action's effect lasts, in game minutes (a round is 6 s; rests count as 1 and 8 hours); 0 = instant. */
 function durationMinutes(amount: number, unit: string): number {
   const per: Record<string, number> = { round: 0.1, turn: 0.1, minute: 1, hour: 60, day: 1440, "short rest": 60, "long rest": 480 };
@@ -115,14 +123,15 @@ export function gearActions(tokenId: number): (GearAction & { source: string })[
   const who = t?.character_id ? getCharacter(t.character_id) : t?.creature_id ? getCreature(t.creature_id) : undefined;
   if (!t || !who) return [];
   const owned = [
-    ...(t.creature_id ? listActions({ creature_id: t.creature_id }).map((a) => ({ a, source: who.name })) : []),
+    ...(t.creature_id ? listActions({ creature_id: t.creature_id }).map((a) => ({ a, source: who.name, itemRange: 5 })) : []),
     ...Object.values(who.equipment ?? {}).flatMap((id) => {
       const item = id ? getItem(id) : undefined;
-      return item ? listActions({ item_id: item.id }).map((a) => ({ a, source: item.name })) : [];
+      return item ? listActions({ item_id: item.id }).map((a) => ({ a, source: item.name, itemRange: item.range_ft })) : [];
     }),
   ];
-  return owned.map(({ a, source }) => ({
-    id: a.id, name: a.name, source, seconds: a.seconds, range: Math.max(1, Math.round(a.range_ft / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
+  // An item's action with no range of its own (0) reaches as far as the item does.
+  return owned.map(({ a, source, itemRange }) => ({
+    id: a.id, name: a.name, source, seconds: a.seconds, range: Math.max(1, Math.round((a.range_ft || itemRange) / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
     ...(a.area_shape && a.area_ft > 0
       ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type) } }
       : {}),

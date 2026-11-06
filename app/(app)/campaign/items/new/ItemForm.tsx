@@ -56,6 +56,8 @@ export default function ItemForm({ initial }: { initial?: Item }) {
             <input name="damage" required pattern={DICE_PATTERN} placeholder="Damage dice (e.g. 2d6)" defaultValue={initial?.damage ?? ""} className="input w-full" /></label>
           <label className="floating-label"><span>To-hit modifier (e.g. 1d4 or -2)</span>
             <input name="attack" pattern={MODIFIER_PATTERN} placeholder="To-hit modifier (e.g. 1d4 or -2)" defaultValue={initial?.attack ?? ""} className="input w-full" /></label>
+          <label className="floating-label col-span-2"><span>Effective range in feet (5 = melee reach)</span>
+            <input name="range_ft" type="number" min="5" step="5" placeholder="Effective range in feet (5 = melee reach)" defaultValue={initial?.range_ft ?? 5} className="input w-full" /></label>
         </div>
       )}
       {type === "consumable" && (
@@ -76,6 +78,12 @@ export default function ItemForm({ initial }: { initial?: Item }) {
         <label className="floating-label"><span>Capacity (number of items or stacks)</span>
           <input name="capacity" type="number" min="1" required placeholder="Capacity (number of items or stacks)" defaultValue={initial?.capacity ?? undefined} className="input w-full" /></label>
       )}
+      <label className="floating-label"><span>Held in</span>
+        <select name="hands" defaultValue={initial?.hands ?? 0} className="select w-full">
+          <option value={0}>Not held</option>
+          <option value={1}>One hand</option>
+          <option value={2}>Both hands (the other hand stays free of anything else)</option>
+        </select></label>
       <fieldset className="fieldset">
         <legend className="fieldset-legend">Equipment slots (leave empty if not equippable)</legend>
         <div className="grid grid-cols-4 gap-2">
