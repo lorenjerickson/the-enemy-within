@@ -9,7 +9,7 @@ import {
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
-import { blockingSegments, insidePolygon, visibilityPolygon, type Point } from "@/lib/visibility";
+import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
@@ -126,7 +126,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
   const left = Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved);
-  const walls = blockingSegments(listStructures(me.level_id));
+  const walls = movementBlockers(listStructures(me.level_id));
   let feet: number;
   if (isGridlessLevel(me.level_id)) {
     const from = { x: me.col + 0.5, y: me.row + 0.5 }, to = { x: Number(col) + 0.5, y: Number(row) + 0.5 };
@@ -159,10 +159,11 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   if (!me) return { error: "You're not on the map yet" };
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, movement is limited" };
-  const walls = blockingSegments(listStructures(me.level_id));
+  const sight = blockingSegments(listStructures(me.level_id)); // what they could see past
+  const walls = movementBlockers(listStructures(me.level_id)); // what they can walk past (windows block)
   const here = { x: me.col + 0.5, y: me.row + 0.5 };
   // What they've seen: from where they stand now and everywhere they've stood on this level.
-  const seen = [here, ...listSightings(user.id, me.level_id)].map((p) => visibilityPolygon(p, 500, walls));
+  const seen = [here, ...listSightings(user.id, me.level_id)].map((p) => visibilityPolygon(p, 500, sight));
   const revealed = (p: Point) => seen.some((poly) => insidePolygon(p, poly));
   const target = { x: Number(gx), y: Number(gy) };
 

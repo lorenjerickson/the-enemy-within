@@ -72,3 +72,10 @@ export function insidePolygon(p: Point, poly: Point[]): boolean {
   }
   return inside;
 }
+
+/** What stops movement: walls, closed doors and windows (windows let sight and light through, but not people). */
+export function movementBlockers(structures: { kind: string; x1: number; y1: number; x2: number; y2: number; open: number }[]): Segment[] {
+  return structures
+    .filter((s) => s.kind === "wall" || s.kind === "window" || (s.kind === "door" && !s.open))
+    .map((s) => ({ a: { x: s.x1, y: s.y1 }, b: { x: s.x2, y: s.y2 } }));
+}

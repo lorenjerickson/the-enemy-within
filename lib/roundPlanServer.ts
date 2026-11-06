@@ -3,7 +3,7 @@ import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
 import type { PlayerActionId } from "@/lib/playerActions";
 import { cannotAdd, planEnd, timeline, type PlanStep } from "@/lib/roundPlan";
-import { blockingSegments } from "@/lib/visibility";
+import { movementBlockers } from "@/lib/visibility";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
 export function tokenPlanner(tokenId: number) {
@@ -22,7 +22,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
     const feetLeft = (timeline(p.plan, p.walking).left * p.walking) / 6;
-    const walls = blockingSegments(listStructures(p.tok.level_id));
+    const walls = movementBlockers(listStructures(p.tok.level_id));
     if (isGridlessLevel(p.tok.level_id)) {
       const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
       const feet = Math.round(Math.hypot(to.col - from.col, to.row - from.row) * FEET_PER_SQUARE * 10) / 10;

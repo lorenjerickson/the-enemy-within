@@ -4,7 +4,7 @@ import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } fr
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import { blockingSegments, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
+import { blockingSegments, movementBlockers, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
@@ -859,7 +859,7 @@ export default function MapView({
     const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
-    const walls = blockingSegments(optimisticStructures);
+    const walls = movementBlockers(optimisticStructures); // windows block movement too
     const squares = m.feet / FEET_PER_SQUARE;
     if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t, token };
     return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t, token };
