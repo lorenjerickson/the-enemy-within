@@ -1,3 +1,4 @@
+import type { Fx } from "@/lib/vfx";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
@@ -56,6 +57,7 @@ export interface ReplayFrame {
   pos: Record<number, Pos>;
   down: number[];
   lines: string[];
+  fx?: Fx[]; // attacks landing (or missing) this second, for the map to draw
 }
 
 /** A resolved round to play back: frames shown one a second from `starts` (ms since epoch). */
@@ -196,6 +198,7 @@ export function resolveMovement(
   const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
+    const fx: Fx[] = [];
     const lagBefore = new Map(lag);
     const autoPursue = new Set<number>(); // closing in on an out-of-reach target this second (their plan waits)
     // Evaluation: where each would like to be at the end of this second (Evade / Pursue decided afresh from where their target is now).
@@ -301,6 +304,9 @@ export function resolveMovement(
       } else {
         const a = me.attack(step.use), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
+        const look = (rangeOf(step) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
+        const shown = (outcome: Fx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
+        if (a.total < d.total) shown("miss");
         if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
         else {
           const dmg = me.damage(step.use);
@@ -308,6 +314,7 @@ export function resolveMovement(
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
+          shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             down.add(target.id);
             say(`${target.name} is down.`);
@@ -323,7 +330,7 @@ export function resolveMovement(
         log.push(`${sec} s: ${order.find((o) => o.tokenId === id)!.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
       }
     }
-    frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")) });
+    frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
   }
   // Actions pushed past the end of the round (by closing in or being held back) don't happen.
   for (const m of order) {

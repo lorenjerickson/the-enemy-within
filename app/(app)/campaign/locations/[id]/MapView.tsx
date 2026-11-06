@@ -16,6 +16,7 @@ import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
+import { drawFx } from "@/lib/vfx";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
@@ -1605,6 +1606,21 @@ export default function MapView({
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(f, 0, 0);
         ctx.restore();
+      }
+      // Round playback: attacks landing this second (a slash or an arrow, then a hit burst or a miss), as far through as
+      // the second is; scrubbing shows them at impact. Players see those involving someone they can see.
+      if (replayFrame && "fx" in replayFrame && replayFrame.fx?.length) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const k = "scrubbing" in replayFrame ? 0.7 : "k" in replayFrame ? replayFrame.k : 1;
+        const at = (id: number) => {
+          const t = state.tokens.find((x) => x.id === id);
+          const p = t ?? replayFrame.pos[id];
+          return p && { x: x0 + (p.col + 0.5) * size, y: y0 + (p.row + 0.5) * size, seen: !!t };
+        };
+        for (const f of replayFrame.fx) {
+          const a = at(f.from), b = at(f.to);
+          if (a && b && (a.seen || b.seen)) drawFx(ctx, f, k, a, b, size);
+        }
       }
       // The creature the GM is planning for: a bright ring with a soft glow, so it's clear which one they control.
       const planning = !readOnly && gmSel !== null ? state.tokens.find((t) => t.id === gmSel) : undefined;
