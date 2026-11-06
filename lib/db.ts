@@ -2063,3 +2063,29 @@ export function listPlayerPlaces(): { character: string; player: string; player_
     )
     .all();
 }
+
+/**
+ * Deletes a character and everything that's only about it: its tokens (and their round plans), professions,
+ * journal, fog memory, pending rolls and objective assignments. Discoveries it owned lose their owner.
+ */
+export function deleteCharacter(id: number): void {
+  db.transaction(() => {
+    const tokens = db.prepare<[number], { id: number }>("SELECT id FROM map_tokens WHERE character_id = ?").all(id).map((t) => t.id);
+    for (const t of tokens) db.prepare("DELETE FROM round_plans WHERE token_id = ?").run(t);
+    db.prepare("DELETE FROM map_tokens WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM character_professions WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM sightings WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM roll_requests WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM journal_entries WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM objective_characters WHERE character_id = ?").run(id);
+    db.prepare("UPDATE discoveries SET character_id = NULL WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM characters WHERE id = ?").run(id);
+  })();
+}
+
+/** Player names by character id (characters nobody plays are left out). */
+export function characterPlayers(): Map<number, string> {
+  return new Map(
+    db.prepare<[], { id: number; name: string }>("SELECT c.id, u.name FROM characters c JOIN users u ON u.id = c.player_id").all().map((r) => [r.id, r.name])
+  );
+}
