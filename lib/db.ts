@@ -2089,3 +2089,11 @@ export function characterPlayers(): Map<number, string> {
     db.prepare<[], { id: number; name: string }>("SELECT c.id, u.name FROM characters c JOIN users u ON u.id = c.player_id").all().map((r) => [r.id, r.name])
   );
 }
+
+/** Planned targeted steps on a level (who aims what at whom), for drawing on the map; optionally one token's only. */
+export function listPlanTargets(levelId: number, tokenId?: number): { from: number; to: number; action: string }[] {
+  const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
+  return rows
+    .filter((r) => tokenId === undefined || r.token_id === tokenId)
+    .flatMap((r) => (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => (s.kind === "action" && s.target ? [{ from: r.token_id, to: s.target.id, action: s.action }] : [])));
+}

@@ -128,6 +128,9 @@ export function resolveMovement(
   function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean): Pos {
     const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
     const b = budget.get(m.tokenId)! + perSecond;
+    // Spots someone else stands in now: a chaser goes around them rather than waiting behind them.
+    const others = [...[...pos].filter(([id]) => id !== m.tokenId).map(([, p]) => p), ...bystanders.map((x) => x.at)];
+    const taken = (p: Pos) => others.some((o) => same(o, p));
     if (gridless) {
       budget.set(m.tokenId, 0);
       if (pursue) {
@@ -141,13 +144,26 @@ export function resolveMovement(
           left -= step;
           if (left <= 1e-6 || step < d) break;
         }
-        return { col: Math.round((at.x - 0.5) * 20) / 20, row: Math.round((at.y - 0.5) * 20) / 20 };
+        let to = { col: at.x - 0.5, row: at.y - 0.5 };
+        if (taken(to)) {
+          // Someone's there: angle off to either side (30° steps) for the free spot that gets closest.
+          const dx = to.col - from.col, dy = to.row - from.row, len = Math.hypot(dx, dy) || b;
+          const heading = Math.atan2(dy, dx);
+          let best: Pos | null = null;
+          for (const turn of [30, -30, 60, -60, 90, -90]) {
+            const a = heading + (turn * Math.PI) / 180, p = { col: from.col + Math.cos(a) * len, row: from.row + Math.sin(a) * len };
+            if (taken(p) || !clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: p.col + 0.5, y: p.row + 0.5 }, walls)) continue;
+            if (!best || dist(p, them) < dist(best, them)) best = p;
+          }
+          to = best ?? from;
+        }
+        return { col: Math.round(to.col * 20) / 20, row: Math.round(to.row * 20) / 20 };
       }
       // Evade: of 16 directions (clear of walls), the one ending furthest away.
       let best = from;
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2, to = { col: from.col + Math.cos(a) * b, row: from.row + Math.sin(a) * b };
-        if (clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls) && dist(to, them) > dist(best, them)) best = to;
+        if (!taken(to) && clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls) && dist(to, them) > dist(best, them)) best = to;
       }
       return { col: Math.round(best.col * 20) / 20, row: Math.round(best.row * 20) / 20 };
     }
@@ -161,14 +177,14 @@ export function resolveMovement(
       const toThem = reachableSquares({ col: Math.round(them.col), row: Math.round(them.row) }, 60, walls);
       let best: Pos = from, bestKey = [toThem.get(squareKey(from.col, from.row))?.steps ?? Infinity, dist(from, them)];
       for (const sq of reach.values()) {
-        if (sq.col === Math.round(them.col) && sq.row === Math.round(them.row)) continue; // not onto them
+        if ((sq.col === Math.round(them.col) && sq.row === Math.round(them.row)) || taken(sq)) continue; // not onto them or anyone else
         const k = [toThem.get(squareKey(sq.col, sq.row))?.steps ?? Infinity, dist(sq, them)];
         if (k[0] < bestKey[0] || (k[0] === bestKey[0] && k[1] < bestKey[1] - 1e-9)) [best, bestKey] = [sq, k];
       }
       return { col: best.col, row: best.row };
     }
     let best = { ...from, steps: 0 };
-    for (const s of reach.values()) if (dist(s, them) > dist(best, them) + 1e-9) best = s;
+    for (const s of reach.values()) if (!taken(s) && dist(s, them) > dist(best, them) + 1e-9) best = s;
     return { col: best.col, row: best.row };
   }
 

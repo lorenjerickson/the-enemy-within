@@ -574,6 +574,7 @@ export default function MapView({
   readOnly = false,
   replay = null,
   replayName = null,
+  planTargets = [],
   gmPlans,
   secrets,
   discoveries = [],
@@ -607,6 +608,7 @@ export default function MapView({
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
+  planTargets?: { from: number; to: number; action: string }[]; // planned targeted actions: drawn as lines to the target
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
@@ -1464,6 +1466,40 @@ export default function MapView({
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(f, 0, 0);
         ctx.restore();
+      }
+      // Planned targets: a dashed line from the actor to who they're aiming at, and a ring on the target.
+      if (planTargets.length && !replayFrame) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const at = (id: number) => {
+          const t = state.tokens.find((x) => x.id === id);
+          return t && { x: x0 + (t.col + 0.5) * size, y: y0 + (t.row + 0.5) * size };
+        };
+        for (const l of planTargets) {
+          const a = at(l.from), b = at(l.to);
+          if (!a || !b) continue;
+          const colour = l.action === "attack" ? "239,68,68" : l.action === "pursue" ? "249,115,22" : l.action === "evade" ? "59,130,246" : "168,85,247";
+          ctx.save();
+          ctx.strokeStyle = `rgba(${colour},0.9)`;
+          ctx.lineWidth = 2.5 / k;
+          ctx.setLineDash([7 / k, 5 / k]);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, size * 0.5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.font = `bold ${11 / k}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.lineWidth = 3 / k;
+          ctx.strokeStyle = "rgba(0,0,0,0.7)";
+          const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          ctx.strokeText(l.action, mid.x, mid.y - 4 / k);
+          ctx.fillStyle = `rgb(${colour})`;
+          ctx.fillText(l.action, mid.x, mid.y - 4 / k);
+          ctx.restore();
+        }
       }
       // Movement overlay: reachable squares (grid) or the reachable area (gridless), over the fog, with feet left.
       if (reach) {

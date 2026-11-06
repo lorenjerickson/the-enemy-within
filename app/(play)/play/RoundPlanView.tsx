@@ -36,7 +36,19 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
           </div>
         ))}
       </div>
-      {plan.steps.length === 0 && <p className="text-xs opacity-60">Add steps in order: an action, or a move (click the map).</p>}
+      {plan.steps.length === 0 ? (
+        <p className="text-xs opacity-60">Add steps in order: an action, or a move (click the map).</p>
+      ) : (
+        <ol className="list-inside list-decimal text-xs" data-plan-steps>
+          {plan.steps.map((s, i) => (
+            <li key={i}>
+              {s.kind === "move" ? `Move ${s.feet} ft` : label(s.action)}
+              {s.kind === "action" && s.target && <span className="font-semibold"> → {s.target.name}</span>}
+              <span className="opacity-60"> · {+s.start.toFixed(1)}–{+s.end.toFixed(1)} s</span>
+            </li>
+          ))}
+        </ol>
+      )}
       <div className="flex gap-2">
         <button type="button" className="btn btn-xs" disabled={pending || plan.ready || !plan.steps.length} onClick={onUndo}>Undo last</button>
         <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending} onClick={onReady}>
