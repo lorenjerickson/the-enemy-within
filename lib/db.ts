@@ -306,6 +306,8 @@ addColumn("ambient_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 addColumn("positional_sounds", "volume", "REAL NOT NULL DEFAULT 1"); // 0..1
 db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls'"); // layer renamed
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
+addColumn("actions", "seconds", "REAL NOT NULL DEFAULT 2"); // time it takes in a combat round
+addColumn("actions", "range_ft", "REAL NOT NULL DEFAULT 5"); // how far the target may be (5 = within reach)
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
@@ -748,13 +750,15 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   roll_grants: RollGrant[];
   duration_amount: number;
   duration_unit: DurationUnit;
+  seconds: number; // time it takes in a combat round
+  range_ft: number; // how far away its target may be (5 = within reach)
 }
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -770,15 +774,16 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
       `UPDATE actions SET name = @name, description = @description, roll = @roll, attack = @attack,
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
-         boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit WHERE id = @id`
+         boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
+         seconds = @seconds, range_ft = @range_ft WHERE id = @id`
     ).run({ ...params, id });
   }
 }

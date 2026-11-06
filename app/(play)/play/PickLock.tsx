@@ -8,6 +8,7 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import GearActions from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
@@ -18,7 +19,7 @@ import type { TimedStep } from "./RoundPlanView";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [],
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [],
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -26,6 +27,7 @@ export default function PickLock({
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string }[]; // who they can see, to attack
+  gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
@@ -56,13 +58,13 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {plan && choosing && (
         <TargetPicker
-          title={`Click who to ${label(choosing).toLowerCase()} on the map, or pick:`}
+          title={target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
           targets={targets}
           onCancel={() => setChoosing(null)}
-          onPick={(target) => {
-            const action = choosing;
+          onPick={(picked) => {
+            const action = choosing, use = target?.use;
             setChoosing(null);
-            run(() => planStep({ kind: "action", action, target }));
+            run(() => planStep({ kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}) }));
           }}
         />
       )}
@@ -93,6 +95,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
+      <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode({ action: "attack", tokenId: null, use: g.id, label: g.name })} />
       {!plan && doors.length > 0 && (
         <ul className="space-y-1" data-pick-lock>
           {doors.map((d) => (

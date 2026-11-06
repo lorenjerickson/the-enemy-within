@@ -5,7 +5,7 @@ import type { PlayerActionId } from "@/lib/playerActions";
 
 // Picking a target for a planned action by clicking a token on the map. `tokenId` is set when the GM plans for one
 // of their creatures (null = the player's own character). The panel sets it; the map uses it and clears it.
-export type TargetMode = { action: PlayerActionId; tokenId: number | null } | null;
+export type TargetMode = { action: PlayerActionId; tokenId: number | null; use?: number; label?: string } | null; // use: a gear action (Aimed shot…)
 let mode: TargetMode = null;
 const listeners = new Set<() => void>();
 

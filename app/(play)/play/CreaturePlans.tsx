@@ -9,12 +9,14 @@ import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import GearActions from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
 export interface CreaturePlan {
   tokenId: number;
   name: string;
   plan: { steps: TimedStep[]; used: number; ready: boolean };
+  gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
 }
 
 /** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
@@ -64,16 +66,17 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           />
           {choosing && (
             <TargetPicker
-              title={`Click who to ${label(choosing).toLowerCase()} on the map, or pick:`}
+              title={target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
               targets={targets.filter((t) => t.id !== current.tokenId)}
               onCancel={() => setChoosing(null)}
-              onPick={(target) => {
-                const action = choosing;
+              onPick={(picked) => {
+                const action = choosing, use = target?.use;
                 setChoosing(null);
-                run(() => gmPlanStep(current.tokenId, { kind: "action", action, target }));
+                run(() => gmPlanStep(current.tokenId, { kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}) }));
               }}
             />
           )}
+          <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode({ action: "attack", tokenId: current.tokenId, use: g.id, label: g.name })} />
           {/* The same actions players have: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           <div className="grid grid-cols-4 gap-1">
             {PLAYER_ACTIONS.map((a) => (

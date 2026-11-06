@@ -1,6 +1,9 @@
 import { FEET_PER_SQUARE, clearPath, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
-import { ROUND_SECONDS, timeline, type PlanStep } from "@/lib/roundPlan";
+import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
+
+/** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
+const rangeOf = (step: Extract<PlanStep, { kind: "action" }>) => step.use?.range ?? ACTION_RANGE[step.action];
 import type { Segment } from "@/lib/visibility";
 
 type Pos = { col: number; row: number };
@@ -66,9 +69,9 @@ export interface Replay {
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
 export interface Combatant {
   hp: number;
-  attack: () => { total: number; text: string };
+  attack: (use?: GearAction) => { total: number; text: string };
   defense: () => { total: number; text: string };
-  damage: () => { total: number; text: string };
+  damage: (use?: GearAction) => { total: number; text: string };
 }
 
 /**
@@ -202,10 +205,10 @@ export function resolveMovement(
         const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
         // A ranged action due now on someone out of reach: pursue them first, while that still leaves time to do it.
         const tp = t - 1;
-        const due = acts.get(m.tokenId)!.find((a) => ACTION_RANGE[a.step.action] && a.step.target && !begun.has(a) && !finished.has(a) && a.start <= tp + 1e-9 && tp < a.end);
+        const due = acts.get(m.tokenId)!.find((a) => rangeOf(a.step) && a.step.target && !begun.has(a) && !finished.has(a) && a.start <= tp + 1e-9 && tp < a.end);
         if (due) {
           const them = where(due.step.target!.id);
-          if (them && !down.has(due.step.target!.id) && !inReach(here, them, ACTION_RANGE[due.step.action])) {
+          if (them && !down.has(due.step.target!.id) && !inReach(here, them, rangeOf(due.step))) {
             if (ROUND_SECONDS - sec >= due.end - due.start - 1e-9) {
               autoPursue.add(m.tokenId);
               if (!closingIn.has(m.tokenId)) log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
@@ -292,17 +295,18 @@ export function resolveMovement(
         say(`${m.name}'s attack fails: no target.`);
       } else if (down.has(target.id)) {
         say(`${m.name}'s attack fails: ${target.name} is already down.`);
-      } else if (!inReach(pos.get(m.tokenId)!, at, ACTION_RANGE.attack)) {
+      } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step))) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
       } else {
-        const a = me.attack(), d = them.defense();
-        if (a.total < d.total) say(`${m.name} attacks ${target.name}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
+        const a = me.attack(step.use), d = them.defense();
+        const how = step.use ? ` (${step.use.name})` : "";
+        if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
         else {
-          const dmg = me.damage();
+          const dmg = me.damage(step.use);
           const left = Math.max(0, hp.get(target.id)! - dmg.total);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
-          say(`${m.name} attacks ${target.name}: ${a.total} vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
+          say(`${m.name} attacks ${target.name}${how}: ${a.total} vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
           if (left <= 0) {
             down.add(target.id);
             say(`${target.name} is down.`);

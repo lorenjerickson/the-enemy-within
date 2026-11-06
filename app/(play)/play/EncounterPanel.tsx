@@ -2,6 +2,7 @@ import { getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, ge
 import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
+import { gearActions } from "@/lib/combat";
 import RoundScrubber from "./RoundScrubber";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
@@ -49,7 +50,7 @@ export default function EncounterPanel() {
               .filter((o) => names.get(o.token_id) && !names.get(o.token_id)!.player)
               .flatMap((o) => {
                 const v = planView(o.token_id);
-                return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready } }] : [];
+                return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: gearActions(o.token_id) }] : [];
               })}
           />
           <form action={resolveRound} className="space-y-1">

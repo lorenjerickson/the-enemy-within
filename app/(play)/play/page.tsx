@@ -19,6 +19,7 @@ import EncounterPanel from "./EncounterPanel";
 import LocationsPanel from "./LocationsPanel";
 import { planEnd, timeline } from "@/lib/roundPlan";
 import { planView } from "@/lib/roundPlanServer";
+import { gearActions } from "@/lib/combat";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
@@ -136,7 +137,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock gear={me ? gearActions(me.token_id) : []} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

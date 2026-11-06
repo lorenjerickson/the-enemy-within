@@ -17,6 +17,8 @@ function summary(a: Action): string {
     ...a.boosts.map((b) => `${b.value} ${targetLabel(b.target)}`),
     ...a.roll_grants.map((g) => `${g.mode} on ${rollKindLabel(g.roll)}`),
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
+    `${a.seconds} s`,
+    a.range_ft > 5 ? `range ${a.range_ft} ft` : "reach",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -44,6 +46,16 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
       <label className="flex items-center gap-2 text-sm">
         <input name="split" type="checkbox" defaultChecked={!!initial?.split} className="checkbox checkbox-sm" />
         Split damage evenly across the area
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        Takes
+        <input name="seconds" type="number" min="0.5" max="6" step="0.5" defaultValue={initial?.seconds ?? 2} className="input input-sm w-20" />
+        seconds of a round
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        Range
+        <input name="range_ft" type="number" min="5" step="5" defaultValue={initial?.range_ft ?? 5} className="input input-sm w-24" />
+        ft (5 = within reach)
       </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       <div className="col-span-2">

@@ -9,14 +9,26 @@ export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
 };
 
 /** One step of a round plan, in the order declared. */
+/** An action from someone's gear (an item's or a creature's own, e.g. Aimed shot or Bite), as a plan needs it. */
+export interface GearAction {
+  id: number;
+  name: string;
+  seconds: number;
+  range: number; // squares (1 = within reach)
+  attack: string | null; // to-hit modifier
+  damage: string | null;
+  roll: "normal" | "advantage" | "disadvantage";
+}
+
 export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string } }; // attacks have a target
+  // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction };
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
   if (step.kind === "move") return walkingFeet > 0 ? Math.round((step.feet / (walkingFeet / ROUND_SECONDS)) * 10) / 10 : Infinity;
-  return ACTION_SECONDS[step.action] ?? 1;
+  return step.use?.seconds ?? ACTION_SECONDS[step.action] ?? 1;
 }
 
 /** The plan laid out in time: when each step starts and ends, and the seconds used. */

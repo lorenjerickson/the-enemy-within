@@ -1028,7 +1028,7 @@ export default function MapView({
       const m = targetMode;
       setTargetMode(null);
       startTransition(async () => {
-        const step = { kind: "action" as const, action: m.action, target: hit.id };
+        const step = { kind: "action" as const, action: m.action, target: hit.id, ...(m.use !== undefined ? { use: m.use } : {}) };
         const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
         if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
       });
@@ -1748,7 +1748,7 @@ export default function MapView({
                 className="absolute top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-box bg-warning px-3 py-2 text-sm text-warning-content shadow"
                 style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
               >
-                Click who to {targetMode.action}
+                {targetMode.label ? `${targetMode.label}: click the target` : `Click who to ${targetMode.action}`}
                 <button type="button" className="btn btn-xs" onClick={() => setTargetMode(null)}>Cancel</button>
               </div>
             )}
