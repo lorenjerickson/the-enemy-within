@@ -75,25 +75,9 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
   const damage_type = text("damage_type") as DamageType | "";
   if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
 
-  const values = formData.getAll("boost_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
-  const boosts: Boost[] = formData.getAll("boost_target").flatMap((t, i): Boost[] => {
-    const target = String(t);
-    let value = values[i] ?? "";
-    if (!target || !value) return []; // incomplete rows are dropped
-    if (!isModifierTarget(target)) throw new Error("Invalid boost target");
-    if (!isModifierFormula(value)) throw new Error("Invalid boost value");
-    if (/^\d/.test(value)) value = `+${value}`;
-    return [{ target, value }];
-  });
-  const modes = formData.getAll("grant_mode").map(String);
-  const roll_grants: RollGrant[] = formData.getAll("grant_roll").flatMap((r, i): RollGrant[] => {
-    const roll = String(r);
-    const mode = modes[i];
-    if (!roll || !mode) return [];
-    if (!isRollKind(roll)) throw new Error("Invalid roll kind");
-    if (mode !== "advantage" && mode !== "disadvantage") throw new Error("Invalid roll mode");
-    return [{ roll, mode }];
-  });
+  // Boosts and roll effects for whoever uses the action, and (fields prefixed "target_") for who it's used on.
+  const boosts = [...parseBoosts(formData, "", "self"), ...parseBoosts(formData, "target_", "target")];
+  const roll_grants = [...parseGrants(formData, "", "self"), ...parseGrants(formData, "target_", "target")];
   const duration_unit = text("duration_unit") as DurationUnit;
   if (!DURATION_UNITS.includes(duration_unit)) throw new Error("Invalid duration unit");
   const duration_amount = Math.max(1, Math.round(Number(formData.get("duration_amount")) || 1));
@@ -134,5 +118,31 @@ function areaFields(formData: FormData) {
     save_dc: Math.max(1, Math.round(Number(formData.get("save_dc")) || 12)),
     save_attr: (ATTRIBUTES as readonly string[]).includes(attr) ? (attr as Attribute) : ("agility" as const),
     save_half: (formData.get("save_half") === "on" ? 1 : 0) as 0 | 1,
+    area_lasts: (formData.get("area_lasts") === "on" ? 1 : 0) as 0 | 1,
   };
+}
+
+function parseBoosts(formData: FormData, prefix: string, on: "self" | "target"): Boost[] {
+  const values = formData.getAll(`${prefix}boost_value`).map((v) => String(v).toLowerCase().replace(/\s/g, ""));
+  return formData.getAll(`${prefix}boost_target`).flatMap((t, i): Boost[] => {
+    const target = String(t);
+    let value = values[i] ?? "";
+    if (!target || !value) return []; // incomplete rows are dropped
+    if (!isModifierTarget(target)) throw new Error("Invalid boost target");
+    if (!isModifierFormula(value)) throw new Error("Invalid boost value");
+    if (/^\d/.test(value)) value = `+${value}`;
+    return [{ target, value, on }];
+  });
+}
+
+function parseGrants(formData: FormData, prefix: string, on: "self" | "target"): RollGrant[] {
+  const modes = formData.getAll(`${prefix}grant_mode`).map(String);
+  return formData.getAll(`${prefix}grant_roll`).flatMap((r, i): RollGrant[] => {
+    const roll = String(r);
+    const mode = modes[i];
+    if (!roll || !mode) return [];
+    if (!isRollKind(roll)) throw new Error("Invalid roll kind");
+    if (mode !== "advantage" && mode !== "disadvantage") throw new Error("Invalid roll mode");
+    return [{ roll, mode, on }];
+  });
 }

@@ -15,6 +15,7 @@ export type DamageType = (typeof DAMAGE_TYPES)[number];
 export interface Boost {
   target: ModifierTarget;
   value: string; // signed number or dice
+  on?: "self" | "target"; // who gets it: whoever uses the action (default), or who it's used on
 }
 
 /** "" = instant. Clock units, then units relative to play ("until the next turn / long rest"). */
@@ -28,11 +29,12 @@ export function formatDuration(amount: number, unit: DurationUnit): string {
 }
 
 /** Rolls an action can give advantage/disadvantage on. */
-export type RollKind = `save:${Attribute}` | `check:${Attribute}` | `skill:${string}`;
+export type RollKind = "attack" | "attacked" | `save:${Attribute}` | `check:${Attribute}` | `skill:${string}`;
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 export const ROLL_KIND_GROUPS: [string, [RollKind, string][]][] = [
+  ["Combat", [["attack", "Their attack rolls"], ["attacked", "Attack rolls against them"]]],
   ["Saving throws", ATTRIBUTES.map((a) => [`save:${a}`, `${cap(a)} save`])],
   ["Ability checks", ATTRIBUTES.map((a) => [`check:${a}`, `${cap(a)} check`])],
   ["Skill checks", SKILLS.map((s) => [`skill:${s}`, `${cap(s)} check`])],
@@ -45,4 +47,5 @@ export const rollKindLabel = (k: RollKind) => ROLL_KIND_LABELS.get(k) ?? k;
 export interface RollGrant {
   roll: RollKind;
   mode: "advantage" | "disadvantage";
+  on?: "self" | "target"; // who gets it: whoever uses the action (default), or who it's used on
 }

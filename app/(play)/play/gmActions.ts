@@ -5,7 +5,7 @@ import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
   getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
-  listLastingAreas, addLastingArea, removeLastingArea, getGameTime, setGameTime,
+  listLastingAreas, addLastingArea, addTokenStatus, removeLastingArea, getGameTime, setGameTime,
 } from "@/lib/db";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
@@ -104,10 +104,11 @@ export async function resolveRound() {
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
   const lasting = listLastingAreas(levelId);
-  const { final, hp, log, frames, created } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
+  const { final, hp, log, frames, created, statuses } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
   const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
   for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
+  for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
   for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {

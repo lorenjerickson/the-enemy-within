@@ -1,4 +1,5 @@
 import type { AreaSpec } from "@/lib/aoe";
+import type { ActionStatuses } from "@/lib/status";
 import { CHASE_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 
 /** A combat round lasts six seconds; everyone plans theirs at once (see the project's encounters doc). */
@@ -20,6 +21,7 @@ export interface GearAction {
   damage: string | null;
   roll: "normal" | "advantage" | "disadvantage";
   area?: AreaSpec; // an area attack: aimed at a spot, everyone caught rolls a save
+  statuses?: ActionStatuses; // what it leaves on whoever uses it and on its target, and for how long
 }
 
 export type PlanStep =

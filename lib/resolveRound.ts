@@ -1,6 +1,7 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice } from "@/lib/dice";
+import { describeStatus, type Status } from "@/lib/status";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
@@ -74,7 +75,8 @@ export interface Replay {
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
 export interface Combatant {
   hp: number;
-  attack: (use?: GearAction) => { total: number; text: string };
+  attack: (use?: GearAction, against?: Combatant) => { total: number; text: string };
+  statuses?: Status[]; // what actions left on them; a status added this round counts straight away
   defense: () => { total: number; text: string };
   damage: (use?: GearAction) => { total: number; text: string };
   save?: (attr: Attribute) => { total: number; text: string };
@@ -98,6 +100,15 @@ export function resolveMovement(
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
 ) {
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
+  const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
+  const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
+  /** Leaves a status on someone (for the rest of this round too), and logs it. */
+  const leave = (id: number, status: Status | undefined, minutes: number, sec: number) => {
+    if (!status || down.has(id)) return;
+    fighters.get(id)?.statuses?.push(status);
+    statuses.push({ tokenId: id, status, minutes });
+    log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
+  };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
   const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number): AreaHit[] => {
     const hits: AreaHit[] = [];
@@ -334,6 +345,12 @@ export function resolveMovement(
           say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
           hits = catchIn(at, area, dmg.total, m.tokenId, sec);
           if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
+          // Statuses: on the user, and on each one caught who failed the save.
+          const st = step.use.statuses;
+          if (st) {
+            leave(m.tokenId, st.self, st.minutes, sec);
+            for (const h of hits) if (h.outcome === "hit") leave(h.id, st.target, st.minutes, sec);
+          }
         }
         // A lasting one stays on the map, catching whoever is in it at the end of each round.
         if (area.minutes) {
@@ -353,7 +370,7 @@ export function resolveMovement(
       } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step))) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
       } else {
-        const a = me.attack(step.use), d = them.defense();
+        const a = me.attack(step.use, them), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
@@ -364,13 +381,15 @@ export function resolveMovement(
           const left = Math.max(0, hp.get(target.id)! - dmg.total);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
-          say(`${m.name} attacks ${target.name}${how}: ${a.total} vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
+          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             down.add(target.id);
             say(`${target.name} is down.`);
           }
+          leave(target.id, step.use?.statuses?.target, step.use?.statuses?.minutes ?? 0, sec); // on a hit
         }
+        leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec); // whether it hit or not
       }
     }
     // Evade / Pursue end once the two are within 5 ft (or the target is down).
@@ -402,5 +421,5 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created };
+  return { final: pos, hp, log, frames, created, statuses };
 }

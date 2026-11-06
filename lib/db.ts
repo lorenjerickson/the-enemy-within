@@ -2,6 +2,7 @@ import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
 import type { Fx } from "@/lib/vfx";
+import type { Status } from "@/lib/status";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
@@ -315,6 +316,7 @@ addColumn("actions", "area_ft", "REAL NOT NULL DEFAULT 0"); // circle radius, or
 addColumn("actions", "save_dc", "INTEGER NOT NULL DEFAULT 12"); // an area's save
 addColumn("actions", "save_attr", "TEXT NOT NULL DEFAULT 'agility'");
 addColumn("actions", "save_half", "INTEGER NOT NULL DEFAULT 1"); // 1 = a successful save takes half damage, 0 = none
+addColumn("actions", "area_lasts", "INTEGER NOT NULL DEFAULT 0"); // 1 = the area stays on the map for the duration
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
@@ -768,13 +770,14 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   save_dc: number;
   save_attr: Attribute;
   save_half: 0 | 1;
+  area_lasts: 0 | 1; // the area stays on the map for the action's duration
 }
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -790,9 +793,9 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
@@ -800,7 +803,7 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
          seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
-         save_attr = @save_attr, save_half = @save_half WHERE id = @id`
+         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts WHERE id = @id`
     ).run({ ...params, id });
   }
 }
@@ -1860,6 +1863,36 @@ export function listLastingAreas(levelId: number): LastingArea[] {
 
 export function removeLastingArea(id: number): void {
   db.prepare("DELETE FROM lasting_areas WHERE id = ?").run(id);
+}
+
+// ---------- Statuses ----------
+
+// What an action left on a token for a while (disadvantage on its attacks, +2 defense); gone once game time passes `ends`.
+db.exec(`CREATE TABLE IF NOT EXISTS token_statuses (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  ends REAL NOT NULL,
+  status TEXT NOT NULL
+)`);
+
+export function addTokenStatus(levelId: number, tokenId: number, status: Status, ends: number): void {
+  db.prepare("DELETE FROM token_statuses WHERE ends <= ?").run(getGameTime());
+  db.prepare("INSERT INTO token_statuses (level_id, token_id, ends, status) VALUES (?, ?, ?, ?)").run(levelId, tokenId, ends, JSON.stringify(status));
+}
+
+/** Statuses in effect on a level's tokens, by token id. */
+export function listTokenStatuses(levelId: number): Map<number, (Status & { id: number; ends: number })[]> {
+  const rows = db
+    .prepare<[number, number], { id: number; token_id: number; ends: number; status: string }>("SELECT id, token_id, ends, status FROM token_statuses WHERE level_id = ? AND ends > ? ORDER BY id")
+    .all(levelId, getGameTime());
+  const out = new Map<number, (Status & { id: number; ends: number })[]>();
+  for (const r of rows) out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, ends: r.ends, ...JSON.parse(r.status) }]);
+  return out;
+}
+
+export function removeTokenStatus(id: number): void {
+  db.prepare("DELETE FROM token_statuses WHERE id = ?").run(id);
 }
 
 // ---------- Effects played by scripts ----------

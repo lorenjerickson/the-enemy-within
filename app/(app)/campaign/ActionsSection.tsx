@@ -16,8 +16,9 @@ function summary(a: Action): string {
     a.attack && `to hit ${a.attack}`,
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.area_shape && `${describeArea({ shape: a.area_shape, ft: a.area_ft })}, ${a.save_attr} save DC ${a.save_dc}${a.save_half ? " (half on a save)" : ""}`,
-    ...a.boosts.map((b) => `${b.value} ${targetLabel(b.target)}`),
-    ...a.roll_grants.map((g) => `${g.mode} on ${rollKindLabel(g.roll)}`),
+    ...a.boosts.map((b) => `${b.on === "target" ? "target: " : ""}${b.value} ${targetLabel(b.target)}`),
+    ...a.roll_grants.map((g) => `${g.on === "target" ? "target: " : ""}${g.mode} on ${rollKindLabel(g.roll)}`),
+    a.area_shape && a.area_lasts ? "stays" : "",
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
     a.range_ft > 5 ? `range ${a.range_ft} ft` : "reach",
@@ -65,7 +66,11 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
           <input name="save_half" type="checkbox" defaultChecked={initial ? !!initial.save_half : true} className="checkbox checkbox-sm" />
           half damage on a save
         </label>
-        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. With a duration below (rounds, minutes…), the area stays on the map that long, and whoever is in it at the end of each round rolls the save again.</span>
+        <label className="flex items-center gap-1">
+          <input name="area_lasts" type="checkbox" defaultChecked={!!initial?.area_lasts} className="checkbox checkbox-sm" />
+          stays on the map for the duration
+        </label>
+        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), whoever is in it at the end of each round rolls the save again.</span>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
         Takes
@@ -78,31 +83,36 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
         ft (5 = within reach)
       </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
-      <div className="col-span-2">
-        <PairListInput
-          title="Temporary boosts"
-          addLabel="+ Add boost"
-          firstName="boost_target"
-          firstPlaceholder="Boosts…"
-          groups={MODIFIER_TARGET_GROUPS}
-          secondName="boost_value"
-          secondPattern={MODIFIER_PATTERN}
-          secondPlaceholder="+2 or 1d4"
-          initial={initial?.boosts.map((b) => [b.target, b.value])}
-        />
-      </div>
-      <div className="col-span-2">
-        <PairListInput
-          title="Advantage / disadvantage on rolls"
-          addLabel="+ Add roll effect"
-          firstName="grant_roll"
-          firstPlaceholder="Roll…"
-          groups={ROLL_KIND_GROUPS}
-          secondName="grant_mode"
-          secondOptions={["advantage", "disadvantage"]}
-          initial={initial?.roll_grants.map((g) => [g.roll, g.mode])}
-        />
-      </div>
+      {(["self", "target"] as const).map((on) => {
+        const p = on === "target" ? "target_" : "";
+        const mine = <T extends { on?: "self" | "target" }>(xs: T[] | undefined) => (xs ?? []).filter((x) => (x.on ?? "self") === on);
+        return (
+          <fieldset key={on} className="col-span-2 space-y-2 rounded-box border border-base-300 p-2" data-effects-on={on}>
+            <legend className="px-1 text-sm font-semibold">{on === "self" ? "On whoever uses it" : "On the target (on a hit, or a failed save)"}</legend>
+            <PairListInput
+              title="Temporary boosts"
+              addLabel="+ Add boost"
+              firstName={`${p}boost_target`}
+              firstPlaceholder="Boosts…"
+              groups={MODIFIER_TARGET_GROUPS}
+              secondName={`${p}boost_value`}
+              secondPattern={MODIFIER_PATTERN}
+              secondPlaceholder="+2 or 1d4"
+              initial={mine(initial?.boosts).map((b) => [b.target, b.value])}
+            />
+            <PairListInput
+              title="Advantage / disadvantage on rolls"
+              addLabel="+ Add roll effect"
+              firstName={`${p}grant_roll`}
+              firstPlaceholder="Roll…"
+              groups={ROLL_KIND_GROUPS}
+              secondName={`${p}grant_mode`}
+              secondOptions={["advantage", "disadvantage"]}
+              initial={mine(initial?.roll_grants).map((g) => [g.roll, g.mode])}
+            />
+          </fieldset>
+        );
+      })}
       <div className="col-span-2 flex items-center gap-2">
         <span className="text-sm font-semibold">Duration</span>
         <input name="duration_amount" type="number" min="1" defaultValue={initial?.duration_amount ?? 1} className="input input-sm w-20" />
@@ -111,7 +121,7 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
             <option key={u} value={u}>{u ? `${u}(s)` : "Instant"}</option>
           ))}
         </select>
-        <span className="text-xs opacity-60">e.g. 1 long rest = until the next long rest</span>
+        <span className="text-xs opacity-60">how long its boosts and roll effects last (1 round = until the end of the next round)</span>
       </div>
       <div className="col-span-2">
         <button className="btn btn-primary btn-sm">Save action</button>

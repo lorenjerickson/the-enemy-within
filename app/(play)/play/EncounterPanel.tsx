@@ -1,8 +1,9 @@
-import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels, listLastingAreas, getGameTime } from "@/lib/db";
+import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses } from "@/lib/db";
 import { endEncounter, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
 import TurnOrder from "./TurnOrder";
+import { describeStatus } from "@/lib/status";
 import { gearActions } from "@/lib/combat";
 import RoundScrubber from "./RoundScrubber";
 
@@ -13,6 +14,7 @@ export default function EncounterPanel() {
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
   const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);
   const down = levelId === undefined ? new Set<number>() : downTokens(levelId); // sit out planning until revived
+  const statuses: ReturnType<typeof listTokenStatuses> = levelId === undefined ? new Map() : listTokenStatuses(levelId);
   // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
   const labels = levelId === undefined ? new Map<number, string>() : tokenLabels(levelId);
   const names = new Map(
@@ -31,7 +33,7 @@ export default function EncounterPanel() {
             rows={[
               ...enc.order.map((o, i) => ({ tokenId: o.token_id, initiative: o.initiative, turn: i === enc.turn })),
               ...waiting.map((id) => ({ tokenId: id, initiative: null, turn: false })),
-            ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId) }))}
+            ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId), statuses: (statuses.get(r.tokenId) ?? []).map((s) => ({ source: s.source, text: describeStatus(s) })) }))}
           />
           <CreaturePlans
             targets={[...names].map(([id, n]) => ({ id, name: n.name }))}

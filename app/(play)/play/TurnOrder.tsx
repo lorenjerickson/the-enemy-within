@@ -11,6 +11,7 @@ export interface TurnRow {
   down: boolean;
   ready: boolean;
   turn: boolean;
+  statuses: { source: string; text: string }[]; // what actions left on them (Blinding flash: disadvantage on attack rolls)
 }
 
 /**
@@ -39,6 +40,9 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
             <span className="flex-1">
               {r.name}
               {r.player && <span className="ml-1 text-xs opacity-60">({r.player})</span>}
+              {r.statuses.map((s, i) => (
+                <span key={i} className="badge badge-xs badge-warning ml-1" title={s.text} data-status>{s.source}</span>
+              ))}
             </span>
             {r.initiative === null && <span className="text-xs">rolling</span>}
             {r.down ? (
