@@ -1,6 +1,6 @@
 import { downTokens, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
-import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import type { PlayerActionId } from "@/lib/playerActions";
 import { cannotAdd, planEnd, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 import { gearActions } from "@/lib/combat";
@@ -26,11 +26,23 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     const feetLeft = (timeline(p.plan, p.walking).left * p.walking) / 6;
     const walls = movementBlockers(listStructures(p.tok.level_id));
     if (isGridlessLevel(p.tok.level_id)) {
+      // Straight there, or by the shortest way round walls in the way (a move per leg).
       const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
-      const feet = Math.round(Math.hypot(to.col - from.col, to.row - from.row) * FEET_PER_SQUARE * 10) / 10;
-      if (feet > feetLeft + 0.05) return "Can't get there in time";
-      if (!clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls)) return "Something's in the way (go around it in two moves)";
-      add = { kind: "move", to, feet };
+      const path = shortestPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls, () => true);
+      if (!path) return "Something's in the way";
+      const legs = path.slice(1).map((pt, i) => {
+        const a = path[i], end = i === path.length - 2 ? to : { col: snapHeight(pt.x - 0.5), row: snapHeight(pt.y - 0.5) };
+        return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10 };
+      });
+      if (legs.reduce((sum, l) => sum + l.feet, 0) > feetLeft + 0.05) return "Can't get there in time";
+      let plan = p.plan;
+      for (const leg of legs) {
+        const why = cannotAdd(plan, leg, p.walking);
+        if (why) return why;
+        plan = [...plan, leg];
+      }
+      saveRoundPlan(p.tok.level_id, p.tok.token_id, plan, false);
+      return null;
     } else {
       const sq = reachableSquares(from, feetLeft / FEET_PER_SQUARE, walls).get(squareKey(Math.round(Number(step.col)), Math.round(Number(step.row))));
       if (!sq || !sq.steps) return "Can't get there in time";

@@ -21,7 +21,7 @@ import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
-import { FEET_PER_SQUARE, pointToSegment, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, pointToSegment, reachPolygons, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -926,7 +926,7 @@ export default function MapView({
   // Recomputed only when the walls or the spots they've stood on change (not on every redraw or page refresh, which
   // hand over new arrays): one visibility polygon per spot adds up over a campaign.
   const fogOn = !!fog && mapImage.perspective !== "portrait"; // side-on maps have no fog
-  const wallsKey = fogOn ? optimisticStructures.map((w) => `${w.kind}${w.open}${w.x1},${w.y1},${w.x2},${w.y2}`).join("|") : "";
+  const wallsKey = optimisticStructures.map((w) => `${w.kind}${w.open}${w.x1},${w.y1},${w.x2},${w.y2}`).join("|"); // changes only when walls do
   const fogWalls = useMemo(() => blockingSegments(optimisticStructures), [wallsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const exploredKey = fogOn ? JSON.stringify(fog!.explored) : "";
   const explored = useMemo(
@@ -947,17 +947,25 @@ export default function MapView({
   // The GM planning a creature's round: its reach from where its plan leaves it.
   const gmSel = useGmPlanToken();
   const gmPlan = !readOnly && gmSel !== null && moveOn ? gmPlans?.[gmSel] : undefined; // only while Move is on
-  const reach = useMemo(() => {
+  const reachAt = useMemo(() => {
     const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false } : moveOn ? fog?.move : null;
     if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
     const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
+    return { from: { col: t.col, row: t.row }, feet: m.feet, at: t, token };
+  }, [moveOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens]);
+  // The area itself, worked out only when where they start, how far they can go or the walls change (it's costly on
+  // gridless maps: the way round each wall end counts too).
+  const reachFromKey = reachAt ? `${reachAt.from.col},${reachAt.from.row},${reachAt.feet}` : "";
+  const reachArea = useMemo(() => {
+    if (!reachAt) return null;
     const walls = movementBlockers(optimisticStructures); // windows block movement too
-    const squares = m.feet / FEET_PER_SQUARE;
-    if (gridless) return { kind: "area" as const, poly: visibilityPolygon({ x: t.col + 0.5, y: t.row + 0.5 }, squares, walls), feet: m.feet, at: t, token };
-    return { kind: "squares" as const, cells: reachableSquares({ col: t.col, row: t.row }, squares, walls), feet: m.feet, at: t, token };
-  }, [moveOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens, optimisticStructures, gridless]);
+    const squares = reachAt.feet / FEET_PER_SQUARE, { col, row } = reachAt.from;
+    if (gridless) return { kind: "area" as const, polys: reachPolygons({ x: col + 0.5, y: row + 0.5 }, squares, walls) };
+    return { kind: "squares" as const, cells: reachableSquares({ col, row }, squares, walls) };
+  }, [reachFromKey, wallsKey, gridless]); // eslint-disable-line react-hooks/exhaustive-deps
+  const reach = reachAt && reachArea ? { ...reachAt, ...reachArea } : null;
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   const [walking, setWalking] = useState<{ id: number; route: Point[]; started: number } | null>(null);
   const WALK_MS = 140; // per square (or per unit on gridless maps)
@@ -1001,7 +1009,10 @@ export default function MapView({
     if (!reach) return;
     // In an encounter a click plans the move (it happens when the round resolves).
     const col = reach.kind === "squares" ? Math.floor(gx) : snapHeight(gx - 0.5), row = reach.kind === "squares" ? Math.floor(gy) : snapHeight(gy - 0.5);
-    if (reach.kind === "squares" ? !reach.cells.get(squareKey(col, row))?.steps : !insidePolygon({ x: gx, y: gy }, reach.poly)) return;
+    if (reach.kind === "squares" ? !reach.cells.get(squareKey(col, row))?.steps : !reach.polys.some((poly) => insidePolygon({ x: gx, y: gy }, poly))) {
+      setControlResult({ label: "Move", ok: false, text: `Out of reach: ${Math.floor(reach.feet)} ft of movement left this round` });
+      return;
+    }
     startTransition(async () => {
       const r = gmPlan && gmSel !== null ? await gmPlanStep(gmSel, { kind: "move", col, row }) : await planStep({ kind: "move", col, row });
       if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
@@ -1845,14 +1856,14 @@ export default function MapView({
             ctx.strokeRect(r.x, r.y, r.w, r.h);
           }
         } else {
+          // The union of the polygons (same winding, so overlaps fill once); no outline, which would cut across it.
           const p = new Path2D();
-          reach.poly.forEach((pt, i) => (i ? p.lineTo(x0 + pt.x * size, y0 + pt.y * size) : p.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
-          p.closePath();
-          ctx.fill(p);
-          ctx.lineWidth = 2 / k;
-          ctx.setLineDash([6 / k, 4 / k]);
-          ctx.stroke(p);
-          ctx.setLineDash([]);
+          for (const poly of reach.polys) {
+            poly.forEach((pt, i) => (i ? p.lineTo(x0 + pt.x * size, y0 + pt.y * size) : p.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
+            p.closePath();
+          }
+          ctx.fillStyle = "rgba(56,189,248,0.28)";
+          ctx.fill(p, "nonzero");
         }
         // Where the plan has them so far: a dashed ring, joined to the token.
         if (reach.at.col !== reach.token.col || reach.at.row !== reach.token.row) {

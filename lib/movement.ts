@@ -1,4 +1,4 @@
-import type { Point, Segment } from "@/lib/visibility";
+import { visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 
 /** Feet per grid square (and per unit of distance on gridless maps), as in D&D. */
 export const FEET_PER_SQUARE = 5;
@@ -154,4 +154,35 @@ export function shortestPath(a: Point, b: Point, walls: Segment[], allowed: (p: 
   const path: Point[] = [];
   for (let i = 1; i >= 0; i = from[i]) path.unshift(nodes[i]);
   return path;
+}
+
+/**
+ * Gridless maps: where a token can get to within `radius` (grid units) by walking around walls and closed doors, as
+ * polygons whose union is the area: what it can see within the radius, plus the same from each wall end it can walk
+ * to (with what distance is left). The token's centre goes where the area says; the move itself is checked with
+ * clearPath / shortestPath (which also keep its body clear of walls).
+ */
+export function reachPolygons(start: Point, radius: number, walls: Segment[]): Point[][] {
+  const OFF = BODY + 0.15;
+  const nodes: Point[] = [start];
+  for (const w of walls) for (const p of [w.a, w.b]) for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const n = { x: p.x + dx * OFF, y: p.y + dy * OFF };
+    if (Math.hypot(n.x - start.x, n.y - start.y) < radius) nodes.push(n);
+  }
+  // Dijkstra from the start over straight, clear hops.
+  const dist = nodes.map(() => Infinity), done = nodes.map(() => false);
+  dist[0] = 0;
+  for (;;) {
+    let u = -1;
+    for (let i = 0; i < nodes.length; i++) if (!done[i] && dist[i] < radius && (u < 0 || dist[i] < dist[u])) u = i;
+    if (u < 0) break;
+    done[u] = true;
+    for (let v = 0; v < nodes.length; v++) {
+      if (done[v]) continue;
+      const d = dist[u] + Math.hypot(nodes[v].x - nodes[u].x, nodes[v].y - nodes[u].y);
+      if (d < dist[v] && d < radius && clearPath(nodes[u], nodes[v], walls)) dist[v] = d;
+    }
+  }
+  // Only wall ends that open up somewhere new are worth a polygon of their own (the start's covers the rest).
+  return nodes.flatMap((n, i) => (i === 0 || (done[i] && radius - dist[i] > 0.25) ? [visibilityPolygon(n, radius - dist[i], walls)] : []));
 }
