@@ -1094,10 +1094,13 @@ export function getTokenLevel(id: number): number | undefined {
   return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(id)?.level_id;
 }
 
-/** Places a character on a level. A character exists once, so any token it already has (on any level) is removed. */
+/**
+ * Places a character on a level. A character can have tokens in several locations at once, but one per level:
+ * placing it again on the same level moves that token.
+ */
 export function placeCharacterToken(levelId: number, characterId: number, col: number, row: number): number {
   return db.transaction(() => {
-    db.prepare<[number]>("DELETE FROM map_tokens WHERE character_id = ?").run(characterId);
+    db.prepare<[number, number]>("DELETE FROM map_tokens WHERE character_id = ? AND level_id = ?").run(characterId, levelId);
     const id = Number(
       db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, character_id, col, row) VALUES (?, ?, ?, ?)").run(
         levelId, characterId, col, row
@@ -1365,13 +1368,13 @@ export function getDoor(id: number): (MapStructure & { level_id: number }) | und
     .get(id);
 }
 
-/** A player's character token: where it stands. */
+/** A player's character token on the map they're seeing (see getPlayerTokenLevelId). */
 export function getPlayerToken(playerId: number): { token_id: number; character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number } | undefined {
   return db
-    .prepare<[number], { token_id: number; character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number }>(
-      "SELECT t.id AS token_id, c.id AS character_id, c.name, c.attributes, c.movement, t.moved, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+    .prepare<[number, number], { token_id: number; character_id: number; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number }>(
+      "SELECT t.id AS token_id, c.id AS character_id, c.name, c.attributes, c.movement, t.moved, t.level_id, t.col, t.row FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? AND t.level_id = ? ORDER BY t.id DESC LIMIT 1"
     )
-    .get(playerId);
+    .get(playerId, getPlayerTokenLevelId(playerId) ?? -1); // the token on the map they're seeing
 }
 
 /** A GM-only sticky note on the map. */
@@ -1793,12 +1796,19 @@ export function getCurrentLevelId(): number | undefined {
 }
 
 /** The map level a player's character token is on, if the GM has placed it. */
+/**
+ * The map a player sees: the GM's active location if their character has a token there, otherwise the level of
+ * their most recently placed token. (A character can have tokens in several locations at once.)
+ */
 export function getPlayerTokenLevelId(playerId: number): number | undefined {
-  return db
+  const levels = db
     .prepare<[number], { level_id: number }>(
-      "SELECT t.level_id FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? ORDER BY t.id LIMIT 1"
+      "SELECT t.level_id FROM map_tokens t JOIN characters c ON c.id = t.character_id WHERE c.player_id = ? GROUP BY t.level_id ORDER BY MAX(t.id) DESC"
     )
-    .get(playerId)?.level_id;
+    .all(playerId)
+    .map((r) => r.level_id);
+  const active = getGmLevelId();
+  return active !== undefined && levels.includes(active) ? active : levels[0];
 }
 
 // ---------- Pings ----------
@@ -2042,11 +2052,11 @@ export function getGmLevelId(): number | undefined {
   return loaded ?? getCurrentLevelId();
 }
 
-/** Every player's character and where its token is (location and level), or nowhere yet. */
-export function listPlayerPlaces(): { character: string; player: string; level_id: number | null; location: string | null; level: string | null }[] {
+/** Every player's character and where its tokens are (a row per token: location and level), or nowhere yet. */
+export function listPlayerPlaces(): { character: string; player: string; player_id: number; level_id: number | null; location: string | null; level: string | null }[] {
   return db
-    .prepare<[], { character: string; player: string; level_id: number | null; location: string | null; level: string | null }>(
-      `SELECT c.name AS character, u.name AS player, t.level_id, l.name AS location, m.name AS level
+    .prepare<[], { character: string; player: string; player_id: number; level_id: number | null; location: string | null; level: string | null }>(
+      `SELECT c.name AS character, u.name AS player, u.id AS player_id, t.level_id, l.name AS location, m.name AS level
        FROM characters c JOIN users u ON u.id = c.player_id
        LEFT JOIN map_tokens t ON t.character_id = c.id LEFT JOIN map_levels m ON m.id = t.level_id LEFT JOIN locations l ON l.id = m.location_id
        ORDER BY u.name, c.name`

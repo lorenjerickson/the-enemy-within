@@ -13,6 +13,7 @@ export interface TokenCreature {
   token_overhead: string | null;
   token_side: string | null;
   height: number; // metres
+  player?: string | null; // characters: who plays it (null = nobody), to tell same-named characters apart
 }
 
 /** Tokens layer editor: pick a character or creature from a modal to place, and list / delete placed tokens. */
@@ -67,7 +68,7 @@ export default function TokensEditor({
       <p className="text-xs opacity-60">
         {creature
           ? creature.kind === "character"
-            ? `Click the map to place ${creature.name} (a character appears once, so this moves them if they're already on a map). `
+            ? `Click the map to place ${creature.name} (one token per level: placing them again here moves them; their tokens elsewhere stay). `
             : `Click an empty grid cell to place a ${creature.name} token. `
           : ""}
         Drag any token to move it.
@@ -111,7 +112,7 @@ export default function TokensEditor({
                   >
                     {c.image ? <img src={c.image} alt="" className="aspect-square w-full rounded object-cover" /> : <div className="aspect-square w-full rounded bg-base-300" />}
                     <div className="mt-1 truncate text-sm">{c.name}</div>
-                    <div className="text-xs opacity-60">{c.kind === "character" ? `character · ${c.type}` : c.type}</div>
+                    <div className="text-xs opacity-60">{c.kind === "character" ? (c.player ? `played by ${c.player}` : `character · no player`) : c.type}</div>
                   </button>
                 </li>
               ))}
@@ -158,7 +159,9 @@ export default function TokensEditor({
                 <button type="button" data-token={t.id} onClick={() => onSelect(t.id)} className="flex flex-1 items-center gap-2 text-left">
                   {t.image ? <img src={t.image} alt="" className="size-6 rounded-full object-cover" /> : <div className="size-6 rounded-full bg-base-300" />}
                   <span>{t.name}</span>
-                  <span className="text-xs opacity-60">{t.character_id ? "character" : "creature"} · col {t.col}, row {t.row}</span>
+                  <span className="text-xs opacity-60">
+                    {t.character_id ? (creatures.find((c) => c.kind === "character" && c.id === t.character_id)?.player ? `played by ${creatures.find((c) => c.kind === "character" && c.id === t.character_id)!.player}` : "character · no player") : "creature"} · col {t.col}, row {t.row}
+                  </span>
                 </button>
                 {t.id === selectedId && (
                   <button type="button" className="btn btn-ghost btn-xs text-error" onClick={() => onDelete(t.id)}>

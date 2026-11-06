@@ -1155,7 +1155,7 @@ export default function MapView({
       const c = tokenCreature;
       const character = c.kind === "character";
       startTransition(async () => {
-        // A character appears once: placing it again moves it here.
+        // A character has one token per level: placing it again on this level moves it here.
         const existing = character ? optimisticTokens.find((t) => t.character_id === c.id) : undefined;
         if (existing) changeTokens({ remove: existing.id });
         changeTokens({

@@ -1,4 +1,4 @@
-import { getCurrentLevelId, getGmLevelId, listLevels, listLocations, listPlayerPlaces } from "@/lib/db";
+import { getCurrentLevelId, getGmLevelId, getPlayerTokenLevelId, listLevels, listLocations, listPlayerPlaces } from "@/lib/db";
 import { loadLevel } from "./gmActions";
 
 /**
@@ -14,20 +14,33 @@ export default function LocationsPanel() {
       <div className="space-y-1" data-player-places>
         <div className="font-semibold">Players</div>
         <ul className="space-y-1">
-          {listPlayerPlaces().map((p) => (
-            <li key={p.character} className="flex items-center gap-2 rounded bg-base-100/60 px-2 py-1">
-              <span className="flex-1">
-                <span className="font-semibold">{p.character}</span> <span className="text-xs opacity-60">({p.player})</span>
-                <span className="block text-xs opacity-80">{p.level_id === null ? "not placed on any map" : `${p.location} › ${p.level}`}</span>
-              </span>
-              {p.level_id !== null && p.level_id !== shown && (
-                <form action={loadLevel.bind(null, p.level_id)}>
-                  <button className="btn btn-xs">Activate</button>
-                </form>
-              )}
-              {p.level_id !== null && p.level_id === shown && <span className="badge badge-sm badge-primary">here</span>}
-            </li>
-          ))}
+          {[...Map.groupBy(listPlayerPlaces(), (p) => p.character)].map(([character, places]) => {
+            const seeing = getPlayerTokenLevelId(places[0].player_id);
+            return (
+              <li key={character} className="rounded bg-base-100/60 px-2 py-1">
+                <span className="font-semibold">{character}</span> <span className="text-xs opacity-60">({places[0].player})</span>
+                <ul>
+                  {places.map((p) =>
+                    p.level_id === null ? (
+                      <li key="none" className="text-xs opacity-80">not placed on any map</li>
+                    ) : (
+                      <li key={p.level_id} className="flex items-center gap-2 text-xs">
+                        <span className="flex-1 opacity-80">{p.location} › {p.level}</span>
+                        {p.level_id === seeing && <span className="badge badge-xs badge-success">sees this</span>}
+                        {p.level_id === shown ? (
+                          <span className="badge badge-xs badge-primary">active</span>
+                        ) : (
+                          <form action={loadLevel.bind(null, p.level_id)}>
+                            <button className="btn btn-xs">Activate</button>
+                          </form>
+                        )}
+                      </li>
+                    )
+                  )}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
       </div>
       {shown !== party && party !== undefined && (
