@@ -8,7 +8,7 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
-import GearActions from "./GearActions";
+import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
@@ -66,7 +66,8 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {plan && choosing && (
         <TargetPicker
-          title={target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
+          title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
+          aiming={!!target?.area}
           targets={targets}
           onCancel={() => setChoosing(null)}
           onPick={(picked) => {
@@ -103,7 +104,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-      <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode({ action: "attack", tokenId: null, use: g.id, label: g.name })} />
+      <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />
       {!plan && doors.length > 0 && (
         <ul className="space-y-1" data-pick-lock>
           {doors.map((d) => (

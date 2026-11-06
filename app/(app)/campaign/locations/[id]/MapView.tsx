@@ -16,7 +16,8 @@ import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
-import { drawFx } from "@/lib/vfx";
+import { drawAreaFx, drawFx } from "@/lib/vfx";
+import { areaPolygon, caughtBy, placeArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
@@ -990,7 +991,16 @@ export default function MapView({
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
-  const targetCandidates = targetMode ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
+  const targetCandidates = targetMode && !targetMode.area ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
+  // Aiming an area attack: where the pointer is, and where the actor will be (where their plan leaves them).
+  const [aimAt, setAimAt] = useState<Point | null>(null);
+  const aimFrom = (() => {
+    if (!targetMode?.area || actingToken === undefined) return null;
+    const t = drawnTokens.find((x) => x.id === actingToken);
+    const from = targetMode.tokenId !== null ? gmPlans?.[targetMode.tokenId]?.from : fog?.move?.from;
+    const p = from ?? t;
+    return p ? { x: p.col + 0.5, y: p.row + 0.5 } : null;
+  })();
   // A script's select() prompt: its options on this map are highlighted, and clicking one picks it.
   const scriptPick = useScriptPick();
   const pickPrompt = scriptPick?.prompt.kind === "select" && !scriptPick.busy ? scriptPick.prompt : null;
@@ -1139,6 +1149,19 @@ export default function MapView({
       return;
     }
     // Picking a target for a planned action: a click on a token chooses it (only tokens shown on this map).
+    if (targetMode?.area && e.button === 0) {
+      // Aiming an area: the click is where it goes (a circle's centre, or the way a cone or line points).
+      const { gx, gy } = gridAt(e);
+      const m = targetMode;
+      setTargetMode(null);
+      setAimAt(null);
+      startTransition(async () => {
+        const step = { kind: "action" as const, action: m.action, use: m.use, aim: { col: Math.round(gx * 20) / 20, row: Math.round(gy * 20) / 20 } };
+        const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
+        if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+      });
+      return;
+    }
     if (targetMode && e.button === 0) {
       const { gx, gy } = gridAt(e);
       const hit = targetCandidates.find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
@@ -1349,6 +1372,10 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (targetMode?.area) {
+      const { gx, gy } = gridAt(e);
+      setAimAt({ x: gx, y: gy });
+    }
     if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > 6) {
       clearTimeout(hold.current.timer); // moved: it's a drag, not a ping
       hold.current = null;
@@ -1617,7 +1644,17 @@ export default function MapView({
           const p = t ?? replayFrame.pos[id];
           return p && { x: x0 + (p.col + 0.5) * size, y: y0 + (p.row + 0.5) * size, seen: !!t };
         };
+        const toPx = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
         for (const f of replayFrame.fx) {
+          if (f.look === "area") {
+            // Players see an area that touches anyone they can see (or that they can see where it starts).
+            const shown = !readOnly || [f.from, ...f.hits.map((h) => h.id)].some((id) => at(id)?.seen);
+            if (!shown) continue;
+            const o = toPx(f.area.origin);
+            const clip = visibilityPolygon(o, f.area.size * size + 2, blockersInScene(state, x0, y0, size));
+            drawAreaFx(ctx, f, k, toPx, size, (id) => at(id), clip);
+            continue;
+          }
           const a = at(f.from), b = at(f.to);
           if (a && b && (a.seen || b.seen)) drawFx(ctx, f, k, a, b, size);
         }
@@ -1677,6 +1714,48 @@ export default function MapView({
           }
           ctx.restore();
         }
+      }
+      // Aiming an area: the shape where it would go (red when a circle is out of range), the squares it covers on grid
+      // maps, and a ring on everyone it would catch.
+      if (targetMode?.area && aimAt && aimFrom) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const px = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
+        const area = placeArea(targetMode.area.shape, targetMode.area.ft, aimFrom, aimAt);
+        const tooFar = targetMode.area.shape === "circle" && Math.hypot(aimAt.x - aimFrom.x, aimAt.y - aimFrom.y) > targetMode.area.range + 0.5;
+        const walls = blockingSegments(state.structures);
+        ctx.save();
+        if (targetMode.area.shape === "circle") {
+          ctx.setLineDash([4 / k, 4 / k]);
+          ctx.strokeStyle = "rgba(250,204,21,0.8)";
+          ctx.lineWidth = 1.5 / k;
+          ctx.beginPath();
+          ctx.arc(px(aimFrom).x, px(aimFrom).y, (targetMode.area.range + 0.5) * size, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        if (!gridless) {
+          ctx.fillStyle = tooFar ? "rgba(239,68,68,0.15)" : "rgba(249,115,22,0.2)";
+          const pts = areaPolygon(area);
+          const [c0, c1] = [Math.floor(Math.min(...pts.map((p) => p.x))), Math.ceil(Math.max(...pts.map((p) => p.x)))];
+          const [r0, r1] = [Math.floor(Math.min(...pts.map((p) => p.y))), Math.ceil(Math.max(...pts.map((p) => p.y)))];
+          for (let c = c0; c < c1; c++) for (let r = r0; r < r1; r++) if (caughtBy(area, { x: c + 0.5, y: r + 0.5 }, walls)) ctx.fillRect(x0 + c * size, y0 + r * size, size, size);
+        }
+        ctx.beginPath();
+        areaPolygon(area).map(px).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.fillStyle = tooFar ? "rgba(239,68,68,0.2)" : "rgba(249,115,22,0.22)";
+        ctx.fill();
+        ctx.strokeStyle = tooFar ? "rgb(239,68,68)" : "rgb(234,88,12)";
+        ctx.lineWidth = 2 / k;
+        ctx.stroke();
+        ctx.strokeStyle = "rgb(234,88,12)";
+        for (const t of state.tokens) {
+          if (t.id === actingToken || !caughtBy(area, { x: t.col + 0.5, y: t.row + 0.5 }, walls)) continue;
+          ctx.beginPath();
+          ctx.arc(x0 + (t.col + 0.5) * size, y0 + (t.row + 0.5) * size, size * 0.6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
       // Picking a target: a faint ring around each token that can be clicked.
       if (targetMode) {
@@ -1941,7 +2020,7 @@ export default function MapView({
                 className="absolute top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-box bg-warning px-3 py-2 text-sm text-warning-content shadow"
                 style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
               >
-                {targetMode.label ? `${targetMode.label}: click the target` : `Click who to ${targetMode.action}`}
+                {targetMode.area ? `${targetMode.label}: click where to aim it` : targetMode.label ? `${targetMode.label}: click the target` : `Click who to ${targetMode.action}`}
                 <button type="button" className="btn btn-xs" onClick={() => setTargetMode(null)}>Cancel</button>
               </div>
             )}

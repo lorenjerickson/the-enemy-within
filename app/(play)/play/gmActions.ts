@@ -9,7 +9,7 @@ import {
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
 import { fightersOn, saveHp } from "@/lib/combat";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
-import { movementBlockers } from "@/lib/visibility";
+import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
@@ -100,7 +100,7 @@ export async function resolveRound() {
     }));
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
-  const { final, hp, log, frames } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters);
+  const { final, hp, log, frames } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)));
   for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {
     const end = final.get(m.tokenId)!;

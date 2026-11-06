@@ -1,3 +1,4 @@
+import type { AreaSpec } from "@/lib/aoe";
 import { CHASE_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 
 /** A combat round lasts six seconds; everyone plans theirs at once (see the project's encounters doc). */
@@ -18,12 +19,14 @@ export interface GearAction {
   attack: string | null; // to-hit modifier
   damage: string | null;
   roll: "normal" | "advantage" | "disadvantage";
+  area?: AreaSpec; // an area attack: aimed at a spot, everyone caught rolls a save
 }
 
 export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction };
+  // An area attack is aimed at a spot (map position) instead of at someone.
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number } };
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
@@ -46,7 +49,7 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
   if (step.kind === "action" && plan.some((s) => s.kind === "action")) return "You've already planned your action this round";
-  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target) return "Pick a target";
+  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim)) return step.use?.area ? "Aim it on the map" : "Pick a target";
   if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkingFeet).left <= 0) return "No time left this round";
   if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;

@@ -9,7 +9,7 @@ import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
-import GearActions from "./GearActions";
+import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
 export interface CreaturePlan {
@@ -66,7 +66,8 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           />
           {choosing && (
             <TargetPicker
-              title={target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
+              title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
+          aiming={!!target?.area}
               targets={targets.filter((t) => t.id !== current.tokenId)}
               onCancel={() => setChoosing(null)}
               onPick={(picked) => {
@@ -76,7 +77,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               }}
             />
           )}
-          <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode({ action: "attack", tokenId: current.tokenId, use: g.id, label: g.name })} />
+          <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode(gearTargetMode(g, current.tokenId))} />
           {/* The same actions players have: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           <div className="grid grid-cols-4 gap-1">
             {PLAYER_ACTIONS.map((a) => (

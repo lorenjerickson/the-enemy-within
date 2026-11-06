@@ -2,21 +2,32 @@
  * Visual effects for things that happen in a round (an attack swinging, an arrow flying, a hit landing).
  * The server records what happened (Fx, in a replay frame); the map draws it here, by how far through its second it is.
  */
+import { areaPolygon, type AreaAt } from "@/lib/aoe";
 
 /** An attack, as played back: who at whom, how it looked, and how it went. */
-export interface Fx {
+export interface AttackFx {
   look: "slash" | "arrow";
   from: number; // token ids
   to: number;
   outcome: "hit" | "miss" | "down";
 }
+/** Someone caught in an area: failed (hit), saved for half, saved for nothing, or dropped. */
+export type AreaHit = { id: number; outcome: "hit" | "half" | "save" | "down" };
+/** An area attack: the area as placed, and how each one caught fared. */
+export interface AreaFx {
+  look: "area";
+  from: number;
+  area: AreaAt;
+  hits: AreaHit[];
+}
+export type Fx = AttackFx | AreaFx;
 
 type P = { x: number; y: number };
 const ease = (k: number) => 1 - (1 - k) * (1 - k);
 const clamp01 = (k: number) => Math.min(1, Math.max(0, k));
 
 /** Draws an attack at progress k (0..1 through the second it lands in), from a to b (map pixels), cell = a square's size. */
-export function drawFx(ctx: CanvasRenderingContext2D, fx: Fx, k: number, a: P, b: P, cell: number) {
+export function drawFx(ctx: CanvasRenderingContext2D, fx: AttackFx, k: number, a: P, b: P, cell: number) {
   const ang = Math.atan2(b.y - a.y, b.x - a.x);
   const IMPACT = fx.look === "arrow" ? 0.5 : 0.55; // when it lands
   ctx.save();
@@ -94,4 +105,58 @@ export function drawFx(ctx: CanvasRenderingContext2D, fx: Fx, k: number, a: P, b
     }
   }
   ctx.restore();
+}
+
+/**
+ * Draws an area attack at progress k: the shape sweeps out from where it starts and fades, and each one caught gets a
+ * burst (red on a failed save, orange for half, a grey puff when they saved for nothing). `toPx` maps grid units to
+ * map pixels; `clip` (map pixels) keeps it out from behind walls.
+ */
+export function drawAreaFx(ctx: CanvasRenderingContext2D, fx: AreaFx, k: number, toPx: (p: P) => P, cell: number, at: (id: number) => P | undefined, clip?: P[]) {
+  const grow = ease(clamp01(k / 0.35)), fade = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
+  const o = toPx(fx.area.origin);
+  ctx.save();
+  if (clip?.length) {
+    ctx.beginPath();
+    clip.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.clip();
+  }
+  ctx.beginPath();
+  areaPolygon(fx.area).map(toPx).forEach((p, i) => {
+    const q = { x: o.x + (p.x - o.x) * grow, y: o.y + (p.y - o.y) * grow }; // sweeping out from its start
+    if (i) ctx.lineTo(q.x, q.y);
+    else ctx.moveTo(q.x, q.y);
+  });
+  ctx.closePath();
+  const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, Math.max(1, fx.area.size * cell));
+  g.addColorStop(0, `rgba(254,215,170,${0.75 * fade})`);
+  g.addColorStop(1, `rgba(234,88,12,${0.45 * fade})`);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(124,45,18,${0.7 * fade})`;
+  ctx.lineWidth = Math.max(1.5, cell * 0.04);
+  ctx.stroke();
+  ctx.restore();
+  if (k < 0.35) return;
+  const p = clamp01((k - 0.35) / 0.65);
+  for (const h of fx.hits) {
+    const b = at(h.id);
+    if (!b) continue;
+    ctx.save();
+    if (h.outcome === "save") {
+      ctx.fillStyle = `rgba(220,220,230,${0.45 * (1 - p)})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, cell * (0.2 + 0.25 * p), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const rgb = h.outcome === "down" ? "150,20,20" : h.outcome === "half" ? "249,115,22" : "239,68,68";
+      ctx.strokeStyle = `rgba(${rgb},${0.9 * (1 - p)})`;
+      ctx.lineWidth = Math.max(2, cell * 0.07);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, cell * (0.3 + 0.45 * ease(p)) * (h.outcome === "down" ? 1.5 : h.outcome === "half" ? 0.8 : 1), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }

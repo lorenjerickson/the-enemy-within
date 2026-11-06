@@ -1,4 +1,6 @@
-import type { Fx } from "@/lib/vfx";
+import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
+import { caughtBy, describeArea, placeArea } from "@/lib/aoe";
+import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
@@ -74,6 +76,7 @@ export interface Combatant {
   attack: (use?: GearAction) => { total: number; text: string };
   defense: () => { total: number; text: string };
   damage: (use?: GearAction) => { total: number; text: string };
+  save?: (attr: Attribute) => { total: number; text: string };
 }
 
 /**
@@ -90,6 +93,7 @@ export function resolveMovement(
   walls: Segment[],
   gridless: boolean,
   fighters: Map<number, Combatant> = new Map(),
+  effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
 ) {
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
@@ -292,6 +296,41 @@ export function resolveMovement(
         say(`${m.name}: ${step.action} (no effect yet).`);
         continue;
       }
+      // An area attack: everyone caught (but the attacker) rolls the save; the damage is rolled once for all.
+      const area = step.use?.area;
+      if (area && step.aim && step.use) {
+        const me = fighters.get(m.tokenId), here = pos.get(m.tokenId)!;
+        const at = placeArea(area.shape, area.ft, { x: here.col + 0.5, y: here.row + 0.5 }, { x: step.aim.col, y: step.aim.row });
+        const caught = [...fighters.keys()].filter((id) => id !== m.tokenId && !down.has(id)).filter((id) => {
+          const p = where(id);
+          return p && caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls);
+        });
+        const hits: AreaHit[] = [];
+        if (!me || !caught.length) say(`${m.name}'s ${step.use.name} catches no one.`);
+        else {
+          const dmg = me.damage(step.use);
+          say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
+          for (const id of caught) {
+            const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
+            const s = f.save ? f.save(area.save) : { total: 0, text: "no save" };
+            const saved = s.total >= area.dc;
+            const taken = saved ? (area.half ? Math.floor(dmg.total / 2) : 0) : dmg.total;
+            const left = Math.max(0, hp.get(id)! - taken);
+            if (taken > 0) {
+              hp.set(id, left);
+              hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
+            }
+            say(`${name} saves (${area.save}): ${s.total} (${s.text}) vs DC ${area.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
+            hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
+            if (left <= 0) {
+              down.add(id);
+              say(`${name} is down.`);
+            }
+          }
+        }
+        fx.push({ look: "area", from: m.tokenId, area: at, hits });
+        continue;
+      }
       const target = step.target;
       const me = fighters.get(m.tokenId), them = target && fighters.get(target.id);
       const at = target && where(target.id);
@@ -305,7 +344,7 @@ export function resolveMovement(
         const a = me.attack(step.use), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
-        const shown = (outcome: Fx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
+        const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         if (a.total < d.total) shown("miss");
         if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
         else {

@@ -1,4 +1,4 @@
-import { formatModifier, modifier } from "@/lib/attributes";
+import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
 import { getCharacter, getCreature, getItem, listActions, listTokens, db, type Creature } from "@/lib/db";
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
 import type { GearAction } from "@/lib/roundPlan";
@@ -14,6 +14,7 @@ export interface Fighter {
   attack: (use?: GearAction) => { total: number; text: string };
   defense: () => { total: number; text: string };
   damage: (use?: GearAction) => { total: number; text: string };
+  save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -31,6 +32,10 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number):
       const mod = use ? use.attack : weapon?.attack, w = roll(mod);
       const how = use?.roll && use.roll !== "normal" ? ` (${use.roll}: ${a}, ${b})` : "";
       return { total: d + might + w, text: `d20 ${d}${how} ${formatModifier(might)}${mod ? ` ${formatModifier(w)} ${use?.name ?? weapon?.name}` : ""}` };
+    },
+    save: (attr) => {
+      const d = rollDice("1d20"), mod = modifier(who.attributes[attr] ?? 10);
+      return { total: d + mod, text: `d20 ${d} ${formatModifier(mod)}` };
     },
     defense: () => {
       const armour = items.reduce((s, i) => s + roll(i.defense), 0);
@@ -78,5 +83,6 @@ export function gearActions(tokenId: number): (GearAction & { source: string })[
   ];
   return owned.map(({ a, source }) => ({
     id: a.id, name: a.name, source, seconds: a.seconds, range: Math.max(1, Math.round(a.range_ft / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
+    ...(a.area_shape && a.area_ft > 0 ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half } } : {}),
   }));
 }

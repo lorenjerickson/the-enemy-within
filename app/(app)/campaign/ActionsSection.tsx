@@ -1,3 +1,5 @@
+import { AREA_SHAPES, describeArea } from "@/lib/aoe";
+import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_KIND_GROUPS, ROLL_MODES, formatDuration, rollKindLabel } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
 import PairListInput from "./PairListInput";
@@ -13,7 +15,7 @@ function summary(a: Action): string {
     (a.attack || a.damage) && a.roll !== "normal" && a.roll,
     a.attack && `to hit ${a.attack}`,
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
-    a.radius > 0 && `${a.split ? "split" : "each"} within ${a.radius} m`,
+    a.area_shape && `${describeArea({ shape: a.area_shape, ft: a.area_ft })}, ${a.save_attr} save DC ${a.save_dc}${a.save_half ? " (half on a save)" : ""}`,
     ...a.boosts.map((b) => `${b.value} ${targetLabel(b.target)}`),
     ...a.roll_grants.map((g) => `${g.mode} on ${rollKindLabel(g.roll)}`),
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
@@ -42,11 +44,29 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
           <option key={t} value={t}>{capitalize(t)}</option>
         ))}
       </select>
-      <input name="radius" type="number" min="0" step="any" placeholder="Area radius in metres (0 = single target)" defaultValue={initial?.radius || ""} className="input input-sm w-full" />
-      <label className="flex items-center gap-2 text-sm">
-        <input name="split" type="checkbox" defaultChecked={!!initial?.split} className="checkbox checkbox-sm" />
-        Split damage evenly across the area
-      </label>
+      <fieldset className="col-span-2 flex flex-wrap items-center gap-2 text-sm" data-area-fields>
+        <span className="font-semibold">Area</span>
+        <select name="area_shape" defaultValue={initial?.area_shape ?? ""} className="select select-sm w-36">
+          <option value="">Single target</option>
+          {AREA_SHAPES.map((s) => (
+            <option key={s} value={s}>{capitalize(s)}</option>
+          ))}
+        </select>
+        <input name="area_ft" type="number" min="0" step="5" placeholder="ft" defaultValue={initial?.area_ft || ""} className="input input-sm w-20" title="Circle: radius; cone and line: length (feet)" />
+        ft · save
+        <select name="save_attr" defaultValue={initial?.save_attr ?? "agility"} className="select select-sm w-32">
+          {ATTRIBUTES.map((a) => (
+            <option key={a} value={a}>{capitalize(a)}</option>
+          ))}
+        </select>
+        DC
+        <input name="save_dc" type="number" min="1" defaultValue={initial?.save_dc ?? 12} className="input input-sm w-16" />
+        <label className="flex items-center gap-1">
+          <input name="save_half" type="checkbox" defaultChecked={initial ? !!initial.save_half : true} className="checkbox checkbox-sm" />
+          half damage on a save
+        </label>
+        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed.</span>
+      </fieldset>
       <label className="flex items-center gap-2 text-sm">
         Takes
         <input name="seconds" type="number" min="0.5" max="6" step="0.5" defaultValue={initial?.seconds ?? 2} className="input input-sm w-20" />

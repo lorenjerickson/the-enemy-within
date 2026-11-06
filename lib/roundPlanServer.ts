@@ -15,7 +15,7 @@ export function tokenPlanner(tokenId: number) {
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number } | { kind: "move"; col: number; row: number };
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number } } | { kind: "move"; col: number; row: number };
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -43,7 +43,15 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     const use = step.use !== undefined ? gearActions(p.tok.token_id).find((g) => g.id === Number(step.use)) : undefined;
     if (step.use !== undefined && !use) return "That isn't one of their actions";
     const { source: _source, ...gear } = use ?? { source: "" };
-    add = { kind: "action", action: step.action, ...(name ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}) };
+    // An area is aimed at a spot: a circle's centre must be within the action's range of where the plan leaves them.
+    let aim: { col: number; row: number } | undefined;
+    if (step.aim && use?.area) {
+      aim = { col: Number(step.aim.col), row: Number(step.aim.row) };
+      if (!Number.isFinite(aim.col) || !Number.isFinite(aim.row)) return "Aim it on the map";
+      const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
+      if (use.area.shape === "circle" && Math.hypot(aim.col - (from.col + 0.5), aim.row - (from.row + 0.5)) > use.range + 0.5) return `Out of range (${use.range * 5} ft)`;
+    }
+    add = { kind: "action", action: step.action, ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;

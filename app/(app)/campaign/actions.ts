@@ -1,5 +1,8 @@
 "use server";
 
+import { AREA_SHAPES, type AreaShape } from "@/lib/aoe";
+import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
+
 import { revalidatePath } from "next/cache";
 import { requireGm, requireUser } from "@/lib/auth";
 import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage } from "@/lib/db";
@@ -106,6 +109,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     split: formData.get("split") === "on" ? 1 : 0,
     seconds: Math.min(6, Math.max(0.5, Number(formData.get("seconds")) || 2)),
     range_ft: Math.max(5, Number(formData.get("range_ft")) || 5),
+    ...areaFields(formData),
     boosts,
     roll_grants,
     duration_amount,
@@ -118,4 +122,17 @@ export async function deleteAction(owner: ActionOwner, actionId: number) {
   await requireGm();
   removeAction(actionId);
   revalidatePath(ownerPath(owner));
+}
+
+/** An action's area (shape, size, save) from its form; no shape = a single-target action. */
+function areaFields(formData: FormData) {
+  const shape = String(formData.get("area_shape") ?? "");
+  const attr = String(formData.get("save_attr") ?? "agility");
+  return {
+    area_shape: (AREA_SHAPES as readonly string[]).includes(shape) ? (shape as AreaShape) : ("" as const),
+    area_ft: Math.max(0, Number(formData.get("area_ft")) || 0),
+    save_dc: Math.max(1, Math.round(Number(formData.get("save_dc")) || 12)),
+    save_attr: (ATTRIBUTES as readonly string[]).includes(attr) ? (attr as Attribute) : ("agility" as const),
+    save_half: (formData.get("save_half") === "on" ? 1 : 0) as 0 | 1,
+  };
 }

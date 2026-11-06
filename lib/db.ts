@@ -5,7 +5,8 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
-import type { Attributes } from "@/lib/attributes";
+import type { Attribute, Attributes } from "@/lib/attributes";
+import type { AreaShape } from "@/lib/aoe";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
   type ClipMode, type ControlEdge, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
@@ -308,6 +309,11 @@ db.exec("UPDATE level_hidden_layers SET layer = 'structure' WHERE layer = 'walls
 addColumn("actions", "roll_grants", "TEXT NOT NULL DEFAULT '[]'"); // JSON RollGrant[]
 addColumn("actions", "seconds", "REAL NOT NULL DEFAULT 2"); // time it takes in a combat round
 addColumn("actions", "range_ft", "REAL NOT NULL DEFAULT 5"); // how far the target may be (5 = within reach)
+addColumn("actions", "area_shape", "TEXT NOT NULL DEFAULT ''"); // AreaShape, '' = single target
+addColumn("actions", "area_ft", "REAL NOT NULL DEFAULT 0"); // circle radius, or cone / line length
+addColumn("actions", "save_dc", "INTEGER NOT NULL DEFAULT 12"); // an area's save
+addColumn("actions", "save_attr", "TEXT NOT NULL DEFAULT 'agility'");
+addColumn("actions", "save_half", "INTEGER NOT NULL DEFAULT 1"); // 1 = a successful save takes half damage, 0 = none
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
@@ -756,13 +762,18 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   duration_unit: DurationUnit;
   seconds: number; // time it takes in a combat round
   range_ft: number; // how far away its target may be (5 = within reach)
+  area_shape: AreaShape | ""; // an area attack (everyone caught rolls a save); '' = single target
+  area_ft: number;
+  save_dc: number;
+  save_attr: Attribute;
+  save_half: 0 | 1;
 }
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -778,16 +789,17 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
       `UPDATE actions SET name = @name, description = @description, roll = @roll, attack = @attack,
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
-         seconds = @seconds, range_ft = @range_ft WHERE id = @id`
+         seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
+         save_attr = @save_attr, save_half = @save_half WHERE id = @id`
     ).run({ ...params, id });
   }
 }
