@@ -971,8 +971,9 @@ export default function MapView({
   const targetCandidates = targetMode ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
   // A script's select() prompt: its options on this map are highlighted, and clicking one picks it.
   const scriptPick = useScriptPick();
-  const pickEntity = scriptPick?.prompt.entity ?? null;
-  const pickIds = new Set(pickEntity ? scriptPick!.prompt.options.map((o) => o.id) : []);
+  const pickPrompt = scriptPick?.prompt.kind === "select" && !scriptPick.busy ? scriptPick.prompt : null;
+  const pickEntity = pickPrompt?.entity ?? null;
+  const pickIds = new Set(pickPrompt ? pickPrompt.options.map((o) => o.id) : []);
   const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
 
   const state: MapState = {

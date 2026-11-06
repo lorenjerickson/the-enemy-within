@@ -96,8 +96,21 @@ WITH select(game.locations.current.actors, 'Who drinks the potion?') AS A
    A.health = A.health.maximum
 ```
 
-The script runs again from the start once the GM has chosen (nothing is saved until it finishes), so `roll()`s before a
-`select()` are rolled again. `select()` can't be used in an ON trigger, since no one is there to choose.
+**Asking for a value with `ask()`.** `ask('Health points', 'number')` asks the GM to type a value; the type is
+`'number'` (the default), `'text'` or `'yes/no'`, and a third argument is the starting value. (`query()` is the same.)
+Questions come one after another in the same overlay, like a wizard, with Back to change an earlier answer.
+The same question asked again in a run gets the same answer, so it can sit inside a WITH that runs for each chosen actor:
+
+```
+WITH select(game.locations.current.actors, 'Who is healed?') AS A
+   WITH ask('Health points', 'number', 5) AS H
+      A.health.current += H
+```
+
+`.each` / `.all` on a single thing is a list of just it, so `A.each.health.current += H` works too.
+
+The script runs again from the start once the GM has answered (nothing is saved until it finishes), so `roll()`s before a
+`select()` are rolled again. `select()` and `ask()` can't be used in an ON trigger, since no one is there to answer.
 
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 

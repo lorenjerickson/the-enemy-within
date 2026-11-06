@@ -7,15 +7,15 @@ import {
   addCreatureToken, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
-import type { ScriptAnswers, SelectPrompt } from "./scriptPrompt";
-import { Collection, FREEFORM, Health, PromptNeeded, plain, selectHelper, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
+import type { ScriptAnswers, ScriptPrompt } from "./scriptPrompt";
+import { Collection, FREEFORM, Health, PromptNeeded, plain, promptHelpers, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 import { objectiveSettled } from "./storyRules";
 
 /** A script's outcome; `prompt` when it stopped to ask the GM something (run it again with the answers). */
-export type ScriptResult = { ok: true; value: string } | { ok: false; error: string; prompt?: SelectPrompt };
+export type ScriptResult = { ok: true; value: string } | { ok: false; error: string; prompt?: ScriptPrompt };
 
 /** A character as scripts see it. Everything here except id, name and type can be changed. */
 export interface Player {
@@ -551,8 +551,8 @@ export function runGameScript(
 ): unknown {
   const [game, changes] = loadGame(levelId);
   const triggers: TriggerDef[] = [];
-  // select() asks the GM; it throws PromptNeeded (before anything is saved) until it has its answer.
-  const globals = { game, ...HELPERS, ...mapHelpers(game, changes), select: selectHelper(answers) };
+  // select() and ask() put questions to the GM; it throws PromptNeeded (before anything is saved) until it has its answer.
+  const globals = { game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers(answers) };
   const result = runScript(source, globals, { onTrigger: (t) => triggers.push(t), bind });
   const settled = saveGame(game, changes, triggers);
   // Objectives the script succeeded or failed: rewards and penalties, as when the GM settles one.
@@ -649,7 +649,7 @@ export function tryGameScript(source: string, levelId?: number, answers?: Script
 export function checkGameState(source: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
     const [game, changes] = loadGame();
-    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes), select: selectHelper() })) };
+    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers() })) };
   } catch (e) {
     if (e instanceof ScriptError) return { ok: false, error: e.message };
     throw e;

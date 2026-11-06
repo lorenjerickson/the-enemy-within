@@ -3,7 +3,7 @@
  * Scripts are parsed and interpreted here; nothing is passed to JavaScript's eval, and only the
  * properties and methods below are reachable. See docs/scripting.md.
  */
-import type { PickEntity, ScriptAnswers, SelectPrompt } from "./scriptPrompt";
+import type { InputPrompt, InputType, PickEntity, ScriptAnswer, ScriptAnswers, ScriptPrompt, SelectPrompt } from "./scriptPrompt";
 
 // ---------- Values the interpreter understands besides plain data ----------
 
@@ -33,7 +33,7 @@ export class Selection extends Broadcast {}
  * and the script runs again from the start with the answers so far. Not a ScriptError, so it isn't reported as one.
  */
 export class PromptNeeded extends Error {
-  constructor(public prompt: SelectPrompt) {
+  constructor(public prompt: ScriptPrompt) {
     super("Waiting for a choice");
   }
 }
@@ -42,34 +42,59 @@ const PICK_ENTITY: Record<string, PickEntity> = { actor: "token", creature: "tok
 const PICK_TEXT: Record<PickEntity, string> = { token: "Choose a token", door: "Choose a door", light: "Choose a light", effect: "Choose an effect" };
 
 /**
- * select(collection, 'instructions'): asks the GM to choose one or more of a collection's items (on the map when
- * they're on it). Gives the item, or a Selection when several were chosen. `answers` are those given so far; without
- * them (an ON trigger) there's no one to ask.
+ * The prompt helpers for one run, given the answers so far (none, e.g. in an ON trigger: there's no one to ask).
+ * - select(collection, 'instructions'): the GM chooses one or more items (on the map when they're on it). Gives the
+ *   item, or a Selection when several were chosen.
+ * - ask('Health points', 'number' | 'text' | 'yes/no', default): the GM types a value.
+ * The same question asked again in a run (e.g. inside a WITH that runs for each chosen actor) gets the same answer.
  */
-export function selectHelper(answers?: ScriptAnswers): Method {
+export function promptHelpers(answers?: ScriptAnswers): Record<string, Method> {
   let asked = 0;
-  return new Method((coll, text) => {
+  const given = new Map<string, unknown>();
+  const answer = <T>(name: string, key: string, prompt: ScriptPrompt, use: (a: ScriptAnswer) => T): T => {
+    if (given.has(key)) return given.get(key) as T;
+    if (!answers) throw new ScriptError(`${name}() needs someone to answer, so it can't be used here (e.g. in an ON trigger)`);
+    const a = answers[asked++];
+    if (a === undefined) throw new PromptNeeded(prompt);
+    const v = use(a);
+    given.set(key, v);
+    return v;
+  };
+  const select = new Method((coll, text) => {
     if (!(coll instanceof Collection)) throw new ScriptError("select() needs a collection, like select(game.locations.current.actors)");
-    if (!answers) throw new ScriptError("select() needs someone to choose, so it can't be used here (e.g. in an ON trigger)");
     if (!coll.items.length) throw new ScriptError(`There are no ${coll.kind}s to choose from`);
     const entity = PICK_ENTITY[coll.kind] ?? null;
-    const answer = answers[asked++];
-    if (!answer) {
-      throw new PromptNeeded({
-        kind: "select",
-        text: text === undefined || text === null ? (entity ? PICK_TEXT[entity] : `Choose a ${coll.kind}`) : String(text),
-        entity,
-        // Same-named ones (three "Human"s) are told apart by id.
-        options: coll.items.map((it) => ({ id: it.id, name: coll.items.filter((x) => x.name === it.name).length > 1 ? `${it.name} (${it.id})` : it.name })),
+    const label = text === undefined || text === null ? (entity ? PICK_TEXT[entity] : `Choose a ${coll.kind}`) : String(text);
+    const prompt: SelectPrompt = {
+      kind: "select", text: label, entity,
+      // Same-named ones (three "Human"s) are told apart by id.
+      options: coll.items.map((it) => ({ id: it.id, name: coll.items.filter((x) => x.name === it.name).length > 1 ? `${it.name} (${it.id})` : it.name })),
+    };
+    return answer("select", `select ${coll.kind} ${label}`, prompt, (a) => {
+      const picked = (Array.isArray(a) ? a : []).map((id) => {
+        if (!coll.items.some((it) => it.id === id)) throw new ScriptError(`A ${coll.kind} chosen for select() is no longer there`);
+        return getKey(coll, String(id)); // by id; also remembers it for ON
       });
-    }
-    const picked = answer.map((id) => {
-      if (!coll.items.some((it) => it.id === id)) throw new ScriptError(`A ${coll.kind} chosen for select() is no longer there`);
-      return getKey(coll, String(id)); // by id; also remembers it for ON
+      if (!picked.length) throw new ScriptError("Nothing was chosen");
+      return picked.length === 1 ? picked[0] : new Selection(picked);
     });
-    if (!picked.length) throw new ScriptError("Nothing was chosen");
-    return picked.length === 1 ? picked[0] : new Selection(picked);
   });
+  const ask = new Method((text, type = "number", initial = null) => {
+    const input = String(type).toLowerCase().replace(/^(yes\/?no|boolean|bool)$/, "yes/no") as InputType;
+    if (!["number", "text", "yes/no"].includes(input)) throw new ScriptError(`ask() types are 'number', 'text' and 'yes/no', not '${type}'`);
+    const label = String(text ?? "Enter a value");
+    const init = initial === null || ["number", "string", "boolean"].includes(typeof initial) ? (initial as InputPrompt["initial"]) : null;
+    return answer("ask", `ask ${input} ${label}`, { kind: "input", text: label, input, initial: init }, (a) => {
+      if (input === "number") {
+        const n = typeof a === "number" ? a : Number(a);
+        if (typeof a === "boolean" || Array.isArray(a) || (typeof a === "string" && !a.trim()) || !Number.isFinite(n)) throw new ScriptError(`"${label}" needs a number`);
+        return n;
+      }
+      if (input === "yes/no") return a === true || a === "yes" || a === "true";
+      return String(a);
+    });
+  });
+  return { select, ask, query: ask };
 }
 /**
  * A question put to a group, from coll.any or coll.one:
@@ -562,6 +587,8 @@ function readKey(obj: unknown, key: string): unknown {
   }
   if (obj && typeof obj === "object") {
     if (Object.hasOwn(obj, key)) return (obj as Record<string, unknown>)[key];
+    // One item read as a list of one, so A.each.health works whether select() gave one actor or several.
+    if ((key === "each" || key === "all") && !FREEFORM.has(obj)) return new Broadcast([obj]);
     if (FREEFORM.has(obj)) return null;
   }
   if (["changed", "previous", "current"].includes(key) && (obj === null || typeof obj !== "object")) {
