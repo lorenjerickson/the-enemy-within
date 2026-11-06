@@ -1094,6 +1094,21 @@ export default function MapView({
     return () => document.documentElement.removeAttribute("data-focus");
   }, [focus]);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  // Picking a creature to plan for: if it's off screen (or under the dock), pan so it's in the middle of what's visible.
+  useEffect(() => {
+    if (readOnly || gmSel === null || !canvasSize.w) return;
+    const t = state.tokens.find((x) => x.id === gmSel);
+    if (!t) return;
+    const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+    const fit = fitScene(canvasSize.w, canvasSize.h);
+    const mx = fit.ox + (x0 + (t.col + 0.5) * size) * fit.s, my = fit.oy + (y0 + (t.row + 0.5) * size) * fit.s; // at zoom 1
+    const left = dockSide === "left" ? dockWidth : 0, right = canvasSize.w - (dockSide === "right" ? dockWidth : 0);
+    setView((v) => {
+      const sx = v.x + v.zoom * mx, sy = v.y + v.zoom * my, pad = 40;
+      if (sx > left + pad && sx < right - pad && sy > pad && sy < canvasSize.h - pad) return v;
+      return { ...v, x: (left + right) / 2 - v.zoom * mx, y: canvasSize.h / 2 - v.zoom * my };
+    });
+  }, [gmSel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel zooms around the cursor (non-passive so the page doesn't scroll).
   useEffect(() => {
@@ -1589,6 +1604,25 @@ export default function MapView({
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(f, 0, 0);
+        ctx.restore();
+      }
+      // The creature the GM is planning for: a bright ring with a soft glow, so it's clear which one they control.
+      const planning = !readOnly && gmSel !== null ? state.tokens.find((t) => t.id === gmSel) : undefined;
+      if (planning) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const cx = x0 + (planning.col + 0.5) * size, cy = y0 + (planning.row + 0.5) * size;
+        ctx.save();
+        ctx.fillStyle = "rgba(167,139,250,0.22)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgb(167,139,250)";
+        ctx.lineWidth = 3 / k;
+        ctx.shadowColor = "rgba(167,139,250,0.9)";
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(cx, cy, size * 0.65, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
       }
       // A script's select(): dashed outlines on what can be chosen, solid on what is.
