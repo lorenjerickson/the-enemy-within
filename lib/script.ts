@@ -768,8 +768,11 @@ function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
           const base = obj && typeof obj === "object" ? REFS.get(obj) : undefined;
           if (base) path = /^[A-Za-z_]\w*$/.test(key) ? `${base}.${key}` : `${base}[${quote(key)}]`;
         } else v = evaluate(s.e, scopes);
-        // Several chosen with select(): the block runs for each.
-        for (let item of v instanceof Selection ? v.values : [v]) {
+        // WITH coll.each (or .all) AS X, or several chosen with select(): the block runs once for each item, so every
+        // roll(), IF and value read inside is that item's own. (A property's list, WITH coll.each.health AS H, stays a
+        // list, for sum(H) and the like.)
+        const perItem = v instanceof Selection || (v instanceof Broadcast && s.e.k === "mem" && (s.e.key === "each" || s.e.key === "all"));
+        for (let item of perItem ? (v as Broadcast).values : [v]) {
           if (s.as && hooks.bind) item = hooks.bind(s.as, item);
           last = execute(s.body, [...scopes, s.as ? { names: { [s.as]: item }, path } : { with: item }], hooks);
         }
@@ -782,9 +785,14 @@ function execute(stmts: Stmt[], scopes: Scope[], hooks: Hooks = {}): unknown {
         const [obj, key] = assignTarget(s.target, scopes);
         // A broadcast target ("lights.all.level += 1") updates each item from its own old value.
         const targets = obj instanceof Broadcast ? obj.values : [obj];
-        const value = s.value ? plain(evaluate(s.value, scopes)) : undefined;
-        // A list of values for a list of targets ("A.each.health.current = A.each.health.maximum") goes item by item.
-        const valueFor = (i: number) => (value instanceof Broadcast && value.values.length === targets.length ? plain(value.values[i]) : value);
+        // For a list of targets the value is worked out afresh for each ("each.health -= roll('1d6')" rolls for each), and a
+        // list of values for a list of targets goes item by item ("each.health.current = each.health.maximum").
+        const once = s.value && !(obj instanceof Broadcast) ? plain(evaluate(s.value, scopes)) : undefined;
+        const valueFor = (i: number) => {
+          if (!s.value) return undefined;
+          const value = obj instanceof Broadcast ? plain(evaluate(s.value, scopes)) : once;
+          return value instanceof Broadcast && value.values.length === targets.length ? plain(value.values[i]) : value;
+        };
         targets.forEach((o, i) => {
           // An unset game.vars counter starts from 0, so "game.vars.rolls += 1" just works.
           let old = s.op === "=" ? undefined : getKey(o, key);

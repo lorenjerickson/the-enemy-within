@@ -12,6 +12,9 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 - `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health.current` → `[25, 7]`.
   Assigning to it sets it on each: `game.players.all.health += 5`.
   A list assigned to a list goes item by item: `X.each.health.current = X.each.health.maximum` restores each to its own maximum.
+  The value is worked out afresh for each item: `creatures.each.health -= roll('1d6')` rolls for each.
+- `WITH coll.each AS X` (or `.all`) runs its block once per item, so every `roll()`, `IF` and value inside is that item's own.
+  `WITH coll.each.health AS H` (a property) stays one list, for `sum(H)` and the like.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.locations`: every location by name. `game.locations.current` is the map the party is on (in the script console), or the button's location (map buttons), with `level`, `actors` (everything on that level) and `creatures`.
