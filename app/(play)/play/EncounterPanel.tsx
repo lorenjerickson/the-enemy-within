@@ -1,4 +1,4 @@
-import { getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
+import { downTokens, getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
 import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
@@ -11,6 +11,7 @@ export default function EncounterPanel() {
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
   const waiting = levelId === undefined ? [] : getEncounterWaiting(levelId);
   const ready = levelId === undefined ? new Set<number>() : readyTokens(levelId);
+  const down = levelId === undefined ? new Set<number>() : downTokens(levelId); // sit out planning until revived
   // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
   const labels = levelId === undefined ? new Map<number, string>() : tokenLabels(levelId);
   const names = new Map(
@@ -30,7 +31,9 @@ export default function EncounterPanel() {
               <li key={o.token_id} className={`flex items-center gap-2 rounded px-2 py-1 ${i === enc.turn ? "bg-primary/25" : "bg-base-100/60"}`}>
                 <span className="w-6 text-right font-mono">{o.initiative}</span>
                 <span className="flex-1">{names.get(o.token_id)?.name ?? "(gone)"}</span>
-                {names.get(o.token_id)?.player && (
+                {down.has(o.token_id) ? (
+                  <span className="badge badge-sm badge-error">down</span>
+                ) : names.get(o.token_id)?.player && (
                   <span className={`badge badge-sm ${ready.has(o.token_id) ? "badge-success" : "badge-ghost"}`}>{ready.has(o.token_id) ? "ready" : "planning"}</span>
                 )}
               </li>
@@ -47,7 +50,7 @@ export default function EncounterPanel() {
           <CreaturePlans
             targets={[...names].map(([id, n]) => ({ id, name: n.name }))}
             creatures={enc.order
-              .filter((o) => names.get(o.token_id) && !names.get(o.token_id)!.player)
+              .filter((o) => names.get(o.token_id) && !names.get(o.token_id)!.player && !down.has(o.token_id))
               .flatMap((o) => {
                 const v = planView(o.token_id);
                 return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: gearActions(o.token_id) }] : [];
@@ -55,7 +58,7 @@ export default function EncounterPanel() {
           />
           <form action={resolveRound} className="space-y-1">
             {(() => {
-              const notReady = [...enc.order.map((o) => o.token_id), ...waiting].filter((id) => !ready.has(id)).length;
+              const notReady = [...enc.order.map((o) => o.token_id), ...waiting].filter((id) => !ready.has(id) && !down.has(id)).length;
               return (
                 <>
                   <button className="btn btn-primary btn-sm w-full" data-resolve-round>Resolve round {enc.round}</button>

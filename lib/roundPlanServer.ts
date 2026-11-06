@@ -1,4 +1,4 @@
-import { getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, squareKey } from "@/lib/movement";
 import type { PlayerActionId } from "@/lib/playerActions";
@@ -10,6 +10,7 @@ import { movementBlockers } from "@/lib/visibility";
 export function tokenPlanner(tokenId: number) {
   const tok = getTokenMover(tokenId);
   if (!tok || !getEncounter(tok.level_id)) return null;
+  if (downTokens(tok.level_id).has(tok.token_id)) return null; // down: no planning until revived
   return { tok, walking: (JSON.parse(tok.movement).walking as number) ?? 0, ...getRoundPlan(tok.level_id, tok.token_id) };
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;

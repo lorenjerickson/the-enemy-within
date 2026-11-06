@@ -19,7 +19,7 @@ import type { TimedStep } from "./RoundPlanView";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [],
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -28,6 +28,7 @@ export default function PickLock({
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string }[]; // who they can see, to attack
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
+  down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
@@ -54,6 +55,13 @@ export default function PickLock({
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
     : `${base}: not available yet`;
 
+  if (down) {
+    return (
+      <div role="alert" className="alert alert-error text-sm" data-down>
+        You&apos;re down. You can&apos;t act until you&apos;re revived.
+      </div>
+    );
+  }
   return (
     <div className="space-y-3 text-sm">
       {plan && choosing && (

@@ -2102,3 +2102,13 @@ export function listPlanTargets(levelId: number, tokenId?: number): { from: numb
     .filter((r) => tokenId === undefined || r.token_id === tokenId)
     .flatMap((r) => (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => (s.kind === "action" && s.target ? [{ from: r.token_id, to: s.target.id, action: s.action }] : [])));
 }
+
+/** Tokens on a level that are down (health 0 or less): they sit out planning until revived (health above 0). */
+export function downTokens(levelId: number): Set<number> {
+  return new Set(
+    db.prepare<[number], { id: number }>(
+      `SELECT t.id FROM map_tokens t LEFT JOIN characters c ON c.id = t.character_id
+       WHERE t.level_id = ? AND COALESCE(CASE WHEN t.character_id IS NULL THEN t.hp ELSE c.hp END, 1) <= 0`
+    ).all(levelId).map((r) => r.id)
+  );
+}
