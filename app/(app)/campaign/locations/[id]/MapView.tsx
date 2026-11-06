@@ -772,10 +772,22 @@ export default function MapView({
     const t = Date.now() - replay.starts;
     if (t >= (replay.frames.length + 1) * 1000) return null; // done (the last second is held one more)
     if (t < 0) return { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[], startsIn: Math.ceil(-t / 1000) };
-    return { ...replay.frames[Math.min(replay.frames.length - 1, Math.floor(t / 1000))], startsIn: 0 };
+    // During each second, tokens glide from where the last second left them to where this one does.
+    const i = Math.min(replay.frames.length - 1, Math.floor(t / 1000));
+    const from = i === 0 ? replay.start : replay.frames[i - 1].pos;
+    const k = i === Math.floor(t / 1000) ? (t - i * 1000) / 1000 : 1;
+    return { ...replay.frames[i], startsIn: 0, from, k };
   })();
   const replayedTokens = replayFrame
-    ? optimisticTokens.map((t) => (replayFrame.pos[t.id] ? { ...t, ...replayFrame.pos[t.id] } : t))
+    ? optimisticTokens.map((t) => {
+        const to = replayFrame.pos[t.id];
+        if (!to) return t;
+        if (!("from" in replayFrame) || replayFrame.k >= 1) return { ...t, ...to };
+        const from = replayFrame.from[t.id] ?? replay!.start[t.id];
+        if (!from) return { ...t, ...to };
+        const k = replayFrame.k;
+        return { ...t, col: from.col + (to.col - from.col) * k, row: from.row + (to.row - from.row) * k };
+      })
     : optimisticTokens;
   const drawnTokens = draggingToken
     ? replayedTokens.map((t) => (t.id === draggingToken.id ? { ...t, col: draggingToken.col, row: draggingToken.row } : t))
@@ -838,7 +850,7 @@ export default function MapView({
   }, [dockSide, levelId]);
   const anyPing = pings.some((p) => Date.now() - p.at < PING_MS);
   const replaying = !!replay && Date.now() < replay.starts + (replay.frames.length + 1) * 1000;
-  const frameMs = anyEffect || anyPing ? 40 : replaying ? 100 : anyFlicker ? 120 : 0;
+  const frameMs = anyEffect || anyPing || replaying ? 33 : anyFlicker ? 120 : 0; // a replay redraws often so tokens glide
   useEffect(() => {
     if (!frameMs) return;
     const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
