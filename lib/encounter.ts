@@ -1,6 +1,6 @@
 import { ATTRIBUTES, modifier, skillModifiers, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
-import { Broadcast, Collection, MODIFIERS, Method, ScriptError } from "./script";
+import { Broadcast, Collection, Health, MODIFIERS, Method, ScriptError } from "./script";
 
 /** A creature or character on the current map level. */
 export interface Actor {
@@ -11,8 +11,8 @@ export interface Actor {
   position: { col: number; row: number } | null;
   /** Fresh rolls each time they're read, e.g. rolls.initiative. */
   rolls: Rolls;
-  /** Current health; a character's is its own (the same as game.players.<name>.health). */
-  health: number;
+  /** Health (current, maximum, temporary); a character's is its own (the same as game.players.<name>.health). */
+  health: Health;
 }
 
 /** Defines a read-only, computed property that scripts can read but not assign. */

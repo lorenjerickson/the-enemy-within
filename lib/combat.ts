@@ -1,5 +1,6 @@
 import { formatModifier, modifier } from "@/lib/attributes";
-import { getCharacter, getCreature, getItem, listActions, listTokens, setTokenHp, db, type Creature } from "@/lib/db";
+import { getCharacter, getCreature, getItem, listActions, listTokens, db, type Creature } from "@/lib/db";
+import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
 import type { GearAction } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 
@@ -43,27 +44,21 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number):
   };
 }
 
-/** Fighters for every token on a level, with current health (rolled from its formula if never set). */
+/** Fighters for every token on a level; their hp is current plus temporary health (temporary goes first). */
 export function fightersOn(levelId: number): Map<number, Fighter> {
   const out = new Map<number, Fighter>();
   for (const t of listTokens(levelId)) {
-    if (t.character_id) {
-      const c = getCharacter(t.character_id);
-      const hp = db.prepare<[number], { hp: number | null }>("SELECT hp FROM characters WHERE id = ?").get(t.character_id)?.hp;
-      if (c) out.set(t.id, fighterOf(c, hp ?? rollDice(c.health || "0")));
-    } else if (t.creature_id) {
-      const c = getCreature(t.creature_id);
-      if (c) out.set(t.id, fighterOf(c, t.hp ?? rollDice(c.health || "0")));
-    }
+    const c = t.character_id ? getCharacter(t.character_id) : t.creature_id ? getCreature(t.creature_id) : undefined;
+    const h = c && tokenHealth(t.id);
+    if (c && h) out.set(t.id, fighterOf(c, h.current + h.temporary));
   }
   return out;
 }
 
-/** Saves a token's health after a round (a character's is its own; a creature token keeps its own). */
+/** Saves a token's health after a round: the drop from current + temporary comes off temporary first. */
 export function saveHp(tokenId: number, hp: number): void {
-  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
-  if (t?.character_id) db.prepare("UPDATE characters SET hp = ? WHERE id = ?").run(Math.round(hp), t.character_id);
-  else setTokenHp(tokenId, Math.round(hp));
+  const h = tokenHealth(tokenId);
+  if (h) saveTokenHealth(tokenId, takeDamage(h, h.current + h.temporary - Math.round(hp)));
 }
 
 /**

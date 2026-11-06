@@ -30,7 +30,7 @@ const TYPES: Record<string, Member[]> = {
   character: [
     text("name", "read-only"), text("type", "read-only"),
     { label: "attributes", type: "attributes", detail: "might, intellect …" },
-    num("health", "current health"), flag("alive", "read-only: health above 0"),
+    { label: "health", type: "health", detail: "current (plain health), maximum, temporary" }, flag("alive", "read-only: health above 0"),
     { label: "conditions", type: "tags", detail: "add / remove / has" },
     { label: "rolls", type: "rolls", detail: "d20 + modifier, fresh each read" },
   ],
@@ -53,9 +53,10 @@ const TYPES: Record<string, Member[]> = {
   ],
   actor: [
     text("name", "read-only"), text("type", "creature / character"),
-    { label: "position", type: "position", detail: "{ col, row }" }, num("health", "current health"),
+    { label: "position", type: "position", detail: "{ col, row }" }, { label: "health", type: "health", detail: "current (plain health), maximum, temporary" },
     { label: "rolls", type: "rolls", detail: "d20 + modifier" },
   ],
+  health: [num("current", "health now; set exactly"), num("maximum", "full health; restore with health = health.maximum"), num("temporary", "lost before current")],
   position: [num("col", "column"), num("row", "row (fractional on portrait maps)")],
   encounter: [
     flag("active", "an encounter is running"), num("round", "from 1"),

@@ -17,6 +17,7 @@ import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
 import LocationsPanel from "./LocationsPanel";
+import HealthPanel from "./HealthPanel";
 import { planEnd, timeline } from "@/lib/roundPlan";
 import { planView } from "@/lib/roundPlanServer";
 import { gearActions } from "@/lib/combat";
@@ -42,6 +43,7 @@ function GmView({ session }: { session: GameSession }) {
   const tools: DockTool[] = [
     { id: "locations", label: "Locations", icon: "map", content: <LocationsPanel /> },
     { id: "encounter", label: "Encounter", icon: "swords", content: <EncounterPanel /> },
+    { id: "health", label: "Health", icon: "heart", content: <HealthPanel /> },
     { id: "time", label: "Time", icon: "clock", content: <CalendarPanel now={getGameTime()} timers={listTimers()} /> },
     {
       id: "triggers",

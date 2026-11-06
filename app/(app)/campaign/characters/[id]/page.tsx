@@ -4,7 +4,8 @@ import { requireGm } from "@/lib/auth";
 import { characterPlayers, getCharacter, getCharacterPlayer, isInParty, listCharacterProfessionIds, listPlayers } from "@/lib/db";
 import DeleteCharacter from "../DeleteCharacter";
 import CreatureForm from "../../creatures/new/CreatureForm";
-import { submitCharacter } from "../actions";
+import { setCharacterHealth, submitCharacter } from "../actions";
+import { characterHealth } from "@/lib/health";
 import { equippableItems, professionNodes } from "../formOptions";
 import ProfessionsInput from "../ProfessionsInput";
 import InPartyInput from "../InPartyInput";
@@ -17,6 +18,7 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
   if (!character) notFound();
 
   const player = characterPlayers().get(character.id) ?? null;
+  const health = characterHealth(character.id)!;
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-3" data-played-by>
@@ -24,6 +26,17 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
         <span className="text-xs opacity-60">character #{character.id}</span>
         <span className="ml-auto"><DeleteCharacter id={character.id} name={character.name} player={player} /></span>
       </div>
+      <form action={setCharacterHealth.bind(null, character.id)} className="flex flex-wrap items-end gap-2 rounded-box bg-base-200 p-3 text-sm" data-character-health>
+        <span className="mr-2 self-center font-semibold">Health</span>
+        {(["current", "maximum", "temporary"] as const).map((k) => (
+          <label key={k} className="flex flex-col">
+            <span className="text-xs opacity-60">{k}</span>
+            <input name={k} type="number" defaultValue={health[k]} key={`${k}${health[k]}`} className="input input-sm w-20" />
+          </label>
+        ))}
+        <button className="btn btn-sm">Save health</button>
+        <button name="restore" value="1" className="btn btn-sm btn-success btn-outline" title="Current back to maximum">Restore to maximum</button>
+      </form>
       <CreatureForm
         items={equippableItems()}
         initial={character}

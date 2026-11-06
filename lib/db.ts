@@ -310,6 +310,10 @@ addColumn("actions", "seconds", "REAL NOT NULL DEFAULT 2"); // time it takes in 
 addColumn("actions", "range_ft", "REAL NOT NULL DEFAULT 5"); // how far the target may be (5 = within reach)
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
+addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
+addColumn("characters", "hp_temp", "INTEGER"); // temporary health, lost before current
+addColumn("map_tokens", "hp_max", "INTEGER");
+addColumn("map_tokens", "hp_temp", "INTEGER");
 addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
 db.exec("CREATE TABLE IF NOT EXISTS game_vars (key TEXT PRIMARY KEY, value TEXT NOT NULL)"); // script variables, JSON values
 // The running encounter on a map level; turn_order is JSON [{ token_id, initiative }], highest first.

@@ -5,13 +5,16 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
 ## State (`lib/game.ts`)
 
 - `game.players` (also `game.characters`): characters, by name or id: `game.players['annis']`, `game.players.annis`.
-  Each has `name`, `type` (read-only), `attributes.might` …, `health` (current), `alive` (read-only: health above 0), `conditions`.
-- `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health` → `[25, 7]`.
+  Each has `name`, `type` (read-only), `attributes.might` …, `health`, `alive` (read-only: health above 0), `conditions`.
+- **Health** has `health.current`, `health.maximum` (rolled once from the health formula) and `health.temporary` (lost before current).
+  Plain `health` is the current value, so `x.health < 5` and `x.health -= 3` work; a loss assigned to `x.health` comes off temporary first,
+  while `x.health.current = 4` sets current exactly. Restore: `x.health = x.health.maximum`. Temporary health: `x.health.temporary = 5`.
+- `coll.each.<prop>` (or `.all`) is that property of every item, like JS `.map`: `game.players.each.health.current` → `[25, 7]`.
   Assigning to it sets it on each: `game.players.all.health += 5`.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
 - `game.locations`: every location by name. `game.locations.current` is the map the party is on (in the script console), or the button's location (map buttons), with `level`, `actors` (everything on that level) and `creatures`.
-  Each actor has `name`, `type`, `position` (`{col, row}`) and `health` (a character's is the player's). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
+  Each actor has `name`, `type`, `position` (`{col, row}`) and `health` (a character's is the player's; see Health below). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
 - From the map's layers, on `game.locations.current`, each named in its layer's list (rename them there):
   - `illumination`: the level's overall light in percent, 0 (dark) to 100 (full). e.g. `game.locations.current.illumination = 25`.
   - `lights`: `name`, `kind`, `range` (cells), `flicker`, `on`. e.g. `L.lights.all.on = false`, `L.lights['lamp'].range = 2`

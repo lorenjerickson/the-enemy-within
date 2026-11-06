@@ -8,6 +8,7 @@ import {
 } from "@/lib/db";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
 import { fightersOn, saveHp } from "@/lib/combat";
+import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
@@ -122,5 +123,24 @@ const REPLAY_DELAY_MS = 3500;
 export async function loadLevel(levelId: number | null) {
   await requireGm();
   setGmViewLevel(levelId === null ? null : Number(levelId));
+  revalidatePath("/play");
+}
+
+/** The GM sets a token's health (a character token's is the character's). */
+export async function setHealth(tokenId: number, form: FormData) {
+  await requireGm();
+  const h = tokenHealth(tokenId);
+  if (!h) return;
+  const n = (k: string, d: number) => (Number.isFinite(Number(form.get(k))) && form.get(k) !== "" ? Number(form.get(k)) : d);
+  saveTokenHealth(tokenId, { current: n("current", h.current), maximum: Math.max(0, n("maximum", h.maximum)), temporary: Math.max(0, n("temporary", h.temporary)) });
+  revalidatePath("/play");
+}
+
+/** Back to full: current = maximum (temporary is left as it is). */
+export async function restoreHealth(tokenId: number) {
+  await requireGm();
+  const h = tokenHealth(tokenId);
+  if (!h) return;
+  saveTokenHealth(tokenId, { ...h, current: h.maximum });
   revalidatePath("/play");
 }

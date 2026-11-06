@@ -51,7 +51,23 @@ export class Method {
 export class Watch {
   constructor(public current: unknown, public previous: unknown) {}
 }
-const plain = (v: unknown) => (v instanceof Watch ? v.current : v);
+/**
+ * Health as scripts see it: x.health.current, .maximum and .temporary.
+ * Used as a plain value it's the current one ("x.health < 5", "x.health -= 3"); a loss assigned to x.health
+ * comes off temporary first. x.health.current = n sets current exactly.
+ */
+export class Health {
+  constructor(public current: number, public maximum: number, public temporary: number) {}
+  set(v: number): void {
+    const loss = this.current - v;
+    const fromTemp = Math.min(this.temporary, Math.max(0, loss));
+    this.temporary -= fromTemp;
+    this.current -= loss - fromTemp;
+  }
+}
+const HEALTH_KEYS = ["current", "maximum", "temporary"];
+/** A value as a plain number, text, etc.: a watched value's current one, health's current. */
+export const plain = (v: unknown): unknown => (v instanceof Watch ? plain(v.current) : v instanceof Health ? v.current : v);
 
 /** Objects whose keys scripts may create (game.vars); missing keys read as null. */
 export const FREEFORM = new WeakSet<object>();
@@ -427,6 +443,10 @@ function readKey(obj: unknown, key: string): unknown {
     if (key === "changed") return obj.current !== obj.previous;
     return readKey(obj.current, key);
   }
+  if (obj instanceof Health) {
+    if (HEALTH_KEYS.includes(key)) return obj[key as keyof Health];
+    throw new ScriptError(`Health has current, maximum and temporary, not "${key}"`);
+  }
   if (obj instanceof Some) {
     if (obj.mode === "one" && key === "rolls") return new OneRoll(obj.values);
     return new Some(obj.mode, obj.values.map((v) => getKey(v, key)));
@@ -516,6 +536,17 @@ function setKey(obj: unknown, key: string, value: unknown): void {
   }
   const rec = obj as Record<string, unknown>;
   if (READ_ONLY.has(key) && !FREEFORM.has(obj)) throw new ScriptError(`"${key}" can't be changed by a script`);
+  if (obj instanceof Health) {
+    if (!HEALTH_KEYS.includes(key)) throw new ScriptError(`Health has current, maximum and temporary, not "${key}"`);
+    if (typeof value !== "number") throw new ScriptError(`health.${key} must be a number`);
+    if (key !== "current" && value < 0) throw new ScriptError(`health.${key} can't be below 0`);
+    (obj as unknown as Record<string, number>)[key] = value;
+    return;
+  }
+  if (Object.hasOwn(rec, key) && rec[key] instanceof Health) {
+    if (typeof value !== "number") throw new ScriptError(`"${key}" must be a number (or change health.current, .maximum, .temporary)`);
+    return rec[key].set(value);
+  }
   if (FREEFORM.has(obj)) {
     if (value !== null && !["number", "string", "boolean"].includes(typeof value)) throw new ScriptError(`game.vars can only hold numbers, text, true/false or null`);
   } else if (!Object.hasOwn(rec, key)) {

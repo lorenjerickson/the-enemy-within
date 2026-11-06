@@ -79,9 +79,10 @@ export default function PlayDock({
 
 const lastOpen: Partial<Record<"left" | "right", string | null>> = {};
 
-export type DockIcon = "layers" | "clock" | "bolt" | "code" | "flag" | "user" | "book" | "swords" | "map";
+export type DockIcon = "layers" | "clock" | "bolt" | "code" | "flag" | "user" | "book" | "swords" | "map" | "heart";
 
 const PATHS: Record<DockIcon, ReactNode> = {
+  heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />,
   layers: <path d="M12 3 2 8l10 5 10-5-10-5zM2 13l10 5 10-5M2 18l10 5 10-5" />,
   clock: (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
   bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />,

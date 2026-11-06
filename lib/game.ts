@@ -1,12 +1,13 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
+import { characterHealth, saveCharacterHealth, saveTokenHealth, tokenHealth } from "./health";
 import {
   getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, logSessionEvent, type Trigger,
   getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen, setDoorLocked,
-  addCreatureToken, setTokenHp, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
+  addCreatureToken, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
-import { Collection, FREEFORM, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
+import { Collection, FREEFORM, Health, plain, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, syncObjectiveJournals, type ObjectiveStatus } from "./story";
@@ -20,7 +21,8 @@ export interface Player {
   name: string;
   type: string;
   attributes: Attributes;
-  health: number;
+  /** health.current, .maximum, .temporary; plain "health" is the current value. */
+  health: Health;
   conditions: Tags;
   /** Read-only: health above 0. */
   readonly alive: boolean;
@@ -110,11 +112,17 @@ interface ActorChanges {
   levelId: number;
   added: Map<Actor, number>; // actor -> creature id
   start: Map<Actor, string>;
-  startHp: Map<Actor, number | null>; // creature tokens' saved health
+  startHp: Map<Actor, string>; // creature tokens' saved health (as JSON, to spot changes)
   encounter: () => EncounterState | null;
   portrait: boolean; // gravity applies
   gridless: boolean; // positions anywhere, distances in straight lines
   structures: MapStructure[];
+}
+
+/** Fresh health for a new creature: the maximum rolled from its formula. */
+function rolledHealth(formula: string | null | undefined): Health {
+  const max = rollDice(formula || "0");
+  return new Health(max, max, 0);
 }
 
 function loadLocation(levelId: number, players: Player[]): [CurrentLocation, ActorChanges] {
@@ -135,15 +143,15 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
       type: t.character_id ? "character" : "creature",
       position: { col: t.col, row: t.row },
       rolls: rollsFor(attributesOf(t)),
-      health: 0,
+      health: new Health(0, 0, 0),
     };
     const player = t.character_id ? players.find((p) => p.id === t.character_id) : undefined;
     if (player) {
-      Object.defineProperty(a, "health", { enumerable: true, get: () => player.health, set: (v: number) => (player.health = v) });
+      Object.defineProperty(a, "health", { enumerable: true, get: () => player.health, set: (v: number) => player.health.set(v) });
     } else {
-      const template = templates.find((c) => c.id === t.creature_id);
-      a.health = t.hp ?? rollDice(template?.health || "0");
-      changes.startHp.set(a, t.hp);
+      const h = tokenHealth(t.id) ?? { current: 0, maximum: 0, temporary: 0 };
+      a.health = new Health(h.current, h.maximum, h.temporary);
+      changes.startHp.set(a, JSON.stringify(a.health));
     }
     changes.start.set(a, `${t.col},${t.row}`);
     return a;
@@ -156,7 +164,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
     const added = Array.from({ length: count }, (): Actor => {
       const a: Actor = {
         id: nextId--, name: template.name, type: "creature", position: null,
-        rolls: rollsFor(template.attributes), health: rollDice(template.health || "0"),
+        rolls: rollsFor(template.attributes), health: rolledHealth(template.health),
       };
       changes.added.set(a, template.id);
       creatures.items.push(a);
@@ -202,14 +210,15 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
     const creatureId = changes.added.get(a);
     if (creatureId !== undefined) {
       if (!a.position) throw new ScriptError(`${a.name} was added but never placed; use place(...)`);
-      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row, Math.round(a.health));
+      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row, Math.round(a.health.current));
+      saveTokenHealth(a.id, a.health);
       continue;
     }
     if (a.position && changes.start.get(a) !== `${a.position.col},${a.position.row}`) {
       moveToken(a.id, a.position.col, a.position.row); // already whole cells, or snapped heights on portrait maps
     }
     // Creature tokens keep their own health (rolled on first use); characters' is saved with the player.
-    if (changes.startHp.has(a) && changes.startHp.get(a) !== Math.round(a.health)) setTokenHp(a.id, Math.round(a.health));
+    if (changes.startHp.has(a) && changes.startHp.get(a) !== JSON.stringify(a.health)) saveTokenHealth(a.id, a.health);
   }
   // After the inserts above, so new creatures have their token ids.
   const e = changes.encounter();
@@ -230,8 +239,8 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
     name: c.name,
     type: c.type,
     attributes: { ...c.attributes },
-    // Current health starts as a roll of the character's health formula.
-    health: c.hp ?? rollDice(c.health || "0"),
+    // Maximum health is rolled once from the character's formula; current starts there.
+    health: ((h) => new Health(h.current, h.maximum, h.temporary))(characterHealth(c.id)!),
     conditions: new Tags(new Set(c.conditions)),
   })) as unknown as Player[]; // `alive` and `rolls` are added just below
   const inParty = new Set(listCharacterStates().filter((c) => c.in_party).map((c) => c.id));
@@ -239,7 +248,7 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
     p.rolls = rollsFor(p.attributes); // reads the attributes live, so changes made by the script count
     Object.defineProperty(p, "alive", {
       enumerable: true,
-      get: () => p.health > 0,
+      get: () => p.health.current > 0,
       set() {
         throw new ScriptError('"alive" can\'t be set; change health instead');
       },
@@ -357,7 +366,8 @@ function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef
     }
     for (const p of game.players.items) {
       const attributes = Object.fromEntries(Object.entries(p.attributes).map(([k, v]) => [k, clamp(v)])) as Attributes;
-      saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health), conditions: [...p.conditions.set] });
+      saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health.current), conditions: [...p.conditions.set] });
+      saveCharacterHealth(p.id, p.health);
     }
     saveVars({ ...game.vars });
     setGameTime(game.calendar.now);
@@ -371,6 +381,7 @@ function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef
 /** Numbers from helper arguments, lists spread out. */
 function numbers(args: unknown[]): number[] {
   return spread(args).map((v) => {
+    v = plain(v);
     if (typeof v !== "number") throw new ScriptError(`expected numbers, got ${JSON.stringify(v)}`);
     return v;
   });
@@ -491,7 +502,7 @@ function mapHelpers(game: Game, changes: ActorChanges | null) {
       a.position = landed;
       const dice = fallDice(landed.row - target.row);
       const damage = dice > 0 ? rollDice(`${dice}d6`) : 0;
-      a.health = Math.max(0, a.health - damage);
+      a.health.set(Math.max(0, a.health.current - damage));
       return damage;
     }),
   };
@@ -569,7 +580,7 @@ export function fireTriggers(depth = 0): string[] {
     const seen: Record<string, VarValue> = {};
     const bind = (name: string, v: unknown) => {
       if (!Object.hasOwn(trigger.watches, name)) return v;
-      const now = (v instanceof Watch ? v.current : v) as VarValue;
+      const now = plain(v) as VarValue;
       seen[name] = now ?? null;
       return new Watch(now, trigger.watches[name]);
     };
@@ -592,7 +603,7 @@ export function fireTriggers(depth = 0): string[] {
     try {
       runGameScript(triggerScript(trigger.prelude, trigger.action), trigger.level_id ?? undefined, {
         depth: depth + 1,
-        bind: (name, v) => (Object.hasOwn(watched, name) ? new Watch(v instanceof Watch ? v.current : v, watched[name]) : v),
+        bind: (name, v) => (Object.hasOwn(watched, name) ? new Watch(plain(v), watched[name]) : v),
       });
     } catch (e) {
       fail(e);
