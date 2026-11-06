@@ -9,6 +9,7 @@ import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import { setTargetMode, useTargetMode } from "./targetMode";
 
 export interface CreaturePlan {
   tokenId: number;
@@ -18,8 +19,11 @@ export interface CreaturePlan {
 
 /** The GM plans each creature's round: pick one, add actions here and moves on the map, then mark it ready. */
 export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string }[] }) {
-  const [choosing, setChoosing] = useState<PlayerActionId | null>(null); // picking a target for this action
   const selected = useGmPlanToken();
+  // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
+  const target = useTargetMode();
+  const choosing = target && target.tokenId === (selected) ? target.action : null;
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected } : null);
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +64,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           />
           {choosing && (
             <TargetPicker
-              title={`${label(choosing)} who?`}
+              title={`Click who to ${label(choosing).toLowerCase()} on the map, or pick:`}
               targets={targets.filter((t) => t.id !== current.tokenId)}
               onCancel={() => setChoosing(null)}
               onPick={(target) => {

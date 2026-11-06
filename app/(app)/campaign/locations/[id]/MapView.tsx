@@ -16,6 +16,7 @@ import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { useScrub } from "../../../../(play)/play/scrub";
+import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
@@ -913,6 +914,10 @@ export default function MapView({
     });
   }
   const press = useRef<{ x: number; y: number; t: number; gx: number; gy: number } | null>(null);
+  // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
+  const targetMode = useTargetMode();
+  const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
+  const targetCandidates = targetMode ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
   const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
 
   const state: MapState = {
@@ -1015,6 +1020,20 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Picking a target for a planned action: a click on a token chooses it (only tokens shown on this map).
+    if (targetMode && e.button === 0) {
+      const { gx, gy } = gridAt(e);
+      const hit = targetCandidates.find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      if (!hit) return;
+      const m = targetMode;
+      setTargetMode(null);
+      startTransition(async () => {
+        const step = { kind: "action" as const, action: m.action, target: hit.id };
+        const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
+        if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+      });
+      return;
+    }
     // The GM planning a creature: a click (no drag, not a hold) plans its move; remember the press.
     if (gmPlan && e.button === 0 && selected === null) press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
@@ -1467,6 +1486,20 @@ export default function MapView({
         ctx.drawImage(f, 0, 0);
         ctx.restore();
       }
+      // Picking a target: a faint ring around each token that can be clicked.
+      if (targetMode) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        ctx.save();
+        ctx.strokeStyle = "rgba(250,204,21,0.85)";
+        ctx.lineWidth = 2 / k;
+        ctx.setLineDash([3 / k, 3 / k]);
+        for (const t of targetCandidates) {
+          ctx.beginPath();
+          ctx.arc(x0 + (t.col + 0.5) * size, y0 + (t.row + 0.5) * size, size * 0.55, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
       // Planned targets: a dashed line from the actor to who they're aiming at, and a ring on the target.
       if (planTargets.length && !replayFrame) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
@@ -1709,6 +1742,16 @@ export default function MapView({
 
   const surface = (
     <>
+            {targetMode && (
+              <div
+                data-target-banner
+                className="absolute top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-box bg-warning px-3 py-2 text-sm text-warning-content shadow"
+                style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
+              >
+                Click who to {targetMode.action}
+                <button type="button" className="btn btn-xs" onClick={() => setTargetMode(null)}>Cancel</button>
+              </div>
+            )}
             {replayFrame && replay && (
               <div
                 data-replay

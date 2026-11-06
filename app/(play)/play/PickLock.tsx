@@ -8,6 +8,7 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import { setTargetMode, useTargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
 
@@ -26,7 +27,10 @@ export default function PickLock({
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string }[]; // who they can see, to attack
 }) {
-  const [choosing, setChoosing] = useState<PlayerActionId | null>(null); // picking a target for this action
+  // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
+  const target = useTargetMode();
+  const choosing = target && target.tokenId === (null) ? target.action : null;
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null } : null);
   const moving = useMoveMode();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +56,7 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {plan && choosing && (
         <TargetPicker
-          title={`${label(choosing)} who?`}
+          title={`Click who to ${label(choosing).toLowerCase()} on the map, or pick:`}
           targets={targets}
           onCancel={() => setChoosing(null)}
           onPick={(target) => {
