@@ -93,7 +93,8 @@ export function resolveMovement(
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
   const lag = new Map(order.map((m) => [m.tokenId, 0])); // seconds each has been held back
   const pos = new Map(order.map((m) => [m.tokenId, m.start]));
-  const same = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) < 0.9 : a.col === b.col && a.row === b.row);
+  const same = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) < 0.9 : a.col === b.col && a.row === b.row); // the same spot (overlapping)
+  const unmoved = (a: Pos, b: Pos) => Math.hypot(a.col - b.col, a.row - b.row) < 0.01; // a short step on a gridless map is still a move
   const log: string[] = [];
   // Each mover's actions in its own plan time. An action finishes when the mover's plan clock (seconds minus the
   // seconds it was held back or spent closing in) passes its end; order within a second = initiative order.
@@ -239,11 +240,11 @@ export function resolveMovement(
     const settled: { id: number; at: Pos }[] = [];
     for (const m of order) {
       const here = pos.get(m.tokenId)!, want = proposed.get(m.tokenId)!;
-      if (same(here, want)) {
+      if (unmoved(here, want)) {
         settled.push({ id: m.tokenId, at: here });
         continue;
       }
-      const stillUnmoved = order.filter((o) => !settled.some((s) => s.id === o.tokenId) && o.tokenId !== m.tokenId && same(proposed.get(o.tokenId)!, pos.get(o.tokenId)!));
+      const stillUnmoved = order.filter((o) => !settled.some((s) => s.id === o.tokenId) && o.tokenId !== m.tokenId && unmoved(proposed.get(o.tokenId)!, pos.get(o.tokenId)!));
       const blocker =
         settled.find((s) => same(s.at, want)) ??
         stillUnmoved.map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
@@ -331,7 +332,7 @@ export function resolveMovement(
   }
   for (const m of order) {
     const end = pos.get(m.tokenId)!;
-    if (!same(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
+    if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
   return { final: pos, hp, log, frames };
 }
