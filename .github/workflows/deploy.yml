@@ -1,0 +1,39 @@
+# Checks the code, then deploys to Fly.io (Docker image built on Fly's builder) on every push to main.
+# Needs the repository secret FLY_API_TOKEN (see docs/deploying.md).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+        env:
+          DATA_DIR: ${{ runner.temp }}/build-data
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

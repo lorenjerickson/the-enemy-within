@@ -18,8 +18,10 @@ import type { Boost, DamageType, DurationUnit, RollGrant, RollMode } from "@/lib
 import type { EffectKind } from "@/lib/effects";
 import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 
-fs.mkdirSync("data", { recursive: true });
-export const db = new Database("data/game.db");
+// Where the database and uploaded media live: ./data locally, a mounted volume when deployed (DATA_DIR=/data).
+export const DATA_DIR = process.env.DATA_DIR ?? "data";
+fs.mkdirSync(DATA_DIR, { recursive: true });
+export const db = new Database(`${DATA_DIR}/game.db`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (

@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { addAsset, type AssetUsage } from "@/lib/db";
+import { DATA_DIR, addAsset, type AssetUsage } from "@/lib/db";
 import { transparentToken } from "@/lib/tokenArt";
 
-// Uploaded media (images and audio) live in data/images and are served by app/images/[file]/route.ts.
-export const IMAGE_DIR = path.join("data", "images");
+// Uploaded media (images and audio) live in <DATA_DIR>/images and are served by app/images/[file]/route.ts.
+export const IMAGE_DIR = path.join(DATA_DIR, "images");
 fs.mkdirSync(IMAGE_DIR, { recursive: true });
 
 const EXTENSIONS: Record<string, string> = {

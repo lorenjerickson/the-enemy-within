@@ -1,53 +1,26 @@
-# syntax = docker/dockerfile:1
+# The Enemy Within: a self-contained Next.js server (output: "standalone").
+# The database and uploaded media live in DATA_DIR (/data), a persistent volume on the host (see fly.toml).
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=22.21.1
-FROM node:${NODE_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Next.js"
-
-# Next.js app lives here
+FROM node:22-bookworm-slim AS deps
 WORKDIR /app
+# Tools to compile better-sqlite3 if no prebuilt binary matches.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Set production environment
-ENV NODE_ENV="production"
-
-
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
-COPY package-lock.json package.json ./
-RUN npm ci --include=dev
-
-# Copy application code
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
+# The build must not touch the real data: give it a scratch data folder.
+RUN DATA_DIR=/tmp/build-data npm run build
 
-# Build application
-RUN npx next build --experimental-build-mode compile
-
-# Remove development dependencies
-RUN npm prune --omit=dev
-
-
-# Final stage for app image
-FROM base
-
-# Copy built application
-COPY --from=build /app /app
-
-# Setup sqlite3 on a separate volume
-RUN mkdir -p /data
-VOLUME /data
-
-# Entrypoint sets up the container.
-ENTRYPOINT [ "/app/docker-entrypoint.js" ]
-
-# Start the server by default, this can be overwritten at runtime
+FROM node:22-bookworm-slim AS run
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 DATA_DIR=/data
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
 EXPOSE 3000
-ENV DATABASE_URL="file:///data/sqlite.db"
-CMD [ "npm", "run", "start" ]
+CMD ["node", "server.js"]
