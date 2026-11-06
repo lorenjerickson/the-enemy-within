@@ -4,7 +4,7 @@ import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } fr
 import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
-import { blockingSegments, movementBlockers, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
+import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
@@ -21,7 +21,7 @@ import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
-import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, pointToSegment, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -147,12 +147,6 @@ function fitScene(w: number, h: number) {
 }
 
 /** Grid cell geometry: top-left of cell (0,0) and the cell size, in map space. */
-/** How far a point is from a wall / door line (grid units). */
-function segmentDistance(px: number, py: number, s: { x1: number; y1: number; x2: number; y2: number }): number {
-  const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
-  const t = dx || dy ? Math.max(0, Math.min(1, ((px - s.x1) * dx + (py - s.y1) * dy) / (dx * dx + dy * dy))) : 0;
-  return Math.hypot(px - (s.x1 + t * dx), py - (s.y1 + t * dy));
-}
 
 function gridOrigin(state: MapState, w: number, h: number) {
   const { size, offsetX, offsetY } = state.grid;
@@ -220,16 +214,6 @@ const FX_MS = 1000; // how long a script's effect plays
 
 /** How far characters see (grid units): as far as walls allow. */
 const SIGHT = 500;
-
-/** Whether a point lies inside a polygon (ray casting). */
-function insidePolygon(p: Point, poly: Point[]): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
 
 /** Layers only the GM ever sees. */
 const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
@@ -939,19 +923,25 @@ export default function MapView({
     : optimisticNotes;
 
   // Fog of war (players; not side-on maps): what their characters see now, past walls and closed doors, and what they saw before.
+  // Recomputed only when the walls or the spots they've stood on change (not on every redraw or page refresh, which
+  // hand over new arrays): one visibility polygon per spot adds up over a campaign.
+  const fogOn = !!fog && mapImage.perspective !== "portrait"; // side-on maps have no fog
+  const wallsKey = fogOn ? optimisticStructures.map((w) => `${w.kind}${w.open}${w.x1},${w.y1},${w.x2},${w.y2}`).join("|") : "";
+  const fogWalls = useMemo(() => blockingSegments(optimisticStructures), [wallsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const exploredKey = fogOn ? JSON.stringify(fog!.explored) : "";
+  const explored = useMemo(
+    () => (exploredKey ? (JSON.parse(exploredKey) as Point[]).map((p) => visibilityPolygon(p, SIGHT, fogWalls)) : []),
+    [exploredKey, fogWalls]
+  );
   const fogged = useMemo(() => {
-    if (!fog || mapImage.perspective === "portrait") return null; // side-on maps have no fog
-    const walls = blockingSegments(optimisticStructures);
+    if (!fogOn) return null;
     const centre = (t: MapToken) => ({ x: t.col + 0.5, y: t.row + 0.5 });
-    const own = drawnTokens.filter((t) => t.character_id !== null && fog.viewers.includes(t.character_id));
-    const visible = own.map((t) => visibilityPolygon(centre(t), SIGHT, walls));
-    const seen = new Map(fog.explored.map((p) => [`${p.x},${p.y}`, p]));
-    for (const t of own) seen.delete(`${centre(t).x},${centre(t).y}`); // already in `visible`
-    const explored = [...seen.values()].map((p) => visibilityPolygon(p, SIGHT, walls));
+    const own = drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
+    const visible = own.map((t) => visibilityPolygon(centre(t), SIGHT, fogWalls));
     // Only tokens in sight are shown (and their own, always).
     const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
     return { visible, explored, tokens };
-  }, [fog, mapImage.perspective, optimisticStructures, drawnTokens]);
+  }, [fogOn, fog?.viewers.join(), fogWalls, explored, drawnTokens]); // eslint-disable-line react-hooks/exhaustive-deps
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.
@@ -1060,7 +1050,7 @@ export default function MapView({
     if (pickEntity === "door") {
       const near = state.structures
         .filter((d) => d.kind === "door" && pickIds.has(d.id))
-        .map((d) => ({ id: d.id, d: segmentDistance(gx, gy, d) }))
+        .map((d) => ({ id: d.id, d: pointToSegment({ x: gx, y: gy }, { x: d.x1, y: d.y1 }, { x: d.x2, y: d.y2 }) }))
         .sort((a, b) => a.d - b.d)[0];
       return near && near.d < 0.4 ? near.id : undefined;
     }

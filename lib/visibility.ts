@@ -48,21 +48,6 @@ export function blockingSegments(structures: { kind: string; x1: number; y1: num
     .map((s) => ({ a: { x: s.x1, y: s.y1 }, b: { x: s.x2, y: s.y2 } }));
 }
 
-/**
- * Whether a sound at `source` with this range can be heard at `listener`: within range and not cut off
- * by a wall or closed door (same units as the walls, e.g. grid units).
- */
-export function audible(source: Point, radius: number, listener: Point, walls: Segment[]): boolean {
-  const dx = listener.x - source.x, dy = listener.y - source.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist > radius) return false;
-  if (dist === 0) return true;
-  return !walls.some((w) => {
-    const t = hit(source, dx / dist, dy / dist, w);
-    return t !== null && t < dist;
-  });
-}
-
 /** Whether a point lies inside a polygon (ray casting). */
 export function insidePolygon(p: Point, poly: Point[]): boolean {
   let inside = false;

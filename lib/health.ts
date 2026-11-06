@@ -57,3 +57,16 @@ export function saveTokenHealth(tokenId: number, h: HealthValues): void {
   if (t?.character_id) return saveCharacterHealth(t.character_id, h);
   db.prepare("UPDATE map_tokens SET hp = ?, hp_max = ?, hp_temp = ? WHERE id = ?").run(...whole(h), tokenId);
 }
+
+/**
+ * Health from a form with HealthFields (blank or invalid fields keep `h`'s value); a "restore" field (the Restore
+ * button) puts current back to maximum.
+ */
+export function parseHealthForm(form: FormData, h: HealthValues): HealthValues {
+  const n = (k: string, d: number) => {
+    const v = form.get(k);
+    return v !== null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d;
+  };
+  const next = { current: n("current", h.current), maximum: Math.max(0, n("maximum", h.maximum)), temporary: Math.max(0, n("temporary", h.temporary)) };
+  return form.get("restore") ? { ...next, current: next.maximum } : next;
+}

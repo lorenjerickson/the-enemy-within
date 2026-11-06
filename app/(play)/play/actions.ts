@@ -167,9 +167,16 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   const sight = blockingSegments(listStructures(me.level_id)); // what they could see past
   const walls = movementBlockers(listStructures(me.level_id)); // what they can walk past (windows block)
   const here = { x: me.col + 0.5, y: me.row + 0.5 };
-  // What they've seen: from where they stand now and everywhere they've stood on this level.
-  const seen = [here, ...listSightings(user.id, me.level_id)].map((p) => visibilityPolygon(p, 500, sight));
-  const revealed = (p: Point) => seen.some((poly) => insidePolygon(p, poly));
+  // What they've seen: from where they stand now and everywhere they've stood on this level. Each spot's view is
+  // worked out only when needed, nearest first, and kept (a route asks about many points; most are seen from nearby).
+  const spots = [here, ...listSightings(user.id, me.level_id)];
+  const views: (Point[] | undefined)[] = [];
+  const viewFrom = (i: number) => (views[i] ??= visibilityPolygon(spots[i], 500, sight));
+  const revealed = (p: Point) =>
+    spots
+      .map((s, i) => [i, Math.hypot(s.x - p.x, s.y - p.y)] as const)
+      .sort((a, b) => a[1] - b[1])
+      .some(([i]) => insidePolygon(p, viewFrom(i)));
   const target = { x: Number(gx), y: Number(gy) };
 
   let route: Point[]; // token corners (col, row) to step through, start first

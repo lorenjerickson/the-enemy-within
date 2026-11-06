@@ -219,7 +219,7 @@ function saveActors(changes: ActorChanges, location: CurrentLocation): void {
     const creatureId = changes.added.get(a);
     if (creatureId !== undefined) {
       if (!a.position) throw new ScriptError(`${a.name} was added but never placed; use place(...)`);
-      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row, Math.round(a.health.current));
+      a.id = addCreatureToken(changes.levelId, creatureId, a.position.col, a.position.row);
       saveTokenHealth(a.id, a.health);
       continue;
     }
@@ -378,7 +378,7 @@ function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef
     }
     for (const p of game.players.items) {
       const attributes = Object.fromEntries(Object.entries(p.attributes).map(([k, v]) => [k, clamp(v)])) as Attributes;
-      saveCharacterState({ id: p.id, attributes, hp: Math.round(p.health.current), conditions: [...p.conditions.set] });
+      saveCharacterState({ id: p.id, attributes, conditions: [...p.conditions.set] });
       saveCharacterHealth(p.id, p.health);
     }
     saveVars({ ...game.vars });

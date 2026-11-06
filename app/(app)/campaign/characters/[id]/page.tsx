@@ -6,6 +6,7 @@ import DeleteCharacter from "../DeleteCharacter";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { setCharacterHealth, submitCharacter } from "../actions";
 import { characterHealth } from "@/lib/health";
+import HealthFields from "../../../HealthFields";
 import { equippableItems, professionNodes } from "../formOptions";
 import ProfessionsInput from "../ProfessionsInput";
 import InPartyInput from "../InPartyInput";
@@ -28,12 +29,7 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
       </div>
       <form action={setCharacterHealth.bind(null, character.id)} className="flex flex-wrap items-end gap-2 rounded-box bg-base-200 p-3 text-sm" data-character-health>
         <span className="mr-2 self-center font-semibold">Health</span>
-        {(["current", "maximum", "temporary"] as const).map((k) => (
-          <label key={k} className="flex flex-col">
-            <span className="text-xs opacity-60">{k}</span>
-            <input name={k} type="number" defaultValue={health[k]} key={`${k}${health[k]}`} className="input input-sm w-20" />
-          </label>
-        ))}
+        <HealthFields health={health} />
         <button className="btn btn-sm">Save health</button>
         <button name="restore" value="1" className="btn btn-sm btn-success btn-outline" title="Current back to maximum">Restore to maximum</button>
       </form>

@@ -1,6 +1,7 @@
 import { downTokens, getGmLevelId, listTokens } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
-import { restoreHealth, setHealth } from "./gmActions";
+import { setHealth } from "./gmActions";
+import HealthFields from "../../(app)/HealthFields";
 
 /** The GM's Health tool: each token on the active map, with current / maximum / temporary health and Restore. */
 export default function HealthPanel() {
@@ -18,18 +19,11 @@ export default function HealthPanel() {
               <span className="flex-1 font-semibold">{t.name}</span>
               {down.has(t.id) && <span className="badge badge-xs badge-error">down</span>}
               <span className="text-xs opacity-70">{h.current}/{h.maximum}{h.temporary ? ` +${h.temporary}` : ""}</span>
-              <form action={restoreHealth.bind(null, t.id)}>
-                <button className="btn btn-xs" disabled={h.current >= h.maximum} title="Current back to maximum">Restore</button>
-              </form>
             </div>
             <form action={setHealth.bind(null, t.id)} className="mt-1 flex items-end gap-1 text-xs">
-              {(["current", "maximum", "temporary"] as const).map((k) => (
-                <label key={k} className="flex flex-col">
-                  <span className="opacity-60">{k}</span>
-                  <input name={k} type="number" defaultValue={h[k]} key={`${k}${h[k]}`} className="input input-xs w-16" />
-                </label>
-              ))}
+              <HealthFields health={h} size="xs" />
               <button className="btn btn-xs">Set</button>
+              <button name="restore" value="1" className="btn btn-xs ml-auto" disabled={h.current >= h.maximum} title="Current back to maximum">Restore</button>
             </form>
           </li>
         );

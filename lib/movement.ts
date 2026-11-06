@@ -57,7 +57,8 @@ export function routeTo(reach: Reach, key: string): { col: number; row: number }
  * doesn't slide over a free-standing wall's end; a little under half, so a one-unit doorway still fits. */
 export const BODY = 0.4;
 
-const pointToSegment = (p: Point, a: Point, b: Point) => {
+/** How far a point is from segment a–b. */
+export const pointToSegment = (p: Point, a: Point, b: Point) => {
   const dx = b.x - a.x, dy = b.y - a.y;
   const t = dx || dy ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy))) : 0;
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));

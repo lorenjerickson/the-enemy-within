@@ -11,7 +11,7 @@ import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
 import { attackRange, fightersOn, saveHp } from "@/lib/combat";
-import { saveTokenHealth, tokenHealth } from "@/lib/health";
+import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
@@ -137,22 +137,12 @@ export async function loadLevel(levelId: number | null) {
   revalidatePath("/play");
 }
 
-/** The GM sets a token's health (a character token's is the character's). */
+/** The GM sets a token's health, or restores it (a character token's is the character's). */
 export async function setHealth(tokenId: number, form: FormData) {
   await requireGm();
   const h = tokenHealth(tokenId);
   if (!h) return;
-  const n = (k: string, d: number) => (Number.isFinite(Number(form.get(k))) && form.get(k) !== "" ? Number(form.get(k)) : d);
-  saveTokenHealth(tokenId, { current: n("current", h.current), maximum: Math.max(0, n("maximum", h.maximum)), temporary: Math.max(0, n("temporary", h.temporary)) });
-  revalidatePath("/play");
-}
-
-/** Back to full: current = maximum (temporary is left as it is). */
-export async function restoreHealth(tokenId: number) {
-  await requireGm();
-  const h = tokenHealth(tokenId);
-  if (!h) return;
-  saveTokenHealth(tokenId, { ...h, current: h.maximum });
+  saveTokenHealth(tokenId, parseHealthForm(form, h));
   revalidatePath("/play");
 }
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { characterHealth, saveCharacterHealth } from "@/lib/health";
+import { characterHealth, parseHealthForm, saveCharacterHealth } from "@/lib/health";
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
@@ -36,10 +36,7 @@ export async function setCharacterHealth(id: number, form: FormData) {
   await requireGm();
   const h = characterHealth(id);
   if (!h) return;
-  const n = (k: string, d: number) => (form.get(k) !== null && form.get(k) !== "" && Number.isFinite(Number(form.get(k))) ? Number(form.get(k)) : d);
-  const next = { current: n("current", h.current), maximum: Math.max(0, n("maximum", h.maximum)), temporary: Math.max(0, n("temporary", h.temporary)) };
-  if (form.get("restore")) next.current = next.maximum;
-  saveCharacterHealth(id, next);
+  saveCharacterHealth(id, parseHealthForm(form, h));
   revalidatePath(`/campaign/characters/${id}`);
   revalidatePath("/play");
 }

@@ -1095,16 +1095,11 @@ export function listTokens(levelId: number): MapToken[] {
     .all(levelId);
 }
 
-export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number, hp: number | null = null): number {
+/** Places a creature token; its health is rolled the first time it's needed (or saved with saveTokenHealth). */
+export function addCreatureToken(levelId: number, creatureId: number, col: number, row: number): number {
   return Number(
-    db.prepare<[number, number, number, number, number | null]>("INSERT INTO map_tokens (level_id, creature_id, col, row, hp) VALUES (?, ?, ?, ?, ?)").run(
-      levelId, creatureId, col, row, hp
-    ).lastInsertRowid
+    db.prepare<[number, number, number, number]>("INSERT INTO map_tokens (level_id, creature_id, col, row) VALUES (?, ?, ?, ?)").run(levelId, creatureId, col, row).lastInsertRowid
   );
-}
-
-export function setTokenHp(id: number, hp: number): void {
-  db.prepare<[number, number]>("UPDATE map_tokens SET hp = ? WHERE id = ?").run(hp, id);
 }
 
 /** Whether a map level is drawn side-on (portrait), where gravity applies. */
@@ -1492,9 +1487,9 @@ export function listCharacterStates(): CharacterState[] {
     .map((r) => ({ ...r, attributes: JSON.parse(r.attributes), conditions: JSON.parse(r.conditions) }));
 }
 
-export function saveCharacterState(s: Pick<CharacterState, "id" | "attributes" | "hp" | "conditions">): void {
-  db.prepare<[string, number | null, string, number]>("UPDATE characters SET attributes = ?, hp = ?, conditions = ? WHERE id = ?")
-    .run(JSON.stringify(s.attributes), s.hp, JSON.stringify(s.conditions), s.id);
+/** Saves what a script may change on a character (health is saved separately, with saveCharacterHealth). */
+export function saveCharacterState(s: Pick<CharacterState, "id" | "attributes" | "conditions">): void {
+  db.prepare<[string, string, number]>("UPDATE characters SET attributes = ?, conditions = ? WHERE id = ?").run(JSON.stringify(s.attributes), JSON.stringify(s.conditions), s.id);
 }
 
 export type VarValue = number | string | boolean | null;
@@ -2053,10 +2048,6 @@ export function deleteSecret(id: number): void {
 
 export function setSecretRevealed(id: number, revealed: boolean): void {
   db.prepare("UPDATE map_secrets SET revealed = ? WHERE id = ?").run(revealed ? 1 : 0, id);
-}
-
-export function getSecretLevel(id: number): number | undefined {
-  return db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_secrets WHERE id = ?").get(id)?.level_id;
 }
 
 /** A token spends movement: it moves to (col, row) and `feet` is added to what it has moved this turn. */
