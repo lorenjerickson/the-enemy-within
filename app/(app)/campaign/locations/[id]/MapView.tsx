@@ -1159,7 +1159,9 @@ export default function MapView({
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button === 0 && selected === "tokens") {
+    // In a session the GM can drag any token straight away (no layer selected): to reposition after a round, say.
+    const gmDrag = !!dockSide && !readOnly && selected === null && !gmPlan && !placingChar;
+    if (e.button === 0 && (selected === "tokens" || gmDrag)) {
       const { col, row } = tokenAt(e);
       // Pressing on a token picks it up (topmost first); otherwise place the chosen creature.
       const { gx, gy } = gridAt(e);
@@ -1172,6 +1174,7 @@ export default function MapView({
         e.currentTarget.setPointerCapture(e.pointerId);
         return;
       }
+      if (selected !== "tokens") return; // (dragging only) — placing new tokens is the Tokens layer's job
       if (!tokenCreature) return;
       const c = tokenCreature;
       const character = c.kind === "character";
