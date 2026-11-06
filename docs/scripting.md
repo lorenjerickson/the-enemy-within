@@ -85,6 +85,20 @@ Stairs (a structure on portrait maps) are sloped floors: a token in a column sta
 Floors can be at any height (drawing snaps to columns across, 1/20 of a cell up and down), so an actor's `position.row` can be fractional: it stands on a floor at `row + 1`.
 Anything placed or moved drops to the first floor below its middle; `near()` only picks spots on floors.
 `move()` deals fall damage, 1d6 per 10 ft (2 cells). With no floor below, nothing falls, so draw the ground.
+**Choosing with `select()`.** `select(collection, 'instructions')` stops and asks the GM to choose: an overlay shows
+the instructions and the choices; on the map, what can be chosen is outlined (tokens for actors and creatures, doors, lights,
+placed effects). Click picks one; shift+click picks several; Confirm carries on, Cancel stops the script with nothing changed.
+Collections not on the map (`game.players`, `game.objectives`…) are chosen from the list.
+With several chosen, `WITH select(…) AS X` runs its block once for each:
+
+```
+WITH select(game.locations.current.actors, 'Who drinks the potion?') AS A
+   A.health = A.health.maximum
+```
+
+The script runs again from the start once the GM has chosen (nothing is saved until it finishes), so `roll()`s before a
+`select()` are rolled again. `select()` can't be used in an ON trigger, since no one is there to choose.
+
 Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` over numbers or lists (`sum(game.players.each.health)`).
 
 Not yet: locations, lights, encounters (they need runtime state first).

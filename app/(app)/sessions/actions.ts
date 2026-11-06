@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
+import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
 import { beginGameSession, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
-export async function runScript(source: string): Promise<ScriptResult> {
+/** Runs a console script; `answers` are the GM's choices so far for its select() prompts. */
+export async function runScript(source: string, answers: ScriptAnswers = []): Promise<ScriptResult> {
   await requireGm();
-  const result = tryGameScript(source, getGmLevelId()); // the console works on the map the GM has loaded (normally the party's)
+  const result = tryGameScript(source, getGmLevelId(), cleanAnswers(answers)); // the console works on the map the GM has loaded (normally the party's)
   revalidatePath("/play");
   revalidatePath("/campaign/characters");
   revalidatePath("/sessions", "layout");

@@ -7,13 +7,15 @@ import {
   addCreatureToken, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
   type VarValue,
 } from "./db";
-import { Collection, FREEFORM, Health, plain, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
+import type { ScriptAnswers, SelectPrompt } from "./scriptPrompt";
+import { Collection, FREEFORM, Health, PromptNeeded, plain, selectHelper, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 import { objectiveSettled } from "./storyRules";
 
-export type ScriptResult = { ok: true; value: string } | { ok: false; error: string };
+/** A script's outcome; `prompt` when it stopped to ask the GM something (run it again with the answers). */
+export type ScriptResult = { ok: true; value: string } | { ok: false; error: string; prompt?: SelectPrompt };
 
 /** A character as scripts see it. Everything here except id, name and type can be changed. */
 export interface Player {
@@ -545,11 +547,13 @@ const HELPERS = {
 export function runGameScript(
   source: string,
   levelId?: number,
-  { depth = 0, bind }: { depth?: number; bind?: (name: string, value: unknown) => unknown } = {}
+  { depth = 0, bind, answers }: { depth?: number; bind?: (name: string, value: unknown) => unknown; answers?: ScriptAnswers } = {}
 ): unknown {
   const [game, changes] = loadGame(levelId);
   const triggers: TriggerDef[] = [];
-  const result = runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) }, { onTrigger: (t) => triggers.push(t), bind });
+  // select() asks the GM; it throws PromptNeeded (before anything is saved) until it has its answer.
+  const globals = { game, ...HELPERS, ...mapHelpers(game, changes), select: selectHelper(answers) };
+  const result = runScript(source, globals, { onTrigger: (t) => triggers.push(t), bind });
   const settled = saveGame(game, changes, triggers);
   // Objectives the script succeeded or failed: rewards and penalties, as when the GM settles one.
   for (const [id, status] of settled) objectiveSettled(id, status);
@@ -628,10 +632,11 @@ export function triggerText(t: Pick<Trigger, "prelude" | "condition" | "action">
 }
 
 /** Runs a game script, returning its value as JSON text, or the script error. */
-export function tryGameScript(source: string, levelId?: number): ScriptResult {
+export function tryGameScript(source: string, levelId?: number, answers?: ScriptAnswers): ScriptResult {
   try {
-    return { ok: true, value: JSON.stringify(runGameScript(source, levelId), null, 2) };
+    return { ok: true, value: JSON.stringify(runGameScript(source, levelId, { answers }), null, 2) };
   } catch (e) {
+    if (e instanceof PromptNeeded) return { ok: false, error: e.message, prompt: e.prompt };
     if (e instanceof ScriptError) return { ok: false, error: e.message };
     throw e;
   }
@@ -644,7 +649,7 @@ export function tryGameScript(source: string, levelId?: number): ScriptResult {
 export function checkGameState(source: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
     const [game, changes] = loadGame();
-    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes) })) };
+    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes), select: selectHelper() })) };
   } catch (e) {
     if (e instanceof ScriptError) return { ok: false, error: e.message };
     throw e;

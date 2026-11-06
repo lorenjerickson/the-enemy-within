@@ -136,7 +136,7 @@ function memberType(type: string, name: string, names: ScriptNames): string | un
 
 /** Helpers callable on their own (game.ts HELPERS and map helpers). */
 export const HELPER_NAMES: Member[] = [
-  { label: "roll", detail: "roll('2d6+1')", method: true }, { label: "mod", detail: "mod(score) → modifier", method: true },
+  { label: "roll", detail: "roll('2d6+1')", method: true }, { label: "select", detail: "select(coll, 'instructions') → what the GM picks", method: true }, { label: "mod", detail: "mod(score) → modifier", method: true },
   { label: "min", detail: "min(…)", method: true }, { label: "max", detail: "max(…)", method: true },
   { label: "sum", detail: "sum(list)", method: true }, { label: "avg", detail: "avg(list)", method: true },
   { label: "count", detail: "count(list)", method: true },

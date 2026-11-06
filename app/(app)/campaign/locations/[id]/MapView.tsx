@@ -17,6 +17,7 @@ import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { useScrub } from "../../../../(play)/play/scrub";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
+import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
@@ -142,6 +143,13 @@ function fitScene(w: number, h: number) {
 }
 
 /** Grid cell geometry: top-left of cell (0,0) and the cell size, in map space. */
+/** How far a point is from a wall / door line (grid units). */
+function segmentDistance(px: number, py: number, s: { x1: number; y1: number; x2: number; y2: number }): number {
+  const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+  const t = dx || dy ? Math.max(0, Math.min(1, ((px - s.x1) * dx + (py - s.y1) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(px - (s.x1 + t * dx), py - (s.y1 + t * dy));
+}
+
 function gridOrigin(state: MapState, w: number, h: number) {
   const { size, offsetX, offsetY } = state.grid;
   const p = state.background.padding;
@@ -961,6 +969,10 @@ export default function MapView({
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
   const targetCandidates = targetMode ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
+  // A script's select() prompt: its options on this map are highlighted, and clicking one picks it.
+  const scriptPick = useScriptPick();
+  const pickEntity = scriptPick?.prompt.entity ?? null;
+  const pickIds = new Set(pickEntity ? scriptPick!.prompt.options.map((o) => o.id) : []);
   const fogCanvas = useRef<{ fog: HTMLCanvasElement; mask: HTMLCanvasElement } | null>(null);
 
   const state: MapState = {
@@ -977,6 +989,22 @@ export default function MapView({
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets,
     effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
+  };
+
+  /** The select() option at a point (grid units): a token, a door (near its line), a light, or a placed effect. */
+  const pickAt = (gx: number, gy: number): number | undefined => {
+    if (pickEntity === "token") return state.tokens.find((t) => pickIds.has(t.id) && gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1)?.id;
+    if (pickEntity === "door") {
+      const near = state.structures
+        .filter((d) => d.kind === "door" && pickIds.has(d.id))
+        .map((d) => ({ id: d.id, d: segmentDistance(gx, gy, d) }))
+        .sort((a, b) => a.d - b.d)[0];
+      return near && near.d < 0.4 ? near.id : undefined;
+    }
+    if (pickEntity === "light") return state.lights.find((l) => pickIds.has(l.id) && Math.hypot(l.x - gx, l.y - gy) < 0.6)?.id;
+    if (pickEntity === "effect") {
+      return state.effects.find((f) => pickIds.has(f.id) && f.x !== null && f.y !== null && gx >= f.x && gx <= f.x + (f.w ?? 0) && gy >= f.y && gy <= f.y + (f.h ?? 0))?.id;
+    }
   };
 
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
@@ -1065,6 +1093,13 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Answering a script's select(): click picks one, shift+click adds or removes it. Other left clicks do nothing meanwhile.
+    if (pickEntity && e.button === 0) {
+      const { gx, gy } = gridAt(e);
+      const id = pickAt(gx, gy);
+      if (id !== undefined) choose(id, e.shiftKey);
+      return;
+    }
     // Picking a target for a planned action: a click on a token chooses it (only tokens shown on this map).
     if (targetMode && e.button === 0) {
       const { gx, gy } = gridAt(e);
@@ -1534,6 +1569,43 @@ export default function MapView({
         ctx.drawImage(f, 0, 0);
         ctx.restore();
       }
+      // A script's select(): dashed outlines on what can be chosen, solid on what is.
+      if (pickEntity) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const chosen = new Set(scriptPick!.selected);
+        const at = (x: number, y: number) => [x0 + x * size, y0 + y * size] as const;
+        for (const on of [false, true]) {
+          ctx.save();
+          ctx.strokeStyle = on ? "rgb(56,189,248)" : "rgba(250,204,21,0.9)";
+          ctx.fillStyle = "rgba(56,189,248,0.25)";
+          ctx.lineWidth = (on ? 4 : 2) / k;
+          ctx.setLineDash(on ? [] : [4 / k, 3 / k]);
+          const shape = (path: () => void) => { ctx.beginPath(); path(); if (on) ctx.fill(); ctx.stroke(); };
+          for (const id of pickIds) {
+            if (chosen.has(id) !== on) continue;
+            if (pickEntity === "token") {
+              const t = state.tokens.find((x) => x.id === id);
+              if (t) shape(() => ctx.arc(...at(t.col + 0.5, t.row + 0.5), size * 0.6, 0, Math.PI * 2));
+            } else if (pickEntity === "door") {
+              const d = state.structures.find((x) => x.id === id);
+              if (d) {
+                ctx.save();
+                ctx.lineWidth = (on ? 10 : 6) / k;
+                ctx.globalAlpha = on ? 0.9 : 0.7;
+                ctx.beginPath(); ctx.moveTo(...at(d.x1, d.y1)); ctx.lineTo(...at(d.x2, d.y2)); ctx.stroke();
+                ctx.restore();
+              }
+            } else if (pickEntity === "light") {
+              const l = state.lights.find((x) => x.id === id);
+              if (l) shape(() => ctx.arc(...at(l.x, l.y), size * 0.5, 0, Math.PI * 2));
+            } else {
+              const f = state.effects.find((x) => x.id === id);
+              if (f && f.x !== null && f.y !== null) shape(() => ctx.rect(...at(f.x!, f.y!), (f.w ?? 0) * size, (f.h ?? 0) * size));
+            }
+          }
+          ctx.restore();
+        }
+      }
       // Picking a target: a faint ring around each token that can be clicked.
       if (targetMode) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
@@ -1790,6 +1862,7 @@ export default function MapView({
 
   const surface = (
     <>
+            <ScriptPickOverlay owner="control" />
             {targetMode && (
               <div
                 data-target-banner
@@ -1840,7 +1913,7 @@ export default function MapView({
                 inset={{ left: dockSide === "left" ? dockWidth : 0, right: dockSide === "right" ? dockWidth : 0 }}
                 onRun={(c) =>
                   startTransition(async () => {
-                    const r = await runControl(locationId, c.id);
+                    const r = await runWithPrompts("control", (answers) => runControl(locationId, c.id, answers));
                     setControlResult({ label: c.label, ok: r.ok, text: r.ok ? r.value : r.error });
                   })
                 }

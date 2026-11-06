@@ -11,6 +11,7 @@ import { checkScript } from "@/lib/script";
 import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
+import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -463,13 +464,14 @@ export async function changeControlScript(locationId: number, id: number, script
 }
 
 /** Runs a button's script (a GM clicked it on the map). */
-export async function runControl(locationId: number, id: number): Promise<ScriptResult> {
+export async function runControl(locationId: number, id: number, answers: ScriptAnswers = []): Promise<ScriptResult> {
   await requireGm();
   const control = getControlScript(id);
   if (!control) return { ok: false, error: "That button no longer exists" };
   if (!control.script.trim()) return { ok: false, error: "This button has no script yet" };
-  const result = tryGameScript(control.script, control.level_id);
+  const result = tryGameScript(control.script, control.level_id, cleanAnswers(answers));
   revalidatePath(`/campaign/locations/${locationId}`);
+  revalidatePath("/play");
   return result;
 }
 
