@@ -15,7 +15,7 @@ import { freeMove, planStep, pingsSince, sendPing } from "../../../../(play)/pla
 import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
-import { useScrub } from "../../../../(play)/play/scrub";
+import { setScrub, useScrub } from "../../../../(play)/play/scrub";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
@@ -754,6 +754,15 @@ export default function MapView({
   const [draggingToken, setDraggingToken] = useState<{ id: number; col: number; row: number } | null>(null);
   // Playing back a resolved round: each second's spots shown for a real second, from the shared start time.
   const scrub = useScrub(); // the GM stepping through the last round (their map only)
+  // Something changing for real (a script revives someone, the GM moves a token) puts the GM's map back to live,
+  // so a replay second being looked at never hides it.
+  const liveKey = JSON.stringify([downTokens, tokens.map((t) => [t.id, t.col, t.row])]);
+  const lastLive = useRef(liveKey);
+  useEffect(() => {
+    if (lastLive.current === liveKey) return;
+    lastLive.current = liveKey;
+    if (scrub !== null) setScrub(null);
+  }, [liveKey, scrub]);
   const replayFrame = (() => {
     if (!replay) return null;
     if (!readOnly && scrub !== null) {
