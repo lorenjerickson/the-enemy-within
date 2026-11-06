@@ -59,6 +59,7 @@ interface MapState {
   structures: MapStructure[];
   showWalls: boolean; // wall lines: GM only, and only while not hidden (they're still walls either way)
   tokens: MapToken[];
+  down: Set<number>; // tokens at 0 health: drawn with a skull
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
   illumination: number;
@@ -162,6 +163,44 @@ const cellToRect = (state: MapState, w: number, h: number, c: CellRect) => {
 };
 
 /** How each layer draws itself. Layers without an entry have nothing to draw yet. */
+/** A semi-transparent skull over a downed token: cranium, jaw and two dark eye sockets, sized to the token. */
+function drawSkull(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: number) {
+  const s = rad * 0.75;
+  ctx.save();
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = "#f3f4f6";
+  ctx.strokeStyle = "rgba(0,0,0,0.6)";
+  ctx.lineWidth = s * 0.06;
+  ctx.beginPath();
+  ctx.arc(cx, cy - s * 0.12, s * 0.62, Math.PI * 0.85, Math.PI * 2.15); // cranium
+  ctx.lineTo(cx + s * 0.38, cy + s * 0.55); // jaw
+  ctx.lineTo(cx - s * 0.38, cy + s * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#111827";
+  for (const dx of [-0.25, 0.25]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + dx * s, cy - s * 0.05, s * 0.16, s * 0.19, 0, 0, Math.PI * 2); // eye sockets
+    ctx.fill();
+  }
+  ctx.beginPath(); // nose
+  ctx.moveTo(cx, cy + s * 0.12);
+  ctx.lineTo(cx - s * 0.07, cy + s * 0.26);
+  ctx.lineTo(cx + s * 0.07, cy + s * 0.26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = s * 0.05; // teeth
+  ctx.strokeStyle = "#111827";
+  for (const dx of [-0.18, 0, 0.18]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * s, cy + s * 0.38);
+    ctx.lineTo(cx + dx * s, cy + s * 0.55);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Press-and-hold time before a ping, and how long a ping shows (ms). */
 const HOLD_MS = 500;
 const PING_MS = 3000;
@@ -490,6 +529,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         const dh = figureCells(state.figureHeight, t) * r.h;
         const dw = (side.naturalWidth / side.naturalHeight) * dh;
         ctx.drawImage(side, r.x + (r.w - dw) / 2, r.y + r.h - dh, dw, dh);
+        if (state.down.has(t.id)) drawSkull(ctx, cx, r.y + r.h - dh / 2, rad);
         continue;
       }
       ctx.save();
@@ -512,6 +552,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.fillText(t.name[0]?.toUpperCase() ?? "?", cx, cy);
       }
       ctx.restore();
+      if (state.down.has(t.id)) drawSkull(ctx, cx, cy, rad);
     }
   },
   map: (state) => (ctx, w, h) => {
@@ -576,6 +617,7 @@ export default function MapView({
   replay = null,
   replayName = null,
   planTargets = [],
+  downTokens = [],
   gmPlans,
   secrets,
   discoveries = [],
@@ -610,6 +652,7 @@ export default function MapView({
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string }[]; // planned targeted actions: drawn as lines to the target
+  downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
@@ -924,6 +967,8 @@ export default function MapView({
     background, backgroundImage, mapImage, mapImageEl, grid,
     tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
     showWalls: !readOnly && !optimisticHideWalls,
+    // Down tokens get a skull; during playback, as of the second shown.
+    down: new Set(replayFrame ? [...replayFrame.down, ...downTokens.filter((id) => !(replay && id in replay.start))] : downTokens),
     // The GM sees the whole map fully lit; darkness and fog are for players.
     tokens: (fogged ? fogged.tokens : drawnTokens).map((t) => {
       if (walking?.id !== t.id) return t;
