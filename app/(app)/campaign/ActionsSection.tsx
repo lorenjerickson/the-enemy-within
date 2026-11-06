@@ -65,7 +65,7 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
           <input name="save_half" type="checkbox" defaultChecked={initial ? !!initial.save_half : true} className="checkbox checkbox-sm" />
           half damage on a save
         </label>
-        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed.</span>
+        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. With a duration below (rounds, minutes…), the area stays on the map that long, and whoever is in it at the end of each round rolls the save again.</span>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
         Takes

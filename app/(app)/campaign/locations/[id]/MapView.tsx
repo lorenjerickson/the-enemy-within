@@ -17,8 +17,8 @@ import { useMoveMode } from "../../../../(play)/play/moveMode";
 import { useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
-import { drawAreaFx, drawFx } from "@/lib/vfx";
-import { areaPolygon, caughtBy, placeArea } from "@/lib/aoe";
+import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
+import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, reachableSquares, routeTo, squareKey } from "@/lib/movement";
@@ -73,6 +73,7 @@ interface MapState {
   notes: MapNote[];
   secrets: MapSecret[];
   effects: MapEffect[];
+  lasting: LastingArea[]; // areas actions left on the map for a while
   time: number; // seconds, drives animated effects
   showEffectAreas: boolean; // outline placed effects (while editing effects)
 }
@@ -339,6 +340,12 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
         ctx.strokeRect(area.x, area.y, area.w, area.h);
         ctx.restore();
       }
+    }
+    // Lasting areas left by actions (a fire wall), kept out from behind walls.
+    const toPx = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
+    for (const l of state.lasting) {
+      const clip = visibilityPolygon(toPx(l.area.origin), l.area.size * size + 2, blockersInScene(state, x0, y0, size));
+      drawLasting(ctx, l, toPx, size, state.time, clip);
     }
   },
   // Secrets: the GM sees every one (a dashed ring with "?", solid with "!" once revealed); players get only revealed ones.
@@ -630,6 +637,7 @@ export default function MapView({
   replayName = null,
   planTargets = [],
   downTokens = [],
+  lasting = [],
   gmPlans,
   secrets,
   discoveries = [],
@@ -665,6 +673,7 @@ export default function MapView({
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string }[]; // planned targeted actions: drawn as lines to the target
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
+  lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
@@ -828,7 +837,7 @@ export default function MapView({
   // Animate: ~25 frames a second while effects are showing, ~8 while any light flickers.
   const [, setFlickerTick] = useState(0);
   const anyFlicker = optimisticLights.some((l) => l.flicker) && !hiddenSet.has("lighting");
-  const anyEffect = effects.length > 0 && !hiddenSet.has("effects");
+  const anyEffect = (effects.length > 0 || lasting.length > 0) && !hiddenSet.has("effects");
   // Placed effects, with moves shown straight away (optimistic) and the one being dragged offset by the drag.
   const [optimisticEffects, moveEffectLocally] = useOptimistic(effects, (es: MapEffect[], m: { id: number; x: number; y: number }) =>
     es.map((e) => (e.id === m.id ? { ...e, x: m.x, y: m.y } : e))
@@ -1033,7 +1042,7 @@ export default function MapView({
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets,
-    effects: drawnEffects, time: performance.now() / 1000, showEffectAreas: selected === "effects",
+    effects: drawnEffects, lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
   /** The select() option at a point (grid units): a token, a door (near its line), a light, or a placed effect. */

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
-import type { AreaShape } from "@/lib/aoe";
+import type { AreaShape, LastingArea } from "@/lib/aoe";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
   type ClipMode, type ControlEdge, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
@@ -1831,6 +1831,35 @@ export function getPlayerTokenLevelId(playerId: number): number | undefined {
     .map((r) => r.level_id);
   const active = getGmLevelId();
   return active !== undefined && levels.includes(active) ? active : levels[0];
+}
+
+// ---------- Lasting areas ----------
+
+// An area an action left on the map for a while (a fire wall); it's gone once game time passes `ends`.
+db.exec(`CREATE TABLE IF NOT EXISTS lasting_areas (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  ends REAL NOT NULL,
+  spec TEXT NOT NULL
+)`);
+
+export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): void {
+  const { name, ends, ...spec } = a;
+  db.prepare("DELETE FROM lasting_areas WHERE ends <= ?").run(getGameTime());
+  db.prepare("INSERT INTO lasting_areas (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(levelId, name, ends, JSON.stringify(spec));
+}
+
+/** A level's lasting areas still in effect. */
+export function listLastingAreas(levelId: number): LastingArea[] {
+  return db
+    .prepare<[number, number], { id: number; name: string; ends: number; spec: string }>("SELECT id, name, ends, spec FROM lasting_areas WHERE level_id = ? AND ends > ? ORDER BY id")
+    .all(levelId, getGameTime())
+    .map((r) => ({ id: r.id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) }));
+}
+
+export function removeLastingArea(id: number): void {
+  db.prepare("DELETE FROM lasting_areas WHERE id = ?").run(id);
 }
 
 // ---------- Effects played by scripts ----------

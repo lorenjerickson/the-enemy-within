@@ -5,7 +5,10 @@ import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
   getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
+  listLastingAreas, addLastingArea, removeLastingArea, getGameTime, setGameTime,
 } from "@/lib/db";
+import { ROUND_SECONDS } from "@/lib/roundPlan";
+import { fireTriggers } from "@/lib/game";
 import { resolveMovement, type Mover } from "@/lib/resolveRound";
 import { fightersOn, saveHp } from "@/lib/combat";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -100,7 +103,12 @@ export async function resolveRound() {
     }));
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
-  const { final, hp, log, frames } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)));
+  const lasting = listLastingAreas(levelId);
+  const { final, hp, log, frames, created } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
+  // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
+  const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
+  for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
+  setGameTime(now);
   for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
@@ -113,6 +121,7 @@ export async function resolveRound() {
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
   setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), frames });
+  fireTriggers(); // game time moved on (e.g. ON timer.expired)
   revalidatePath("/play");
 }
 
@@ -142,5 +151,12 @@ export async function restoreHealth(tokenId: number) {
   const h = tokenHealth(tokenId);
   if (!h) return;
   saveTokenHealth(tokenId, { ...h, current: h.maximum });
+  revalidatePath("/play");
+}
+
+/** The GM clears a lasting area (a fire wall) before it runs out. */
+export async function removeLasting(id: number) {
+  await requireGm();
+  removeLastingArea(Number(id));
   revalidatePath("/play");
 }

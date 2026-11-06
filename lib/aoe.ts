@@ -3,6 +3,7 @@
  * and gridless maps alike; points are positions on the map (a token's centre is col + 0.5, row + 0.5).
  */
 import type { Attribute } from "@/lib/attributes";
+import type { EffectKind } from "@/lib/effects";
 import { FEET_PER_SQUARE, crosses } from "@/lib/movement";
 import type { Point, Segment } from "@/lib/visibility";
 
@@ -16,6 +17,21 @@ export interface AreaSpec {
   dc: number;
   save: Attribute;
   half: boolean; // a successful save takes half damage (else none)
+  minutes?: number; // lasting: stays on the map this long (game time; a round is 6 s), catching whoever is in it each round
+  look?: EffectKind; // how a lasting area looks (from the damage type)
+}
+
+/** An area left on the map for a while (a fire wall): whoever is in it at the end of each round rolls the save. */
+export interface LastingArea {
+  id: number;
+  name: string;
+  look: EffectKind;
+  area: AreaAt;
+  damage: string | null;
+  dc: number;
+  save: Attribute;
+  half: boolean;
+  ends: number; // game minutes
 }
 
 /** An area placed on the map: a circle centred where it's aimed; a cone or line from the actor towards the aim. */

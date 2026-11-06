@@ -3,6 +3,7 @@ import { getCharacter, getCreature, getItem, listActions, listTokens, db, type C
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
 import type { GearAction } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
+import type { EffectKind } from "@/lib/effects";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -66,6 +67,16 @@ export function saveHp(tokenId: number, hp: number): void {
   if (h) saveTokenHealth(tokenId, takeDamage(h, h.current + h.temporary - Math.round(hp)));
 }
 
+/** How long an action's effect lasts, in game minutes (a round is 6 s; rests count as 1 and 8 hours); 0 = instant. */
+function durationMinutes(amount: number, unit: string): number {
+  const per: Record<string, number> = { round: 0.1, turn: 0.1, minute: 1, hour: 60, day: 1440, "short rest": 60, "long rest": 480 };
+  return (per[unit] ?? 0) * Math.max(1, amount);
+}
+
+/** How a lasting area looks, from its damage type. */
+const lookOf = (type: string): EffectKind =>
+  type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind" : "fog";
+
 /**
  * Actions a token can take from its gear: those of its equipped items (and, for a creature, its own actions,
  * e.g. a rat's Bite). Each carries what resolving needs: time, range (squares), to-hit, damage, roll mode.
@@ -83,6 +94,8 @@ export function gearActions(tokenId: number): (GearAction & { source: string })[
   ];
   return owned.map(({ a, source }) => ({
     id: a.id, name: a.name, source, seconds: a.seconds, range: Math.max(1, Math.round(a.range_ft / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
-    ...(a.area_shape && a.area_ft > 0 ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half } } : {}),
+    ...(a.area_shape && a.area_ft > 0
+      ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: durationMinutes(a.duration_amount, a.duration_unit), look: lookOf(a.damage_type) } }
+      : {}),
   }));
 }

@@ -1,5 +1,6 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { caughtBy, describeArea, placeArea } from "@/lib/aoe";
+import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
+import { rollDice } from "@/lib/dice";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
@@ -94,7 +95,33 @@ export function resolveMovement(
   gridless: boolean,
   fighters: Map<number, Combatant> = new Map(),
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
+  lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
 ) {
+  const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
+  /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number): AreaHit[] => {
+    const hits: AreaHit[] = [];
+    for (const id of [...fighters.keys()]) {
+      const p = where(id);
+      if (id === except || down.has(id) || !p || !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls)) continue;
+      const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
+      const s = f.save ? f.save(spec.save) : { total: 0, text: "no save" };
+      const saved = s.total >= spec.dc;
+      const taken = saved ? (spec.half ? Math.floor(total / 2) : 0) : total;
+      const left = Math.max(0, hp.get(id)! - taken);
+      if (taken > 0) {
+        hp.set(id, left);
+        hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
+      }
+      log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
+      hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
+      if (left <= 0) {
+        down.add(id);
+        log.push(`${sec} s: ${name} is down.`);
+      }
+    }
+    return hits;
+  };
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
   const lag = new Map(order.map((m) => [m.tokenId, 0])); // seconds each has been held back
@@ -301,32 +328,17 @@ export function resolveMovement(
       if (area && step.aim && step.use) {
         const me = fighters.get(m.tokenId), here = pos.get(m.tokenId)!;
         const at = placeArea(area.shape, area.ft, { x: here.col + 0.5, y: here.row + 0.5 }, { x: step.aim.col, y: step.aim.row });
-        const caught = [...fighters.keys()].filter((id) => id !== m.tokenId && !down.has(id)).filter((id) => {
-          const p = where(id);
-          return p && caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls);
-        });
-        const hits: AreaHit[] = [];
-        if (!me || !caught.length) say(`${m.name}'s ${step.use.name} catches no one.`);
-        else {
+        let hits: AreaHit[] = [];
+        if (me) {
           const dmg = me.damage(step.use);
           say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
-          for (const id of caught) {
-            const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
-            const s = f.save ? f.save(area.save) : { total: 0, text: "no save" };
-            const saved = s.total >= area.dc;
-            const taken = saved ? (area.half ? Math.floor(dmg.total / 2) : 0) : dmg.total;
-            const left = Math.max(0, hp.get(id)! - taken);
-            if (taken > 0) {
-              hp.set(id, left);
-              hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
-            }
-            say(`${name} saves (${area.save}): ${s.total} (${s.text}) vs DC ${area.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
-            hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
-            if (left <= 0) {
-              down.add(id);
-              say(`${name} is down.`);
-            }
-          }
+          hits = catchIn(at, area, dmg.total, m.tokenId, sec);
+          if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
+        }
+        // A lasting one stays on the map, catching whoever is in it at the end of each round.
+        if (area.minutes) {
+          created.push({ name: step.use.name, look: area.look ?? "fog", area: at, damage: step.use.damage, dc: area.dc, save: area.save, half: area.half, minutes: area.minutes });
+          say(`${step.use.name} stays for ${area.minutes < 1 ? `${Math.round(area.minutes * 10)} round(s)` : `${area.minutes} min`}.`);
         }
         fx.push({ look: "area", from: m.tokenId, area: at, hits });
         continue;
@@ -369,6 +381,16 @@ export function resolveMovement(
         log.push(`${sec} s: ${order.find((o) => o.tokenId === id)!.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
       }
     }
+    // The end of the round: whoever is in a lasting area rolls its save (its damage dice rolled once for everyone).
+    if (sec === ROUND_SECONDS) {
+      for (const l of lasting) {
+        const total = l.damage ? rollDice(l.damage) : 0;
+        const before = log.length;
+        const hits = catchIn(l.area, l, total, -1, sec);
+        if (hits.length) log.splice(before, 0, `${sec} s: ${l.name} lingers: ${total} damage, ${l.save} save DC ${l.dc}.`);
+        fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
+      }
+    }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
   }
   // Actions pushed past the end of the round (by closing in or being held back) don't happen.
@@ -380,5 +402,5 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames };
+  return { final: pos, hp, log, frames, created };
 }

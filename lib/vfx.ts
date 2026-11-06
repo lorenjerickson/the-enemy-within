@@ -2,7 +2,8 @@
  * Visual effects for things that happen in a round (an attack swinging, an arrow flying, a hit landing).
  * The server records what happened (Fx, in a replay frame); the map draws it here, by how far through its second it is.
  */
-import { areaPolygon, type AreaAt } from "@/lib/aoe";
+import { areaPolygon, type AreaAt, type LastingArea } from "@/lib/aoe";
+import { drawEffect } from "@/lib/effects";
 
 /** An attack, as played back: who at whom, how it looked, and how it went. */
 export interface AttackFx {
@@ -19,6 +20,7 @@ export interface AreaFx {
   from: number;
   area: AreaAt;
   hits: AreaHit[];
+  lasting?: boolean; // a lasting area's end-of-round catch: it's drawn already, so only the bursts
 }
 export type Fx = AttackFx | AreaFx;
 
@@ -115,6 +117,32 @@ export function drawFx(ctx: CanvasRenderingContext2D, fx: AttackFx, k: number, a
 export function drawAreaFx(ctx: CanvasRenderingContext2D, fx: AreaFx, k: number, toPx: (p: P) => P, cell: number, at: (id: number) => P | undefined, clip?: P[]) {
   const grow = ease(clamp01(k / 0.35)), fade = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
   const o = toPx(fx.area.origin);
+  if (!fx.lasting) drawSweep(ctx, fx, o, grow, fade, toPx, cell, clip); // a lasting area is drawn on the map already: only the bursts
+  if (k < 0.35) return;
+  const p = clamp01((k - 0.35) / 0.65);
+  for (const h of fx.hits) {
+    const b = at(h.id);
+    if (!b) continue;
+    ctx.save();
+    if (h.outcome === "save") {
+      ctx.fillStyle = `rgba(220,220,230,${0.45 * (1 - p)})`;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, cell * (0.2 + 0.25 * p), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const rgb = h.outcome === "down" ? "150,20,20" : h.outcome === "half" ? "249,115,22" : "239,68,68";
+      ctx.strokeStyle = `rgba(${rgb},${0.9 * (1 - p)})`;
+      ctx.lineWidth = Math.max(2, cell * 0.07);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, cell * (0.3 + 0.45 * ease(p)) * (h.outcome === "down" ? 1.5 : h.outcome === "half" ? 0.8 : 1), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/** An area sweeping out from where it starts (grow 0..1), fading; `clip` keeps it out from behind walls. */
+function drawSweep(ctx: CanvasRenderingContext2D, fx: AreaFx, o: P, grow: number, fade: number, toPx: (p: P) => P, cell: number, clip?: P[]) {
   ctx.save();
   if (clip?.length) {
     ctx.beginPath();
@@ -138,25 +166,26 @@ export function drawAreaFx(ctx: CanvasRenderingContext2D, fx: AreaFx, k: number,
   ctx.lineWidth = Math.max(1.5, cell * 0.04);
   ctx.stroke();
   ctx.restore();
-  if (k < 0.35) return;
-  const p = clamp01((k - 0.35) / 0.65);
-  for (const h of fx.hits) {
-    const b = at(h.id);
-    if (!b) continue;
-    ctx.save();
-    if (h.outcome === "save") {
-      ctx.fillStyle = `rgba(220,220,230,${0.45 * (1 - p)})`;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, cell * (0.2 + 0.25 * p), 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      const rgb = h.outcome === "down" ? "150,20,20" : h.outcome === "half" ? "249,115,22" : "239,68,68";
-      ctx.strokeStyle = `rgba(${rgb},${0.9 * (1 - p)})`;
-      ctx.lineWidth = Math.max(2, cell * 0.07);
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, cell * (0.3 + 0.45 * ease(p)) * (h.outcome === "down" ? 1.5 : h.outcome === "half" ? 0.8 : 1), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
+}
+
+/** A lasting area on the map (a fire wall): its effect (fire, fog…) filling the shape, kept out from behind walls by `clip`. */
+export function drawLasting(ctx: CanvasRenderingContext2D, l: Pick<LastingArea, "area" | "look">, toPx: (p: P) => P, cell: number, t: number, clip?: P[]) {
+  const pts = areaPolygon(l.area).map(toPx);
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), placed: true };
+  ctx.save();
+  if (clip?.length) {
+    ctx.beginPath();
+    clip.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.clip();
   }
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.fillStyle = l.look === "fire" ? "rgba(234,88,12,0.18)" : "rgba(148,163,184,0.18)";
+  ctx.fill();
+  ctx.clip();
+  drawEffect(ctx, l.look, box, 0.8, t, cell);
+  ctx.restore();
 }

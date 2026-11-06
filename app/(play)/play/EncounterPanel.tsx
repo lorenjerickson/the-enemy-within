@@ -1,5 +1,5 @@
-import { downTokens, getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels } from "@/lib/db";
-import { endEncounter, resolveRound, rollInitiative } from "./gmActions";
+import { downTokens, getCharacterPlayer, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, tokenLabels, listLastingAreas, getGameTime } from "@/lib/db";
+import { endEncounter, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
 import { gearActions } from "@/lib/combat";
@@ -56,6 +56,20 @@ export default function EncounterPanel() {
                 return v ? [{ tokenId: o.token_id, name: names.get(o.token_id)!.name, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: gearActions(o.token_id) }] : [];
               })}
           />
+          {levelId !== undefined && listLastingAreas(levelId).length > 0 && (
+            <div className="space-y-1 rounded-box bg-base-100/50 p-2 text-xs" data-lasting-areas>
+              <div className="font-semibold">Lasting areas</div>
+              {listLastingAreas(levelId).map((l) => {
+                const rounds = Math.max(1, Math.round((l.ends - getGameTime()) * 10));
+                return (
+                  <form key={l.id} action={removeLasting.bind(null, l.id)} className="flex items-center gap-2">
+                    <span className="flex-1">{l.name} <span className="opacity-60">({rounds < 10 ? `${rounds} round${rounds === 1 ? "" : "s"}` : `${Math.round(rounds / 10)} min`} left)</span></span>
+                    <button className="btn btn-ghost btn-xs">Remove</button>
+                  </form>
+                );
+              })}
+            </div>
+          )}
           <form action={resolveRound} className="space-y-1">
             {(() => {
               const notReady = [...enc.order.map((o) => o.token_id), ...waiting].filter((id) => !ready.has(id) && !down.has(id)).length;
