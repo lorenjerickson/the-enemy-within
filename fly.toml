@@ -14,7 +14,7 @@ primary_region = "sea"
   destination = "/data"
 
 [http_service]
-  internal_port = 3000
+  internal_port = 8080 # Fly's default; the Dockerfile sets PORT=8080 to match
   force_https = true
   # One always-on machine: SQLite lives on its volume, and players poll during sessions.
   auto_stop_machines = "off"

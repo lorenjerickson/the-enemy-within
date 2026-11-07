@@ -18,9 +18,9 @@ RUN DATA_DIR=/tmp/build-data npm run build
 
 FROM node:22-bookworm-slim AS run
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 DATA_DIR=/data
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080 HOSTNAME=0.0.0.0 DATA_DIR=/data
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
-EXPOSE 3000
+EXPOSE 8080
 CMD ["node", "server.js"]
