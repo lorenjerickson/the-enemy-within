@@ -22,6 +22,7 @@ export interface Fighter {
   damage: (use?: GearAction) => { total: number; text: string };
   save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
   wear: (equipment: Equipment) => void; // a refit mid-round: attacks, damage and defense use the new gear from then on
+  maxHp?: number; // full health (for how bad a wound sounds)
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -81,7 +82,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
   for (const t of listTokens(levelId)) {
     const c = tokenWho(t.id);
     const h = c && tokenHealth(t.id);
-    if (c && h) out.set(t.id, fighterOf(c, h.current + h.temporary, statuses.get(t.id)));
+    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, statuses.get(t.id)), maxHp: h.maximum });
   }
   return out;
 }

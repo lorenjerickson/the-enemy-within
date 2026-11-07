@@ -107,7 +107,7 @@ export async function resolveRound() {
   const fighters = fightersOn(levelId);
   const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
   const lasting = listLastingAreas(levelId);
-  const { final, hp, log, frames, created, statuses, refits } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
+  const { final, hp, log, frames, created, statuses, refits, story } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
   const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
   for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
@@ -125,7 +125,7 @@ export async function resolveRound() {
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames });
+  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story });
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
   revalidatePath("/play");
 }

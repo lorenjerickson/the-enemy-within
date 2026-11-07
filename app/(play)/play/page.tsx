@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
+import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -15,6 +15,8 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
+import RoundSummary from "./RoundSummary";
+import { playerStory } from "@/lib/roundStory";
 import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
 import PlanRollPrompt from "./PlanRollPrompt";
@@ -142,6 +144,13 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     const s = rp.plan[r.step], dice = s.kind === "action" ? s.dice?.[r.key] : undefined;
     return { spec: r.spec, want: planDice(r.spec), ...(dice ? { result: rolledTotal(r.spec, dice) } : {}) };
   }) : [];
+  // The last round, told from their side once it has played back (no numbers; only what involved them).
+  const replay = me ? getReplay(me.level_id) : null;
+  const lastRound = replay && me ? (() => {
+    const labels = tokenLabels(me.level_id);
+    const mine = listTokens(me.level_id).filter((t) => t.character_id !== null && listPlayerCharacters(user.id).some((c) => c.id === t.character_id)).map((t) => t.id);
+    return { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, lines: [...playerStory(replay.story, mine, (id) => labels.get(id) ?? "someone").values()].flat() };
+  })() : null;
   const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
@@ -193,6 +202,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     <>
       <AutoRefresh checkIn={checkIn} />
       {user.playedBy && <ActingAs session={session} user={user} />}
+      {lastRound && <RoundSummary key={lastRound.round} {...lastRound} />}
       {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (

@@ -1,5 +1,6 @@
 import { listDiscoveries } from "@/lib/story";
-import { downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
+import { playerStory } from "@/lib/roundStory";
+import { tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
 import type { DockTool } from "../../../../(play)/play/PlayDock";
@@ -28,11 +29,18 @@ export default function LevelMap({
 }) {
   // A player's view gets nothing GM-only (notes, controls, scripts, sounds, the creature list).
   const gm = !readOnly;
+  // A round's playback: the GM sees the full log; a player sees only their own story of it (no numbers, nothing
+  // about anyone they didn't deal with). The raw events never reach a browser.
+  const raw = getReplay(level.id);
+  const labels = tokenLabels(level.id);
+  const mine = gm ? [] : listTokens(level.id).filter((t) => t.character_id !== null && (fog?.viewers ?? []).includes(t.character_id)).map((t) => t.id);
+  const told = raw && !gm ? playerStory(raw.story, mine, (id) => labels.get(id) ?? "someone") : null;
+  const replay = raw && { ...raw, story: undefined, frames: told ? raw.frames.map((f) => ({ ...f, lines: told.get(f.sec) ?? [] })) : raw.frames };
   const start = getPartyStart();
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   return (
-    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} replay={getReplay(level.id)} replayName={replayName} gmPlans={gmPlans} fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

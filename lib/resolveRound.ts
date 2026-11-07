@@ -13,6 +13,7 @@ const rangeOf = (step: Extract<PlanStep, { kind: "action" }>, m?: Mover) =>
   step.use?.range ?? (step.action === "attack" && m?.attackRange ? m.attackRange : ACTION_RANGE[step.action]);
 import type { Segment } from "@/lib/visibility";
 import type { EquipSlot } from "@/lib/itemTypes";
+import type { StoryEvent } from "@/lib/roundStory";
 
 type Pos = { col: number; row: number };
 
@@ -75,6 +76,7 @@ export interface Replay {
   starts: number;
   start: Record<number, Pos>; // where everyone was before the round
   startDown?: number[]; // who was already down before it
+  story?: StoryEvent[]; // what happened, for telling each player their part (stripped before it reaches a browser)
   frames: ReplayFrame[];
 }
 
@@ -87,6 +89,7 @@ export interface Combatant {
   damage: (use?: GearAction) => { total: number; text: string };
   save?: (attr: Attribute) => { total: number; text: string };
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
+  maxHp?: number; // for how bad a wound sounds in the players' story
 }
 
 /**
@@ -109,16 +112,19 @@ export function resolveMovement(
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
+  const story: StoryEvent[] = []; // the round as events, for each player's own account of it
+  const hurt = (id: number, dmg: number) => dmg / Math.max(1, fighters.get(id)?.maxHp ?? hp.get(id) ?? 1);
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
   const leave = (id: number, status: Status | undefined, minutes: number, sec: number) => {
     if (!status || down.has(id)) return;
     fighters.get(id)?.statuses?.push(status);
     statuses.push({ tokenId: id, status, minutes });
+    story.push({ sec, k: "status", who: id, source: status.source });
     log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
   };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
-  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number): AreaHit[] => {
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area"): AreaHit[] => {
     const hits: AreaHit[] = [];
     for (const id of [...fighters.keys()]) {
       const p = where(id);
@@ -134,7 +140,9 @@ export function resolveMovement(
       }
       log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
       hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
+      story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken) });
       if (left <= 0) {
+        story.push({ sec, k: "down", who: id });
         down.add(id);
         log.push(`${sec} s: ${name} is down.`);
       }
@@ -266,7 +274,10 @@ export function resolveMovement(
           if (them && !down.has(due.step.target!.id) && !inReach(here, them, rangeOf(due.step, m))) {
             if (ROUND_SECONDS - sec >= due.end - due.start - 1e-9) {
               autoPursue.add(m.tokenId);
-              if (!closingIn.has(m.tokenId)) log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
+              if (!closingIn.has(m.tokenId)) {
+                log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
+                story.push({ sec, k: "close", who: m.tokenId, target: due.step.target!.id });
+              }
               closingIn.add(m.tokenId);
               return [m.tokenId, chaseStep(m, here, them, true)];
             }
@@ -278,6 +289,7 @@ export function resolveMovement(
           if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
             skipped.add(m.tokenId);
             log.push(`${sec} s: ${m.name}'s planned move is skipped: they closed in instead.`);
+            story.push({ sec, k: "skip", who: m.tokenId });
           }
           return [m.tokenId, here];
         }
@@ -290,6 +302,7 @@ export function resolveMovement(
             if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
               skipped.add(m.tokenId);
               log.push(`${sec} s: ${m.name}'s planned move is skipped: they stay where the ${c.action} left them.`);
+              story.push({ sec, k: "skip", who: m.tokenId });
             }
             return [m.tokenId, here];
           }
@@ -316,6 +329,7 @@ export function resolveMovement(
         lag.set(m.tokenId, lag.get(m.tokenId)! + 1);
         const who = order.find((o) => o.tokenId === blocker.id)?.name ?? "someone";
         log.push(`${sec} s: ${m.name} is held back by ${who}.`);
+        story.push({ sec, k: "blocked", who: m.tokenId, by: blocker.id >= 0 ? blocker.id : null });
         settled.push({ id: m.tokenId, at: here });
       } else {
         settled.push({ id: m.tokenId, at: want });
@@ -342,10 +356,12 @@ export function resolveMovement(
         // d20 + agility (their own dice, if they rolled with the plan) against DODGE_DC.
         const f = fighters.get(m.tokenId), check = f?.save ? usingDice(a.step.dice?.check, () => f.save!("agility")) : undefined;
         if (check && check.total < DODGE_DC) {
+          story.push({ sec, k: "dodge", who: m.tokenId, ok: false });
           log.push(`${sec} s: ${m.name} tries to dodge but isn't quick enough (${check.total}: ${check.text} vs DC ${DODGE_DC}).`);
           continue;
         }
         f?.statuses?.push({ source: "Dodge", boosts: [], grants: [{ roll: "attacked", mode: "disadvantage" }] });
+        story.push({ sec, k: "dodge", who: m.tokenId, ok: true });
         log.push(`${sec} s: ${m.name} is ready to dodge${check ? ` (${check.total} vs DC ${DODGE_DC})` : ""}: attacks against them have disadvantage.`);
       }
     }
@@ -368,12 +384,14 @@ export function resolveMovement(
         fighters.get(m.tokenId)?.wear?.(equipment);
         if (step.swap.reach) m.attackRange = step.swap.reach;
         refits.push({ tokenId: m.tokenId, equipment, before, swap: step.swap });
+        story.push({ sec, k: "refit", who: m.tokenId, from: step.swap.from?.name ?? null, to: step.swap.item.name });
         say(`${m.name} ${step.swap.from ? `swaps ${step.swap.from.name} for ${step.swap.item.name}` : `takes up ${step.swap.item.name}`} (${step.swap.slot}).`);
         continue;
       }
       // Hit while doing it (not in the second it finishes: blows landing together both count).
       if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t < sec)) {
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
+        story.push({ sec, k: "interrupted", who: m.tokenId, action: step.use ? "attack" : step.action });
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action) || REACTIONS.includes(step.action)) continue; // movement / reactions: handled above
@@ -390,7 +408,8 @@ export function resolveMovement(
         if (me) {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
           say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
-          hits = catchIn(at, area, dmg.total, m.tokenId, sec);
+          story.push({ sec, k: "area", who: m.tokenId, name: step.use.name });
+          hits = catchIn(at, area, dmg.total, m.tokenId, sec, step.use.name);
           if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
           // Statuses: on the user, and on each one caught who failed the save.
           const st = step.use.statuses;
@@ -414,8 +433,10 @@ export function resolveMovement(
         say(`${m.name}'s attack fails: no target.`);
       } else if (down.has(target.id)) {
         say(`${m.name}'s attack fails: ${target.name} is already down.`);
+        story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "gone" });
       } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step, m))) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
+        story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "reach" });
       } else {
         const a = usingDice(step.dice?.hit, () => me.attack(step.use, them)), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
@@ -423,14 +444,17 @@ export function resolveMovement(
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         if (a.total < d.total) shown("miss");
         if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
+        if (a.total < d.total) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
         else {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
           const left = Math.max(0, hp.get(target.id)! - dmg.total);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, dmg.total) });
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
+            story.push({ sec, k: "down", who: target.id });
             down.add(target.id);
             say(`${target.name} is down.`);
           }
@@ -451,16 +475,19 @@ export function resolveMovement(
         chaseOver.add(id);
         if (now < next.start - 1e-9) lag.set(id, lag.get(id)! - (next.start - now));
         log.push(`${sec} s: ${m.name} stops their ${c.action}: ${next.step.target!.name} is within range to ${next.step.use?.name ?? next.step.action}.`);
+        story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: "range" });
         continue;
       }
       const them = where(c.target.id);
       if (them && (close(pos.get(id)!, them) || down.has(c.target.id))) {
         chaseOver.add(id);
+        story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: down.has(c.target.id) ? "down" : "close" });
         log.push(`${sec} s: ${m.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
         continue;
       }
       if (now >= c.end - 1e-9 && c.end < ROUND_SECONDS - 1e-9) {
         chaseOver.add(id);
+        story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: "time" });
         log.push(`${sec} s: ${m.name}'s ${c.action} ends after ${+(c.end - c.start).toFixed(1)} s.`);
       }
     }
@@ -469,7 +496,7 @@ export function resolveMovement(
       for (const l of lasting) {
         const total = l.damage ? rollDice(l.damage) : 0;
         const before = log.length;
-        const hits = catchIn(l.area, l, total, -1, sec);
+        const hits = catchIn(l.area, l, total, -1, sec, l.name);
         if (hits.length) log.splice(before, 0, `${sec} s: ${l.name} lingers: ${total} damage, ${l.save} save DC ${l.dc}.`);
         fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
       }
@@ -479,11 +506,14 @@ export function resolveMovement(
   // Actions pushed past the end of the round (by closing in or being held back) don't happen.
   for (const m of order) {
     if (down.has(m.tokenId)) continue;
-    for (const a of acts.get(m.tokenId)!) if (!finished.has(a) && !CHASE_ACTIONS.includes(a.step.action)) log.push(`${m.name}'s ${a.step.action} runs out of time this round.`);
+    for (const a of acts.get(m.tokenId)!) if (!finished.has(a) && !CHASE_ACTIONS.includes(a.step.action)) {
+      log.push(`${m.name}'s ${a.step.action} runs out of time this round.`);
+      story.push({ sec: ROUND_SECONDS, k: "late", who: m.tokenId, action: a.step.use ? "attack" : a.step.action });
+    }
   }
   for (const m of order) {
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits };
+  return { final: pos, hp, log, frames, created, statuses, refits, story };
 }
