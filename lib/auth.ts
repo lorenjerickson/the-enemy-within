@@ -58,7 +58,8 @@ export async function setActingAs(playerId: number | null): Promise<void> {
 export async function requireUser(): Promise<User> {
   const user = await currentUser();
   if (!user) redirect("/login");
-  if (user.must_change_password) redirect("/change-password");
+  // Their own first login asks for a new password; the GM playing them isn't asked (it's not theirs to set).
+  if (user.must_change_password && !user.playedBy) redirect("/change-password");
   return user;
 }
 

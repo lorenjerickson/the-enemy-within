@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { changePassword } from "@/lib/db";
-import { currentUser } from "@/lib/auth";
+import { loggedInUser } from "@/lib/auth";
 
 async function doChange(formData: FormData) {
   "use server";
-  const user = await currentUser();
+  const user = await loggedInUser();
   if (!user) redirect("/login");
   const password = String(formData.get("password") ?? "");
   if (!password || password !== formData.get("confirm")) redirect("/change-password?error=1");
@@ -15,7 +15,7 @@ async function doChange(formData: FormData) {
 
 export default async function ChangePassword({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   await connection();
-  const user = await currentUser();
+  const user = await loggedInUser();
   if (!user) redirect("/login");
   if (!user.must_change_password) redirect("/");
   const { error } = await searchParams;
