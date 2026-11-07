@@ -4,7 +4,7 @@ import { rollDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
-import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
+import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
 import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
@@ -240,6 +240,7 @@ export function resolveMovement(
   }
 
   const closingIn = new Set<number>(); // who has been told they're closing in (logged once)
+  const readied = new Set<Act>(); // reactions that are ready
   const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
@@ -317,6 +318,17 @@ export function resolveMovement(
         log.push(`${sec} s: ${a} and ${b} end up in the same spot — GM to decide.`);
       }
     }
+    // Reactions get ready in the second they're planned for (after anything planned before them): Dodge gives
+    // attacks against them disadvantage from then until the round ends.
+    for (const m of order) {
+      if (down.has(m.tokenId)) continue;
+      for (const a of acts.get(m.tokenId)!) {
+        if (!REACTIONS.includes(a.step.action) || readied.has(a) || a.start > sec - 1 - lag.get(m.tokenId)! + 1e-9) continue;
+        readied.add(a);
+        fighters.get(m.tokenId)?.statuses?.push({ source: "Dodge", boosts: [], grants: [{ roll: "attacked", mode: "disadvantage" }] });
+        log.push(`${sec} s: ${m.name} is ready to dodge: attacks against them have disadvantage.`);
+      }
+    }
     // Actions finishing this second: their end passed on the mover's own plan clock.
     const finishing = order.flatMap((m) => {
       const from = sec - 1 - lagBefore.get(m.tokenId)!, to = sec - lag.get(m.tokenId)!;
@@ -328,11 +340,12 @@ export function resolveMovement(
       const start = act.start + lag.get(m.tokenId)!; // when it really started
       const say = (text: string) => log.push(`${sec} s: ${text}`);
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
-      if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t <= sec)) {
+      // Hit while doing it (not in the second it finishes: blows landing together both count).
+      if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t < sec)) {
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
         continue;
       }
-      if (CHASE_ACTIONS.includes(step.action)) continue; // movement, handled above
+      if (CHASE_ACTIONS.includes(step.action) || REACTIONS.includes(step.action)) continue; // movement / reactions: handled above
       if (step.action !== "attack") {
         say(`${m.name}: ${step.action} (no effect yet).`);
         continue;

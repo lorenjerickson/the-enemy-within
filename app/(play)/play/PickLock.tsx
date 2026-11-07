@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
-import { CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
@@ -78,8 +78,15 @@ export default function PickLock({
         />
       )}
       {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} />}
-      <ul className="grid grid-cols-3 gap-2" data-player-actions>
-        {PLAYER_ACTIONS.map((a) => (
+      {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
+      {ACTION_GROUPS.map(([kind, title]) => {
+        const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
+        if (!group.length && !(kind === "action" && gear.length)) return null;
+        return (
+          <section key={kind} className="space-y-1" data-action-group={kind}>
+            <div className="text-xs font-semibold opacity-80">{title}</div>
+            <ul className="grid grid-cols-3 gap-2" data-player-actions>
+        {group.map((a) => (
           <li key={a.id}>
             <button
               type="button"
@@ -96,7 +103,7 @@ export default function PickLock({
                 <span className="block opacity-60">
                   {a.id === "move" && onMap && !plan ? (freeMovement ? "free" : `${moveLeft} ft left`)
                     : plan && ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s`
-                    : plan && CHASE_ACTIONS.includes(a.id) ? "rest of round"
+                    : plan && CHASE_ACTIONS.includes(a.id) ? "follows them"
                     : "hint" in a ? a.hint : ""}
                 </span>
               </span>
@@ -104,7 +111,10 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-      <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />}
+          </section>
+        );
+      })}
       {!plan && doors.length > 0 && (
         <ul className="space-y-1" data-pick-lock>
           {doors.map((d) => (

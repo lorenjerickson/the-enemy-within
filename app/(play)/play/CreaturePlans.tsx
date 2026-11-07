@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
@@ -59,14 +59,19 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               }}
             />
           )}
-          <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode(gearTargetMode(g, current.tokenId))} />
-          {/* The same actions players have: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
-          <div className="grid grid-cols-4 gap-1">
-            {PLAYER_ACTIONS.map((a) => (
+          {/* The same actions players have, grouped by kind: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
+          {ACTION_GROUPS.map(([kind, title]) => {
+            const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
+            if (!group.length && !(kind === "action" && current.gear.length)) return null;
+            return (
+              <section key={kind} className="space-y-1" data-action-group={kind}>
+                <div className="text-xs font-semibold opacity-80">{title}</div>
+              <div className="grid grid-cols-4 gap-1">
+            {group.map((a) => (
               <button
                 key={a.id}
                 type="button"
-                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone for the rest of the round (until within 5 ft)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
+                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone (until within 5 ft, or within range of what comes next)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
                 disabled={pending || current.plan.ready || a.id === "dash"}
@@ -85,6 +90,10 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </button>
             ))}
           </div>
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode(gearTargetMode(g, current.tokenId))} />}
+              </section>
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs opacity-60">Click someone in the initiative order to plan their round.</p>
