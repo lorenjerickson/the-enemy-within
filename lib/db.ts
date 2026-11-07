@@ -2010,10 +2010,10 @@ export type RollAction = { kind: "pickLock"; doorId: number; dc: number } | { ki
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
 
-/** Asks a player to roll; replaces any roll they haven't made yet. */
+/** Asks a player to roll; replaces any roll they haven't made yet (and puts away one they rolled but left open). */
 export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
   db.transaction(() => {
-    db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ? AND result IS NULL").run(playerId);
+    db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ?").run(playerId);
     db.prepare("INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ?, ?)").run(playerId, characterId, JSON.stringify(spec), JSON.stringify(action));
   })();
 }
@@ -2022,6 +2022,21 @@ export function requestRoll(playerId: number, characterId: number, spec: RollSpe
 export function getOpenRollRequest(playerId: number): RollRequest | undefined {
   const r = db.prepare<[number], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE player_id = ? AND done = 0 ORDER BY id DESC LIMIT 1").get(playerId);
   return r && parseRequest(r);
+}
+
+/** The open initiative roll asked of whoever plays this token, if they haven't rolled it. */
+export function openInitiativeRequest(tokenId: number): RollRequest | undefined {
+  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
+    .map(parseRequest).find((r) => r.action.kind === "initiative" && r.action.tokenId === tokenId);
+}
+
+/** An initiative roll lands: into the turn order, highest first (a re-roll replaces an earlier one); no longer waited on. */
+export function settleInitiative(levelId: number, tokenId: number, total: number): void {
+  const enc = getEncounter(levelId);
+  if (!enc) return;
+  const order = [...enc.order.filter((o) => o.token_id !== tokenId), { token_id: tokenId, initiative: total }].sort((x, y) => y.initiative - x.initiative);
+  saveEncounter(levelId, { ...enc, order });
+  setEncounterWaiting(levelId, getEncounterWaiting(levelId).filter((id) => id !== tokenId));
 }
 
 export function saveRollResult(id: number, result: NonNullable<RollRequest["result"]>): void {

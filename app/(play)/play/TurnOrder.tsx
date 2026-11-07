@@ -2,6 +2,7 @@
 
 import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode } from "./moveMode";
+import { gmRollInitiativeFor } from "./gmActions";
 
 export interface TurnRow {
   tokenId: number;
@@ -24,7 +25,7 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
   return (
     <ol className="space-y-1" data-turn-order>
       {rows.map((r) => (
-        <li key={r.tokenId}>
+        <li key={r.tokenId} className="flex items-center gap-1">
           <button
             type="button"
             data-turn={r.tokenId}
@@ -35,7 +36,7 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
               setMoveMode(false); // a newly picked one starts with no move being planned
               setGmPlanToken(selected === r.tokenId ? null : r.tokenId);
             }}
-            className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left ${selected === r.tokenId ? "bg-primary text-primary-content" : r.turn ? "bg-primary/25" : "bg-base-100/60"} ${r.initiative === null ? "opacity-70" : ""} ${r.down ? "cursor-default" : "hover:ring-1 hover:ring-primary"}`}
+            className={`flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1 text-left ${selected === r.tokenId ? "bg-primary text-primary-content" : r.turn ? "bg-primary/25" : "bg-base-100/60"} ${r.initiative === null ? "opacity-70" : ""} ${r.down ? "cursor-default" : "hover:ring-1 hover:ring-primary"}`}
           >
             <span className="w-6 text-right font-mono">{r.initiative ?? "…"}</span>
             <span className="flex-1">
@@ -52,6 +53,11 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
               <span className={`badge badge-sm ${r.ready ? "badge-success" : r.rolling ? "badge-secondary" : "badge-ghost"}`}>{r.ready ? "ready" : r.rolling ? "rolling…" : "planning"}</span>
             )}
           </button>
+          {r.initiative === null && (
+            <form action={gmRollInitiativeFor.bind(null, r.tokenId)}>
+              <button className="btn btn-xs" data-roll-for={r.tokenId} title={`Roll initiative for ${r.name}${r.player ? ` (instead of ${r.player})` : ""}`}>Roll</button>
+            </form>
+          )}
         </li>
       ))}
     </ol>

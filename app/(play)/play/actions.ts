@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
-  addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
+  addPing, listPings, type Ping, characterModifiers, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
@@ -79,12 +79,7 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).
-    const enc = getEncounter(a.levelId);
-    if (enc) {
-      const order = [...enc.order.filter((o) => o.token_id !== a.tokenId), { token_id: a.tokenId, initiative: scored.total }].sort((x, y) => y.initiative - x.initiative);
-      saveEncounter(a.levelId, { ...enc, order });
-      setEncounterWaiting(a.levelId, getEncounterWaiting(a.levelId).filter((id) => id !== a.tokenId));
-    }
+    settleInitiative(a.levelId, a.tokenId, scored.total);
     success = true;
     outcome = `Initiative ${scored.total}.`;
     logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} rolled ${scored.total} for initiative.`);

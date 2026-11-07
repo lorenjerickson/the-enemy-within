@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  downTokens, getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
+  downTokens, getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
   listLastingAreas, addLastingArea, addTokenStatus, removeLastingArea, getGameTime, setGameTime,
 } from "@/lib/db";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
@@ -153,5 +153,30 @@ export async function setHealth(tokenId: number, form: FormData) {
 export async function removeLasting(id: number) {
   await requireGm();
   removeLastingArea(Number(id));
+  revalidatePath("/play");
+}
+
+/**
+ * The GM rolls initiative for a player's character still waiting on it (they're away, or slow): rolled here, into the
+ * turn order, and their prompt closes. No token: everyone still rolling.
+ */
+export async function gmRollInitiativeFor(tokenId: number | null) {
+  await requireGm();
+  const levelId = getGmLevelId();
+  if (levelId === undefined) return;
+  const labels = tokenLabels(levelId);
+  for (const id of tokenId === null ? getEncounterWaiting(levelId) : [Number(tokenId)]) {
+    const t = listTokens(levelId).find((x) => x.id === id);
+    const who = t?.character_id ? getCharacter(t.character_id) : undefined;
+    if (!t || !who) continue;
+    const req = openInitiativeRequest(id);
+    const rolled = rollSpec(req?.spec ?? initiativeRoll(who.attributes));
+    settleInitiative(levelId, id, rolled.total);
+    if (req) {
+      saveRollResult(req.id, { ...rolled, outcome: `Initiative ${rolled.total} (rolled by the GM).`, success: true });
+      closeRollRequest(req.id, req.player_id);
+    }
+    logSessionEvent(`The GM rolled ${rolled.total} for ${labels.get(id) ?? who.name}'s initiative.`);
+  }
   revalidatePath("/play");
 }

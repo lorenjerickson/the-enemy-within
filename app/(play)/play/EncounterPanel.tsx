@@ -1,5 +1,5 @@
 import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses } from "@/lib/db";
-import { endEncounter, resolveRound, rollInitiative, removeLasting } from "./gmActions";
+import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import CreaturePlans from "./CreaturePlans";
 import TurnOrder from "./TurnOrder";
@@ -29,7 +29,14 @@ export default function EncounterPanel() {
       <p className="text-xs opacity-60">Players on this map are asked to roll; your creatures roll straight away. Movement is limited while the encounter runs.</p>
       {enc && (
         <>
-          <div className="font-semibold">Round {enc.round}</div>
+          <div className="flex items-center font-semibold">
+            Round {enc.round}
+            {waiting.length > 0 && (
+              <form action={gmRollInitiativeFor.bind(null, null)} className="ml-auto">
+                <button className="btn btn-xs" data-roll-for-all title="Roll initiative for everyone still rolling">Roll for the {waiting.length} still rolling</button>
+              </form>
+            )}
+          </div>
           <TurnOrder
             rows={[
               ...enc.order.map((o, i) => ({ tokenId: o.token_id, initiative: o.initiative, turn: i === enc.turn })),
