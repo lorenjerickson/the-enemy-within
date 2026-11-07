@@ -21,7 +21,7 @@ import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
-import { FEET_PER_SQUARE, pointToSegment, reachPolygons, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -653,7 +653,7 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
-  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
+  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string }[]; // planned targeted actions: drawn as lines to the target
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
@@ -662,7 +662,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number } } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -948,12 +948,12 @@ export default function MapView({
   const gmSel = useGmPlanToken();
   const gmPlan = !readOnly && gmSel !== null && moveOn ? gmPlans?.[gmSel] : undefined; // only while Move is on
   const reachAt = useMemo(() => {
-    const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false } : moveOn ? fog?.move : null;
+    const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false, perSecond: gmPlan.perSecond } : moveOn ? fog?.move : null;
     if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
     const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
-    return { from: { col: t.col, row: t.row }, feet: m.feet, at: t, token };
+    return { from: { col: t.col, row: t.row }, feet: m.feet, perSecond: m.perSecond ?? 0, at: t, token };
   }, [moveOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens]);
   // The area itself, worked out only when where they start, how far they can go or the walls change (it's costly on
   // gridless maps: the way round each wall end counts too).
@@ -962,7 +962,10 @@ export default function MapView({
     if (!reachAt) return null;
     const walls = movementBlockers(optimisticStructures); // windows block movement too
     const squares = reachAt.feet / FEET_PER_SQUARE, { col, row } = reachAt.from;
-    if (gridless) return { kind: "area" as const, polys: reachPolygons({ x: col + 0.5, y: row + 0.5 }, squares, walls) };
+    if (gridless) {
+      const areas = reachAreas({ x: col + 0.5, y: row + 0.5 }, squares, walls);
+      return { kind: "area" as const, polys: areas.map((a) => a.poly), areas };
+    }
     return { kind: "squares" as const, cells: reachableSquares({ col, row }, squares, walls) };
   }, [reachFromKey, wallsKey, gridless]); // eslint-disable-line react-hooks/exhaustive-deps
   const reach = reachAt && reachArea ? { ...reachAt, ...reachArea } : null;
@@ -1846,25 +1849,80 @@ export default function MapView({
       if (reach) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
-        ctx.fillStyle = "rgba(56,189,248,0.22)";
-        ctx.strokeStyle = "rgba(125,211,252,0.85)";
-        ctx.lineWidth = 1 / k;
+        // Graded by the second it takes to get there (nearer = deeper), so they can see how much time a move
+        // leaves for an action; the first band's seconds are labelled.
+        const v = reach.perSecond / FEET_PER_SQUARE; // squares a second
+        const total = v > 0 ? reach.feet / reach.perSecond : 0; // seconds of movement left
+        const bands = v > 0 ? Math.ceil(total - 1e-6) : 1;
+        const shade = (sec: number) => (bands <= 1 ? 0.3 : 0.42 - (0.3 * (sec - 1)) / (bands - 1)); // 1 s deepest
+        const labels: { x: number; y: number; text: string }[] = [];
         if (reach.kind === "squares") {
+          ctx.strokeStyle = "rgba(125,211,252,0.85)";
+          ctx.lineWidth = 1 / k;
+          const edge = new Map<number, { col: number; row: number }>(); // per second: the cell to label
           for (const c of reach.cells.values()) {
+            const sec = v > 0 && c.steps ? Math.max(1, Math.ceil(c.steps / v - 1e-6)) : 1;
             const r = cellToRect(state, SCENE.w, SCENE.h, { col: c.col, row: c.row, cols: 1, rows: 1 });
+            ctx.fillStyle = `rgba(56,189,248,${shade(sec)})`;
             ctx.fillRect(r.x, r.y, r.w, r.h);
             ctx.strokeRect(r.x, r.y, r.w, r.h);
+            // Label on their row if possible, furthest to the right.
+            const e = edge.get(sec), score = (q: { col: number; row: number }) => q.col - Math.abs(q.row - reach.from.row) * 3;
+            if (c.steps && (!e || score(c) > score(e))) edge.set(sec, c);
           }
+          if (bands > 1) for (const [sec, c] of edge) labels.push({ x: x0 + (c.col + 0.5) * size, y: y0 + (c.row + 0.5) * size, text: `${sec} s` });
         } else {
-          // The union of the polygons (same winding, so overlaps fill once); no outline, which would cut across it.
-          const p = new Path2D();
-          for (const poly of reach.polys) {
-            poly.forEach((pt, i) => (i ? p.lineTo(x0 + pt.x * size, y0 + pt.y * size) : p.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
-            p.closePath();
+          // Each band is the area reachable within that many seconds: every polygon cut to the walk left from its own
+          // origin. Painted solid, outermost first, on a layer of its own, then laid over the map translucent (so
+          // overlapping polygons don't double up).
+          const layer = document.createElement("canvas");
+          layer.width = ctx.canvas.width;
+          layer.height = ctx.canvas.height;
+          const lc = layer.getContext("2d")!;
+          lc.setTransform(ctx.getTransform());
+          const radius = reach.feet / FEET_PER_SQUARE;
+          const far = Math.floor(radius / (v || radius)) * v - 0.25, o0 = reach.areas[0].origin;
+          const labelAngle = [1, 3, -1, -3, 0, 2, 4, -2].map((q) => (q * Math.PI) / 4).find((ang) => insidePolygon({ x: o0.x + Math.cos(ang) * far, y: o0.y + Math.sin(ang) * far }, reach.areas[0].poly)) ?? Math.PI / 4;
+          for (let sec = bands; sec >= 1; sec--) {
+            const r = Math.min(radius, sec * v || radius);
+            const a = shade(sec) / 0.42; // 0..1: how deep this band is
+            lc.fillStyle = `rgb(${Math.round(8 + 140 * (1 - a))},${Math.round(90 + 135 * (1 - a))},${Math.round(170 + 82 * (1 - a))})`; // deep blue → pale
+            for (const ar of reach.areas) {
+              if (r - ar.base <= 0) continue;
+              lc.save();
+              lc.beginPath();
+              lc.arc(x0 + ar.origin.x * size, y0 + ar.origin.y * size, (r - ar.base) * size, 0, Math.PI * 2);
+              lc.clip();
+              lc.beginPath();
+              ar.poly.forEach((pt, i) => (i ? lc.lineTo(x0 + pt.x * size, y0 + pt.y * size) : lc.moveTo(x0 + pt.x * size, y0 + pt.y * size)));
+              lc.closePath();
+              lc.fill();
+              lc.restore();
+            }
+            // Label each full second along one open line out from them (the first direction they can walk all the way).
+            if (bands > 1 && sec * v <= radius + 1e-6) {
+              const o = reach.areas[0].origin, d = sec * v - 0.25;
+              const p = { x: o.x + Math.cos(labelAngle) * d, y: o.y + Math.sin(labelAngle) * d };
+              labels.push({ x: x0 + p.x * size, y: y0 + p.y * size, text: `${sec} s` });
+            }
           }
-          ctx.fillStyle = "rgba(56,189,248,0.28)";
-          ctx.fill(p, "nonzero");
+          ctx.save();
+          ctx.resetTransform();
+          ctx.globalAlpha = 0.55;
+          ctx.drawImage(layer, 0, 0);
+          ctx.restore();
         }
+        ctx.font = `bold ${10 / k}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = 3 / k;
+        for (const l of labels) {
+          ctx.strokeStyle = "rgba(0,0,0,0.7)";
+          ctx.strokeText(l.text, l.x, l.y);
+          ctx.fillStyle = "#e0f2fe";
+          ctx.fillText(l.text, l.x, l.y);
+        }
+        ctx.textBaseline = "alphabetic";
         // Where the plan has them so far: a dashed ring, joined to the token.
         if (reach.at.col !== reach.token.col || reach.at.row !== reach.token.row) {
           ctx.setLineDash([4 / k, 3 / k]);
@@ -1880,7 +1938,7 @@ export default function MapView({
           ctx.setLineDash([]);
         }
         const tx = x0 + (reach.at.col + 0.5) * size, ty = y0 + reach.at.row * size;
-        const label = `${Math.floor(reach.feet)} ft`;
+        const label = reach.perSecond > 0 ? `${Math.floor(reach.feet)} ft · ${+(reach.feet / reach.perSecond).toFixed(1)} s` : `${Math.floor(reach.feet)} ft`;
         ctx.font = `bold ${12 / k}px sans-serif`;
         ctx.textAlign = "center";
         ctx.lineWidth = 3 / k;

@@ -91,5 +91,6 @@ export function planView(tokenId: number) {
     ready: p.ready,
     from: planEnd(p.plan, { col: p.tok.col, row: p.tok.row }),
     feetLeft: (t.left * p.walking) / 6,
+    perSecond: p.walking / 6, // feet a second at walking pace
   };
 }

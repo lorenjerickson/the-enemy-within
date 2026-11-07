@@ -163,6 +163,11 @@ export function shortestPath(a: Point, b: Point, walls: Segment[], allowed: (p: 
  * clearPath / shortestPath (which also keep its body clear of walls).
  */
 export function reachPolygons(start: Point, radius: number, walls: Segment[]): Point[][] {
+  return reachAreas(start, radius, walls).map((a) => a.poly);
+}
+
+/** The same, with each polygon's origin and the distance walked to get there (for showing how far each second goes). */
+export function reachAreas(start: Point, radius: number, walls: Segment[]): { poly: Point[]; origin: Point; base: number }[] {
   const OFF = BODY + 0.15;
   const nodes: Point[] = [start];
   for (const w of walls) for (const p of [w.a, w.b]) for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
@@ -184,5 +189,5 @@ export function reachPolygons(start: Point, radius: number, walls: Segment[]): P
     }
   }
   // Only wall ends that open up somewhere new are worth a polygon of their own (the start's covers the rest).
-  return nodes.flatMap((n, i) => (i === 0 || (done[i] && radius - dist[i] > 0.25) ? [visibilityPolygon(n, radius - dist[i], walls)] : []));
+  return nodes.flatMap((n, i) => (i === 0 || (done[i] && radius - dist[i] > 0.25) ? [{ poly: visibilityPolygon(n, radius - dist[i], walls), origin: n, base: dist[i] }] : []));
 }

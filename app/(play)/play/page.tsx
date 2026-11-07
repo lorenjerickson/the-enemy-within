@@ -85,7 +85,7 @@ function GmView({ session }: { session: GameSession }) {
   const gmPlans = Object.fromEntries(
     (enc?.order ?? []).flatMap((o) => {
       const v = planView(o.token_id);
-      return v ? [[o.token_id, { from: v.from, feetLeft: v.ready ? 0 : v.feetLeft }]] : [];
+      return v ? [[o.token_id, { from: v.from, feetLeft: v.ready ? 0 : v.feetLeft, perSecond: v.perSecond }]] : [];
     })
   );
   return (
@@ -159,7 +159,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       <AutoRefresh checkIn={checkIn} />
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
-        <LevelMap readOnly replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
+        <LevelMap readOnly replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from, perSecond: walking / 6 } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>
