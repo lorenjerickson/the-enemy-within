@@ -11,6 +11,7 @@ import { equippableItems, professionNodes } from "../formOptions";
 import ProfessionsInput from "../ProfessionsInput";
 import InPartyInput from "../InPartyInput";
 import Journal from "../../../character/Journal";
+import Containers from "../Containers";
 
 export default async function EditCharacter({ params }: { params: Promise<{ id: string }> }) {
   await connection();
@@ -46,6 +47,7 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
           </>
         }
       />
+      <Containers characterId={character.id} />
       <div className="max-w-3xl">
         <Journal characterId={character.id} name={character.name} />
       </div>

@@ -113,7 +113,7 @@ export async function resolveRound() {
   for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
   for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
-  for (const r of refits) saveRefit(r.tokenId, r.equipment); // the swap stays after the round
+  for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
   for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
   for (const m of movers) {
     const end = final.get(m.tokenId)!;

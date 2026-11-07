@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, type GameSession, type User } from "@/lib/db";
+import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, characterContainers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -142,7 +142,16 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
           {place && <p className="opacity-70">{place.location} › {place.level}</p>}
           <ul>
             {listPlayerCharacters(user.id).map((c) => (
-              <li key={c.id} className="font-semibold">{c.name}</li>
+              <li key={c.id} className="space-y-1">
+                <span className="font-semibold">{c.name}</span>
+                {/* What they carry: each worn container's contents. */}
+                {characterContainers(c.id).map((k) => (
+                  <div key={k.slot} className="text-xs" data-carried={k.container.id}>
+                    <span className="opacity-70">{k.container.name} ({k.stacks.length}/{k.container.capacity}):</span>{" "}
+                    {k.stacks.length ? k.stacks.map((s) => `${s.item.name}${s.qty > 1 ? ` ×${s.qty}` : ""}`).join(", ") : <span className="opacity-50">empty</span>}
+                  </div>
+                ))}
+              </li>
             ))}
           </ul>
           <Link href="/" className="btn btn-sm">Leave</Link>

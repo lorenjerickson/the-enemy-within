@@ -4,7 +4,7 @@ import { characterHealth, parseHealthForm, saveCharacterHealth } from "@/lib/hea
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { deleteCharacter, listPlayers, saveCharacter, setCharacterPlayer, setCharacterProfessions, setInParty } from "@/lib/db";
+import { addToContainer, deleteCharacter, listPlayers, takeFromStack, saveCharacter, setCharacterPlayer, setCharacterProfessions, setInParty } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncObjectiveJournals } from "@/lib/story";
 import { parseCreatureForm } from "@/lib/creatureForm";
@@ -39,4 +39,19 @@ export async function setCharacterHealth(id: number, form: FormData) {
   saveCharacterHealth(id, parseHealthForm(form, h));
   revalidatePath(`/campaign/characters/${id}`);
   revalidatePath("/play");
+}
+
+/** Puts items from the catalogue into one of the character's containers (what doesn't fit is left out). */
+export async function addContainerItem(characterId: number, containerId: number, form: FormData) {
+  await requireGm();
+  const qty = Math.max(1, Math.floor(Number(form.get("qty")) || 1));
+  addToContainer(Number(characterId), Number(containerId), Number(form.get("item")), qty);
+  revalidatePath(`/campaign/characters/${characterId}`);
+}
+
+/** Takes one off a stack in a container. */
+export async function removeContainerStack(characterId: number, stackId: number) {
+  await requireGm();
+  takeFromStack(Number(stackId));
+  revalidatePath(`/campaign/characters/${characterId}`);
 }

@@ -1,11 +1,11 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
-import { getCharacter, getCreature, getItem, listActions, listItems, listTokens, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
-import type { GearAction } from "@/lib/roundPlan";
+import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 
@@ -121,26 +121,36 @@ export function tokenWho(tokenId: number) {
 const HANDS: EquipSlot[] = ["main hand", "off hand"];
 
 /**
- * What a token could refit into each of its slots: anything from the item list that fits and isn't worn already
- * (there's no carried inventory yet; when there is, this is where it narrows to what they carry).
+ * What a token could refit into each of its slots: what a character carries in their worn containers that fits and
+ * isn't worn already; the GM's creatures (no containers) can pick anything from the item list.
  */
 export function refitOptions(tokenId: number, equipment: Equipment) {
-  const carried = listItems();
+  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t) return [];
+  const carried = t.character_id ? characterContainers(t.character_id).flatMap((c) => c.stacks.map((s) => s.item)) : listItems();
   const worn = new Set(Object.values(equipment).filter(Boolean));
   return (Object.keys(equipment) as EquipSlot[]).filter((slot) => slot !== "container").flatMap((slot) => {
     const current = equipment[slot] ? getItem(equipment[slot]!) : undefined;
     const other = HANDS.includes(slot) ? HANDS.find((h) => h !== slot)! : undefined;
     const otherItem = other && equipment[other] ? getItem(equipment[other]!) : undefined;
     if (otherItem?.hands === 2) return []; // held in both hands: refit that one instead
-    const items = carried.filter((i) => i.slots.includes(slot) && !worn.has(i.id));
+    const items = carried.filter((i, n) => carried.findIndex((j) => j.id === i.id) === n && i.slots.includes(slot) && !worn.has(i.id));
     return items.length ? [{ slot, current: current ? { id: current.id, name: current.name } : null, items: items.map((i) => ({ id: i.id, name: i.name, hands: i.hands })) }] : [];
   });
 }
 
-/** Keeps a refit after the round: in a character's equipment, or on a creature token (not its template). */
-export function saveRefit(tokenId: number, equipment: Equipment): void {
+/**
+ * Keeps a refit after the round: in a character's equipment (the new item comes out of their container, and what it
+ * replaced goes back into it), or on a creature token (not its template).
+ */
+export function saveRefit(tokenId: number, equipment: Equipment, swap?: Refit, before?: Equipment): void {
   const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
   if (!t) return;
+  if (t.character_id && swap) {
+    const from = takeCarried(t.character_id, swap.item.id) ?? characterContainers(t.character_id)[0]?.container.id;
+    const out = [swap.from?.id, swap.clears ? before?.[swap.clears] : null].filter((x): x is number => !!x);
+    for (const id of out) if (from) addToContainer(t.character_id, from, id, 1);
+  }
   if (t.character_id) {
     const c = getCharacter(t.character_id);
     if (c) { const { id: _id, creature_id, template_name: _t, ...rest } = c; saveCharacter(c.id, creature_id, { ...rest, equipment }); }

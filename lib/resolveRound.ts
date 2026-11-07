@@ -5,7 +5,7 @@ import { describeStatus, type Status } from "@/lib/status";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
-import { DODGE_DC, ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
+import { DODGE_DC, ROUND_SECONDS, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
 /** How far an action reaches (squares): a gear action's own range, a plain Attack the mover's weapon's. */
@@ -106,7 +106,7 @@ export function resolveMovement(
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
 ) {
-  const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>> }[] = []; // refits done, to keep
+  const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
@@ -362,11 +362,12 @@ export function resolveMovement(
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
       // A refit (a bonus action) is done: from now on they fight with the new gear.
       if (step.swap) {
-        const equipment = { ...(m.equipment ?? {}), [step.swap.slot]: step.swap.item.id, ...(step.swap.clears ? { [step.swap.clears]: null } : {}) };
+        const before = { ...(m.equipment ?? {}) };
+        const equipment = { ...before, [step.swap.slot]: step.swap.item.id, ...(step.swap.clears ? { [step.swap.clears]: null } : {}) };
         m.equipment = equipment;
         fighters.get(m.tokenId)?.wear?.(equipment);
         if (step.swap.reach) m.attackRange = step.swap.reach;
-        refits.push({ tokenId: m.tokenId, equipment });
+        refits.push({ tokenId: m.tokenId, equipment, before, swap: step.swap });
         say(`${m.name} ${step.swap.from ? `swaps ${step.swap.from.name} for ${step.swap.item.name}` : `takes up ${step.swap.item.name}`} (${step.swap.slot}).`);
         continue;
       }

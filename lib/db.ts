@@ -2193,6 +2193,7 @@ export function deleteCharacter(id: number): void {
     for (const t of tokens) db.prepare("DELETE FROM round_plans WHERE token_id = ?").run(t);
     db.prepare("DELETE FROM map_tokens WHERE character_id = ?").run(id);
     db.prepare("DELETE FROM character_professions WHERE character_id = ?").run(id);
+    db.prepare("DELETE FROM container_items WHERE character_id = ?").run(id);
     db.prepare("DELETE FROM sightings WHERE character_id = ?").run(id);
     db.prepare("DELETE FROM roll_requests WHERE character_id = ?").run(id);
     db.prepare("DELETE FROM journal_entries WHERE character_id = ?").run(id);
@@ -2225,4 +2226,84 @@ export function downTokens(levelId: number): Set<number> {
        WHERE t.level_id = ? AND COALESCE(CASE WHEN t.character_id IS NULL THEN t.hp ELSE c.hp END, 1) <= 0`
     ).all(levelId).map((r) => r.id)
   );
+}
+
+// ---------- Containers ----------
+
+// What's in a character's containers (a belt, a pack…): each container they own has its own inventory, kept with
+// the container (unequip it and equip it again, and its contents are still there). A stack fills one of the
+// container's slots (its capacity), up to the item's max stack.
+db.exec(`CREATE TABLE IF NOT EXISTS container_items (
+  id INTEGER PRIMARY KEY,
+  character_id INTEGER NOT NULL,
+  container_id INTEGER NOT NULL, -- the container item
+  item_id INTEGER NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 1
+)`);
+
+export interface ContainerStack {
+  id: number;
+  item: Item;
+  qty: number;
+}
+
+/** Equipped containers and their contents: one entry per container worn (a container item with a capacity). */
+export function characterContainers(characterId: number): { slot: EquipSlot; container: Item; stacks: ContainerStack[] }[] {
+  const c = getCharacter(characterId);
+  if (!c) return [];
+  const rows = db.prepare<[number], { id: number; container_id: number; item_id: number; qty: number }>("SELECT id, container_id, item_id, qty FROM container_items WHERE character_id = ? ORDER BY id").all(characterId);
+  return (Object.entries(c.equipment ?? {}) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
+    const container = id ? getItem(id) : undefined;
+    if (!container || !container.capacity) return [];
+    const stacks = rows.filter((r) => r.container_id === container.id).flatMap((r) => {
+      const item = getItem(r.item_id);
+      return item ? [{ id: r.id, item, qty: r.qty }] : [];
+    });
+    return [{ slot, container, stacks }];
+  });
+}
+
+/** Puts items in a container: onto a stack of the same item with room first, then into free slots. Returns how many didn't fit. */
+export function addToContainer(characterId: number, containerId: number, itemId: number, qty: number): number {
+  const container = getItem(containerId), item = getItem(itemId);
+  if (!container?.capacity || !item || item.id === containerId) return qty;
+  const max = Math.max(1, item.max_stack ?? 1);
+  return db.transaction(() => {
+    let left = qty;
+    const stacks = db.prepare<[number, number], { id: number; item_id: number; qty: number }>("SELECT id, item_id, qty FROM container_items WHERE character_id = ? AND container_id = ?").all(characterId, containerId);
+    for (const s of stacks) {
+      if (s.item_id !== itemId || s.qty >= max || left <= 0) continue;
+      const put = Math.min(left, max - s.qty);
+      db.prepare("UPDATE container_items SET qty = qty + ? WHERE id = ?").run(put, s.id);
+      left -= put;
+    }
+    let free = container.capacity! - stacks.length;
+    while (left > 0 && free > 0) {
+      const put = Math.min(left, max);
+      db.prepare("INSERT INTO container_items (character_id, container_id, item_id, qty) VALUES (?, ?, ?, ?)").run(characterId, containerId, itemId, put);
+      left -= put;
+      free--;
+    }
+    return left;
+  })();
+}
+
+/** Takes up to `qty` off a stack (the stack goes when it's empty). */
+export function takeFromStack(stackId: number, qty = 1): void {
+  db.transaction(() => {
+    db.prepare("UPDATE container_items SET qty = qty - ? WHERE id = ?").run(qty, stackId);
+    db.prepare("DELETE FROM container_items WHERE id = ? AND qty <= 0").run(stackId);
+  })();
+}
+
+/** Takes one of an item out of whichever of their worn containers has it; the container it came from, or null. */
+export function takeCarried(characterId: number, itemId: number): number | null {
+  for (const c of characterContainers(characterId)) {
+    const s = c.stacks.find((x) => x.item.id === itemId);
+    if (s) {
+      takeFromStack(s.id);
+      return c.container.id;
+    }
+  }
+  return null;
 }
