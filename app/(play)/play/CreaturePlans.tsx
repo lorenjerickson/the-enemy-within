@@ -11,6 +11,7 @@ import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
+import RefitPicker, { type RefitOption } from "./RefitPicker";
 
 export interface CreaturePlan {
   tokenId: number;
@@ -18,6 +19,7 @@ export interface CreaturePlan {
   player: string | null; // a player's character the GM is planning for (absent or AFK)
   plan: { steps: TimedStep[]; used: number; ready: boolean };
   gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
+  refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
@@ -28,6 +30,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const choosing = target && target.tokenId === (selected) ? target.action : null;
   const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected } : null);
   const moving = useMoveMode();
+  const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
@@ -60,6 +63,9 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               }}
             />
           )}
+          {refitting && (
+            <RefitPicker options={current.refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", swap: { slot, item } })); }} />
+          )}
           {/* The same actions players have, grouped by kind: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           {ACTION_GROUPS.map(([kind, title]) => {
             const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
@@ -79,6 +85,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
                   a.id === "move" ? setMoveMode(!moving)
+                  : a.id === "refit" ? setRefitting(!refitting)
                   : TARGETED_ACTIONS.includes(a.id) ? setChoosing(a.id)
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))
                 }

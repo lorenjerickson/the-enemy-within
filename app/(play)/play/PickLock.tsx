@@ -12,6 +12,7 @@ import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
+import RefitPicker, { type RefitOption } from "./RefitPicker";
 
 /**
  * The player's Actions panel. Out of an encounter, actions happen straight away (Move is free, Search rolls).
@@ -19,7 +20,7 @@ import type { TimedStep } from "./RoundPlanView";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [],
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -28,6 +29,7 @@ export default function PickLock({
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string }[]; // who they can see, to attack
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
+  refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
@@ -35,6 +37,7 @@ export default function PickLock({
   const choosing = target && target.tokenId === (null) ? target.action : null;
   const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null } : null);
   const moving = useMoveMode();
+  const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
@@ -44,13 +47,14 @@ export default function PickLock({
   const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
     if (id === "move") return setMoveMode(!moving);
+    if (id === "refit") return setRefitting(!refitting);
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
   };
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
-    : plan ? (id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
     : `${base}: not available yet`;
@@ -77,6 +81,9 @@ export default function PickLock({
             run(() => planStep({ kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}), ...(seconds ? { seconds } : {}) }));
           }}
         />
+      )}
+      {plan && refitting && (
+        <RefitPicker options={refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", swap: { slot, item } })); }} />
       )}
       {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} />}
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}

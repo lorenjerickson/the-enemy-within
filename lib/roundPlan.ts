@@ -1,5 +1,7 @@
 import type { AreaSpec } from "@/lib/aoe";
 import type { ActionStatuses } from "@/lib/status";
+import type { EquipSlot } from "@/lib/itemTypes";
+type Equipment = Partial<Record<EquipSlot, number | null>>;
 import { CHASE_ACTIONS, TARGETED_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
 
 /** A combat round lasts six seconds; everyone plans theirs at once (see the project's encounters doc). */
@@ -7,7 +9,7 @@ export const ROUND_SECONDS = 6;
 
 /** How long each action takes, in seconds (defaults; tune freely). Move and Dash are movement, timed by distance. */
 export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
-  interact: 1, use: 2, attack: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
+  interact: 1, use: 2, attack: 2, refit: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
 };
 
 /** One step of a round plan, in the order declared. */
@@ -28,8 +30,30 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit };
 // seconds: how long an Evade / Pursue lasts (unset = the rest of the round).
+
+/**
+ * A refit: what goes into a slot (and what comes out), whatever has to leave the other hand for something held in
+ * both, and the reach a plain Attack gets from it (main hand only, squares).
+ */
+export interface Refit {
+  slot: EquipSlot;
+  item: { id: number; name: string };
+  from: { id: number; name: string } | null;
+  clears?: EquipSlot; // the other hand, emptied for a two-handed item
+  reach?: number;
+}
+
+/** Equipment once the plan's refits have happened. */
+export function afterRefits(equipment: Equipment, plan: PlanStep[]): Equipment {
+  const out = { ...equipment };
+  for (const s of plan) if (s.kind === "action" && s.swap) {
+    out[s.swap.slot] = s.swap.item.id;
+    if (s.swap.clears) out[s.swap.clears] = null;
+  }
+  return out;
+}
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
@@ -52,10 +76,11 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
-  // One action and one reaction a round; movement (Move, Dash, Evade, Pursue) as time allows.
+  // One action, one bonus action and one reaction a round; movement (Move, Dash, Evade, Pursue) as time allows.
   const kind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? "action" : actionKind(s.action));
   if (kind(step) === "action" && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round";
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
+  if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";
   if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim)) return step.use?.area ? "Aim it on the map" : "Pick a target";
   if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkingFeet).left <= 0) return "No time left this round";
   if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";

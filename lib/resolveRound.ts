@@ -12,6 +12,7 @@ import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/r
 const rangeOf = (step: Extract<PlanStep, { kind: "action" }>, m?: Mover) =>
   step.use?.range ?? (step.action === "attack" && m?.attackRange ? m.attackRange : ACTION_RANGE[step.action]);
 import type { Segment } from "@/lib/visibility";
+import type { EquipSlot } from "@/lib/itemTypes";
 
 type Pos = { col: number; row: number };
 
@@ -24,6 +25,7 @@ export interface Mover {
   plan: PlanStep[];
   walking: number; // feet per round
   attackRange?: number; // squares a plain Attack reaches (their main-hand weapon's range); 1 = within reach
+  equipment?: Partial<Record<EquipSlot, number | null>>; // what they wear (refits change it mid-round)
 }
 
 /** Where a plan puts a mover at time t (seconds into the round), ignoring everyone else. */
@@ -84,6 +86,7 @@ export interface Combatant {
   defense: () => { total: number; text: string };
   damage: (use?: GearAction) => { total: number; text: string };
   save?: (attr: Attribute) => { total: number; text: string };
+  wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
 }
 
 /**
@@ -103,6 +106,7 @@ export function resolveMovement(
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
 ) {
+  const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>> }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
@@ -350,6 +354,16 @@ export function resolveMovement(
       const start = act.start + lag.get(m.tokenId)!; // when it really started
       const say = (text: string) => log.push(`${sec} s: ${text}`);
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
+      // A refit (a bonus action) is done: from now on they fight with the new gear.
+      if (step.swap) {
+        const equipment = { ...(m.equipment ?? {}), [step.swap.slot]: step.swap.item.id, ...(step.swap.clears ? { [step.swap.clears]: null } : {}) };
+        m.equipment = equipment;
+        fighters.get(m.tokenId)?.wear?.(equipment);
+        if (step.swap.reach) m.attackRange = step.swap.reach;
+        refits.push({ tokenId: m.tokenId, equipment });
+        say(`${m.name} ${step.swap.from ? `swaps ${step.swap.from.name} for ${step.swap.item.name}` : `takes up ${step.swap.item.name}`} (${step.swap.slot}).`);
+        continue;
+      }
       // Hit while doing it (not in the second it finishes: blows landing together both count).
       if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t < sec)) {
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
@@ -464,5 +478,5 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses };
+  return { final: pos, hp, log, frames, created, statuses, refits };
 }

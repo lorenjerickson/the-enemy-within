@@ -41,7 +41,7 @@ export default function EncounterPanel() {
               .filter((id) => names.get(id) && !down.has(id))
               .flatMap((id) => {
                 const v = planView(id);
-                return v ? [{ tokenId: id, name: names.get(id)!.name, player: names.get(id)!.player, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: gearActions(id) }] : [];
+                return v ? [{ tokenId: id, name: names.get(id)!.name, player: names.get(id)!.player, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits }] : [];
               })}
           />
           {levelId !== undefined && listLastingAreas(levelId).length > 0 && (

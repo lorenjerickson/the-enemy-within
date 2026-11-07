@@ -1,9 +1,9 @@
-import { downTokens, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, getItem, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { ROUND_SECONDS, cannotAdd, planEnd, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
-import { gearActions } from "@/lib/combat";
+import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
+import { gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { movementBlockers } from "@/lib/visibility";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
@@ -15,7 +15,10 @@ export function tokenPlanner(tokenId: number) {
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number } | { kind: "move"; col: number; row: number };
+/** Their equipment as the plan so far leaves it (after any refit). */
+export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
+
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number } } | { kind: "move"; col: number; row: number };
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -52,7 +55,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     const name = step.target !== undefined ? tokenLabels(p.tok.level_id).get(Number(step.target)) : undefined;
     if (step.target !== undefined && (!name || Number(step.target) === p.tok.token_id)) return "Pick someone else on this map";
     // A gear action must be one this token actually has (an equipped item's, or a creature's own).
-    const use = step.use !== undefined ? gearActions(p.tok.token_id).find((g) => g.id === Number(step.use)) : undefined;
+    const use = step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use)) : undefined;
     if (step.use !== undefined && !use) return "That isn't one of their actions";
     const { source: _source, ...gear } = use ?? { source: "" };
     // An area is aimed at a spot: a circle's centre must be within the action's range of where the plan leaves them.
@@ -69,7 +72,22 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       seconds = Number(step.seconds);
       if (!Number.isInteger(seconds) || seconds < 1 || seconds > ROUND_SECONDS) return "Pick how many seconds";
     }
-    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
+    // Refit: something they carry that fits the slot, as their gear will be by then.
+    let swap: Refit | undefined;
+    if (step.action === "refit") {
+      const equipment = plannedEquipment(p);
+      const option = refitOptions(p.tok.token_id, equipment).find((o) => o.slot === step.swap?.slot);
+      const item = option?.items.find((i) => i.id === Number(step.swap?.item));
+      if (!option || !item) return "Pick what to swap in";
+      const other = option.slot === "main hand" ? "off hand" : option.slot === "off hand" ? "main hand" : undefined;
+      const range = getItem(item.id)?.range_ft ?? 5;
+      swap = {
+        slot: option.slot, item: { id: item.id, name: item.name }, from: option.current,
+        ...(item.hands === 2 && other && equipment[other] ? { clears: other } : {}),
+        ...(option.slot === "main hand" ? { reach: Math.max(1, Math.round(range / 5)) } : {}),
+      };
+    }
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;
@@ -92,5 +110,7 @@ export function planView(tokenId: number) {
     from: planEnd(p.plan, { col: p.tok.col, row: p.tok.row }),
     feetLeft: (t.left * p.walking) / 6,
     perSecond: p.walking / 6, // feet a second at walking pace
+    gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
+    refits: refitOptions(tokenId, plannedEquipment(p)),
   };
 }

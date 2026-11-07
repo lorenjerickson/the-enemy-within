@@ -1,5 +1,6 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
-import { getCharacter, getCreature, getItem, listActions, listTokens, listTokenStatuses, db, type Creature } from "@/lib/db";
+import { getCharacter, getCreature, getItem, listActions, listItems, listTokens, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import type { EquipSlot } from "@/lib/itemTypes";
 import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
@@ -20,6 +21,7 @@ export interface Fighter {
   defense: () => { total: number; text: string };
   damage: (use?: GearAction) => { total: number; text: string };
   save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
+  wear: (equipment: Equipment) => void; // a refit mid-round: attacks, damage and defense use the new gear from then on
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -34,13 +36,18 @@ const boosted = (statuses: Status[], target: ModifierTarget) => boostsOn(statuse
 const plus = (n: number, what: string) => (n ? ` ${formatModifier(n)} ${what}` : "");
 
 function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, statuses: Status[] = []): Fighter {
-  const items = Object.values(who.equipment ?? {}).flatMap((id) => (id ? [getItem(id)].filter(Boolean) : [])) as NonNullable<ReturnType<typeof getItem>>[];
-  const weapon = who.equipment?.["main hand"] ? getItem(who.equipment["main hand"]!) : undefined;
+  let items: NonNullable<ReturnType<typeof getItem>>[] = [], weapon: ReturnType<typeof getItem>;
+  const wear = (equipment: Equipment) => {
+    items = Object.values(equipment ?? {}).flatMap((id) => (id ? [getItem(id)].filter(Boolean) : [])) as typeof items;
+    weapon = equipment?.["main hand"] ? getItem(equipment["main hand"]!) : undefined;
+  };
+  wear(who.equipment);
   // Attribute modifiers, with statuses' attribute boosts (read when rolled, so new statuses count).
   const mod = (a: Attribute) => modifier((who.attributes[a] ?? 10) + boosted(f.statuses, `attribute:${a}`));
   const f: Fighter = {
     hp,
     statuses: [...statuses],
+    wear,
     attack: (use, against) => {
       // A gear action (Aimed shot…) uses its own to-hit modifier; advantage / disadvantage from it, from statuses on the
       // attacker (their attack rolls) and on the target (attack rolls against them) — one of each cancels out.
@@ -72,7 +79,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
   const out = new Map<number, Fighter>();
   const statuses = listTokenStatuses(levelId);
   for (const t of listTokens(levelId)) {
-    const c = t.character_id ? getCharacter(t.character_id) : t.creature_id ? getCreature(t.creature_id) : undefined;
+    const c = tokenWho(t.id);
     const h = c && tokenHealth(t.id);
     if (c && h) out.set(t.id, fighterOf(c, h.current + h.temporary, statuses.get(t.id)));
   }
@@ -97,11 +104,47 @@ function statusesOf(a: { name: string; boosts: Boost[]; roll_grants: RollGrant[]
 }
 
 /** How far a token's plain Attack reaches, in squares: its main-hand weapon's range (1 = within reach). */
-export function attackRange(tokenId: number): number {
-  const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
-  const who = t?.character_id ? getCharacter(t.character_id) : t?.creature_id ? getCreature(t.creature_id) : undefined;
-  const weapon = who?.equipment?.["main hand"] ? getItem(who.equipment["main hand"]!) : undefined;
+export function attackRange(tokenId: number, equipment?: Equipment): number {
+  const main = (equipment ?? tokenWho(tokenId)?.equipment)?.["main hand"];
+  const weapon = main ? getItem(main) : undefined;
   return Math.max(1, Math.round((weapon?.range_ft ?? 5) / 5));
+}
+
+/** Who a token is (its character or creature), wearing its own equipment: a creature token's refits stay with it. */
+export function tokenWho(tokenId: number) {
+  const t = db.prepare<[number], { character_id: number | null; creature_id: number | null; equipment: string | null }>("SELECT character_id, creature_id, equipment FROM map_tokens WHERE id = ?").get(tokenId);
+  if (t?.character_id) return getCharacter(t.character_id);
+  const c = t?.creature_id ? getCreature(t.creature_id) : undefined;
+  return c && t?.equipment ? { ...c, equipment: JSON.parse(t.equipment) as Equipment } : c;
+}
+
+const HANDS: EquipSlot[] = ["main hand", "off hand"];
+
+/**
+ * What a token could refit into each of its slots: anything from the item list that fits and isn't worn already
+ * (there's no carried inventory yet; when there is, this is where it narrows to what they carry).
+ */
+export function refitOptions(tokenId: number, equipment: Equipment) {
+  const carried = listItems();
+  const worn = new Set(Object.values(equipment).filter(Boolean));
+  return (Object.keys(equipment) as EquipSlot[]).filter((slot) => slot !== "container").flatMap((slot) => {
+    const current = equipment[slot] ? getItem(equipment[slot]!) : undefined;
+    const other = HANDS.includes(slot) ? HANDS.find((h) => h !== slot)! : undefined;
+    const otherItem = other && equipment[other] ? getItem(equipment[other]!) : undefined;
+    if (otherItem?.hands === 2) return []; // held in both hands: refit that one instead
+    const items = carried.filter((i) => i.slots.includes(slot) && !worn.has(i.id));
+    return items.length ? [{ slot, current: current ? { id: current.id, name: current.name } : null, items: items.map((i) => ({ id: i.id, name: i.name, hands: i.hands })) }] : [];
+  });
+}
+
+/** Keeps a refit after the round: in a character's equipment, or on a creature token (not its template). */
+export function saveRefit(tokenId: number, equipment: Equipment): void {
+  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t) return;
+  if (t.character_id) {
+    const c = getCharacter(t.character_id);
+    if (c) { const { id: _id, creature_id, template_name: _t, ...rest } = c; saveCharacter(c.id, creature_id, { ...rest, equipment }); }
+  } else db.prepare<[string, number]>("UPDATE map_tokens SET equipment = ? WHERE id = ?").run(JSON.stringify(equipment), tokenId);
 }
 
 /** How long an action's effect lasts, in game minutes (a round is 6 s; rests count as 1 and 8 hours); 0 = instant. */
@@ -118,13 +161,13 @@ const lookOf = (type: string): EffectKind =>
  * Actions a token can take from its gear: those of its equipped items (and, for a creature, its own actions,
  * e.g. a rat's Bite). Each carries what resolving needs: time, range (squares), to-hit, damage, roll mode.
  */
-export function gearActions(tokenId: number): (GearAction & { source: string })[] {
+export function gearActions(tokenId: number, equipment?: Equipment): (GearAction & { source: string })[] {
   const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
-  const who = t?.character_id ? getCharacter(t.character_id) : t?.creature_id ? getCreature(t.creature_id) : undefined;
+  const who = tokenWho(tokenId);
   if (!t || !who) return [];
   const owned = [
     ...(t.creature_id ? listActions({ creature_id: t.creature_id }).map((a) => ({ a, source: who.name, itemRange: 5 })) : []),
-    ...Object.values(who.equipment ?? {}).flatMap((id) => {
+    ...Object.values(equipment ?? who.equipment ?? {}).flatMap((id) => {
       const item = id ? getItem(id) : undefined;
       return item ? listActions({ item_id: item.id }).map((a) => ({ a, source: item.name, itemRange: item.range_ft })) : [];
     }),

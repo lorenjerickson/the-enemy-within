@@ -1,7 +1,7 @@
 /**
  * What every player can do in a round, grouped by kind (movement, actions, bonus actions, reactions) in the order the
  * Actions panel shows them, with a Game Icons name each. A round has any amount of movement (time allowing), one
- * action and one reaction.
+ * action, one bonus action and one reaction.
  */
 export const PLAYER_ACTIONS = [
   { id: "move", label: "Move", hint: "walk", icon: "GiWalk", kind: "movement" },
@@ -16,13 +16,14 @@ export const PLAYER_ACTIONS = [
   { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action" },
   { id: "ready", label: "Ready", icon: "GiHourglass", kind: "action" },
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action" },
+  { id: "refit", label: "Refit", icon: "GiSwordClash", kind: "bonus" },
   { id: "dodge", label: "Dodge", icon: "GiDodging", kind: "reaction" },
 ] as const;
 
 export type PlayerActionId = (typeof PLAYER_ACTIONS)[number]["id"];
 export type ActionKind = "movement" | "action" | "bonus" | "reaction";
 
-/** The groups in the Actions panel (bonus actions: none defined yet, so it isn't shown). */
+/** The groups in the Actions panel. */
 export const ACTION_GROUPS: [ActionKind, string][] = [["movement", "Movement"], ["action", "Actions"], ["bonus", "Bonus actions"], ["reaction", "Reactions"]];
 
 export const actionKind = (id: PlayerActionId): ActionKind => PLAYER_ACTIONS.find((a) => a.id === id)?.kind ?? "action";
@@ -53,3 +54,9 @@ export const CHASE_ACTIONS: PlayerActionId[] = ["evade", "pursue"];
  * the actor pursues them first, for as long as that still leaves time to do the action.
  */
 export const ACTION_RANGE: Partial<Record<PlayerActionId, number>> = { attack: 1 };
+
+/**
+ * Refit (bonus action): swap what's in one equipment slot for something else they carry that fits it. Planned
+ * steps after it assume the swap (a new weapon's actions can be planned); it happens when the refit finishes.
+ */
+export const REFIT_SECONDS = 2;

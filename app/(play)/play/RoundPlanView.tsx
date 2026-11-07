@@ -15,7 +15,7 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
   onReady: () => void;
   title?: string;
 }) {
-  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
+  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
   return (
     <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
       <div className="flex items-baseline gap-2">
@@ -44,6 +44,7 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
           {plan.steps.map((s, i) => (
             <li key={i}>
               {s.kind === "move" ? `Move ${s.feet} ft` : s.use?.name ?? label(s.action)}
+              {s.kind === "action" && s.swap && <span className="font-semibold"> {s.swap.from ? `${s.swap.from.name} → ` : ""}{s.swap.item.name}</span>}
               {s.kind === "action" && s.target && <span className="font-semibold"> → {s.target.name}</span>}
               {s.kind === "action" && s.aim && s.use?.area && <span className="opacity-70"> ({describeArea(s.use.area)}, aimed)</span>}
               <span className="opacity-60"> · {+s.start.toFixed(1)}–{+s.end.toFixed(1)} s</span>

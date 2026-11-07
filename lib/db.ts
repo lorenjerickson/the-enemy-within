@@ -327,6 +327,7 @@ addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once fro
 addColumn("characters", "hp_temp", "INTEGER"); // temporary health, lost before current
 addColumn("map_tokens", "hp_max", "INTEGER");
 addColumn("map_tokens", "hp_temp", "INTEGER");
+addColumn("map_tokens", "equipment", "TEXT"); // a creature token's own equipment once refitted (JSON); null = its template's
 addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
 db.exec("CREATE TABLE IF NOT EXISTS game_vars (key TEXT PRIMARY KEY, value TEXT NOT NULL)"); // script variables, JSON values
 // The running encounter on a map level; turn_order is JSON [{ token_id, initiative }], highest first.

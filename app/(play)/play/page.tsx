@@ -18,9 +18,9 @@ import RollPrompt from "./RollPrompt";
 import EncounterPanel from "./EncounterPanel";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
-import { planEnd, timeline } from "@/lib/roundPlan";
+import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
 import { planView } from "@/lib/roundPlanServer";
-import { gearActions } from "@/lib/combat";
+import { gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
@@ -116,6 +116,8 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         return listTokens(me.level_id).filter((t) => t.id !== me.token_id && insidePolygon({ x: t.col + 0.5, y: t.row + 0.5 }, seen)).map((t) => ({ id: t.id, name: labels.get(t.id)! }));
       })()
     : [];
+  // Their gear as the plan leaves it: a planned refit counts for what they plan after it.
+  const equipped = me ? afterRefits(tokenWho(me.token_id)?.equipment ?? {}, rp?.plan ?? []) : {};
   const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
@@ -140,7 +142,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id) : []} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
