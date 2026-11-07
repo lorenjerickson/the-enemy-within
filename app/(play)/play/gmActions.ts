@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
+  downTokens, getEncounter, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
   listLastingAreas, addLastingArea, addTokenStatus, removeLastingArea, getGameTime, setGameTime,
 } from "@/lib/db";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
@@ -104,6 +104,7 @@ export async function resolveRound() {
     }));
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
+  const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
   const lasting = listLastingAreas(levelId);
   const { final, hp, log, frames, created, statuses } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
@@ -122,7 +123,7 @@ export async function resolveRound() {
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), frames });
+  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames });
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
   revalidatePath("/play");
 }

@@ -72,6 +72,7 @@ export interface Replay {
   round: number;
   starts: number;
   start: Record<number, Pos>; // where everyone was before the round
+  startDown?: number[]; // who was already down before it
   frames: ReplayFrame[];
 }
 

@@ -762,13 +762,15 @@ export default function MapView({
   }, [liveKey, scrub]);
   const replayFrame = (() => {
     if (!replay) return null;
+    // Before the round plays: whoever was already down stays down (older replays: whoever was down after its first second).
+    const before = replay.startDown ?? replay.frames[0]?.down.filter((id) => downTokens.includes(id)) ?? [];
     if (!readOnly && scrub !== null) {
-      const f = scrub === 0 ? { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[] } : replay.frames[Math.min(scrub, replay.frames.length) - 1];
+      const f = scrub === 0 ? { sec: 0, pos: replay.start, down: before, lines: [] as string[] } : replay.frames[Math.min(scrub, replay.frames.length) - 1];
       return { ...f, startsIn: 0, scrubbing: true };
     }
     const t = Date.now() - replay.starts;
     if (t >= (replay.frames.length + 1) * 1000) return null; // done (the last second is held one more)
-    if (t < 0) return { sec: 0, pos: replay.start, down: [] as number[], lines: [] as string[], startsIn: Math.ceil(-t / 1000) };
+    if (t < 0) return { sec: 0, pos: replay.start, down: before, lines: [] as string[], startsIn: Math.ceil(-t / 1000) };
     // During each second, tokens glide from where the last second left them to where this one does.
     const i = Math.min(replay.frames.length - 1, Math.floor(t / 1000));
     const from = i === 0 ? replay.start : replay.frames[i - 1].pos;
