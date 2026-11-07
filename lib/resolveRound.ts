@@ -165,10 +165,10 @@ export function resolveMovement(
   // What each second ended with, for playing the round back: everyone's spot, who's down, and what happened.
   const frames: ReplayFrame[] = [];
   // Evade / Pursue: from when each starts (in its own plan time), its target, and whether it's over (within 5 ft).
-  const chases = new Map<number, { start: number; action: string; target: { id: number; name: string } }>();
+  const chases = new Map<number, { start: number; end: number; action: string; target: { id: number; name: string } }>();
   for (const m of order) {
     for (const s of timeline(m.plan, m.walking).steps) {
-      if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) chases.set(m.tokenId, { start: s.start, action: s.step.action, target: s.step.target });
+      if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) chases.set(m.tokenId, { start: s.start, end: s.end, action: s.step.action, target: s.step.target });
     }
   }
   const chaseOver = new Set<number>();
@@ -279,7 +279,16 @@ export function resolveMovement(
         if (c && t > c.start) {
           // Chasing (or done chasing, which ends the round's movement: they stay where it left them).
           const them = where(c.target.id);
-          if (chaseOver.has(m.tokenId) || !them || down.has(c.target.id) || close(here, them)) return [m.tokenId, here];
+          if (chaseOver.has(m.tokenId) || t - 1 >= c.end - 1e-9) {
+            // Over: they stay where the chase left them, so moves planned after it are skipped.
+            const planned = wants.get(m.tokenId)!;
+            if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
+              skipped.add(m.tokenId);
+              log.push(`${sec} s: ${m.name}'s planned move is skipped: they stay where the ${c.action} left them.`);
+            }
+            return [m.tokenId, here];
+          }
+          if (!them || down.has(c.target.id) || close(here, them)) return [m.tokenId, here];
           return [m.tokenId, chaseStep(m, here, them, c.action === "pursue")];
         }
         return [m.tokenId, wants.get(m.tokenId)!(t)];
@@ -408,12 +417,29 @@ export function resolveMovement(
         leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec); // whether it hit or not
       }
     }
-    // Evade / Pursue end once the two are within 5 ft (or the target is down).
+    // Evade / Pursue end: within range of what's planned next, within 5 ft, the target down, or their time up.
     for (const [id, c] of chases) {
-      const them = where(c.target.id);
-      if (!chaseOver.has(id) && sec - lag.get(id)! > c.start && them && (close(pos.get(id)!, them) || down.has(c.target.id))) {
+      if (chaseOver.has(id) || down.has(id) || sec - lag.get(id)! <= c.start + 1e-9) continue;
+      const m = order.find((o) => o.tokenId === id)!, now = sec - lag.get(id)!;
+      // Within range of what they planned next (only theirs: the other may well keep going): they stop and get on
+      // with it now, the rest of the chase's time going to it.
+      const next = acts.get(id)!.find((a) => a.start >= c.end - 1e-9 && !finished.has(a) && a.step.target && rangeOf(a.step, m));
+      const nextAt = next && where(next.step.target!.id);
+      if (next && nextAt && !down.has(next.step.target!.id) && inReach(pos.get(id)!, nextAt, rangeOf(next.step, m))) {
         chaseOver.add(id);
-        log.push(`${sec} s: ${order.find((o) => o.tokenId === id)!.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
+        if (now < next.start - 1e-9) lag.set(id, lag.get(id)! - (next.start - now));
+        log.push(`${sec} s: ${m.name} stops their ${c.action}: ${next.step.target!.name} is within range to ${next.step.use?.name ?? next.step.action}.`);
+        continue;
+      }
+      const them = where(c.target.id);
+      if (them && (close(pos.get(id)!, them) || down.has(c.target.id))) {
+        chaseOver.add(id);
+        log.push(`${sec} s: ${m.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);
+        continue;
+      }
+      if (now >= c.end - 1e-9 && c.end < ROUND_SECONDS - 1e-9) {
+        chaseOver.add(id);
+        log.push(`${sec} s: ${m.name}'s ${c.action} ends after ${+(c.end - c.start).toFixed(1)} s.`);
       }
     }
     // The end of the round: whoever is in a lasting area rolls its save (its damage dice rolled once for everyone).

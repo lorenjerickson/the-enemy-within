@@ -50,7 +50,7 @@ export default function PickLock({
   };
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
-    : plan ? (id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for the rest of the round (until within 5 ft)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
     : `${base}: not available yet`;
@@ -68,12 +68,13 @@ export default function PickLock({
         <TargetPicker
           title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
           aiming={!!target?.area}
+          duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
           targets={targets}
           onCancel={() => setChoosing(null)}
           onPick={(picked) => {
-            const action = choosing, use = target?.use;
+            const action = choosing, use = target?.use, seconds = target?.seconds;
             setChoosing(null);
-            run(() => planStep({ kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}) }));
+            run(() => planStep({ kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}), ...(seconds ? { seconds } : {}) }));
           }}
         />
       )}

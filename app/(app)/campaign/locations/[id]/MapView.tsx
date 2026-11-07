@@ -1200,7 +1200,7 @@ export default function MapView({
       const m = targetMode;
       setTargetMode(null);
       startTransition(async () => {
-        const step = { kind: "action" as const, action: m.action, target: hit.id, ...(m.use !== undefined ? { use: m.use } : {}) };
+        const step = { kind: "action" as const, action: m.action, target: hit.id, ...(m.use !== undefined ? { use: m.use } : {}), ...(m.seconds ? { seconds: m.seconds } : {}) };
         const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
         if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
       });

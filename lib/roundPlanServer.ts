@@ -1,8 +1,8 @@
 import { downTokens, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
-import type { PlayerActionId } from "@/lib/playerActions";
-import { cannotAdd, planEnd, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
+import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { ROUND_SECONDS, cannotAdd, planEnd, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 import { gearActions } from "@/lib/combat";
 import { movementBlockers } from "@/lib/visibility";
 
@@ -15,7 +15,7 @@ export function tokenPlanner(tokenId: number) {
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number } } | { kind: "move"; col: number; row: number };
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number } | { kind: "move"; col: number; row: number };
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -63,7 +63,13 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
       if (use.area.shape === "circle" && Math.hypot(aim.col - (from.col + 0.5), aim.row - (from.row + 0.5)) > use.range + 0.5) return `Out of range (${use.range * 5} ft)`;
     }
-    add = { kind: "action", action: step.action, ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
+    // Evade / Pursue for a whole number of seconds (or, unset, the rest of the round).
+    let seconds: number | undefined;
+    if (CHASE_ACTIONS.includes(step.action) && step.seconds !== undefined && step.seconds !== null) {
+      seconds = Number(step.seconds);
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > ROUND_SECONDS) return "Pick how many seconds";
+    }
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;

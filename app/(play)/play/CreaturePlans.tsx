@@ -50,12 +50,13 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
             <TargetPicker
               title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
           aiming={!!target?.area}
+          duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - current.plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
               targets={targets.filter((t) => t.id !== current.tokenId)}
               onCancel={() => setChoosing(null)}
               onPick={(picked) => {
-                const action = choosing, use = target?.use;
+                const action = choosing, use = target?.use, seconds = target?.seconds;
                 setChoosing(null);
-                run(() => gmPlanStep(current.tokenId, { kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}) }));
+                run(() => gmPlanStep(current.tokenId, { kind: "action", action, target: picked, ...(use !== undefined ? { use } : {}), ...(seconds ? { seconds } : {}) }));
               }}
             />
           )}
@@ -85,7 +86,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 <GameIcon name={a.icon} className="size-4" />
                 <span className="text-[10px] leading-tight">
                   {a.label}
-                  <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : CHASE_ACTIONS.includes(a.id) ? "rest" : "hint" in a ? a.hint : ""}</span>
+                  <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : CHASE_ACTIONS.includes(a.id) ? "follows them" : "hint" in a ? a.hint : ""}</span>
                 </span>
               </button>
             ))}

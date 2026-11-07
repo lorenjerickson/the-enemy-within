@@ -28,7 +28,8 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number } };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number };
+// seconds: how long an Evade / Pursue lasts (unset = the rest of the round).
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
@@ -41,8 +42,9 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
   let t = 0;
   const steps = plan.map((step) => {
     const start = t;
-    // Evade / Pursue run for the rest of the round (they stop early once within 5 ft of the target).
-    t += step.kind === "action" && CHASE_ACTIONS.includes(step.action) ? Math.max(0, ROUND_SECONDS - t) : stepSeconds(step, walkingFeet);
+    // Evade / Pursue run for their seconds, or the rest of the round (stopping early within 5 ft of the target,
+    // or once the next action's target is within its range).
+    t += step.kind === "action" && CHASE_ACTIONS.includes(step.action) ? (step.seconds ?? Math.max(0, ROUND_SECONDS - t)) : stepSeconds(step, walkingFeet);
     return { step, start, end: t };
   });
   return { steps, used: t, left: Math.max(0, ROUND_SECONDS - t) };
