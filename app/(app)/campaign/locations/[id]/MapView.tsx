@@ -1211,8 +1211,12 @@ export default function MapView({
       });
       return;
     }
-    // The GM planning a creature: a click (no drag, not a hold) plans its move; remember the press.
-    if (gmPlan && e.button === 0 && selected === null) press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
+    // The GM planning a creature's move (Move on): a left click (no drag, not a hold) plans it, whatever layer editor
+    // was last open (it would otherwise take the click and nothing would happen). Right-drag still pans.
+    if (gmPlan && reach && e.button === 0) {
+      press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
+      return;
+    }
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
     if (dockSide && e.button === 0 && (readOnly || (selected === null && !placingChar))) {
       const { gx, gy } = gridAt(e);

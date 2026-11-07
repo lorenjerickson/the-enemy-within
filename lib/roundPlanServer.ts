@@ -35,6 +35,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
       const path = shortestPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls, () => true);
       if (!path) return "Something's in the way";
+      if (Math.hypot(to.col - from.col, to.row - from.row) < 0.1) return "Already there";
       const legs = path.slice(1).map((pt, i) => {
         const a = path[i], end = i === path.length - 2 ? to : { col: snapHeight(pt.x - 0.5), row: snapHeight(pt.y - 0.5) };
         return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10 };
