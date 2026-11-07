@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getOpenGameSession, listPlayerCharacters, markPresent } from "@/lib/db";
+import { getOpenGameSession, isRemovedFrom, listPlayerCharacters, markPresent } from "@/lib/db";
 import AutoRefresh from "../AutoRefresh";
 import PlayerPresence from "../sessions/PlayerPresence";
 import { checkIn } from "./actions";
@@ -14,8 +14,8 @@ export default async function Lobby() {
   const session = getOpenGameSession();
   // Joining without a character: make one first.
   if (session && !listPlayerCharacters(user.id).length) redirect("/character/new");
-  if (session?.began_at) redirect("/play"); // the session is played full screen
-  if (session) markPresent(session.id, user.id);
+  if (session?.began_at && !isRemovedFrom(session.id, user.id)) redirect("/play"); // the session is played full screen
+  if (session && !user.playedBy) markPresent(session.id, user.id);
   return (
     <div className="max-w-xl space-y-4">
       <AutoRefresh checkIn={checkIn} />
@@ -24,7 +24,7 @@ export default async function Lobby() {
       ) : (
         <>
           <h2 className="text-xl font-semibold">Session {session.number}</h2>
-          <p className="opacity-80">Waiting for everyone to join. The GM will begin the session.</p>
+          {isRemovedFrom(session.id, user.id) ? <p className="opacity-80" data-left-out>The GM has left you out of this session.</p> : <p className="opacity-80">Waiting for everyone to join. The GM will begin the session.</p>}
           <PlayerPresence sessionId={session.id} />
         </>
       )}

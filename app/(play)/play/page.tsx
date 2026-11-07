@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, characterContainers, type GameSession, type User } from "@/lib/db";
+import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, downTokens, listTimers, listTriggers, markPresent, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -15,6 +15,8 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
+import PlayerPresence from "../../(app)/sessions/PlayerPresence";
+import { playAs } from "../../(app)/sessions/actions";
 import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel from "./EncounterPanel";
@@ -33,6 +35,7 @@ export default async function Play() {
   const user = await requireUser();
   const session = getOpenGameSession();
   if (!session?.began_at) redirect(user.role === "gm" ? (session ? `/sessions/${session.id}` : "/sessions") : "/lobby");
+  if (user.role === "player" && isRemovedFrom(session.id, user.id)) redirect("/lobby"); // the GM left them out
   return user.role === "gm" ? <GmView session={session} /> : <PlayerView session={session} user={user} />;
 }
 
@@ -64,6 +67,20 @@ function GmView({ session }: { session: GameSession }) {
             <Link href="/campaign" className="btn btn-sm">Campaign</Link>
             <Link href="/sessions" className="btn btn-sm">Sessions</Link>
           </div>
+          {/* Absent players the GM plays: switch to playing as one (and back from their screen). */}
+          <div className="space-y-1" data-play-as>
+            <div className="text-xs font-semibold opacity-80">Players you play</div>
+            {gmPlayedPlayers(session.id).length ? (
+              <div className="flex flex-wrap gap-1">
+                {listPlayers().filter((p) => gmPlayedPlayers(session.id).includes(p.id)).map((p) => (
+                  <form key={p.id} action={playAs.bind(null, p.id)}><button className="btn btn-xs btn-info">Play as {p.name}</button></form>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs opacity-60">None. Add absent players in the session&apos;s lobby list (Sessions › this session).</p>
+            )}
+          </div>
+          <PlayerPresence sessionId={session.id} manage />
           <form action={endSession.bind(null, session.id)}>
             <button className="btn btn-sm btn-error btn-outline">End session</button>
           </form>
@@ -100,7 +117,7 @@ function GmView({ session }: { session: GameSession }) {
 }
 
 function PlayerView({ session, user }: { session: GameSession; user: User }) {
-  markPresent(session.id, user.id);
+  if (!user.playedBy) markPresent(session.id, user.id); // the GM playing them doesn't make them present
   const levelId = getPlayerTokenLevelId(user.id);
   const place = levelId === undefined ? undefined : getLevelPlace(levelId);
   const roll = getOpenRollRequest(user.id); // a roll they're being asked to make
@@ -175,6 +192,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   return (
     <>
       <AutoRefresh checkIn={checkIn} />
+      {user.playedBy && <ActingAs session={session} user={user} />}
       {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
@@ -186,5 +204,19 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </>
       )}
     </>
+  );
+}
+
+/** The GM playing an absent player: whose screen this is, the others they play, and back to the GM. */
+function ActingAs({ session, user }: { session: GameSession; user: User }) {
+  const others = listPlayers().filter((p) => p.id !== user.id && gmPlayedPlayers(session.id).includes(p.id));
+  return (
+    <div data-acting-as className="fixed left-1/2 top-2 z-40 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-box bg-info/90 px-3 py-1 text-sm text-info-content shadow">
+      <span>Playing as <b>{user.name}</b></span>
+      {others.map((p) => (
+        <form key={p.id} action={playAs.bind(null, p.id)}><button className="btn btn-xs">{p.name}</button></form>
+      ))}
+      <form action={playAs.bind(null, null)}><button className="btn btn-xs btn-neutral">Back to GM</button></form>
+    </div>
   );
 }

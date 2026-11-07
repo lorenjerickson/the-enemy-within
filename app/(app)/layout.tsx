@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { getGm, getOpenGameSession, listPresentPlayers } from "@/lib/db";
+import { playAs } from "./sessions/actions";
+import { getGm, getOpenGameSession, isRemovedFrom, listPresentPlayers } from "@/lib/db";
 import JoinPrompt from "./lobby/JoinPrompt";
 import { logout, requireUser } from "@/lib/auth";
 
@@ -23,7 +24,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
   // A session open that this player hasn't joined (they're asked to).
   const session = user.role === "player" ? getOpenGameSession() : undefined;
-  const open = session && !listPresentPlayers(session.id).includes(user.id) ? session : undefined;
+  const open = session && !user.playedBy && !isRemovedFrom(session.id, user.id) && !listPresentPlayers(session.id).includes(user.id) ? session : undefined;
 
   return (
     <>
@@ -38,7 +39,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </ul>
           </nav>
         )}
-        <details className="dropdown dropdown-end ml-auto">
+        {user.playedBy && (
+          <form action={playAs.bind(null, null)} className="ml-auto flex items-center gap-2 text-sm" data-acting-as>
+            <span className="badge badge-info">Playing as {user.name}</span>
+            <button className="btn btn-xs">Back to GM</button>
+          </form>
+        )}
+        <details className={`dropdown dropdown-end ${user.playedBy ? "" : "ml-auto"}`}>
           <summary className="btn btn-ghost btn-sm">{user.name}</summary>
           <ul className="menu dropdown-content bg-base-100 rounded-box z-10 w-40 p-2 shadow">
             <li>

@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireGm } from "@/lib/auth";
+import { requireGm, setActingAs } from "@/lib/auth";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { beginGameSession, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
+import { beginGameSession, getOpenGameSession, setSessionMember, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
 /** Runs a console script; `answers` are the GM's choices so far for its select() prompts. */
@@ -52,4 +52,20 @@ export async function endSession(id: number) {
   await requireGm();
   end(Number(id));
   redirect("/sessions");
+}
+
+/** The GM adds an absent player to the session to play for them ("gm"), keeps someone out ("removed"), or undoes it. */
+export async function setMember(sessionId: number, userId: number, status: "gm" | "removed" | null) {
+  await requireGm();
+  setSessionMember(Number(sessionId), Number(userId), status === "gm" || status === "removed" ? status : null);
+  if (status !== "gm") await setActingAs(null); // no longer theirs to play
+  revalidatePath("/sessions");
+  revalidatePath("/play");
+}
+
+/** The GM plays as an absent player they added (everything as them, until they switch back). */
+export async function playAs(playerId: number | null) {
+  await requireGm();
+  await setActingAs(playerId ? Number(playerId) : null);
+  redirect(getOpenGameSession()?.began_at ? "/play" : "/lobby");
 }

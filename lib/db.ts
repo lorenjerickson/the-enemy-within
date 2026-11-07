@@ -421,6 +421,7 @@ export interface User {
   contact: string | null;
   role: Role;
   must_change_password: 0 | 1;
+  playedBy?: number; // set when the GM is playing this (absent) player: the GM's user id
 }
 
 export function hashPassword(password: string): string {
@@ -1703,13 +1704,42 @@ export function markPresent(sessionId: number, userId: number): void {
 /** How long after a player's last check-in they still count as present. */
 export const PRESENCE_MS = 15_000;
 
-/** The players present in a session now (their pages checked in recently). */
+/** The players present in a session now (their pages checked in recently), not counting anyone the GM removed. */
 export function listPresentPlayers(sessionId: number): number[] {
+  const removed = new Set(sessionMembers(sessionId).filter((m) => m.status === "removed").map((m) => m.user_id));
   return db
     .prepare<[number, number], { user_id: number }>("SELECT user_id FROM session_presence WHERE session_id = ? AND last_seen > ?")
     .all(sessionId, Date.now() - PRESENCE_MS)
-    .map((r) => r.user_id);
+    .map((r) => r.user_id)
+    .filter((id) => !removed.has(id));
 }
+
+// Who the GM put in or took out of a session (its lobby): "gm" = an absent player the GM plays; "removed" = kept out.
+// Anyone else is in the session by being present.
+db.exec(`CREATE TABLE IF NOT EXISTS session_members (
+  session_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  status TEXT NOT NULL, -- 'gm' | 'removed'
+  PRIMARY KEY (session_id, user_id)
+)`);
+
+export function sessionMembers(sessionId: number): { user_id: number; status: "gm" | "removed" }[] {
+  return db.prepare<[number], { user_id: number; status: "gm" | "removed" }>("SELECT user_id, status FROM session_members WHERE session_id = ?").all(sessionId);
+}
+
+/** The GM adds a player to the session to play for them ("gm"), keeps one out ("removed"), or undoes either (null). */
+export function setSessionMember(sessionId: number, userId: number, status: "gm" | "removed" | null): void {
+  if (status === null) db.prepare<[number, number]>("DELETE FROM session_members WHERE session_id = ? AND user_id = ?").run(sessionId, userId);
+  else db.prepare("INSERT INTO session_members (session_id, user_id, status) VALUES (?, ?, ?) ON CONFLICT (session_id, user_id) DO UPDATE SET status = excluded.status").run(sessionId, userId, status);
+}
+
+/** Players the GM plays in this session (added while absent). */
+export function gmPlayedPlayers(sessionId: number): number[] {
+  return sessionMembers(sessionId).filter((m) => m.status === "gm").map((m) => m.user_id);
+}
+
+/** Whether the GM took this player out of the session. */
+export const isRemovedFrom = (sessionId: number, userId: number) => sessionMembers(sessionId).some((m) => m.user_id === userId && m.status === "removed");
 
 export function endGameSession(id: number, summary: string): void {
   db.prepare<[string, string, number]>("UPDATE game_sessions SET ended_at = ?, summary = ? WHERE id = ?").run(new Date().toISOString(), summary, id);
