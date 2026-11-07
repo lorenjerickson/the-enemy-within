@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
+import { Unzip, UnzipInflate, zipSync, strToU8 } from "fflate";
 import { db } from "@/lib/db";
 import { IMAGE_DIR } from "@/lib/images";
 
@@ -41,15 +41,44 @@ export function exportCampaign(): Uint8Array {
 }
 
 /**
- * Replaces this server's campaign with an archive's: every campaign table is emptied and refilled (columns this
- * server doesn't have are skipped, ones the archive lacks take their defaults), media files are written, and
- * everyone is logged out (the user accounts were replaced too). Returns what was imported.
+ * Replaces this server's campaign with an archive's, read from a .zip file on disk a piece at a time (so a large
+ * export doesn't have to fit in memory): media files are written as they come, then every campaign table is emptied
+ * and refilled from campaign.json (columns this server doesn't have are skipped, ones the archive lacks take their
+ * defaults), and everyone is logged out (the user accounts were replaced too). Returns what was imported.
  */
-export function importCampaign(zip: Uint8Array): { tables: number; rows: number; files: number } {
-  const entries = unzipSync(zip);
-  const raw = entries["campaign.json"];
-  if (!raw) throw new Error("Not a campaign export: campaign.json is missing");
-  const json = JSON.parse(strFromU8(raw)) as CampaignJson;
+export async function importCampaignFile(zipPath: string): Promise<{ tables: number; rows: number; files: number }> {
+  fs.mkdirSync(IMAGE_DIR, { recursive: true });
+  const jsonParts: Uint8Array[] = [];
+  let files = 0;
+  let failed: Error | null = null;
+  const unzip = new Unzip((entry) => {
+    const name = entry.name;
+    if (name === "campaign.json") {
+      entry.ondata = (err, data) => (err ? (failed = err) : jsonParts.push(data));
+    } else if (name.startsWith("images/") && !name.endsWith("/")) {
+      const fd = fs.openSync(path.join(IMAGE_DIR, path.basename(name)), "w");
+      entry.ondata = (err, data, final) => {
+        if (err) failed = err;
+        else fs.writeSync(fd, data);
+        if (final || err) {
+          fs.closeSync(fd);
+          if (!err) files++;
+        }
+      };
+    } else return;
+    entry.start();
+  });
+  unzip.register(UnzipInflate);
+  for await (const chunk of fs.createReadStream(zipPath, { highWaterMark: 1 << 20 })) unzip.push(chunk as Uint8Array);
+  unzip.push(new Uint8Array(0), true);
+  if (failed) throw failed;
+  if (!jsonParts.length) throw new Error("Not a campaign export: campaign.json is missing");
+  const json = JSON.parse(Buffer.concat(jsonParts).toString("utf8")) as CampaignJson;
+  return { ...replaceTables(json), files };
+}
+
+/** Empties every campaign table and refills it from an export (and logs everyone out). */
+function replaceTables(json: CampaignJson): { tables: number; rows: number } {
   if (json.format !== ARCHIVE_FORMAT) throw new Error(`Unknown export format "${json.format}"`);
   const here = new Set(campaignTables());
   const columnsOf = (t: string) => new Set(db.prepare<[], { name: string }>(`PRAGMA table_info("${t}")`).all().map((c) => c.name));
@@ -74,12 +103,5 @@ export function importCampaign(zip: Uint8Array): { tables: number; rows: number;
   } finally {
     db.pragma("foreign_keys = ON");
   }
-  fs.mkdirSync(IMAGE_DIR, { recursive: true });
-  let files = 0;
-  for (const [name, bytes] of Object.entries(entries)) {
-    if (!name.startsWith("images/") || name.endsWith("/")) continue;
-    fs.writeFileSync(path.join(IMAGE_DIR, path.basename(name)), bytes);
-    files++;
-  }
-  return { tables, rows, files };
+  return { tables, rows };
 }
