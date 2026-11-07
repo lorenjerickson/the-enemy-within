@@ -1,7 +1,7 @@
 # Fly.io: one machine running the Docker image, with a volume for the database and media.
 # First time: see docs/deploying.md.
 app = "the-enemy-within"
-primary_region = "sea"
+primary_region = "sjc" # San Jose; `fly platform regions` lists the others
 
 [build]
   dockerfile = "Dockerfile"
