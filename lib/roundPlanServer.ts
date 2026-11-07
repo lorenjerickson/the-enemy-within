@@ -1,9 +1,10 @@
-import { downTokens, getItem, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, getItem, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 import { gearActions, refitOptions, tokenWho } from "@/lib/combat";
+import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { movementBlockers } from "@/lib/visibility";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
@@ -22,6 +23,7 @@ export type StepRequest = { kind: "action"; action: PlayerActionId; target?: num
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
+  if (p.rolled) return "The dice are rolled: the plan is set";
   if (p.ready) return "Ready already; undo that to change the plan";
   let add: PlanStep;
   if (step.kind === "move") {
@@ -95,8 +97,30 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   return null;
 }
 
-export const undoPlanStep = (p: Planner) => saveRoundPlan(p.tok.level_id, p.tok.token_id, p.plan.slice(0, -1), false);
-export const setReady = (p: Planner, ready: boolean) => saveRoundPlan(p.tok.level_id, p.tok.token_id, p.plan, !!ready);
+export const undoPlanStep = (p: Planner) => { if (!p.rolled) saveRoundPlan(p.tok.level_id, p.tok.token_id, p.plan.slice(0, -1), false); };
+
+/** Ready (or not). A player whose plan has dice to roll rolls them first; the GM's plans are rolled by the server. */
+export function setReady(p: Planner, ready: boolean, mustRoll = false): string | null {
+  if (ready && mustRoll && p.rolled !== 2 && planRolls(p.tok.token_id, p.plan).length) return "Roll your dice first";
+  saveRoundPlan(p.tok.level_id, p.tok.token_id, p.plan, !!ready);
+  return null;
+}
+
+/** Roll: the player starts rolling their plan's dice (shown to everyone as rolling…); nothing to roll, nothing happens. */
+export function startPlanRoll(p: Planner, rolling: boolean): void {
+  if (p.rolled === 2 || p.ready) return;
+  if (rolling && !planRolls(p.tok.token_id, p.plan).length) return;
+  setPlanRolled(p.tok.level_id, p.tok.token_id, rolling ? 1 : 0);
+}
+
+/** The dice landed: they go onto the plan's steps, and the plan is set. */
+export function submitPlanRoll(p: Planner, thrown: number[][][]): string | null {
+  if (p.rolled !== 1) return "Nothing to roll";
+  const plan = withThrownDice(p.plan, planRolls(p.tok.token_id, p.plan), thrown);
+  if (!plan) return "Those dice don't fit these rolls";
+  setPlanRolled(p.tok.level_id, p.tok.token_id, 2, plan);
+  return null;
+}
 
 /** A token's plan laid out for showing: steps in time, seconds used, ready, where it leaves them and the feet they can still move. */
 export function planView(tokenId: number) {
@@ -107,6 +131,7 @@ export function planView(tokenId: number) {
     steps: t.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })),
     used: t.used,
     ready: p.ready,
+    rolled: p.rolled,
     from: planEnd(p.plan, { col: p.tok.col, row: p.tok.row }),
     feetLeft: (t.left * p.walking) / 6,
     perSecond: p.walking / 6, // feet a second at walking pace

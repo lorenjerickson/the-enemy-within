@@ -2080,9 +2080,23 @@ db.exec(`CREATE TABLE IF NOT EXISTS round_plans (
   PRIMARY KEY (level_id, token_id)
 )`);
 
-export function getRoundPlan(levelId: number, tokenId: number): { plan: PlanStep[]; ready: boolean } {
-  const r = db.prepare<[number, number], { plan: string; ready: number }>("SELECT plan, ready FROM round_plans WHERE level_id = ? AND token_id = ?").get(levelId, tokenId);
-  return { plan: r ? JSON.parse(r.plan) : [], ready: !!r?.ready };
+addColumn("round_plans", "rolled", "INTEGER NOT NULL DEFAULT 0"); // the player's dice for it: 0 not yet, 1 rolling, 2 rolled (plan set)
+
+export function getRoundPlan(levelId: number, tokenId: number): { plan: PlanStep[]; ready: boolean; rolled: 0 | 1 | 2 } {
+  const r = db.prepare<[number, number], { plan: string; ready: number; rolled: number }>("SELECT plan, ready, rolled FROM round_plans WHERE level_id = ? AND token_id = ?").get(levelId, tokenId);
+  return { plan: r ? JSON.parse(r.plan) : [], ready: !!r?.ready, rolled: (r?.rolled ?? 0) as 0 | 1 | 2 };
+}
+
+/** Sets where a plan's dice are (0 not rolled, 1 rolling, 2 rolled), keeping the plan. */
+export function setPlanRolled(levelId: number, tokenId: number, rolled: 0 | 1 | 2, plan?: PlanStep[]): void {
+  db.prepare("INSERT INTO round_plans (level_id, token_id, plan, rolled) VALUES (?, ?, ?, ?) ON CONFLICT(level_id, token_id) DO UPDATE SET rolled = excluded.rolled" + (plan ? ", plan = excluded.plan" : "")).run(
+    levelId, tokenId, JSON.stringify(plan ?? []), rolled
+  );
+}
+
+/** Which tokens on the level are rolling their plan's dice right now. */
+export function rollingTokens(levelId: number): Set<number> {
+  return new Set(db.prepare<[number], { token_id: number }>("SELECT token_id FROM round_plans WHERE level_id = ? AND rolled = 1").all(levelId).map((r) => r.token_id));
 }
 
 export function saveRoundPlan(levelId: number, tokenId: number, plan: PlanStep[], ready: boolean): void {

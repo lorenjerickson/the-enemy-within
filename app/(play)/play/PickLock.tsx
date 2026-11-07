@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickLock, planStep, search, setPlanReady, undoStep } from "./actions";
+import { pickLock, planStep, search, setPlanReady, rollPlan, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import { ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ACTION_SECONDS } from "@/lib/roundPlan";
@@ -20,7 +20,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [],
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -30,6 +30,7 @@ export default function PickLock({
   targets?: { id: number; name: string }[]; // who they can see, to attack
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
+  dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
@@ -44,7 +45,7 @@ export default function PickLock({
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
-  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready : id === "move" || id === "search"); // Evade / Pursue: encounters only
+  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
     if (id === "move") return setMoveMode(!moving);
     if (id === "refit") return setRefitting(!refitting);
@@ -85,7 +86,7 @@ export default function PickLock({
       {plan && refitting && (
         <RefitPicker options={refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", swap: { slot, item } })); }} />
       )}
-      {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} />}
+      {plan && <RoundPlanView plan={plan} pending={pending} label={label} onUndo={() => run(undoStep)} onReady={() => run(() => setPlanReady(!plan.ready))} dice={dice && { ...dice, onRoll: () => run(() => rollPlan(true)) }} />}
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
       {ACTION_GROUPS.map(([kind, title]) => {
         const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
@@ -119,7 +120,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />}
           </section>
         );
       })}

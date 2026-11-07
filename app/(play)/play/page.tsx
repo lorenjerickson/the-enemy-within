@@ -15,6 +15,8 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
+import PlanRollPrompt from "./PlanRollPrompt";
+import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel from "./EncounterPanel";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
@@ -118,6 +120,11 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     : [];
   // Their gear as the plan leaves it: a planned refit counts for what they plan after it.
   const equipped = me ? afterRefits(tokenWho(me.token_id)?.equipment ?? {}, rp?.plan ?? []) : {};
+  // The dice their plan needs (rolled before Ready), with what they came to once rolled.
+  const diceRolls = rp && me ? planRolls(me.token_id, rp.plan).map((r) => {
+    const s = rp.plan[r.step], dice = s.kind === "action" ? s.dice?.[r.key] : undefined;
+    return { spec: r.spec, want: planDice(r.spec), ...(dice ? { result: rolledTotal(r.spec, dice) } : {}) };
+  }) : [];
   const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
@@ -142,7 +149,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -159,6 +166,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   return (
     <>
       <AutoRefresh checkIn={checkIn} />
+      {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
         <LevelMap readOnly replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from, perSecond: walking / 6 } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />

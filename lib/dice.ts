@@ -23,6 +23,27 @@ export function sumDice(formulas: string[]): { formula: string; min: number; max
   };
 }
 
+// Dice a player has already thrown (in order), used by rollDice before any random ones: a planned attack's dice
+// rolled with the plan are spent when the attack lands. A die that doesn't fit (wrong sides) is rolled afresh.
+let thrown: number[] | null = null;
+
+/** Runs `f` with these dice to draw on first (any left over are ignored). */
+export function usingDice<T>(dice: number[] | undefined, f: () => T): T {
+  const before = thrown;
+  thrown = dice ? [...dice] : null;
+  try {
+    return f();
+  } finally {
+    thrown = before;
+  }
+}
+
+const die = (sides: number) => {
+  if (thrown?.length && Number.isInteger(thrown[0]) && thrown[0] >= 1 && thrown[0] <= sides) return thrown.shift()!;
+  thrown = null; // out of step: the rest are random
+  return 1 + Math.floor(Math.random() * sides);
+};
+
 /** Rolls a dice formula such as "1d20+2" or "3d4 + 2d6 - 1" and returns the total. */
 export function rollDice(formula: string): number {
   const terms = formula.replace(/\s/g, "").match(/[+-]?[^+-]+/g);
@@ -33,7 +54,7 @@ export function rollDice(formula: string): number {
     const sign = m[1] === "-" ? -1 : 1;
     if (m[4]) return total + sign * Number(m[4]);
     let sum = 0;
-    for (let i = 0; i < Number(m[2] || 1); i++) sum += 1 + Math.floor(Math.random() * Number(m[3]));
+    for (let i = 0; i < Number(m[2] || 1); i++) sum += die(Number(m[3]));
     return total + sign * sum;
   }, 0);
 }

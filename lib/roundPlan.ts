@@ -30,7 +30,7 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice };
 // seconds: how long an Evade / Pursue lasts (unset = the rest of the round).
 
 /**
@@ -44,6 +44,16 @@ export interface Refit {
   clears?: EquipSlot; // the other hand, emptied for a two-handed item
   reach?: number;
 }
+
+/** Dice a player threw for a step with the plan (in the order resolution rolls them: both d20s first). */
+export interface StepDice {
+  hit?: number[];
+  damage?: number[];
+  check?: number[]; // Dodge: d20 + agility vs DODGE_DC
+}
+
+/** Dodge: d20 + agility against this; beating it gives attacks against them disadvantage. */
+export const DODGE_DC = 12;
 
 /** Equipment once the plan's refits have happened. */
 export function afterRefits(equipment: Equipment, plan: PlanStep[]): Equipment {

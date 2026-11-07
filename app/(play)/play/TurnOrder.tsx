@@ -10,6 +10,7 @@ export interface TurnRow {
   player: string | null; // who plays them (a character), or null for a GM creature
   down: boolean;
   ready: boolean;
+  rolling?: boolean; // rolling their plan's dice
   turn: boolean;
   statuses: { source: string; text: string }[]; // what actions left on them (Blinding flash: disadvantage on attack rolls)
 }
@@ -48,7 +49,7 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
             {r.down ? (
               <span className="badge badge-sm badge-error">down</span>
             ) : (
-              <span className={`badge badge-sm ${r.ready ? "badge-success" : "badge-ghost"}`}>{r.ready ? "ready" : "planning"}</span>
+              <span className={`badge badge-sm ${r.ready ? "badge-success" : r.rolling ? "badge-secondary" : "badge-ghost"}`}>{r.ready ? "ready" : r.rolling ? "rolling…" : "planning"}</span>
             )}
           </button>
         </li>

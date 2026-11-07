@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
-import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
+import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
@@ -236,9 +236,27 @@ export async function undoStep(): Promise<void> {
   revalidatePath("/play");
 }
 
-export async function setPlanReady(ready: boolean): Promise<void> {
+export async function setPlanReady(ready: boolean): Promise<{ error?: string }> {
   const user = await requireUser();
   const p = planner(user.id);
-  if (p) setReady(p, ready);
+  const error = p ? setReady(p, ready, true) : null;
   revalidatePath("/play");
+  return error ? { error } : {};
+}
+
+/** Roll (or cancel before throwing): the plan's dice prompt opens, and everyone sees them rolling. */
+export async function rollPlan(rolling: boolean): Promise<void> {
+  const user = await requireUser();
+  const p = planner(user.id);
+  if (p) startPlanRoll(p, rolling);
+  revalidatePath("/play");
+}
+
+/** The plan's dice have landed (per roll, per part): checked and kept on the plan, which is then set. */
+export async function submitPlanDice(thrown: number[][][]): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const p = planner(user.id);
+  const error = p ? submitPlanRoll(p, thrown) : "Not in an encounter";
+  revalidatePath("/play");
+  return error ? { error } : {};
 }

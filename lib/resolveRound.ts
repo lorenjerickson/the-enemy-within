@@ -1,11 +1,11 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
-import { rollDice } from "@/lib/dice";
+import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
-import { ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
+import { DODGE_DC, ROUND_SECONDS, timeline, type GearAction, type PlanStep } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
 /** How far an action reaches (squares): a gear action's own range, a plain Attack the mover's weapon's. */
@@ -339,8 +339,14 @@ export function resolveMovement(
       for (const a of acts.get(m.tokenId)!) {
         if (!REACTIONS.includes(a.step.action) || readied.has(a) || a.start > sec - 1 - lag.get(m.tokenId)! + 1e-9) continue;
         readied.add(a);
-        fighters.get(m.tokenId)?.statuses?.push({ source: "Dodge", boosts: [], grants: [{ roll: "attacked", mode: "disadvantage" }] });
-        log.push(`${sec} s: ${m.name} is ready to dodge: attacks against them have disadvantage.`);
+        // d20 + agility (their own dice, if they rolled with the plan) against DODGE_DC.
+        const f = fighters.get(m.tokenId), check = f?.save ? usingDice(a.step.dice?.check, () => f.save!("agility")) : undefined;
+        if (check && check.total < DODGE_DC) {
+          log.push(`${sec} s: ${m.name} tries to dodge but isn't quick enough (${check.total}: ${check.text} vs DC ${DODGE_DC}).`);
+          continue;
+        }
+        f?.statuses?.push({ source: "Dodge", boosts: [], grants: [{ roll: "attacked", mode: "disadvantage" }] });
+        log.push(`${sec} s: ${m.name} is ready to dodge${check ? ` (${check.total} vs DC ${DODGE_DC})` : ""}: attacks against them have disadvantage.`);
       }
     }
     // Actions finishing this second: their end passed on the mover's own plan clock.
@@ -381,7 +387,7 @@ export function resolveMovement(
         const at = placeArea(area.shape, area.ft, { x: here.col + 0.5, y: here.row + 0.5 }, { x: step.aim.col, y: step.aim.row });
         let hits: AreaHit[] = [];
         if (me) {
-          const dmg = me.damage(step.use);
+          const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
           say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
           hits = catchIn(at, area, dmg.total, m.tokenId, sec);
           if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
@@ -410,14 +416,14 @@ export function resolveMovement(
       } else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step, m))) {
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
       } else {
-        const a = me.attack(step.use, them), d = them.defense();
+        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them)), d = them.defense();
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         if (a.total < d.total) shown("miss");
         if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
         else {
-          const dmg = me.damage(step.use);
+          const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
           const left = Math.max(0, hp.get(target.id)! - dmg.total);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);

@@ -7,14 +7,17 @@ import { ROUND_SECONDS, type PlanStep } from "@/lib/roundPlan";
 export type TimedStep = PlanStep & { start: number; end: number };
 
 /** This round's plan: a six-second timeline with each step in order, Undo, and Ready. */
-export default function RoundPlanView({ plan, pending, label, onUndo, onReady, title = "This round" }: {
+export default function RoundPlanView({ plan, pending, label, onUndo, onReady, title = "This round", dice }: {
   plan: { steps: TimedStep[]; used: number; ready: boolean };
   pending: boolean;
   label: (id: PlayerActionId) => string;
   onUndo: () => void;
   onReady: () => void;
   title?: string;
+  // A player's plan with dice to roll: Roll comes before Ready, and once rolled the plan is set.
+  dice?: { count: number; rolled: 0 | 1 | 2; onRoll: () => void };
 }) {
+  const mustRoll = !!dice && dice.count > 0 && dice.rolled !== 2;
   const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
   return (
     <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
@@ -53,10 +56,16 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
         </ol>
       )}
       <div className="flex gap-2">
-        <button type="button" className="btn btn-xs" disabled={pending || plan.ready || !plan.steps.length} onClick={onUndo}>Undo last</button>
-        <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending} onClick={onReady}>
-          {plan.ready ? "Ready ✓ (change plan)" : "Ready"}
-        </button>
+        <button type="button" className="btn btn-xs" disabled={pending || plan.ready || !plan.steps.length || !!dice?.rolled} onClick={onUndo} title={dice?.rolled === 2 ? "The dice are rolled: the plan is set" : undefined}>Undo last</button>
+        {mustRoll ? (
+          <button type="button" data-plan-roll className="btn btn-xs btn-secondary ml-auto" disabled={pending || dice.rolled === 1} onClick={dice.onRoll} title="Roll the dice your plan needs; after that the plan can't change">
+            {dice.rolled === 1 ? "Rolling…" : `Roll (${dice.count} ${dice.count === 1 ? "roll" : "rolls"})`}
+          </button>
+        ) : (
+          <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending} onClick={onReady}>
+            {plan.ready ? (dice?.rolled === 2 ? "Ready ✓ (not ready)" : "Ready ✓ (change plan)") : "Ready"}
+          </button>
+        )}
       </div>
     </div>
   );
