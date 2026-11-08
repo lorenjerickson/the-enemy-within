@@ -1,4 +1,6 @@
-import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses, getPendingRound } from "@/lib/db";
+import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses, getPendingRound, getRoundStories } from "@/lib/db";
+import { gmStory } from "@/lib/roundStory";
+import GmRoundHistory, { type GmRound } from "./GmRoundHistory";
 import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import type { CreaturePlan } from "./CreaturePlans";
@@ -74,12 +76,14 @@ export default function EncounterPanel() {
             const r = getReplay(levelId);
             return r ? <RoundScrubber round={r.round} seconds={r.frames.length} /> : null;
           })()}
+          {levelId !== undefined && <GmRoundHistory rounds={gmRounds(levelId)} />}
           {levelId !== undefined && getLastRoundLog(levelId).length > 0 && (
-            <div className="space-y-1 rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
-              {getLastRoundLog(levelId).map((line, i) => (
-                <p key={i} className={i === 0 ? "font-semibold" : line.includes("GM to decide") ? "text-warning" : ""}>{line}</p>
+            <details className="rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
+              <summary className="cursor-pointer font-semibold opacity-80">Full log of {getLastRoundLog(levelId)[0]} (rolls and numbers)</summary>
+              {getLastRoundLog(levelId).slice(1).map((line, i) => (
+                <p key={i} className={line.includes("GM to decide") ? "text-warning" : ""}>{line}</p>
               ))}
-            </div>
+            </details>
           )}
           <form action={endEncounter}>
             <button className="btn btn-ghost btn-sm text-error">End encounter</button>
@@ -91,15 +95,24 @@ export default function EncounterPanel() {
 }
 
 /** For planning a creature's round (GM planning mode): everyone in the turn order who can plan, and who they can aim at. */
-export function planningData(): { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance: string; character_id: number | null }[] } {
+/** Every round of the level's encounter so far, told for the GM in the order it happened. */
+export function gmRounds(levelId: number): GmRound[] {
+  const labels = tokenLabels(levelId), name = (id: number) => labels.get(id) ?? "someone";
+  const stories = getRoundStories(levelId);
+  const replay = getReplay(levelId);
+  if (replay && !stories.some((r) => r.round === replay.round)) stories.push({ round: replay.round, showAt: 0, story: replay.story ?? [] }); // resolved before rounds were kept
+  return stories.map((r) => ({ round: r.round, seconds: gmStory(r.story, name) }));
+}
+
+export function planningData(): { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance: string; character_id: number | null }[]; history: GmRound[] } {
   const levelId = getGmLevelId();
   const enc = levelId === undefined ? undefined : getEncounter(levelId);
-  if (levelId === undefined || !enc) return { creatures: [], targets: [] };
+  if (levelId === undefined || !enc) return { creatures: [], targets: [], history: [] };
   const labels = tokenLabels(levelId), down = downTokens(levelId), tokens = listTokens(levelId);
   const targets = tokens.map((t) => ({ id: t.id, name: labels.get(t.id)!, allegiance: allegianceOf(t), character_id: t.character_id }));
   const creatures = [...enc.order.map((o) => o.token_id), ...getEncounterWaiting(levelId)].flatMap((id) => {
     const t = tokens.find((x) => x.id === id), v = !down.has(id) && t ? planView(id) : null;
     return t && v ? [{ tokenId: id, name: labels.get(id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits, allegiance: allegianceOf(t), attackRange: v.attackRange, sees: v.sees }] : [];
   });
-  return { creatures, targets };
+  return { creatures, targets, history: gmRounds(levelId) };
 }

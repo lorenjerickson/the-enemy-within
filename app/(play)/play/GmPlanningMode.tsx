@@ -6,6 +6,7 @@ import { GmSheet, useGmSheet } from "./GmSheetPanel";
 import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode } from "./moveMode";
 import { setTargetMode } from "./targetMode";
+import GmRoundHistory, { type GmRound } from "./GmRoundHistory";
 
 const back = () => {
   setGmPlanToken(null);
@@ -17,7 +18,7 @@ const back = () => {
  * The GM planning someone's round (picked in the turn order) sees what a player sees: their sheet on the left edge,
  * their planning on the right, and a prominent way back to GM mode (where Resolve round is: never next to Ready).
  */
-export default function GmPlanningMode({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[] }) {
+export default function GmPlanningMode({ creatures, targets, history }: { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; history: GmRound[] }) {
   const id = useGmPlanToken();
   const [sheet, setSheet, reload] = useGmSheet(id);
   const current = creatures.find((c) => c.tokenId === id);
@@ -56,6 +57,7 @@ export default function GmPlanningMode({ creatures, targets }: { creatures: Crea
         <header className="px-3 py-2 font-semibold">Actions</header>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           {current ? <CreaturePlans creatures={creatures} targets={targets} /> : <p className="text-sm opacity-60">They can&apos;t plan right now (down, or out of the encounter).</p>}
+          <div className="mt-3"><GmRoundHistory rounds={history} /></div>
         </div>
       </aside>
     </>

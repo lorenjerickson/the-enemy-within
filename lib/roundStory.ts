@@ -134,3 +134,49 @@ export function playerStory(events: StoryEvent[] | undefined, tokens: number[], 
   for (const t of tokens) for (const [sec, lines] of storyFor(events ?? [], t, name)) out.set(sec, [...(out.get(sec) ?? []), ...lines]);
   return new Map([...out].sort((a, b) => a[0] - b[0]));
 }
+
+/**
+ * The whole round for the GM, in the order it happened (not grouped by who): every actor's deeds and what befell
+ * them, in the third person, with exact damage. One entry per second that had anything in it.
+ */
+export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => string): { sec: number; lines: string[] }[] {
+  const out = new Map<number, string[]>();
+  const add = (sec: number, line: string) => out.set(sec, [...(out.get(sec) ?? []), line]);
+  const n = (id: number | null | undefined) => (id === null || id === undefined ? "something" : name(id));
+  const hurt = (h: number, dmg?: number) => `${severity(h)} damage${dmg ? ` (${dmg})` : ""}`;
+  const does = (action: string) => (action.startsWith("use ") ? action : ACTION_WORD[action] === "use your item" ? "use their item" : ACTION_WORD[action] ?? action);
+  for (const e of [...(events ?? [])].sort((a, b) => a.sec - b.sec)) {
+    const who = n(e.who);
+    switch (e.k) {
+      case "close": add(e.sec, `${who} closes in on ${n(e.target)}${e.means ? ` to ${does(e.means)}` : ""}.`); break;
+      case "blocked": {
+        const i = e.intent;
+        const why = !i || i.doing === "move" ? "" : i.doing === "close" ? ` closing in on ${n(i.target)}` : i.doing === "chase" ? ` chasing ${n(i.target)}` : ` getting away from ${n(i.target)}`;
+        add(e.sec, `${who} is held up by ${n(e.by)}${why}.`);
+        break;
+      }
+      case "skip": add(e.sec, `${who} holds position instead of moving on.`); break;
+      case "dodge": add(e.sec, e.ok ? `${who} readies a dodge.` : `${who} fails to ready a dodge.`); break;
+      case "refit": add(e.sec, `${who} ${e.from ? `swaps ${e.from} for ${e.to}` : `takes up ${e.to}`}.`); break;
+      case "interrupted": add(e.sec, `${who} is thrown off by ${e.by ? `${n(e.by)}'s blow` : "a blow"} and can't ${does(e.action)}.`); break;
+      case "attack": {
+        const w = e.with ? ` with ${e.with}` : "", t = n(e.target);
+        add(e.sec, e.outcome === "hit" ? `${who} hits ${t}${w}: ${hurt(e.hurt ?? 0, e.dmg)}.` : e.outcome === "miss" ? `${who} attacks ${t}${w} and misses.` : e.outcome === "reach" ? `${who} can't reach ${t}.` : `${who} finds ${t} already down.`);
+        break;
+      }
+      case "area": add(e.sec, `${who} uses ${e.name}.`); break;
+      case "ability": add(e.sec, `${who} uses ${e.name}${e.target === null ? "" : e.target === e.who ? " on themselves" : ` on ${n(e.target)}`}.`); break;
+      case "caught": add(e.sec, `${e.by === null ? e.name : `${n(e.by)}'s ${e.name}`} catches ${who}: ${e.outcome === "save" ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}.`); break;
+      case "down": add(e.sec, `${who} goes down.`); break;
+      case "chase": {
+        const v = e.action === "pursue" ? `chases ${n(e.target)}` : `keeps away from ${n(e.target)}`;
+        add(e.sec, e.why === "range" && e.next !== undefined && e.next !== e.target ? `${who} ${v}, then turns on ${n(e.next)}.` : `${who} ${v}${e.why === "range" ? " until within reach" : e.why === "close" ? (e.action === "pursue" ? " and catches up" : " but is caught up with") : e.why === "down" ? " until they fall" : ""}.`);
+        break;
+      }
+      case "status": add(e.sec, `${who} is affected by ${e.source}.`); break;
+      case "healed": add(e.sec, e.much > 0 ? `${who} is healed for ${e.much} (${e.source}).` : `${who} gets nothing from ${e.source} (already well).`); break;
+      case "late": add(e.sec, `${who}${e.heldBy ? `, held up by ${n(e.heldBy)},` : ""} runs out of time to ${does(e.action)}${e.target ? ` ${e.target === e.who ? "themselves" : n(e.target)}` : ""}.`); break;
+    }
+  }
+  return [...out].sort((a, b) => a[0] - b[0]).map(([sec, lines]) => ({ sec, lines }));
+}
