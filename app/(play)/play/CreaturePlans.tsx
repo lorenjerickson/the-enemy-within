@@ -40,7 +40,8 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
+  // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
+  const run = (f: () => Promise<{ error?: string } | void>) => { setMoveMode(false); startTransition(async () => setError((await f())?.error ?? null)); };
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
   const current = creatures.find((c) => c.tokenId === selected);
   if (!creatures.length) return null;
@@ -101,9 +102,9 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0)}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
-                  a.id === "move" ? setMoveMode(!moving)
-                  : a.id === "refit" ? setRefitting(!refitting)
-                  : TARGETED_ACTIONS.includes(a.id) ? setChoosing(a.id)
+                  a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!moving))
+                  : a.id === "refit" ? (setMoveMode(false), setRefitting(!refitting))
+                  : TARGETED_ACTIONS.includes(a.id) ? (setMoveMode(false), setChoosing(a.id))
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))
                 }
               >
@@ -116,7 +117,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

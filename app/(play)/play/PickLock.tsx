@@ -55,6 +55,7 @@ export default function PickLock({
   };
   // A targeted action: at their selected target straight away if it suits, otherwise pick on the map.
   const startTargeting = (m: NonNullable<TargetMode>) => {
+    setMoveMode(false);
     const id = selectedFor(m);
     if (id === null) return setTargetMode(m);
     setTargetMode(null);
@@ -64,7 +65,8 @@ export default function PickLock({
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const run = (f: () => Promise<{ error?: string } | void>) => startTransition(async () => setError((await f())?.error ?? null));
+  // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
+  const run = (f: () => Promise<{ error?: string } | void>) => { setMoveMode(false); startTransition(async () => setError((await f())?.error ?? null)); };
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
@@ -72,7 +74,13 @@ export default function PickLock({
   const spent = (id: PlayerActionId) => (plan ? unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0) : null);
   const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
-    if (id === "move") return setMoveMode(!moving);
+    if (id === "move") {
+      // Move takes over: whatever else was being picked is put away.
+      setTargetMode(null);
+      setRefitting(false);
+      return setMoveMode(!moving);
+    }
+    setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
