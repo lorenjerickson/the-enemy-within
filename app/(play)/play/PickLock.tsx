@@ -4,11 +4,13 @@ import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, rollPlan, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { unavailable, ACTION_SECONDS } from "@/lib/roundPlan";
+import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
 import RoundScrubber from "./RoundScrubber";
+import ActionTip from "./ActionTip";
+import { basicLines } from "./basicLines";
 import { planTargeted } from "./targetPlan";
 import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
 import GearActions, { gearTargetMode } from "./GearActions";
@@ -31,7 +33,7 @@ export default function PickLock({
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; // who they can see, to aim at
-  gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
+  gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
@@ -123,13 +125,13 @@ export default function PickLock({
             <ul className="grid grid-cols-3 gap-2" data-player-actions>
         {group.map((a) => (
           <li key={a.id}>
+          <ActionTip name={a.label} desc={a.desc} lines={basicLines(a.id)} why={!usable(a.id) ? hint(a.id, a.label) : null}>
             <button
               type="button"
               data-action={a.id}
               disabled={!usable(a.id) || pending}
               aria-pressed={a.id === "move" ? moving : undefined}
               onClick={() => press(a.id)}
-              title={hint(a.id, `${a.label}${"hint" in a ? ` (${a.hint})` : ""}`)}
               className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${a.id === "move" && moving ? "btn-primary" : ""}`}
             >
               <GameIcon name={a.icon} className="size-7" />
@@ -143,6 +145,7 @@ export default function PickLock({
                 </span>
               </span>
             </button>
+          </ActionTip>
           </li>
         ))}
       </ul>

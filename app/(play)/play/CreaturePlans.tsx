@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { unavailable, ACTION_SECONDS } from "@/lib/roundPlan";
+import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
 import { useGmPlanToken } from "./gmPlanner";
@@ -12,6 +12,8 @@ import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 import RefitPicker, { type RefitOption } from "./RefitPicker";
+import ActionTip from "./ActionTip";
+import { basicLines } from "./basicLines";
 import { planTargeted } from "./targetPlan";
 import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
 
@@ -20,7 +22,7 @@ export interface CreaturePlan {
   name: string;
   player: string | null; // a player's character the GM is planning for (absent or AFK)
   plan: { steps: TimedStep[]; used: number; ready: boolean };
-  gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
+  gear: (GearAction & { source: string })[]; // its own, its gear's and its professions' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
   attackRange?: number; // squares its plain Attack reaches
@@ -91,10 +93,9 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 <div className="text-xs font-semibold opacity-80">{title}</div>
               <div className="grid grid-cols-4 gap-1">
             {group.map((a) => (
+              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0) ?? (a.id === "dash" ? "Not in yet" : null)}>
               <button
-                key={a.id}
                 type="button"
-                title={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0) ?? (a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone (until within 5 ft, or within range of what comes next)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`)}
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
                 disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0)}
@@ -112,6 +113,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                   <span className="block opacity-60">{ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s` : CHASE_ACTIONS.includes(a.id) ? "follows them" : "hint" in a ? a.hint : ""}</span>
                 </span>
               </button>
+              </ActionTip>
             ))}
           </div>
                 {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }))} />}

@@ -28,6 +28,8 @@ export interface GearAction {
   self?: boolean; // only on themselves: planned without a target
   targets?: "self" | "others" | "anyone"; // who it can be used on
   targeting?: Targeting; // friendlies / enemies; one, exactly N, up to N or all (in range, or in its area)
+  description?: string; // what it is, in the GM's words
+  damageType?: string; // acid, fire…
 }
 
 /** A gear action that does damage (an attack roll and a damage roll); one that doesn't just takes effect. */

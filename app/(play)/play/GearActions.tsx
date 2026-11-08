@@ -1,9 +1,12 @@
 "use client";
 
-import { describeArea, type AreaSpec } from "@/lib/aoe";
-import { describeTargeting, type Targeting } from "@/lib/sides";
+import { describeArea } from "@/lib/aoe";
+import type { GearAction } from "@/lib/roundPlan";
+import { gearSummary } from "@/lib/actionSummary";
+import ActionTip from "./ActionTip";
+import { describeTargeting } from "@/lib/sides";
 
-type Gear = { id: number; name: string; source: string; seconds: number; range: number; area?: AreaSpec; self?: boolean; targets?: "self" | "others" | "anyone"; targeting?: Targeting };
+type Gear = GearAction & { source: string };
 
 /** The target mode for using a gear action: pick a token, or for an area, aim it at a spot. */
 export const gearTargetMode = (g: Gear, tokenId: number | null) =>
@@ -25,20 +28,20 @@ export default function GearActions({ gear, enabled, onUse, blocked }: {
       <div className="text-xs font-semibold opacity-80">From their gear and professions</div>
       <div className="grid grid-cols-3 gap-2">
         {gear.map((g) => (
-          <button
-            key={g.id}
-            type="button"
-            data-gear-action={g.id}
-            disabled={!enabled || !!blocked?.(g)}
-            title={enabled && blocked?.(g) ? blocked(g)! : enabled ? `${g.name} (${g.source}): ${g.seconds} s, ${g.area ? `${describeArea(g.area)}, ${g.area.save} save DC ${g.area.dc}. Then aim it.` : g.self ? "on themselves" : `${g.range > 1 ? `range ${g.range * 5} ft` : "within reach"}. Then pick who.`}` : "Only in an encounter"}
-            className="btn h-auto w-full flex-col gap-0 py-2 text-xs disabled:bg-base-100/60 disabled:text-base-content/80"
-            onClick={() => onUse(g)}
-          >
-            <span className="font-semibold">{g.name}</span>
-            <span className="opacity-60">{g.source}</span>
-            <span className="opacity-60">{g.seconds} s · {g.area ? describeArea(g.area) : g.self ? "self" : g.range > 1 ? `${g.range * 5} ft` : "reach"}</span>
-            {g.targeting && (g.targeting.count !== "one" || g.targeting.who) && <span className="opacity-60">{describeTargeting(g.targeting, !!g.area)}</span>}
-          </button>
+          <ActionTip key={g.id} name={`${g.name} (${g.source})`} desc={g.description} lines={gearSummary(g)} why={!enabled ? "Only in an encounter" : blocked?.(g)}>
+            <button
+              type="button"
+              data-gear-action={g.id}
+              disabled={!enabled || !!blocked?.(g)}
+              className="btn h-auto w-full flex-col gap-0 py-2 text-xs disabled:bg-base-100/60 disabled:text-base-content/80"
+              onClick={() => onUse(g)}
+            >
+              <span className="font-semibold">{g.name}</span>
+              <span className="opacity-60">{g.source}</span>
+              <span className="opacity-60">{g.seconds} s · {g.area ? describeArea(g.area) : g.self ? "self" : g.range > 1 ? `${g.range * 5} ft` : "reach"}</span>
+              {g.targeting && (g.targeting.count !== "one" || g.targeting.who) && <span className="opacity-60">{describeTargeting(g.targeting, !!g.area)}</span>}
+            </button>
+          </ActionTip>
         ))}
       </div>
     </div>
