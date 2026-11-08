@@ -632,6 +632,7 @@ export default function MapView({
   dockSide,
   dockTools = [],
   dockInitial = null,
+  dockOpposite,
 }: {
   locationId: number;
   levelId: number;
@@ -668,6 +669,7 @@ export default function MapView({
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
+  dockOpposite?: { tools: DockTool[]; initial?: string | null }; // a second dock on the other edge (players: their sheet on the left)
   lights: LightSource[];
   notes: MapNote[];
   effects: MapEffect[];
@@ -2453,9 +2455,11 @@ export default function MapView({
     return (
       <div className="fixed inset-0 overflow-hidden bg-base-300">
         {surface}
-        <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
+        <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockOpposite ? "left-1/2 -translate-x-1/2" : dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
         {/* Leaving the map layers panel puts the layer editor away too, so map clicks go back to play (sheets, moves). */}
-        <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} onOpen={(id) => id !== "map" && setSelected(null)} />
+        {/* The GM planning a creature's round sees what a player sees (its sheet on the left, planning on the right), so their own dock steps aside. */}
+        {!(dockSide === "left" && !readOnly && gmSel !== null) && <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} onOpen={(id) => id !== "map" && setSelected(null)} />}
+        {dockOpposite && <PlayDock side={dockSide === "left" ? "right" : "left"} tools={dockOpposite.tools} initial={dockOpposite.initial ?? null} />}
       </div>
     );
   }

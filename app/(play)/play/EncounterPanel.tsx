@@ -1,10 +1,9 @@
 import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses } from "@/lib/db";
 import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
-import CreaturePlans from "./CreaturePlans";
+import type { CreaturePlan } from "./CreaturePlans";
 import TurnOrder from "./TurnOrder";
 import { describeStatus } from "@/lib/status";
-import { gearActions } from "@/lib/combat";
 import RoundScrubber from "./RoundScrubber";
 import { allegianceOf } from "@/lib/sides";
 
@@ -44,15 +43,7 @@ export default function EncounterPanel() {
               ...waiting.map((id) => ({ tokenId: id, initiative: null, turn: false })),
             ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId), rolling: rolling.has(r.tokenId), statuses: (statuses.get(r.tokenId) ?? []).map((s) => ({ source: s.source, text: describeStatus(s) })) }))}
           />
-          <CreaturePlans
-            targets={[...names].map(([id, n]) => ({ id, name: n.name, allegiance: n.allegiance, character_id: n.character_id }))}
-            creatures={[...enc.order.map((o) => o.token_id), ...waiting]
-              .filter((id) => names.get(id) && !down.has(id))
-              .flatMap((id) => {
-                const v = planView(id);
-                return v ? [{ tokenId: id, name: names.get(id)!.name, player: names.get(id)!.player, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits, allegiance: names.get(id)!.allegiance }] : [];
-              })}
-          />
+          <p className="text-xs opacity-60">Click someone in the turn order to plan their round (as their player would).</p>
           {levelId !== undefined && listLastingAreas(levelId).length > 0 && (
             <div className="space-y-1 rounded-box bg-base-100/50 p-2 text-xs" data-lasting-areas>
               <div className="font-semibold">Lasting areas</div>
@@ -96,4 +87,18 @@ export default function EncounterPanel() {
       )}
     </div>
   );
+}
+
+/** For planning a creature's round (GM planning mode): everyone in the turn order who can plan, and who they can aim at. */
+export function planningData(): { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance: string; character_id: number | null }[] } {
+  const levelId = getGmLevelId();
+  const enc = levelId === undefined ? undefined : getEncounter(levelId);
+  if (levelId === undefined || !enc) return { creatures: [], targets: [] };
+  const labels = tokenLabels(levelId), down = downTokens(levelId), tokens = listTokens(levelId);
+  const targets = tokens.map((t) => ({ id: t.id, name: labels.get(t.id)!, allegiance: allegianceOf(t), character_id: t.character_id }));
+  const creatures = [...enc.order.map((o) => o.token_id), ...getEncounterWaiting(levelId)].flatMap((id) => {
+    const t = tokens.find((x) => x.id === id), v = !down.has(id) && t ? planView(id) : null;
+    return t && v ? [{ tokenId: id, name: labels.get(id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits, allegiance: allegianceOf(t) }] : [];
+  });
+  return { creatures, targets };
 }

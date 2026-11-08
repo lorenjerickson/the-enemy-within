@@ -18,6 +18,7 @@ import RollPrompt from "./RollPrompt";
 import RoundSummary from "./RoundSummary";
 import CharacterSheet from "./CharacterSheet";
 import GmSheetPanel from "./GmSheetPanel";
+import GmPlanningMode from "./GmPlanningMode";
 import { sheetFor } from "@/lib/sheet";
 import { allegianceOf } from "@/lib/sides";
 import { playerStory } from "@/lib/roundStory";
@@ -25,7 +26,7 @@ import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
 import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
-import EncounterPanel from "./EncounterPanel";
+import EncounterPanel, { planningData } from "./EncounterPanel";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
@@ -118,6 +119,7 @@ function GmView({ session }: { session: GameSession }) {
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
+      <GmPlanningMode {...planningData()} />
       <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} />
     </>
   );
@@ -203,7 +205,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
-        <LevelMap readOnly replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from, perSecond: walking / 6 } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools }} />
+        <LevelMap readOnly replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from, perSecond: walking / 6 } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>
