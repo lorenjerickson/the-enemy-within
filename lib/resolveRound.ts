@@ -153,7 +153,7 @@ export function resolveMovement(
       }
       log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
       hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
-      story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken) });
+      story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken), dmg: taken });
       if (left <= 0) {
         story.push({ sec, k: "down", who: id });
         down.add(id);
@@ -472,7 +472,7 @@ export function resolveMovement(
           hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
           lastHitBy.set(id, m.tokenId);
           say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text}); ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, dmg.total) });
+          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, dmg.total), dmg: dmg.total });
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
           if (left <= 0) {
             down.add(id);
@@ -562,7 +562,7 @@ export function resolveMovement(
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           lastHitBy.set(target.id, m.tokenId);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, dmg.total) });
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, dmg.total), dmg: dmg.total });
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             story.push({ sec, k: "down", who: target.id });

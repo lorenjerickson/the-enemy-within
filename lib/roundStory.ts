@@ -13,10 +13,10 @@ export type StoryEvent = { sec: number } & (
   | { k: "dodge"; who: number; ok: boolean }
   | { k: "refit"; who: number; from: string | null; to: string }
   | { k: "interrupted"; who: number; action: string; by?: number | null }
-  | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number } // hurt: share of their health
+  | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number; dmg?: number } // hurt: share of their health; dmg: how much (told only to whoever took it)
   | { k: "area"; who: number; name: string }
   | { k: "ability"; who: number; name: string; target: number | null } // an ability that does no damage (on themselves, or on someone)
-  | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number }
+  | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number }
   | { k: "down"; who: number }
   | { k: "chase"; who: number; target: number; action: string; why: "range" | "close" | "down" | "time"; next?: number } // next: who they turned on
   | { k: "status"; who: number; source: string }
@@ -24,6 +24,11 @@ export type StoryEvent = { sec: number } & (
   | { k: "late"; who: number; action: string; heldBy?: number | null; target?: number | null }
 );
 
+/**
+ * How bad a wound is, from the share of their health it took. Whoever took it also learns exactly how much
+ * ("moderate (-4)"); whoever dealt it only sees how bad it looked.
+ */
+const taken = (hurt: number, dmg?: number) => `${severity(hurt)}${dmg ? ` (-${dmg})` : ""}`;
 /** How bad a wound is, from the share of their health it took. */
 export const severity = (hurt: number) => (hurt <= 0.15 ? "minor" : hurt <= 0.35 ? "moderate" : hurt <= 0.6 ? "serious" : "grievous");
 
@@ -86,17 +91,17 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
             : e.outcome === "reach" ? `You can't reach ${them} to attack.`
             : `${cap(them)} is already down.`);
         } else if (e.outcome === "hit" || e.outcome === "miss") {
-          add(e.sec, e.outcome === "hit" ? `${subj} attacks you${weapon} and hits, causing ${severity(e.hurt ?? 0)} damage.` : `${subj} attacks you${weapon} but misses.`);
+          add(e.sec, e.outcome === "hit" ? `${subj} attacks you${weapon} and hits, causing ${taken(e.hurt ?? 0, e.dmg)} damage.` : `${subj} attacks you${weapon} but misses.`);
         }
         break;
       }
       case "area": add(e.sec, `You use ${e.name}.`); break;
       case "ability": add(e.sec, mine ? (e.target === null ? `You use ${e.name}.` : e.target === me ? `You use ${e.name} on yourself.` : `You use ${e.name} on ${name(e.target)}.`) : `${subj} uses ${e.name} on you.`); break;
-      case "healed": add(e.sec, e.much > 0 ? `You feel better (${e.source}).` : `${e.source} does you no more good: you're already well.`); break;
+      case "healed": add(e.sec, e.much > 0 ? `You feel better (+${e.much}, ${e.source}).` : `${e.source} does you no more good: you're already well.`); break;
       case "caught": {
         if (e.who === me) {
           const from = e.by === null ? e.name : `${name(e.by)}'s ${e.name}`;
-          add(e.sec, e.outcome === "save" ? `You're caught in ${from} but get clear unharmed.` : e.outcome === "half" ? `You're caught in ${from} and partly get clear, taking ${severity(e.hurt)} damage.` : `You're caught in ${from}, taking ${severity(e.hurt)} damage.`);
+          add(e.sec, e.outcome === "save" ? `You're caught in ${from} but get clear unharmed.` : e.outcome === "half" ? `You're caught in ${from} and partly get clear, taking ${taken(e.hurt, e.dmg)} damage.` : `You're caught in ${from}, taking ${taken(e.hurt, e.dmg)} damage.`);
         } else add(e.sec, `Your ${e.name} catches ${name(e.who)}${e.outcome === "save" ? ", who gets clear" : `, causing ${severity(e.hurt)} damage`}.`);
         break;
       }
