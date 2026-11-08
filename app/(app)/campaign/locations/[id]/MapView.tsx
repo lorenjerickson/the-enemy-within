@@ -11,7 +11,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, fxSince, planStep, pingsSince, sendPing } from "../../../../(play)/play/actions";
+import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode } from "../../../../(play)/play/moveMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
@@ -638,6 +638,7 @@ export default function MapView({
   planTargets = [],
   planRoutes = [],
   contest = null,
+  selectedTarget = null,
   downTokens = [],
   lasting = [],
   gmPlans,
@@ -677,6 +678,7 @@ export default function MapView({
   planTargets?: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[]; // planned targeted actions: lines to the target, from where they'll be
   planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
   contest?: Contest | null; // a contested move waiting on the GM: zoomed to, boxed, the spot highlighted
+  selectedTarget?: number | null; // a player's selected target (kept from round to round): marked; clicking another token changes it
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
@@ -1288,6 +1290,12 @@ export default function MapView({
       const hit = [...(replayedTokens ?? drawnTokens)].reverse().find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
       if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
     }
+    // A player in an encounter clicking someone else they can see (not moving or picking a target): their selected target.
+    if (readOnly && fog?.move && !fog.move.free && !moveOn && !targetMode && e.button === 0) {
+      const { gx, gy } = gridAt(e);
+      const hit = [...(fogged ? fogged.tokens : drawnTokens)].reverse().find((t) => t.character_id !== fog.move!.characterId && gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
+    }
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
     if (dockSide && e.button === 0 && (readOnly || (selected === null && !placingChar))) {
       const { gx, gy } = gridAt(e);
@@ -1588,6 +1596,11 @@ export default function MapView({
         setMoveMode(false);
         setTargetMode(null);
         setGmPlanToken(tp.id);
+      } else if (readOnly) {
+        if (tp.id !== selectedTarget) startTransition(async () => {
+          const r = await selectTarget(tp.id);
+          if (r.error) setControlResult({ label: "Target", ok: false, text: r.error });
+        });
       } else if (planningAs === null) setSheetToken(tp.id);
     }
     if (p && e && (readOnly || gmPlan) && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
@@ -2057,6 +2070,29 @@ export default function MapView({
       }
       // Planned targets: a dashed line to who they're aiming at, from where they'll be when they do it (after the moves
       // planned before it), and a ring on the target.
+      // A player's selected target: a red crosshair ring (only on someone they can see).
+      if (selectedTarget !== null && !replayFrame) {
+        const t = (fogged ? fogged.tokens : drawnTokens).find((x) => x.id === selectedTarget);
+        if (t) {
+          const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+          const cx = x0 + (t.col + 0.5) * size, cy = y0 + (t.row + 0.5) * size, r = size * 0.62;
+          ctx.save();
+          ctx.strokeStyle = "rgba(239,68,68,0.95)";
+          ctx.lineWidth = 2.5 / k;
+          ctx.setLineDash([size * 0.18, size * 0.1]);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            ctx.beginPath();
+            ctx.moveTo(cx + dx * r * 0.8, cy + dy * r * 0.8);
+            ctx.lineTo(cx + dx * r * 1.25, cy + dy * r * 1.25);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
       if (planTargets.length && !replayFrame) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         const at = (id: number) => {

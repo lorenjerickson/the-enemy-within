@@ -341,6 +341,7 @@ addColumn("characters", "hp", "INTEGER"); // current health; null until first ro
 addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
 addColumn("characters", "hp_temp", "INTEGER"); // temporary health, lost before current
 addColumn("map_tokens", "hp_max", "INTEGER");
+addColumn("map_tokens", "target", "INTEGER"); // the token it has selected as its target (kept from round to round)
 addColumn("map_tokens", "hp_temp", "INTEGER");
 addColumn("map_tokens", "equipment", "TEXT"); // a creature token's own equipment once refitted (JSON); null = its template's
 addColumn("characters", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of condition names
@@ -1204,6 +1205,15 @@ export function clearPartyStart(): void {
 
 export function deleteToken(id: number): void {
   db.prepare<[number]>("DELETE FROM map_tokens WHERE id = ?").run(id);
+}
+
+/** The token a token has selected as its target (its last one planned, or one its player clicked), if any. */
+export function getTokenTarget(id: number): number | null {
+  return db.prepare<[number], { target: number | null }>("SELECT target FROM map_tokens WHERE id = ?").get(id)?.target ?? null;
+}
+
+export function setTokenTarget(id: number, target: number | null): void {
+  db.prepare<[number | null, number]>("UPDATE map_tokens SET target = ? WHERE id = ?").run(target, id);
 }
 
 export function moveToken(id: number, col: number, row: number): void {

@@ -12,9 +12,9 @@ import RoundScrubber from "./RoundScrubber";
 import ActionTip from "./ActionTip";
 import { basicLines } from "./basicLines";
 import { planTargeted } from "./targetPlan";
-import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
+import { allegianceOf, fits, maxPicks, picksSeveral, relation, type Allegiance } from "@/lib/sides";
 import GearActions, { gearTargetMode } from "./GearActions";
-import { setTargetMode, useTargetMode } from "./targetMode";
+import { setTargetMode, useTargetMode, type TargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
 import RefitPicker, { type RefitOption } from "./RefitPicker";
@@ -25,7 +25,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -33,6 +33,7 @@ export default function PickLock({
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; // who they can see, to aim at
+  selected?: number | null; // their selected target (kept from last round): used for a targeted action straight away
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
@@ -44,7 +45,21 @@ export default function PickLock({
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
   const choosing = target && target.tokenId === (null) ? target.action : null;
-  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null, visible: targets.map((t) => t.id), ...(action === "attack" ? { range: attackRange } : {}) } : null);
+  const setChoosing = (action: PlayerActionId | null) => (action ? startTargeting({ action, tokenId: null, visible: targets.map((t) => t.id), ...(action === "attack" ? { range: attackRange } : {}) }) : setTargetMode(null));
+  // Their selected target, if it suits this action (one target, not an area or a chase, someone it can be used on).
+  const selectedFor = (m: NonNullable<TargetMode>) => {
+    const t = targets.find((x) => x.id === selected);
+    if (!t || m.area || CHASE_ACTIONS.includes(m.action) || picksSeveral(m.targeting)) return null;
+    if (m.targeting?.who && self?.allegiance && !fits(m.targeting.who, relation(self.allegiance, allegianceOf({ allegiance: t.allegiance, character_id: t.character_id ?? null })))) return null;
+    return t.id;
+  };
+  // A targeted action: at their selected target straight away if it suits, otherwise pick on the map.
+  const startTargeting = (m: NonNullable<TargetMode>) => {
+    const id = selectedFor(m);
+    if (id === null) return setTargetMode(m);
+    setTargetMode(null);
+    run(() => planTargeted(m, { target: id }));
+  };
   const moving = useMoveMode();
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -114,6 +129,11 @@ export default function PickLock({
       {plan && refitting && (
         <RefitPicker options={refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", swap: { slot, item } })); }} />
       )}
+      {plan && (
+        <p className="text-xs opacity-80" data-selected-target>
+          {selected !== null ? <>Target: <b className="text-error">{targets.find((t) => t.id === selected)?.name}</b> <span className="opacity-70">(used for targeted actions; click someone else on the map to change)</span></> : <span className="opacity-70">Click someone on the map to make them your target.</span>}
+        </p>
+      )}
       {plan && <RoundPlanView plan={plan} pending={pending} label={label} onRemove={(i) => run(() => removeStep(i))} onReady={() => run(() => setPlanReady(!plan.ready))} dice={dice && { ...dice, onRoll: () => run(() => rollPlan(true)) }} />}
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
       {ACTION_GROUPS.map(([kind, title]) => {
@@ -149,7 +169,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
           </section>
         );
       })}

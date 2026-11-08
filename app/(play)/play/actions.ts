@@ -1,6 +1,9 @@
 "use server";
 
 import { recordRollOff } from "./workOutRound";
+import { setTokenTarget } from "@/lib/db";
+import { seenFrom } from "@/lib/sight";
+import { planEnd } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
@@ -220,6 +223,19 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
 function planner(userId: number) {
   const me = getPlayerToken(userId);
   return me ? tokenPlanner(me.token_id) : null;
+}
+
+/** The player picks who's their target (clicking a token on the map): someone else they can see from where their plan has them. */
+export async function selectTarget(tokenId: number): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const p = planner(user.id);
+  if (!p) return { error: "Not in an encounter" };
+  const id = Number(tokenId);
+  if (id === p.tok.token_id) return {};
+  if (!seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), p.tok.token_id).has(id)) return { error: "You can't see them from there" };
+  setTokenTarget(p.tok.token_id, id);
+  revalidatePath("/play");
+  return {};
 }
 
 /** Round planning: add an action, or a move to a square (reachable from where the plan leaves them, in the time left). */

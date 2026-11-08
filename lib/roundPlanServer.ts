@@ -1,4 +1,4 @@
-import { downTokens, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
@@ -123,6 +123,8 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;
   saveRoundPlan(p.tok.level_id, p.tok.token_id, [...p.plan, add], false);
+  // Whoever it's aimed at (someone else) stays their selected target, this round and the next.
+  if (add.kind === "action" && add.target && add.target.id !== p.tok.token_id) setTokenTarget(p.tok.token_id, add.target.id);
   return null;
 }
 
