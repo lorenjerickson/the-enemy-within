@@ -1591,11 +1591,15 @@ export default function MapView({
     const tp = tokenPress.current;
     tokenPress.current = null;
     if (tp && e && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) <= 6) {
-      // Planning mode: a click on someone else who can plan this round switches to planning theirs; otherwise, their sheet.
-      if (planningAs !== null && tp.id !== planningAs && gmPlans?.[tp.id]) {
-        setMoveMode(false);
-        setTargetMode(null);
-        setGmPlanToken(tp.id);
+      // In an encounter, a click on someone who plans this round opens planning for them (or switches to them); the
+      // planning panel shows their details, so no sheet card. Anyone else (or out of an encounter): their sheet.
+      if (!readOnly && gmPlans?.[tp.id]) {
+        if (tp.id !== planningAs) {
+          setMoveMode(false);
+          setTargetMode(null);
+          setSheetToken(null);
+          setGmPlanToken(tp.id);
+        }
       } else if (readOnly) {
         if (tp.id !== selectedTarget) startTransition(async () => {
           const r = await selectTarget(tp.id);
