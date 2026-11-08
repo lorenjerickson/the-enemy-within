@@ -171,7 +171,7 @@ const lookOf = (type: string): EffectKind =>
   type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind" : "fog";
 
 /** Extra time to dig an item out of a pack (anything carried in a container not worn at the waist) before using it. */
-export const FROM_PACK_SECONDS = 2;
+export const FROM_PACK_SECONDS = 3;
 
 /**
  * Actions a token can take from its gear: those of every equipped item, whatever it is (a weapon's Cleave, a tool's
