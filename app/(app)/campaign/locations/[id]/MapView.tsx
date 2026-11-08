@@ -66,6 +66,7 @@ interface MapState {
   showWalls: boolean; // wall lines: GM only, and only while not hidden (they're still walls either way)
   tokens: MapToken[];
   down: Set<number>; // tokens at 0 health: drawn with a skull
+  lifted?: number | null; // the token the GM has picked up to move: drawn raised, with a shadow
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
   illumination: number;
@@ -211,6 +212,8 @@ function drawSkull(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: n
 
 /** Press-and-hold time before a ping, and how long a ping shows (ms). */
 const HOLD_MS = 500;
+/** How long the GM holds on a token before it lifts, to be moved. */
+const LIFT_MS = 350;
 const PING_MS = 3000;
 const FX_MS = 1000; // how long a script's effect plays
 
@@ -526,7 +529,18 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   tokens: (state) => (ctx, w, h) => {
     for (const t of state.tokens) {
       const r = cellToRect(state, w, h, { col: t.col, row: t.row, cols: 1, rows: 1 });
-      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, rad = r.w * 0.42;
+      // Picked up to move: raised a little and larger, over its own shadow.
+      const up = state.lifted === t.id;
+      if (up) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.filter = `blur(${Math.max(2, r.w * 0.08)}px)`;
+        ctx.beginPath();
+        ctx.ellipse(r.x + r.w / 2 + r.w * 0.06, r.y + r.h / 2 + r.h * 0.12, r.w * 0.44, r.h * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2 - (up ? r.h * 0.12 : 0), rad = r.w * (up ? 0.5 : 0.42);
       // Side-on maps show the side-on figure standing on its floor, scaled to fit the cell.
       const side = state.mapImage.perspective === "portrait" && t.token_side ? state.tokenImages.get(t.token_side) : undefined;
       if (side) {
@@ -1035,6 +1049,7 @@ export default function MapView({
   }
   const press = useRef<{ x: number; y: number; t: number; gx: number; gy: number } | null>(null);
   const tokenPress = useRef<{ x: number; y: number; id: number } | null>(null); // the GM pressing a token: a click opens its sheet
+  const lift = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null); // holding on a token to pick it up
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
@@ -1065,6 +1080,7 @@ export default function MapView({
     showWalls: !readOnly && !optimisticHideWalls,
     // Down tokens get a skull; during playback, as of the second shown.
     down: new Set(replayFrame ? [...replayFrame.down, ...downTokens.filter((id) => !(replay && id in replay.start))] : downTokens),
+    lifted: draggingToken?.id ?? null,
     // The GM sees the whole map fully lit; darkness and fog are for players.
     tokens: (fogged ? fogged.tokens : drawnTokens).map((t) => {
       if (walking?.id !== t.id) return t;
@@ -1388,9 +1404,24 @@ export default function MapView({
       const top = (t: MapToken) => (portrait && t.token_side ? t.row + 1 - Math.max(1, figureCells(figureHeight, t)) : t.row);
       const hit = [...optimisticTokens].reverse().find((t) => gx >= t.col && gx < t.col + 1 && gy >= top(t) && gy < t.row + 1);
       if (hit) {
-        setSelectedTokenId(hit.id);
-        setDraggingToken({ id: hit.id, col: hit.col, row: hit.row });
+        // Never in a player's view. The GM presses and holds to pick a token up (a quick click stays a click).
+        if (readOnly) return;
         e.currentTarget.setPointerCapture(e.pointerId);
+        if (hold.current) {
+          clearTimeout(hold.current.timer); // holding on a token lifts it rather than pinging
+          hold.current = null;
+        }
+        if (lift.current) clearTimeout(lift.current.timer);
+        lift.current = {
+          x: e.clientX,
+          y: e.clientY,
+          timer: setTimeout(() => {
+            lift.current = null;
+            tokenPress.current = null; // it's a move now, not a click
+            setSelectedTokenId(hit.id);
+            setDraggingToken({ id: hit.id, col: hit.col, row: hit.row });
+          }, LIFT_MS),
+        };
         return;
       }
       if (selected !== "tokens") return; // (dragging only) — placing new tokens is the Tokens layer's job
@@ -1487,6 +1518,11 @@ export default function MapView({
       if (x !== draggingSound.x || y !== draggingSound.y) setDraggingSound({ ...draggingSound, x, y });
       return;
     }
+    // Moving before the hold is up: not a pick-up after all.
+    if (lift.current && Math.hypot(e.clientX - lift.current.x, e.clientY - lift.current.y) > 6) {
+      clearTimeout(lift.current.timer);
+      lift.current = null;
+    }
     if (draggingToken) {
       const { col, row } = tokenAt(e);
       if (col !== draggingToken.col || row !== draggingToken.row) setDraggingToken({ ...draggingToken, col, row });
@@ -1521,6 +1557,10 @@ export default function MapView({
   };
   const onPointerUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
     drag.current = null;
+    if (lift.current) {
+      clearTimeout(lift.current.timer); // let go before it lifted: just a click
+      lift.current = null;
+    }
     const p = press.current;
     press.current = null;
     const tp = tokenPress.current;
