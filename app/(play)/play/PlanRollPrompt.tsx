@@ -66,7 +66,7 @@ export default function PlanRollPrompt({ rolls, rolled }: { rolls: PlanRollView[
         </ul>
         <p className="text-xs opacity-60">To-hit and Dodge d20s are thrown twice: advantage or disadvantage when it happens picks which counts (otherwise the first).</p>
         {rolled === 2 ? (
-          <button type="button" className="btn btn-sm" onClick={() => { box.current?.clear(); setClosed(true); }}>Close (plan set; now Ready)</button>
+          <button type="button" className="btn btn-sm" onClick={() => { box.current?.clear(); setClosed(true); }}>Close (plan set: you're ready)</button>
         ) : (
           <div className="flex gap-2">
             <button type="button" className="btn btn-primary flex-1" disabled={throwing} onClick={throwAll}>{throwing ? "Rolling…" : "Roll"}</button>

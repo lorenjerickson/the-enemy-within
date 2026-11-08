@@ -62,8 +62,8 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
             {dice.rolled === 1 ? "Rolling…" : `Roll (${dice.count} ${dice.count === 1 ? "roll" : "rolls"})`}
           </button>
         ) : (
-          <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending} onClick={onReady}>
-            {plan.ready ? (dice?.rolled === 2 ? "Ready ✓ (not ready)" : "Ready ✓ (change plan)") : "Ready"}
+          <button type="button" data-plan-ready className={`btn btn-xs ml-auto ${plan.ready ? "btn-success" : "btn-primary"}`} disabled={pending || (plan.ready && dice?.rolled === 2)} onClick={onReady}>
+            {plan.ready ? (dice?.rolled === 2 ? "Ready ✓ (dice rolled, plan set)" : "Ready ✓ (change plan)") : "Ready"}
           </button>
         )}
       </div>

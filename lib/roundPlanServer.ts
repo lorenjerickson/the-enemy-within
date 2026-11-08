@@ -142,12 +142,13 @@ export function startPlanRoll(p: Planner, rolling: boolean): void {
   setPlanRolled(p.tok.level_id, p.tok.token_id, rolling ? 1 : 0);
 }
 
-/** The dice landed: they go onto the plan's steps, and the plan is set. */
+/** The dice landed: they go onto the plan's steps, the plan is set, and they're ready. */
 export function submitPlanRoll(p: Planner, thrown: number[][][]): string | null {
   if (p.rolled !== 1) return "Nothing to roll";
   const plan = withThrownDice(p.plan, planRolls(p.tok.token_id, p.plan), thrown);
   if (!plan) return "Those dice don't fit these rolls";
   setPlanRolled(p.tok.level_id, p.tok.token_id, 2, plan);
+  saveRoundPlan(p.tok.level_id, p.tok.token_id, plan, true); // rolled = set, so they're ready (no second click)
   return null;
 }
 
