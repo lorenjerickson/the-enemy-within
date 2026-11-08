@@ -42,7 +42,7 @@ export default function PickLock({
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
   const choosing = target && target.tokenId === (null) ? target.action : null;
-  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null, ...(action === "attack" ? { range: attackRange } : {}) } : null);
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null, visible: targets.map((t) => t.id), ...(action === "attack" ? { range: attackRange } : {}) } : null);
   const moving = useMoveMode();
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -143,7 +143,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, null)))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
           </section>
         );
       })}

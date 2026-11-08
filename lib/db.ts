@@ -2271,11 +2271,33 @@ export function characterPlayers(): Map<number, string> {
 }
 
 /** Planned targeted steps on a level (who aims what at whom), for drawing on the map; optionally one token's only. */
-export function listPlanTargets(levelId: number, tokenId?: number): { from: number; to: number; action: string }[] {
+export type PlanTarget = { from: number; to: number; action: string; label: string; at: { col: number; row: number } | null }; // at: where they'll be (null: where they stand)
+export function listPlanTargets(levelId: number, tokenId?: number): PlanTarget[] {
   const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
   return rows
     .filter((r) => tokenId === undefined || r.token_id === tokenId)
-    .flatMap((r) => (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => (s.kind === "action" && s.target ? [{ from: r.token_id, to: s.target.id, action: s.action }] : [])));
+    .flatMap((r) => {
+      // Each aimed step from where the moves before it leave them (so a move, attack, move plan aims from the middle).
+      let at: { col: number; row: number } | null = null;
+      return (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => {
+        if (s.kind === "move") {
+          at = s.to;
+          return [];
+        }
+        const label = s.use?.name ?? s.action;
+        const to = s.picks?.length ? s.picks.map((p) => p.id) : s.target ? [s.target.id] : [];
+        return to.map((id) => ({ from: r.token_id, to: id, action: s.action, label, at }));
+      });
+    });
+}
+
+/** Each plan's moves as a trail of waypoints (in order), for drawing the route it takes. */
+export function listPlanRoutes(levelId: number, tokenId?: number): { token: number; points: { col: number; row: number }[] }[] {
+  const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
+  return rows
+    .filter((r) => tokenId === undefined || r.token_id === tokenId)
+    .map((r) => ({ token: r.token_id, points: (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => (s.kind === "move" ? [s.to] : [])) }))
+    .filter((r) => r.points.length);
 }
 
 /** Tokens on a level that are down (health 0 or less): they sit out planning until revived (health above 0). */

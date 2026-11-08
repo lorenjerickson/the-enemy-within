@@ -24,6 +24,7 @@ export interface CreaturePlan {
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
   attackRange?: number; // squares its plain Attack reaches
+  sees?: number[]; // who it could see (and so aim at) from where its plan has it
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
@@ -32,7 +33,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
   const choosing = target && target.tokenId === (selected) ? target.action : null;
-  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, visible: creatures.find((c) => c.tokenId === selected)?.sees, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
   const moving = useMoveMode();
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -58,7 +59,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
           aiming={!!target?.area && !target.aimed}
           duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - current.plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
-              targets={targets.filter((t) => t.id !== current.tokenId)}
+              targets={targets.filter((t) => t.id !== current.tokenId && (!current.sees || current.sees.includes(t.id)))}
               me={target?.canSelf ? { id: current.tokenId, name: current.name } : null}
           who={target?.targeting?.who ?? ""}
           actor={current.allegiance}
@@ -113,7 +114,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </button>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, current.tokenId)))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }))} />}
               </section>
             );
           })}

@@ -5,6 +5,7 @@ import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
+import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
 
@@ -62,6 +63,10 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     if (step.use !== undefined && !use) return "That isn't one of their actions";
     // On themselves only when the action allows it (Healing Draught: themselves or others).
     if (step.target !== undefined && (!name || (Number(step.target) === p.tok.token_id && use?.targets !== "anyone"))) return "Pick someone else on this map";
+    // Only someone they could see from where the plan has them by then (no aiming at, chasing or fleeing the unseen).
+    const sees = seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), p.tok.token_id);
+    const unseen = [...(step.target !== undefined ? [Number(step.target)] : []), ...(step.picks ?? []).map(Number)].find((id) => id !== p.tok.token_id && !sees.has(id));
+    if (unseen !== undefined) return `They can't see ${tokenLabels(p.tok.level_id).get(unseen) ?? "them"} from there`;
     const { source: _source, ...gear } = use ?? { source: "" };
     // An area is aimed at a spot: a circle's centre must be within the action's range of where the plan leaves them.
     let aim: { col: number; row: number } | undefined;
@@ -162,5 +167,6 @@ export function planView(tokenId: number) {
     gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
     refits: refitOptions(tokenId, plannedEquipment(p)),
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)
+    sees: [...seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), tokenId)], // who they could aim at from where the plan has them
   };
 }

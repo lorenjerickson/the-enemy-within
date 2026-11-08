@@ -622,6 +622,7 @@ export default function MapView({
   replay = null,
   replayName = null,
   planTargets = [],
+  planRoutes = [],
   downTokens = [],
   lasting = [],
   gmPlans,
@@ -658,7 +659,8 @@ export default function MapView({
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
-  planTargets?: { from: number; to: number; action: string }[]; // planned targeted actions: drawn as lines to the target
+  planTargets?: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[]; // planned targeted actions: lines to the target, from where they'll be
+  planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
@@ -931,27 +933,31 @@ export default function MapView({
   // Fog of war (players; not side-on maps): what their characters see now, past walls and closed doors, and what they saw before.
   // Recomputed only when the walls or the spots they've stood on change (not on every redraw or page refresh, which
   // hand over new arrays): one visibility polygon per spot adds up over a campaign.
-  const fogOn = !!fog && mapImage.perspective !== "portrait"; // side-on maps have no fog
+  // The GM planning someone's round sees the map as they would: through that token's eyes (fog of war, only who it can
+  // see), from where its plan has it by then, so there's no planning around what it couldn't know.
+  const gmSel = useGmPlanToken();
+  const planningAs = !readOnly && !!dockSide && gmSel !== null ? gmSel : null;
+  const fogOn = (!!fog || planningAs !== null) && mapImage.perspective !== "portrait"; // side-on maps have no fog
   const wallsKey = optimisticStructures.map((w) => `${w.kind}${w.open}${w.x1},${w.y1},${w.x2},${w.y2}`).join("|"); // changes only when walls do
   const fogWalls = useMemo(() => blockingSegments(optimisticStructures), [wallsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const exploredKey = fogOn ? JSON.stringify(fog!.explored) : "";
+  const exploredKey = fogOn && fog && planningAs === null ? JSON.stringify(fog.explored) : "";
   const explored = useMemo(
     () => (exploredKey ? (JSON.parse(exploredKey) as Point[]).map((p) => visibilityPolygon(p, SIGHT, fogWalls)) : []),
     [exploredKey, fogWalls]
   );
   const fogged = useMemo(() => {
     if (!fogOn) return null;
-    const centre = (t: MapToken) => ({ x: t.col + 0.5, y: t.row + 0.5 });
-    const own = drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
-    const visible = own.map((t) => visibilityPolygon(centre(t), SIGHT, fogWalls));
+    const centre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
+    const own = planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
+    const planEndAt = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
+    const visible = own.map((t) => visibilityPolygon(centre(planEndAt ?? t), SIGHT, fogWalls));
     // Only tokens in sight are shown (and their own, always).
     const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
     return { visible, explored, tokens };
-  }, [fogOn, fog?.viewers.join(), fogWalls, explored, drawnTokens]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fogOn, fog?.viewers.join(), fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.
-  const gmSel = useGmPlanToken();
   const gmPlan = !readOnly && gmSel !== null && moveOn ? gmPlans?.[gmSel] : undefined; // only while Move is on
   const reachAt = useMemo(() => {
     const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false, perSecond: gmPlan.perSecond } : moveOn ? fog?.move : null;
@@ -1035,7 +1041,7 @@ export default function MapView({
   // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
   const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
   const fitsTarget = (t: { id: number; allegiance: string | null; character_id: number | null }) =>
-    (t.id !== actingToken || !!targetMode?.canSelf) && (t.id === actingToken || fits(targetMode?.targeting?.who ?? "", relation(actorSide, allegianceOf(t)))) && (!targetMode?.pickFrom || targetMode.pickFrom.includes(t.id));
+    (t.id !== actingToken || !!targetMode?.canSelf) && (t.id === actingToken || fits(targetMode?.targeting?.who ?? "", relation(actorSide, allegianceOf(t)))) && (!targetMode?.pickFrom || targetMode.pickFrom.includes(t.id)) && (t.id === actingToken || !targetMode?.visible || targetMode.visible.includes(t.id));
   const targetCandidates = targetMode && (!targetMode.area || targetMode.aimed) ? (fogged ? fogged.tokens : drawnTokens).filter(fitsTarget) : [];
   // Aiming an area attack: where the pointer is, and where the actor will be (where their plan leaves them).
   const [aimAt, setAimAt] = useState<Point | null>(null);
@@ -1905,7 +1911,41 @@ export default function MapView({
         }
         ctx.restore();
       }
-      // Planned targets: a dashed line from the actor to who they're aiming at, and a ring on the target.
+      // Planned moves: each plan's route as a linked trail of waypoints (numbered), from where the token stands.
+      if (planRoutes.length && !replayFrame) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        for (const r of planRoutes) {
+          const t = state.tokens.find((x) => x.id === r.token);
+          if (!t) continue;
+          const pts = [t, ...r.points].map((p) => ({ x: x0 + (p.col + 0.5) * size, y: y0 + (p.row + 0.5) * size }));
+          ctx.save();
+          ctx.strokeStyle = "rgba(186,230,253,0.9)";
+          ctx.lineWidth = 2 / k;
+          ctx.setLineDash([2 / k, 4 / k]);
+          ctx.beginPath();
+          pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.stroke();
+          ctx.setLineDash([]);
+          pts.slice(1).forEach((p, i) => {
+            ctx.fillStyle = "rgba(14,116,144,0.95)";
+            ctx.strokeStyle = "rgba(224,242,254,0.95)";
+            ctx.lineWidth = 1.5 / k;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, size * 0.16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = "#e0f2fe";
+            ctx.font = `bold ${9 / k}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(String(i + 1), p.x, p.y);
+            ctx.textBaseline = "alphabetic";
+          });
+          ctx.restore();
+        }
+      }
+      // Planned targets: a dashed line to who they're aiming at, from where they'll be when they do it (after the moves
+      // planned before it), and a ring on the target.
       if (planTargets.length && !replayFrame) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         const at = (id: number) => {
@@ -1913,7 +1953,7 @@ export default function MapView({
           return t && { x: x0 + (t.col + 0.5) * size, y: y0 + (t.row + 0.5) * size };
         };
         for (const l of planTargets) {
-          const a = at(l.from), b = at(l.to);
+          const a = l.at ? { x: x0 + (l.at.col + 0.5) * size, y: y0 + (l.at.row + 0.5) * size } : at(l.from), b = at(l.to);
           if (!a || !b) continue;
           const colour = l.action === "attack" ? "239,68,68" : l.action === "pursue" ? "249,115,22" : l.action === "evade" ? "59,130,246" : "168,85,247";
           ctx.save();
@@ -1933,9 +1973,9 @@ export default function MapView({
           ctx.lineWidth = 3 / k;
           ctx.strokeStyle = "rgba(0,0,0,0.7)";
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-          ctx.strokeText(l.action, mid.x, mid.y - 4 / k);
+          ctx.strokeText(l.label ?? l.action, mid.x, mid.y - 4 / k);
           ctx.fillStyle = `rgb(${colour})`;
-          ctx.fillText(l.action, mid.x, mid.y - 4 / k);
+          ctx.fillText(l.label ?? l.action, mid.x, mid.y - 4 / k);
           ctx.restore();
         }
       }
