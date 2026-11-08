@@ -1525,7 +1525,14 @@ export default function MapView({
     press.current = null;
     const tp = tokenPress.current;
     tokenPress.current = null;
-    if (tp && e && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) <= 6) setSheetToken(tp.id);
+    if (tp && e && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) <= 6) {
+      // Planning mode: a click on someone else who can plan this round switches to planning theirs; otherwise, their sheet.
+      if (planningAs !== null && tp.id !== planningAs && gmPlans?.[tp.id]) {
+        setMoveMode(false);
+        setTargetMode(null);
+        setGmPlanToken(tp.id);
+      } else if (planningAs === null) setSheetToken(tp.id);
+    }
     if (p && e && (readOnly || gmPlan) && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
     if (hold.current) {
       clearTimeout(hold.current.timer);

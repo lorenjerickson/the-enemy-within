@@ -33,6 +33,22 @@ export default function GmPlanningMode({ creatures, targets }: { creatures: Crea
         <div className="space-y-2 border-b border-base-300 p-3">
           <button type="button" className="btn btn-warning btn-block" data-gm-mode onClick={back}>← Back to GM mode</button>
           <p className="text-xs opacity-70">Planning for {current?.name ?? "…"}{current?.player ? ` (for ${current.player})` : ""}. Esc also goes back.</p>
+          {/* Switch to someone else's plan: here, or by clicking their token on the map. */}
+          <div className="flex flex-wrap gap-1" data-plan-switch>
+            {creatures.map((c) => (
+              <button
+                key={c.tokenId}
+                type="button"
+                data-plan-switch-to={c.tokenId}
+                aria-pressed={c.tokenId === id}
+                className={`btn btn-xs ${c.tokenId === id ? "btn-primary" : c.plan.ready ? "btn-success btn-outline" : ""}`}
+                title={c.plan.ready ? "Ready" : "Still planning"}
+                onClick={() => { setMoveMode(false); setTargetMode(null); setGmPlanToken(c.tokenId); }}
+              >
+                {c.name}{c.plan.ready ? " ✓" : ""}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet ? <GmSheet sheet={sheet} onChange={setSheet} reload={reload} /> : <p className="text-sm opacity-60">Loading…</p>}</div>
       </aside>
