@@ -1,5 +1,5 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
-import { addToContainer, characterContainers, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
@@ -178,6 +178,10 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
   if (!t || !who) return [];
   const owned = [
     ...(t.creature_id ? listActions({ creature_id: t.creature_id }).map((a) => ({ a, source: who.name, itemRange: 5 })) : []),
+    // A character's professions grant actions too (Fortune Teller: Mesmerize).
+    ...(t.character_id
+      ? listCharacterProfessionIds(t.character_id).flatMap((pid) => listActions({ profession_id: pid }).map((a) => ({ a, source: professionName(pid), itemRange: 5 })))
+      : []),
     ...Object.values(equipment ?? who.equipment ?? {}).flatMap((id) => {
       const item = id ? getItem(id) : undefined;
       return item ? listActions({ item_id: item.id }).map((a) => ({ a, source: item.name, itemRange: item.range_ft })) : [];
@@ -190,5 +194,8 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
       ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type) } }
       : {}),
     ...statusesOf(a),
+    ...(!a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") ? { self: true } : {}),
   }));
 }
+
+const professionName = (id: number) => db.prepare<[number], { name: string }>("SELECT name FROM professions WHERE id = ?").get(id)?.name ?? "Profession";

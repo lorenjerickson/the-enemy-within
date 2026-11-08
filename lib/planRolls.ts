@@ -33,7 +33,7 @@ export function planRolls(tokenId: number, plan: PlanStep[]): PlanRoll[] {
     const what = s.use?.name ?? (weapon ? weapon.name : "Unarmed");
     const might = flat(mod("might"), `Might (${formatModifier(mod("might"))})`);
     const versus = s.target ? ` on ${s.target.name}` : "";
-    if ((s.action === "attack" && s.target) || (s.use && s.target && !s.use.area)) {
+    if ((s.action === "attack" && s.target && (!s.use || s.use.damage)) || (s.use && s.use.damage && s.target && !s.use.area)) {
       out.push({ step: i, key: "hit", spec: { label: `${what}${versus}: to hit`, mode: "normal", parts: [{ formula: "1d20", source: "To hit (thrown twice)" }, ...might, ...terms(s.use ? s.use.attack : weapon?.attack, what)] } });
       out.push({ step: i, key: "damage", spec: { label: `${what}${versus}: damage`, mode: "normal", parts: [...terms(s.use?.damage || weapon?.damage || "1d4", s.use?.damage || weapon?.damage ? what : "Unarmed"), ...might] } });
     } else if (s.use?.area && s.use.damage) {

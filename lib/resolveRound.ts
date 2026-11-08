@@ -395,8 +395,30 @@ export function resolveMovement(
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action) || REACTIONS.includes(step.action)) continue; // movement / reactions: handled above
+      // An ability used on themselves (Case the Scene): its effects on them.
+      if (step.action === "use" && step.use) {
+        say(`${m.name} uses ${step.use.name}.`);
+        story.push({ sec, k: "ability", who: m.tokenId, name: step.use.name, target: null });
+        leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec);
+        continue;
+      }
       if (step.action !== "attack") {
         say(`${m.name}: ${step.action} (no effect yet).`);
+        continue;
+      }
+      // An ability aimed at someone that does no damage (Mesmerize): no attack roll; it takes effect if they're in range.
+      if (step.use && !step.use.damage && !step.use.area) {
+        const target = step.target, at = target && where(target.id);
+        if (!target || !at || down.has(target.id)) say(`${m.name}'s ${step.use.name} fails: no one to use it on.`);
+        else if (!inReach(pos.get(m.tokenId)!, at, rangeOf(step, m))) {
+          say(`${m.name}'s ${step.use.name} on ${target.name} fails: out of range.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use.name, outcome: "reach" });
+        } else {
+          say(`${m.name} uses ${step.use.name} on ${target.name}.`);
+          story.push({ sec, k: "ability", who: m.tokenId, name: step.use.name, target: target.id });
+          leave(target.id, step.use.statuses?.target, step.use.statuses?.minutes ?? 0, sec);
+          leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec);
+        }
         continue;
       }
       // An area attack: everyone caught (but the attacker) rolls the save; the damage is rolled once for all.

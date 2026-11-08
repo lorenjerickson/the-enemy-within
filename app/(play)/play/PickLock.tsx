@@ -120,7 +120,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => setTargetMode(gearTargetMode(g, null))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, null)))} />}
           </section>
         );
       })}

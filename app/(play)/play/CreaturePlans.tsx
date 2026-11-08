@@ -98,7 +98,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </button>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => setTargetMode(gearTargetMode(g, current.tokenId))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, current.tokenId)))} />}
               </section>
             );
           })}

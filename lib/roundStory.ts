@@ -12,6 +12,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "interrupted"; who: number; action: string }
   | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number } // hurt: share of their health
   | { k: "area"; who: number; name: string }
+  | { k: "ability"; who: number; name: string; target: number | null } // an ability that does no damage (on themselves, or on someone)
   | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number }
   | { k: "down"; who: number }
   | { k: "chase"; who: number; target: number; action: string; why: "range" | "close" | "down" | "time" }
@@ -61,6 +62,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         break;
       }
       case "area": add(e.sec, `You use ${e.name}.`); break;
+      case "ability": add(e.sec, mine ? (e.target === null ? `You use ${e.name}.` : `You use ${e.name} on ${name(e.target)}.`) : `${subj} uses ${e.name} on you.`); break;
       case "caught": {
         if (e.who === me) {
           const from = e.by === null ? e.name : `${name(e.by)}'s ${e.name}`;
