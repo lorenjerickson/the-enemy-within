@@ -17,7 +17,7 @@ Scripts read and change game state. They're run by an interpreter (`lib/script.t
   `WITH coll.each.health AS H` (a property) stays one list, for `sum(H)` and the like.
 - `coll.count`.
 - `conditions.add('grappled')`, `.remove(...)`, `.has(...)`, `.count`.
-- `game.locations`: every location by name. `game.locations.current` is the map the party is on (in the script console), or the button's location (map buttons), with `level`, `actors` (everything on that level) and `creatures`.
+- `game.locations`: every location by name. `game.locations.current` is the map the party is on (in the script console), or the button's location (map buttons), with `level`, `creatures` (everyone on that level: creature tokens and characters, players' and NPCs) and `actors` (the same).
   Each actor has `name`, `type`, `position` (`{col, row}`) and `health` (a character's is the player's; see Health below). `creatures.add('giant rat')` adds a creature from the templates (`add('giant rat', 3)` adds a group); it must then be placed.
 - From the map's layers, on `game.locations.current`, each named in its layer's list (rename them there):
   - `illumination`: the level's overall light in percent, 0 (dark) to 100 (full). e.g. `game.locations.current.illumination = 25`.

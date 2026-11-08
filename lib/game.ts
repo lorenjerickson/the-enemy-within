@@ -166,8 +166,9 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
     return a;
   });
   let nextId = -1;
-  // add('giant rat') returns the new creature; add('giant rat', 3) returns a group of them.
-  const creatures = new Collection("creature", actors.filter((a) => a.type === "creature"), (name, count) => {
+  // Everyone on the map: creature tokens and characters (players' and NPCs) alike, so "restore every creature" includes
+  // a downed player character. add('giant rat') returns the new creature; add('giant rat', 3) returns a group of them.
+  const creatures = new Collection("creature", [...actors], (name, count) => {
     const template = templates.find((c) => c.name.toLowerCase() === name.toLowerCase());
     if (!template) throw new ScriptError(`No creature named "${name}" (see Campaign › Creatures)`);
     const added = Array.from({ length: count }, (): Actor => {
