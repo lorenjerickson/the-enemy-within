@@ -170,9 +170,14 @@ function durationMinutes(amount: number, unit: string): number {
 const lookOf = (type: string): EffectKind =>
   type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind" : "fog";
 
+/** Extra time to dig an item out of a pack (anything carried in a container not worn at the waist) before using it. */
+export const FROM_PACK_SECONDS = 2;
+
 /**
- * Actions a token can take from its gear: those of its equipped items (and, for a creature, its own actions,
- * e.g. a rat's Bite). Each carries what resolving needs: time, range (squares), to-hit, damage, roll mode.
+ * Actions a token can take from its gear: those of every equipped item, whatever it is (a weapon's Cleave, a tool's
+ * Sedate, a shield's Block), of items it carries in its worn containers (on a belt at hand; from a pack taking
+ * FROM_PACK_SECONDS longer), of a character's professions, and of a creature itself (a rat's Bite). Each carries what
+ * resolving needs: time, range (squares), to-hit, damage, roll mode.
  */
 export function gearActions(tokenId: number, equipment?: Equipment): (GearAction & { source: string })[] {
   const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
@@ -189,6 +194,17 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
       return item ? listActions({ item_id: item.id }).map((a) => ({ a, source: item.name, itemRange: item.range_ft })) : [];
     }),
   ];
+  // Carried in their containers (not also equipped): a belt's are at hand; a pack's take longer to get out.
+  const worn = new Set(Object.values(equipment ?? who.equipment ?? {}).filter(Boolean));
+  const carried = t.character_id
+    ? characterContainers(t.character_id).flatMap((c) => {
+        const extra = c.slot === "waist" ? 0 : FROM_PACK_SECONDS;
+        return c.stacks
+          .filter((s, i) => !worn.has(s.item.id) && c.stacks.findIndex((x) => x.item.id === s.item.id) === i)
+          .flatMap((s) => listActions({ item_id: s.item.id }).map((a) => ({ a: { ...a, seconds: a.seconds + extra }, source: `${s.item.name}, ${extra ? `from ${c.container.name}` : `on ${c.container.name}`}`, itemRange: s.item.range_ft })));
+      })
+    : [];
+  owned.push(...carried.filter((x) => !owned.some((o) => o.a.id === x.a.id)));
   // An item's action with no range of its own (0) reaches as far as the item does.
   return owned.map(({ a, source, itemRange }) => ({
     id: a.id, name: a.name, description: a.description, damageType: a.damage_type || undefined, source, seconds: a.seconds, range: Math.max(1, Math.round((a.range_ft || itemRange) / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
