@@ -23,6 +23,9 @@ import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type 
 export const DATA_DIR = process.env.DATA_DIR ?? "data";
 fs.mkdirSync(DATA_DIR, { recursive: true });
 export const db = new Database(`${DATA_DIR}/game.db`);
+// Several processes may open it at once (the production build collects pages with parallel workers): wait for each
+// other rather than failing with "database is locked".
+db.pragma("busy_timeout = 5000");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -226,7 +229,13 @@ function nameUnnamed(): void {
 // Add columns introduced after a database was first created.
 export function addColumn(table: string, column: string, definition: string): void {
   const cols = db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all();
-  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  if (cols.some((c) => c.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (e) {
+    // Another process (a parallel build worker) added it between the check and now: fine.
+    if (!(e instanceof Error && /duplicate column name/i.test(e.message))) throw e;
+  }
 }
 addColumn("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
 addColumn("items", "type", "TEXT NOT NULL DEFAULT 'utility'");
