@@ -93,9 +93,24 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 }
 
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
+/** A step's kind: movement, action (gear actions too), bonus action or reaction. */
+export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? "action" : actionKind(s.action));
+
+/**
+ * Why something of this kind, taking these seconds, can't be added to the plan now (for greying out its button), or
+ * null if it can: one action, one bonus action and one reaction a round, and only what fits the time left.
+ */
+export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typeof stepKind>, seconds: number): string | null {
+  const left = ROUND_SECONDS - used;
+  if (kind !== "movement" && plan.some((s) => stepKind(s) === kind)) return `You've already planned your ${kind === "bonus" ? "bonus action" : kind} this round`;
+  if (left <= 1e-9) return "No time left this round";
+  if (seconds > left + 1e-9) return `Not enough time left (${+left.toFixed(1)} s)`;
+  return null;
+}
+
 export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
   // One action, one bonus action and one reaction a round; movement (Move, Dash, Evade, Pursue) as time allows.
-  const kind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? "action" : actionKind(s.action));
+  const kind = stepKind;
   if (kind(step) === "action" && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round";
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
   if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";

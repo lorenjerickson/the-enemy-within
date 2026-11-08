@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { ACTION_SECONDS } from "@/lib/roundPlan";
+import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { unavailable, ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
 import { useGmPlanToken } from "./gmPlanner";
@@ -94,10 +94,10 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               <button
                 key={a.id}
                 type="button"
-                title={a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone (until within 5 ft, or within range of what comes next)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`}
+                title={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0) ?? (a.id === "move" ? "Plan a move: click where to go on the map" : a.id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(a.id) ? `${a.label} someone (until within 5 ft, or within range of what comes next)` : `${a.label} (${ACTION_SECONDS[a.id]} s)`)}
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
-                disabled={pending || current.plan.ready || a.id === "dash"}
+                disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0)}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
                   a.id === "move" ? setMoveMode(!moving)
@@ -114,7 +114,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </button>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }))} />}
               </section>
             );
           })}

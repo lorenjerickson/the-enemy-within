@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, rollPlan, undoStep } from "./actions";
 import { setMoveMode, useMoveMode } from "./moveMode";
-import { ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { ACTION_SECONDS } from "@/lib/roundPlan";
+import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { unavailable, ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
@@ -51,7 +51,9 @@ export default function PickLock({
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
-  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled : id === "move" || id === "search"); // Evade / Pursue: encounters only
+  // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
+  const spent = (id: PlayerActionId) => (plan ? unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0) : null);
+  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
     if (id === "move") return setMoveMode(!moving);
     if (id === "refit") return setRefitting(!refitting);
@@ -61,6 +63,7 @@ export default function PickLock({
   };
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
+    : plan && spent(id) ? spent(id)!
     : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
@@ -143,7 +146,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
           </section>
         );
       })}

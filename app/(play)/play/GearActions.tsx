@@ -13,10 +13,11 @@ export const gearTargetMode = (g: Gear, tokenId: number | null) =>
  * Actions from someone's gear, own abilities and professions (Aimed shot, Bite, Mesmerize…): one aimed at someone plans
  * it on a target (an attack if it does damage); one that only affects its user (Case the Scene) is planned straight away.
  */
-export default function GearActions({ gear, enabled, onUse }: {
+export default function GearActions({ gear, enabled, onUse, blocked }: {
   gear: Gear[];
   enabled: boolean;
   onUse: (g: Gear) => void;
+  blocked?: (g: Gear) => string | null; // why this one can't be planned now (action used, no time)
 }) {
   if (!gear.length) return null;
   return (
@@ -28,8 +29,8 @@ export default function GearActions({ gear, enabled, onUse }: {
             key={g.id}
             type="button"
             data-gear-action={g.id}
-            disabled={!enabled}
-            title={enabled ? `${g.name} (${g.source}): ${g.seconds} s, ${g.area ? `${describeArea(g.area)}, ${g.area.save} save DC ${g.area.dc}. Then aim it.` : g.self ? "on themselves" : `${g.range > 1 ? `range ${g.range * 5} ft` : "within reach"}. Then pick who.`}` : "Only in an encounter"}
+            disabled={!enabled || !!blocked?.(g)}
+            title={enabled && blocked?.(g) ? blocked(g)! : enabled ? `${g.name} (${g.source}): ${g.seconds} s, ${g.area ? `${describeArea(g.area)}, ${g.area.save} save DC ${g.area.dc}. Then aim it.` : g.self ? "on themselves" : `${g.range > 1 ? `range ${g.range * 5} ft` : "within reach"}. Then pick who.`}` : "Only in an encounter"}
             className="btn h-auto w-full flex-col gap-0 py-2 text-xs disabled:bg-base-100/60 disabled:text-base-content/80"
             onClick={() => onUse(g)}
           >
