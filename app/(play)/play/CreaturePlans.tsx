@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
-import { gmPlanStep, gmSetReady, gmUndoStep } from "./gmActions";
+import { gmPlanStep, gmSetReady, gmRemoveStep } from "./gmActions";
 import { useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
@@ -53,7 +53,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
             plan={current.plan}
             pending={pending}
             label={label}
-            onUndo={() => run(() => gmUndoStep(current.tokenId))}
+            onRemove={(i) => run(() => gmRemoveStep(current.tokenId, i))}
             onReady={() => run(() => gmSetReady(current.tokenId, !current.plan.ready))}
           />
           {choosing && (

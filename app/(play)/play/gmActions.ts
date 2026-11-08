@@ -12,7 +12,7 @@ import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
 import { ALLEGIANCES } from "@/lib/sides";
 import { setTokenAllegiance } from "@/lib/db";
-import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
+import { addPlanStep, setReady, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
 /**
  * Starts an encounter on the party's map: every player character there is asked to roll initiative, and the GM's
@@ -62,11 +62,13 @@ export async function gmPlanStep(tokenId: number, step: StepRequest): Promise<{ 
   return error ? { error } : {};
 }
 
-export async function gmUndoStep(tokenId: number) {
+/** Takes a step out of a creature's plan (the ones after it move up). */
+export async function gmRemoveStep(tokenId: number, index: number): Promise<{ error?: string }> {
   await requireGm();
   const p = tokenPlanner(Number(tokenId));
-  if (p) undoPlanStep(p);
+  const error = p ? removePlanStep(p, Number(index)) : "Nothing planned";
   revalidatePath("/play");
+  return error ? { error } : {};
 }
 
 export async function gmSetReady(tokenId: number, ready: boolean) {

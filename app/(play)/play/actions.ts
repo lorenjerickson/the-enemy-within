@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, characterModifiers, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
-import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
+import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
@@ -233,11 +233,13 @@ export async function planStep(step: StepRequest): Promise<{ error?: string }> {
 }
 
 /** Takes the last step off the plan (and un-readies). */
-export async function undoStep(): Promise<void> {
+/** Takes a step out of the player's plan (the ones after it move up). */
+export async function removeStep(index: number): Promise<{ error?: string }> {
   const user = await requireUser();
   const p = planner(user.id);
-  if (p) undoPlanStep(p);
+  const error = p ? removePlanStep(p, Number(index)) : "Nothing planned";
   revalidatePath("/play");
+  return error ? { error } : {};
 }
 
 export async function setPlanReady(ready: boolean): Promise<{ error?: string }> {

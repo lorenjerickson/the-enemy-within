@@ -126,7 +126,45 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   return null;
 }
 
-export const undoPlanStep = (p: Planner) => { if (!p.rolled) saveRoundPlan(p.tok.level_id, p.tok.token_id, p.plan.slice(0, -1), false); };
+/**
+ * Takes one step out of the plan; the steps after it move up into its time. A move after a removed move now starts
+ * from somewhere else, so it's measured again from there (by the shortest way; dropped if it can't get there), and
+ * anything that no longer fits the round is dropped from the end.
+ */
+export function removePlanStep(p: Planner, index: number): string | null {
+  if (p.rolled) return "The dice are rolled: the plan is set";
+  if (p.ready) return "Ready already; undo that to change the plan";
+  if (!Number.isInteger(index) || index < 0 || index >= p.plan.length) return "That step isn't in the plan";
+  const removed = p.plan[index];
+  const rest = [...p.plan.slice(0, index), ...p.plan.slice(index + 1)];
+  if (removed.kind === "move") {
+    const j = rest.findIndex((s, k) => k >= index && s.kind === "move");
+    if (j >= 0) rest.splice(j, 1, ...(remeasure(p, planEnd(rest.slice(0, j), { col: p.tok.col, row: p.tok.row }), (rest[j] as Extract<PlanStep, { kind: "move" }>).to) ?? []));
+  }
+  const plan: PlanStep[] = [];
+  for (const s of rest) {
+    if (cannotAdd(plan, s, p.walking)) break;
+    plan.push(s);
+  }
+  saveRoundPlan(p.tok.level_id, p.tok.token_id, plan, false);
+  return null;
+}
+
+/** A move from `from` to `to` as plan steps (legs round walls on a gridless map), or null if there's no way there. */
+function remeasure(p: Planner, from: { col: number; row: number }, to: { col: number; row: number }): PlanStep[] | null {
+  if (Math.hypot(to.col - from.col, to.row - from.row) < 0.1) return [];
+  const walls = movementBlockers(listStructures(p.tok.level_id));
+  if (isGridlessLevel(p.tok.level_id)) {
+    const path = shortestPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls, () => true);
+    if (!path) return null;
+    return path.slice(1).map((pt, i) => {
+      const a = path[i], end = i === path.length - 2 ? to : { col: snapHeight(pt.x - 0.5), row: snapHeight(pt.y - 0.5) };
+      return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10 };
+    });
+  }
+  const sq = reachableSquares(from, (p.walking * 2) / FEET_PER_SQUARE, walls).get(squareKey(to.col, to.row)); // anything further won't fit the round anyway
+  return sq?.steps ? [{ kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE }] : null;
+}
 
 /** Ready (or not). A player whose plan has dice to roll rolls them first; the GM's plans are rolled by the server. */
 export function setReady(p: Planner, ready: boolean, mustRoll = false): string | null {
