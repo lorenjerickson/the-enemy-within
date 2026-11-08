@@ -179,7 +179,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
           {listPlayerCharacters(user.id).map((c) => {
             const t = levelId === undefined ? undefined : listTokens(levelId).find((x) => x.character_id === c.id);
             const sheet = t && sheetFor(t.id);
-            return sheet ? <CharacterSheet key={c.id} sheet={sheet} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
+            return sheet ? <CharacterSheet key={c.id} sheet={sheet} manage={{ gm: false, locked: levelId !== undefined && getEncounter(levelId) ? "In an encounter, swap gear with Refit (a bonus action)." : null }} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
           })}
           <Link href="/" className="btn btn-sm">Leave</Link>
         </div>

@@ -17,8 +17,10 @@ export interface Sheet {
   health: { current: number; maximum: number; temporary: number } | null;
   down: boolean;
   effects: { source: string; text: string; left: string }[]; // active statuses, with time left
-  equipment: { slot: EquipSlot; name: string }[];
-  containers: { name: string; capacity: number; stacks: { name: string; qty: number }[] }[];
+  equipment: { slot: EquipSlot; name: string; id: number; container: boolean }[];
+  containers: { id: number; slot: EquipSlot; name: string; capacity: number; stacks: { id: number; name: string; qty: number; slots: EquipSlot[] }[] }[];
+  characterId: number | null; // for changing what they carry (characters only)
+  slots: EquipSlot[]; // their slots (to equip into)
 }
 
 const timeLeft = (minutes: number) => (minutes < 1 ? `${Math.max(1, Math.round(minutes * 10))} round${Math.round(minutes * 10) === 1 ? "" : "s"}` : minutes < 60 ? `${Math.round(minutes)} min` : `${Math.round(minutes / 60)} h`);
@@ -43,10 +45,12 @@ export function sheetFor(tokenId: number): Sheet | null {
     effects: (listTokenStatuses(t.level_id).get(t.id) ?? []).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
     equipment: (Object.entries(who.equipment ?? {}) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
       const item = id ? getItem(id) : undefined;
-      return item ? [{ slot, name: item.name }] : [];
+      return item ? [{ slot, name: item.name, id: item.id, container: !!item.capacity }] : [];
     }),
     containers: t.character_id
-      ? characterContainers(t.character_id).map((c) => ({ name: c.container.name, capacity: c.container.capacity ?? 0, stacks: c.stacks.map((s) => ({ name: s.item.name, qty: s.qty })) }))
+      ? characterContainers(t.character_id).map((c) => ({ id: c.container.id, slot: c.slot, name: c.container.name, capacity: c.container.capacity ?? 0, stacks: c.stacks.map((s) => ({ id: s.id, name: s.item.name, qty: s.qty, slots: s.item.slots })) }))
       : [],
+    characterId: t.character_id,
+    slots: Object.keys(who.equipment ?? {}) as EquipSlot[],
   };
 }

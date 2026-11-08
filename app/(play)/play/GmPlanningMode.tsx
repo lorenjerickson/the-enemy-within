@@ -19,7 +19,7 @@ const back = () => {
  */
 export default function GmPlanningMode({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[] }) {
   const id = useGmPlanToken();
-  const [sheet, setSheet] = useGmSheet(id);
+  const [sheet, setSheet, reload] = useGmSheet(id);
   const current = creatures.find((c) => c.tokenId === id);
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && id !== null && !document.querySelector("[data-art-modal]") && back();
@@ -34,7 +34,7 @@ export default function GmPlanningMode({ creatures, targets }: { creatures: Crea
           <button type="button" className="btn btn-warning btn-block" data-gm-mode onClick={back}>← Back to GM mode</button>
           <p className="text-xs opacity-70">Planning for {current?.name ?? "…"}{current?.player ? ` (for ${current.player})` : ""}. Esc also goes back.</p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet ? <GmSheet sheet={sheet} onChange={setSheet} /> : <p className="text-sm opacity-60">Loading…</p>}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">{sheet ? <GmSheet sheet={sheet} onChange={setSheet} reload={reload} /> : <p className="text-sm opacity-60">Loading…</p>}</div>
       </aside>
       <aside data-planning-panel className="fixed inset-y-0 right-0 z-20 flex w-[26rem] max-w-[calc(100vw-3rem)] flex-col bg-base-200/90 shadow-xl backdrop-blur">
         <header className="px-3 py-2 font-semibold">Actions</header>
