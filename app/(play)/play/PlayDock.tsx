@@ -20,17 +20,20 @@ export default function PlayDock({
   tools,
   initial = null,
   onWidth,
+  onOpen,
 }: {
   side: "left" | "right";
   tools: DockTool[];
   initial?: string | null;
   onWidth?: (px: number) => void; // reports how wide the dock is (rail, plus the open panel), so map overlays can keep clear
+  onOpen?: (id: string | null) => void; // which tool's panel is now open (null: none)
 }) {
   // Remembered per edge, so loading another map (which rebuilds the dock) keeps the same tool open.
   const [open, setOpenState] = useState<string | null>(lastOpen[side] === undefined ? initial : lastOpen[side]!);
   const setOpen = (id: string | null) => {
     lastOpen[side] = id;
     setOpenState(id);
+    onOpen?.(id);
   };
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {

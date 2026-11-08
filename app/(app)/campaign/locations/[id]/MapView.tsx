@@ -1223,7 +1223,7 @@ export default function MapView({
     tokenPress.current = null;
     if (!readOnly && dockSide && e.button === 0 && (selected === null || selected === "tokens") && !placingChar) {
       const { gx, gy } = gridAt(e);
-      const hit = [...drawnTokens].reverse().find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      const hit = [...(replayedTokens ?? drawnTokens)].reverse().find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
       if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
     }
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
@@ -2229,7 +2229,7 @@ export default function MapView({
                 <button
                   type="button"
                   aria-current={selected === layer}
-                  onClick={() => setSelected(layer)}
+                  onClick={() => setSelected(selected === layer ? null : layer)} // again: put the editor away
                   className={`flex-1 text-left px-1 py-0.5 rounded ${hoverBg(layer)} ${hiddenSet.has(layer) ? "opacity-30" : ""}`}
                 >
                   {capitalize(layer)}
@@ -2422,7 +2422,8 @@ export default function MapView({
       <div className="fixed inset-0 overflow-hidden bg-base-300">
         {surface}
         <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
-        <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} />
+        {/* Leaving the map layers panel puts the layer editor away too, so map clicks go back to play (sheets, moves). */}
+        <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} onOpen={(id) => id !== "map" && setSelected(null)} />
       </div>
     );
   }
