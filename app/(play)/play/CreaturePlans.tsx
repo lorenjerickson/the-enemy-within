@@ -23,6 +23,7 @@ export interface CreaturePlan {
   gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
+  attackRange?: number; // squares its plain Attack reaches
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
@@ -31,7 +32,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
   const choosing = target && target.tokenId === (selected) ? target.action : null;
-  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected } : null);
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
   const moving = useMoveMode();
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();

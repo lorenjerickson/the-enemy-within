@@ -23,7 +23,7 @@ import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode
 import { setSheetToken } from "../../../../(play)/play/sheetToken";
 import { allegianceOf, fits, maxPicks, picksSeveral, relation } from "@/lib/sides";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
-import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, crosses, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -1040,7 +1040,7 @@ export default function MapView({
   // Aiming an area attack: where the pointer is, and where the actor will be (where their plan leaves them).
   const [aimAt, setAimAt] = useState<Point | null>(null);
   const aimFrom = (() => {
-    if (!targetMode?.area || actingToken === undefined) return null;
+    if (!targetMode || (!targetMode.area && !targetMode.range) || actingToken === undefined) return null;
     const t = drawnTokens.find((x) => x.id === actingToken);
     const from = targetMode.tokenId !== null ? gmPlans?.[targetMode.tokenId]?.from : fog?.move?.from;
     const p = from ?? t;
@@ -1839,14 +1839,56 @@ export default function MapView({
         }
         ctx.restore();
       }
-      // Picking a target: a faint ring around each token that can be clicked.
+      // Picking a target: how far the action reaches from where their plan leaves them (walls block it), so it's
+      // clear who's in range; on a grid, the squares it reaches.
+      if (targetMode && !targetMode.area && targetMode.range && aimFrom) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const reach = targetMode.range + 0.5, walls = blockingSegments(state.structures);
+        const seen = visibilityPolygon(aimFrom, gridless ? reach : reach * 1.5, walls);
+        ctx.save();
+        ctx.fillStyle = "rgba(250,204,21,0.12)";
+        ctx.strokeStyle = "rgba(250,204,21,0.9)";
+        ctx.lineWidth = 1.5 / k;
+        if (gridless) {
+          ctx.beginPath();
+          seen.forEach((p, i) => (i ? ctx.lineTo(x0 + p.x * size, y0 + p.y * size) : ctx.moveTo(x0 + p.x * size, y0 + p.y * size)));
+          ctx.closePath();
+          ctx.fill();
+          ctx.setLineDash([5 / k, 4 / k]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          const c0 = Math.floor(aimFrom.x - 0.5), r0 = Math.floor(aimFrom.y - 0.5), n = targetMode.range;
+          for (let c = c0 - n; c <= c0 + n; c++) for (let r = r0 - n; r <= r0 + n; r++) {
+            if (insidePolygon({ x: c + 0.5, y: r + 0.5 }, seen)) ctx.fillRect(x0 + c * size, y0 + r * size, size, size);
+          }
+        }
+        const label = `${targetMode.range * 5} ft`;
+        ctx.font = `bold ${11 / k}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.lineWidth = 3 / k;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        const lx = x0 + aimFrom.x * size, ly = y0 + (aimFrom.y - reach) * size - 4 / k;
+        ctx.strokeText(label, lx, ly);
+        ctx.fillStyle = "#fde68a";
+        ctx.fillText(label, lx, ly);
+        ctx.restore();
+      }
+      // Picking a target: a faint ring around each token that can be clicked (red if it's out of range from there).
       if (targetMode) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         ctx.save();
         ctx.strokeStyle = "rgba(250,204,21,0.85)";
         ctx.lineWidth = 2 / k;
         ctx.setLineDash([3 / k, 3 / k]);
+        const inRange = (t: { col: number; row: number }) => {
+          if (!targetMode.range || targetMode.area || !aimFrom) return true;
+          const c = { x: t.col + 0.5, y: t.row + 0.5 };
+          const near = gridless ? Math.hypot(c.x - aimFrom.x, c.y - aimFrom.y) <= targetMode.range + 0.5 : Math.max(Math.abs(c.x - aimFrom.x), Math.abs(c.y - aimFrom.y)) <= targetMode.range + 1e-6;
+          return near && !blockingSegments(state.structures).some((w) => crosses(aimFrom, c, w));
+        };
         for (const t of targetCandidates) {
+          ctx.strokeStyle = inRange(t) ? "rgba(250,204,21,0.85)" : "rgba(239,68,68,0.85)";
           ctx.beginPath();
           ctx.arc(x0 + (t.col + 0.5) * size, y0 + (t.row + 0.5) * size, size * 0.55, 0, Math.PI * 2);
           ctx.stroke();

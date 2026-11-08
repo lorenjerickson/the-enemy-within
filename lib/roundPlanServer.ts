@@ -3,7 +3,7 @@ import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
-import { gearActions, refitOptions, tokenWho } from "@/lib/combat";
+import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
@@ -161,5 +161,6 @@ export function planView(tokenId: number) {
     perSecond: p.walking / 6, // feet a second at walking pace
     gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
     refits: refitOptions(tokenId, plannedEquipment(p)),
+    attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)
   };
 }

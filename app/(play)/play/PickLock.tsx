@@ -23,7 +23,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -34,6 +34,7 @@ export default function PickLock({
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
+  attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
   lastRound?: { round: number; seconds: number; endsAt: number } | null; // the last round's replay, to step through once it has played
   self?: { id: number; name: string; allegiance?: Allegiance } | null; // their own token (actions on themselves; whose side they're on)
   down?: boolean; // their character is down (0 health): nothing to do until revived
@@ -41,7 +42,7 @@ export default function PickLock({
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
   const choosing = target && target.tokenId === (null) ? target.action : null;
-  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null } : null);
+  const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: null, ...(action === "attack" ? { range: attackRange } : {}) } : null);
   const moving = useMoveMode();
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
