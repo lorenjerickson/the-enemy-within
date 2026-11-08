@@ -754,7 +754,7 @@ export default function MapView({
   // Dragging a token: which one, and the cell it's currently over.
   const [draggingToken, setDraggingToken] = useState<{ id: number; col: number; row: number } | null>(null);
   // Playing back a resolved round: each second's spots shown for a real second, from the shared start time.
-  const scrub = useScrub(); // the GM stepping through the last round (their map only)
+  const scrub = useScrub(); // stepping through the last round (the GM's or a player's own map only)
   // Something changing for real (a script revives someone, the GM moves a token) puts the GM's map back to live,
   // so a replay second being looked at never hides it.
   const liveKey = JSON.stringify([downTokens, tokens.map((t) => [t.id, t.col, t.row])]);
@@ -768,7 +768,7 @@ export default function MapView({
     if (!replay) return null;
     // Before the round plays: whoever was already down stays down (older replays: whoever was down after its first second).
     const before = replay.startDown ?? replay.frames[0]?.down.filter((id) => downTokens.includes(id)) ?? [];
-    if (!readOnly && scrub !== null) {
+    if (scrub !== null) {
       const f = scrub === 0 ? { sec: 0, pos: replay.start, down: before, lines: [] as string[] } : replay.frames[Math.min(scrub, replay.frames.length) - 1];
       return { ...f, startsIn: 0, scrubbing: true };
     }
@@ -796,7 +796,7 @@ export default function MapView({
         if (!to) return t;
         if (!("from" in replayFrame) || replayFrame.k >= 1) return { ...t, ...to };
         const from = replayFrame.from[t.id] ?? replay!.start[t.id];
-        if (!from) return { ...t, ...to };
+        if (!from || from.col < -9000) return { ...t, ...to }; // coming into sight: no glide from where it was hidden
         const k = replayFrame.k;
         return { ...t, col: from.col + (to.col - from.col) * k, row: from.row + (to.row - from.row) * k };
       })

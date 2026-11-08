@@ -8,6 +8,7 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import RoundScrubber from "./RoundScrubber";
 import { planTargeted } from "./targetPlan";
 import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
 import GearActions, { gearTargetMode } from "./GearActions";
@@ -22,7 +23,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -33,6 +34,7 @@ export default function PickLock({
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
+  lastRound?: { round: number; seconds: number; endsAt: number } | null; // the last round's replay, to step through once it has played
   self?: { id: number; name: string; allegiance?: Allegiance } | null; // their own token (actions on themselves; whose side they're on)
   down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
@@ -63,15 +65,21 @@ export default function PickLock({
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
     : `${base}: not available yet`;
 
+  // Once the last round has played back: step through it second by second (only what they could have seen).
+  const scrubber = lastRound && Date.now() > lastRound.endsAt ? <RoundScrubber round={lastRound.round} seconds={lastRound.seconds} /> : null;
   if (down) {
     return (
-      <div role="alert" className="alert alert-error text-sm" data-down>
-        You&apos;re down. You can&apos;t act until you&apos;re revived.
+      <div className="space-y-3">
+        <div role="alert" className="alert alert-error text-sm" data-down>
+          You&apos;re down. You can&apos;t act until you&apos;re revived.
+        </div>
+        {scrubber}
       </div>
     );
   }
   return (
     <div className="space-y-3 text-sm">
+      {scrubber}
       {plan && choosing && (
         <TargetPicker
           title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}

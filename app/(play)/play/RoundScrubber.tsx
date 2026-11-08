@@ -2,7 +2,10 @@
 
 import { setScrub, useScrub } from "./scrub";
 
-/** GM only: step backwards and forwards through the last resolved round's seconds on their own map (players unaffected). */
+/**
+ * Step backwards and forwards through the last resolved round's seconds on your own map (no one else's changes). The GM
+ * sees everything; a player sees only what their characters could see, and their own story of each second.
+ */
 export default function RoundScrubber({ round, seconds }: { round: number; seconds: number }) {
   const at = useScrub();
   const show = (s: number) => setScrub(Math.max(0, Math.min(seconds, s)));

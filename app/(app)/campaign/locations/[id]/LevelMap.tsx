@@ -1,5 +1,6 @@
 import { listDiscoveries } from "@/lib/story";
-import { playerStory } from "@/lib/roundStory";
+import { playerReplay } from "@/lib/replayView";
+import { blockingSegments } from "@/lib/visibility";
 import { tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
@@ -34,8 +35,7 @@ export default function LevelMap({
   const raw = getReplay(level.id);
   const labels = tokenLabels(level.id);
   const mine = gm ? [] : listTokens(level.id).filter((t) => t.character_id !== null && (fog?.viewers ?? []).includes(t.character_id)).map((t) => t.id);
-  const told = raw && !gm ? playerStory(raw.story, mine, (id) => labels.get(id) ?? "someone") : null;
-  const replay = raw && { ...raw, story: undefined, frames: told ? raw.frames.map((f) => ({ ...f, lines: told.get(f.sec) ?? [] })) : raw.frames };
+  const replay = raw && (gm ? { ...raw, story: undefined } : playerReplay(raw, mine, (id) => labels.get(id) ?? "someone", blockingSegments(listStructures(level.id))));
   const start = getPartyStart();
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
