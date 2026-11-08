@@ -20,6 +20,7 @@ import { setScrub, useScrub } from "../../../../(play)/play/scrub";
 import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
+import { setSheetToken } from "../../../../(play)/play/sheetToken";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
@@ -1024,6 +1025,7 @@ export default function MapView({
     });
   }
   const press = useRef<{ x: number; y: number; t: number; gx: number; gy: number } | null>(null);
+  const tokenPress = useRef<{ x: number; y: number; id: number } | null>(null); // the GM pressing a token: a click opens its sheet
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
@@ -1216,6 +1218,13 @@ export default function MapView({
     if (gmPlan && reach && e.button === 0) {
       press.current = { x: e.clientX, y: e.clientY, t: performance.now(), ...gridAt(e) };
       return;
+    }
+    // The GM pressing a token (no layer editor open, or the tokens one): a click (no drag) opens its character sheet.
+    tokenPress.current = null;
+    if (!readOnly && dockSide && e.button === 0 && (selected === null || selected === "tokens") && !placingChar) {
+      const { gx, gy } = gridAt(e);
+      const hit = [...drawnTokens].reverse().find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
     }
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
     if (dockSide && e.button === 0 && (readOnly || (selected === null && !placingChar))) {
@@ -1485,6 +1494,9 @@ export default function MapView({
     drag.current = null;
     const p = press.current;
     press.current = null;
+    const tp = tokenPress.current;
+    tokenPress.current = null;
+    if (tp && e && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) <= 6) setSheetToken(tp.id);
     if (p && e && (readOnly || gmPlan) && (reach || (moveOn && fog?.move?.free)) && Math.hypot(e.clientX - p.x, e.clientY - p.y) <= 6 && performance.now() - p.t < HOLD_MS) walkTo(p.gx, p.gy);
     if (hold.current) {
       clearTimeout(hold.current.timer);

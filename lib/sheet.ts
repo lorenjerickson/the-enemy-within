@@ -1,0 +1,49 @@
+import { characterContainers, characterPlayers, db, getGameTime, getItem, listTokenStatuses, tokenLabels } from "@/lib/db";
+import { tokenWho } from "@/lib/combat";
+import { tokenHealth } from "@/lib/health";
+import { describeStatus } from "@/lib/status";
+import type { EquipSlot } from "@/lib/itemTypes";
+
+/** What a character sheet shows for a token: art, how they're doing, what they wear and carry, and what's on them. */
+export interface Sheet {
+  tokenId: number;
+  name: string;
+  kind: "character" | "creature";
+  player: string | null;
+  image: string | null; // their artwork
+  token: string | null; // their map token, if there's no artwork
+  health: { current: number; maximum: number; temporary: number } | null;
+  down: boolean;
+  effects: { source: string; text: string; left: string }[]; // active statuses, with time left
+  equipment: { slot: EquipSlot; name: string }[];
+  containers: { name: string; capacity: number; stacks: { name: string; qty: number }[] }[];
+}
+
+const timeLeft = (minutes: number) => (minutes < 1 ? `${Math.max(1, Math.round(minutes * 10))} round${Math.round(minutes * 10) === 1 ? "" : "s"}` : minutes < 60 ? `${Math.round(minutes)} min` : `${Math.round(minutes / 60)} h`);
+
+/** The sheet for a token on the map (null if it's gone or isn't anyone). */
+export function sheetFor(tokenId: number): Sheet | null {
+  const t = db.prepare<[number], { id: number; level_id: number; character_id: number | null; creature_id: number | null }>("SELECT id, level_id, character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const who = t && tokenWho(t.id);
+  if (!t || !who) return null;
+  const h = tokenHealth(t.id);
+  const now = getGameTime();
+  return {
+    tokenId: t.id,
+    name: tokenLabels(t.level_id).get(t.id) ?? who.name,
+    kind: t.character_id ? "character" : "creature",
+    player: t.character_id ? characterPlayers().get(t.character_id) ?? null : null,
+    image: who.image ?? null,
+    token: who.token_overhead ?? null,
+    health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },
+    down: !!h && h.current + h.temporary <= 0,
+    effects: (listTokenStatuses(t.level_id).get(t.id) ?? []).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
+    equipment: (Object.entries(who.equipment ?? {}) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
+      const item = id ? getItem(id) : undefined;
+      return item ? [{ slot, name: item.name }] : [];
+    }),
+    containers: t.character_id
+      ? characterContainers(t.character_id).map((c) => ({ name: c.container.name, capacity: c.container.capacity ?? 0, stacks: c.stacks.map((s) => ({ name: s.item.name, qty: s.qty })) }))
+      : [],
+  };
+}

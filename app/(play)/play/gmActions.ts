@@ -14,6 +14,7 @@ import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/comb
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
+import { sheetFor, type Sheet } from "@/lib/sheet";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
 /**
@@ -179,4 +180,10 @@ export async function gmRollInitiativeFor(tokenId: number | null) {
     logSessionEvent(`The GM rolled ${rolled.total} for ${labels.get(id) ?? who.name}'s initiative.`);
   }
   revalidatePath("/play");
+}
+
+/** A token's character sheet, for the GM (who may look at anyone's). */
+export async function gmSheet(tokenId: number): Promise<Sheet | null> {
+  await requireGm();
+  return sheetFor(Number(tokenId));
 }

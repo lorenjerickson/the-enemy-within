@@ -16,6 +16,9 @@ import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import RoundSummary from "./RoundSummary";
+import CharacterSheet from "./CharacterSheet";
+import GmSheetPanel from "./GmSheetPanel";
+import { sheetFor } from "@/lib/sheet";
 import { playerStory } from "@/lib/roundStory";
 import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
@@ -113,6 +116,7 @@ function GmView({ session }: { session: GameSession }) {
     <>
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
+      <GmSheetPanel />
       <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} />
     </>
   );
@@ -166,20 +170,12 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         <div className="space-y-2 text-sm">
           <p>Session {session.number}</p>
           {place && <p className="opacity-70">{place.location} › {place.level}</p>}
-          <ul>
-            {listPlayerCharacters(user.id).map((c) => (
-              <li key={c.id} className="space-y-1">
-                <span className="font-semibold">{c.name}</span>
-                {/* What they carry: each worn container's contents. */}
-                {characterContainers(c.id).map((k) => (
-                  <div key={k.slot} className="text-xs" data-carried={k.container.id}>
-                    <span className="opacity-70">{k.container.name} ({k.stacks.length}/{k.container.capacity}):</span>{" "}
-                    {k.stacks.length ? k.stacks.map((s) => `${s.item.name}${s.qty > 1 ? ` ×${s.qty}` : ""}`).join(", ") : <span className="opacity-50">empty</span>}
-                  </div>
-                ))}
-              </li>
-            ))}
-          </ul>
+          {/* Their character sheet(s): art (click for the full picture), health, effects, equipment and what they carry. */}
+          {listPlayerCharacters(user.id).map((c) => {
+            const t = levelId === undefined ? undefined : listTokens(levelId).find((x) => x.character_id === c.id);
+            const sheet = t && sheetFor(t.id);
+            return sheet ? <CharacterSheet key={c.id} sheet={sheet} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
+          })}
           <Link href="/" className="btn btn-sm">Leave</Link>
         </div>
       ),
