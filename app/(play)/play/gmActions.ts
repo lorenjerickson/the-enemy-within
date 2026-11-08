@@ -4,17 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  downTokens, getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, moveToken, setLastRoundLog, tokenLabels, setReplay,
-  listLastingAreas, addLastingArea, addTokenStatus, removeLastingArea, getGameTime, setGameTime,
-} from "@/lib/db";
-import { ROUND_SECONDS } from "@/lib/roundPlan";
-import { fireTriggers } from "@/lib/game";
-import { ContestedMove, resolveMovement, type Mover } from "@/lib/resolveRound";
-import { withSeed } from "@/lib/dice";
-import { getPendingRound, setPendingRound } from "@/lib/db";
-import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
+  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea } from "@/lib/db";
+import { getPendingRound } from "@/lib/db";
+import { rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
-import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
 import { ALLEGIANCES } from "@/lib/sides";
@@ -107,77 +100,25 @@ export async function decideContest(winner: number) {
   revalidatePath("/play");
 }
 
-/** The GM leaves a contested move to chance: a roll-off (d20 each, ties re-rolled). */
+/** The GM leaves a contested move to chance: a roll-off, d20 each. A player's character's player rolls their own
+ * (the round waits for them); the GM's creatures roll at once. Ties roll again. */
 export async function rollOffContest() {
   await requireGm();
   const levelId = getGmLevelId();
-  const pending = levelId === undefined ? null : getPendingRound(levelId);
-  if (levelId === undefined || !pending) return;
-  let ra = 0, rb = 0;
-  while (ra === rb) [ra, rb] = [1 + Math.floor(Math.random() * 20), 1 + Math.floor(Math.random() * 20)];
-  const { a, b } = pending.contest;
-  logSessionEvent(`Contested move: ${a.name} rolls ${ra}, ${b.name} rolls ${rb}.`);
-  await decideContest(ra > rb ? a.id : b.id);
+  if (levelId === undefined || !getPendingRound(levelId)) return;
+  startRollOff(levelId);
+  revalidatePath("/play");
 }
 
-/** Works the round out with these dice and the GM's calls so far, and applies it, unless it stops on a contested
- * move the GM hasn't settled yet (then it's kept pending for them, and nothing changes). */
-function workOutRound(levelId: number, seed: number, decisions: Record<string, number>) {
-  const enc = getEncounter(levelId);
-  if (!enc) return;
-  const tokens = listTokens(levelId);
-  const initiative = new Map(enc.order.map((o) => [o.token_id, o.initiative]));
-  const labels = tokenLabels(levelId);
-  const taking = new Set([...enc.order.map((o) => o.token_id), ...getEncounterWaiting(levelId)]);
-  const movers: Mover[] = tokens
-    .filter((t) => taking.has(t.id))
-    .map((t) => ({
-      tokenId: t.id,
-      name: labels.get(t.id) ?? t.name,
-      initiative: initiative.get(t.id) ?? -1000, // hasn't rolled: loses every tie
-      start: { col: t.col, row: t.row },
-      plan: getRoundPlan(levelId, t.id).plan,
-      walking: JSON.parse(getTokenMover(t.id)?.movement ?? "{}").walking ?? 0,
-      attackRange: attackRange(t.id),
-      equipment: tokenWho(t.id)?.equipment ?? {},
-    }));
-  const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
-  const fighters = fightersOn(levelId);
-  const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
-  const lasting = listLastingAreas(levelId);
-  let result: ReturnType<typeof resolveMovement>;
-  try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions));
-  } catch (e) {
-    if (!(e instanceof ContestedMove)) throw e;
-    setPendingRound(levelId, { seed, decisions, contest: e.contest });
-    return;
-  }
-  setPendingRound(levelId, null);
-  const { final, hp, log, frames, created, statuses, refits, story } = result;
-  // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
-  const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
-  for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
-  for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
-  setGameTime(now);
-  for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
-  for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
-  for (const m of movers) {
-    const end = final.get(m.tokenId)!;
-    if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);
-  }
-  const lines = log.length ? log : ["Nothing happened."];
-  logSessionEvent(`Round ${enc.round}: ${lines.join(" ")}`);
-  saveEncounter(levelId, { ...enc, round: enc.round + 1 });
-  setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
-  clearRoundPlans(levelId);
-  // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story });
-  fireTriggers(); // game time moved on (e.g. ON timer.expired)
+/** The GM rolls a player's roll-off for them (they're away, or slow). */
+export async function gmRollOffFor(tokenId: number) {
+  await requireGm();
+  const levelId = getGmLevelId();
+  if (levelId === undefined) return;
+  rollOffFor(levelId, Number(tokenId), true);
+  revalidatePath("/play");
 }
 
-/** How long after resolving the playback starts (players' screens refresh every 3 s). */
-const REPLAY_DELAY_MS = 3500;
 
 /** The GM loads a location's level on their map (null = back to the party's). */
 export async function loadLevel(levelId: number | null) {

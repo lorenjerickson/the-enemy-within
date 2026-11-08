@@ -2030,7 +2030,11 @@ export interface RollRequest {
 }
 
 /** What a roll is for. */
-export type RollAction = { kind: "pickLock"; doorId: number; dc: number } | { kind: "search"; dc: number } | { kind: "initiative"; levelId: number; tokenId: number };
+export type RollAction =
+  | { kind: "pickLock"; doorId: number; dc: number }
+  | { kind: "search"; dc: number }
+  | { kind: "initiative"; levelId: number; tokenId: number }
+  | { kind: "rolloff"; levelId: number; tokenId: number }; // a roll-off for a contested spot
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
@@ -2053,6 +2057,17 @@ export function getOpenRollRequest(playerId: number): RollRequest | undefined {
 export function openInitiativeRequest(tokenId: number): RollRequest | undefined {
   return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
     .map(parseRequest).find((r) => r.action.kind === "initiative" && r.action.tokenId === tokenId);
+}
+
+/** The open roll-off asked of whoever plays this token, if they haven't rolled it. */
+export function openRollOffRequest(tokenId: number): RollRequest | undefined {
+  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
+    .map(parseRequest).find((r) => r.action.kind === "rolloff" && r.action.tokenId === tokenId);
+}
+
+/** Puts away any roll-offs still asked for (the contest was settled another way). */
+export function closeRollOffRequests(): void {
+  db.prepare("UPDATE roll_requests SET done = 1 WHERE done = 0 AND result IS NULL AND json_extract(action, '$.kind') = 'rolloff'").run();
 }
 
 /** An initiative roll lands: into the turn order, highest first (a re-roll replaces an earlier one); no longer waited on. */
@@ -2145,6 +2160,7 @@ export interface PendingRound {
   seed: number;
   decisions: Record<string, number>;
   contest: import("@/lib/resolveRound").Contest;
+  rolloff?: Record<number, number | null>; // a roll-off under way: each side's d20 (null = their player hasn't rolled yet)
 }
 
 export function getPendingRound(levelId: number): PendingRound | null {

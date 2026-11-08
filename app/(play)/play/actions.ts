@@ -1,5 +1,6 @@
 "use server";
 
+import { recordRollOff } from "./workOutRound";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
@@ -83,6 +84,14 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     success = true;
     outcome = `Initiative ${scored.total}.`;
     logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} rolled ${scored.total} for initiative.`);
+  }
+  if (a.kind === "rolloff") {
+    success = true;
+    outcome = `You rolled ${scored.total}.`;
+    saveRollResult(req.id, { ...scored, outcome, success }); // first: settling may ask them to roll again (a tie)
+    recordRollOff(a.levelId, a.tokenId, scored.total);
+    revalidatePath("/play");
+    return {};
   }
   saveRollResult(req.id, { ...scored, outcome, success });
   revalidatePath("/play");
