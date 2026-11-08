@@ -9,6 +9,7 @@ import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
 import RoundScrubber from "./RoundScrubber";
+import RoundHistory from "./RoundHistory";
 import ActionTip from "./ActionTip";
 import { basicLines } from "./basicLines";
 import { planTargeted } from "./targetPlan";
@@ -25,7 +26,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -33,6 +34,7 @@ export default function PickLock({
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; // who they can see, to aim at
+  history?: { round: number; showAt: number; lines: string[] }[]; // every round of the encounter so far, told from their side
   selected?: number | null; // their selected target (kept from last round): used for a targeted action straight away
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
@@ -103,6 +105,7 @@ export default function PickLock({
           You&apos;re down. You can&apos;t act until you&apos;re revived.
         </div>
         {scrubber}
+        <RoundHistory rounds={history} />
       </div>
     );
   }
@@ -143,6 +146,7 @@ export default function PickLock({
         </p>
       )}
       {plan && <RoundPlanView plan={plan} pending={pending} label={label} onRemove={(i) => run(() => removeStep(i))} onReady={() => run(() => setPlanReady(!plan.ready))} dice={dice && { ...dice, onRoll: () => run(() => rollPlan(true)) }} />}
+      <RoundHistory rounds={history} />
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
       {ACTION_GROUPS.map(([kind, title]) => {
         const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);

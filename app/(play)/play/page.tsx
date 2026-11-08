@@ -15,7 +15,6 @@ import { checkIn } from "../../(app)/lobby/actions";
 import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
-import RoundSummary from "./RoundSummary";
 import CharacterSheet from "./CharacterSheet";
 import GmSheetPanel from "./GmSheetPanel";
 import GmPlanningMode from "./GmPlanningMode";
@@ -29,7 +28,7 @@ import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel, { planningData } from "./EncounterPanel";
 import ContestModal from "./ContestModal";
-import { getPendingRound, getCharacterPlayer, getTokenTarget } from "@/lib/db";
+import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories } from "@/lib/db";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
@@ -167,13 +166,15 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     const s = rp.plan[r.step], dice = s.kind === "action" ? s.dice?.[r.key] : undefined;
     return { spec: r.spec, want: planDice(r.spec), ...(dice ? { result: rolledTotal(r.spec, dice) } : {}) };
   }) : [];
-  // The last round, told from their side once it has played back (no numbers; only what involved them).
+  // The last round's playback, and every round of the encounter told from their side (no numbers; only what involved them).
   const replay = me ? getReplay(me.level_id) : null;
-  const lastRound = replay && me ? (() => {
+  const roundHistory = me && getEncounter(me.level_id) ? (() => {
     const labels = tokenLabels(me.level_id);
     const mine = listTokens(me.level_id).filter((t) => t.character_id !== null && listPlayerCharacters(user.id).some((c) => c.id === t.character_id)).map((t) => t.id);
-    return { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, lines: [...playerStory(replay.story, mine, (id) => labels.get(id) ?? "someone").values()].flat() };
-  })() : null;
+    const stories = getRoundStories(me.level_id);
+    if (replay && !stories.some((r) => r.round === replay.round)) stories.push({ round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [] }); // resolved before rounds were kept
+    return stories.map((r) => ({ round: r.round, showAt: r.showAt, lines: [...playerStory(r.story, mine, (id) => labels.get(id) ?? "someone").values()].flat() }));
+  })() : [];
   const plan = rp && me ? { ...timeline(rp.plan, walking), ready: rp.ready, from: planEnd(rp.plan, { col: me.col, row: me.row }) } : null;
   const lockedNearby = me
     ? listStructures(me.level_id)
@@ -199,7 +200,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -217,7 +218,6 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     <>
       <AutoRefresh checkIn={checkIn} />
       {user.playedBy && <ActingAs session={session} user={user} />}
-      {lastRound && <RoundSummary key={lastRound.round} {...lastRound} />}
       {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (

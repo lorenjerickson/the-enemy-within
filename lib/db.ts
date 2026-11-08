@@ -359,7 +359,8 @@ addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors:
 addColumn("encounters", "replay", "TEXT"); // JSON Replay of the last resolved round (lib/resolveRound.ts)
 addColumn("encounters", "last_log", "TEXT NOT NULL DEFAULT '[]'"); // JSON lines: what happened in the last resolved round
 addColumn("encounters", "waiting", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids still to roll initiative (players)
-addColumn("encounters", "pending", "TEXT"); // JSON PendingRound: a round being resolved, waiting on the GM's call on a contested move
+addColumn("encounters", "pending", "TEXT");
+addColumn("encounters", "stories", "TEXT NOT NULL DEFAULT '[]'"); // JSON RoundStory[]: every resolved round's events (players' accounts of earlier rounds) // JSON PendingRound: a round being resolved, waiting on the GM's call on a contested move
 addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
@@ -2267,6 +2268,21 @@ export function getReplay(levelId: number): Replay | null {
 
 export function setReplay(levelId: number, replay: Replay): void {
   db.prepare<[string, number]>("UPDATE encounters SET replay = ? WHERE level_id = ?").run(JSON.stringify(replay), levelId);
+  // Kept for the rest of the encounter, so players can look back over every round they've had.
+  const stories = [...getRoundStories(levelId).filter((r) => r.round !== replay.round), { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [] }];
+  db.prepare<[string, number]>("UPDATE encounters SET stories = ? WHERE level_id = ?").run(JSON.stringify(stories), levelId);
+}
+
+/** A resolved round's events (raw: each player is only ever told their own part), and when its playback ends. */
+export interface RoundStory {
+  round: number;
+  showAt: number; // ms since epoch: the playback's end (players hear about it then)
+  story: import("@/lib/roundStory").StoryEvent[];
+}
+
+export function getRoundStories(levelId: number): RoundStory[] {
+  const row = db.prepare<[number], { stories: string }>("SELECT stories FROM encounters WHERE level_id = ?").get(levelId);
+  return row ? JSON.parse(row.stories) : [];
 }
 
 // ---------- The GM's map ----------
