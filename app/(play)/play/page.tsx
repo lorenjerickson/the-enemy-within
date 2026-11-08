@@ -28,6 +28,8 @@ import { playAs } from "../../(app)/sessions/actions";
 import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel, { planningData } from "./EncounterPanel";
+import ContestModal from "./ContestModal";
+import { getPendingRound } from "@/lib/db";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
@@ -109,6 +111,7 @@ function GmView({ session }: { session: GameSession }) {
   const levels = listLevels(place.location_id);
   // In an encounter: where each of the GM's creatures' plans leaves it, and the feet it can still move (for planning moves on the map).
   const enc = getEncounter(levelId!);
+  const contest = enc ? getPendingRound(levelId!)?.contest ?? null : null; // a contested move waiting on the GM's call
   const gmPlans = Object.fromEntries(
     (enc?.order ?? []).flatMap((o) => {
       const v = planView(o.token_id);
@@ -121,7 +124,8 @@ function GmView({ session }: { session: GameSession }) {
       <AutoRefresh />
       <GmSheetPanel />
       <GmPlanningMode {...planningData()} />
-      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
+      {contest && <ContestModal contest={contest} />}
+      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
     </>
   );
 }

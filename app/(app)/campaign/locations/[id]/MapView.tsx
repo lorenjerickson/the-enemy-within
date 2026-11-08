@@ -24,7 +24,7 @@ import { setSheetToken } from "../../../../(play)/play/sheetToken";
 import { allegianceOf, fits, maxPicks, picksSeveral, relation } from "@/lib/sides";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, crosses, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
-import type { Replay } from "@/lib/resolveRound";
+import type { Contest, Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
@@ -637,6 +637,7 @@ export default function MapView({
   replayName = null,
   planTargets = [],
   planRoutes = [],
+  contest = null,
   downTokens = [],
   lasting = [],
   gmPlans,
@@ -675,6 +676,7 @@ export default function MapView({
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[]; // planned targeted actions: lines to the target, from where they'll be
   planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
+  contest?: Contest | null; // a contested move waiting on the GM: zoomed to, boxed, the spot highlighted
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
@@ -888,7 +890,7 @@ export default function MapView({
   const anyPing = pings.some((p) => Date.now() - p.at < PING_MS);
   const anyFx = scriptFx.some((f) => Date.now() < f.starts + FX_MS);
   const replaying = !!replay && Date.now() < replay.starts + (replay.frames.length + 1) * 1000;
-  const frameMs = anyEffect || anyPing || replaying || anyFx ? 33 : anyFlicker ? 120 : 0; // a replay redraws often so tokens glide
+  const frameMs = anyEffect || anyPing || replaying || anyFx ? 33 : contest ? 60 : anyFlicker ? 120 : 0; // a replay redraws often so tokens glide
   useEffect(() => {
     if (!frameMs) return;
     const t = setInterval(() => setFlickerTick((n) => n + 1), frameMs);
@@ -1187,6 +1189,21 @@ export default function MapView({
       return { ...v, x: (left + right) / 2 - v.zoom * mx, y: canvasSize.h / 2 - v.zoom * my };
     });
   }, [gmSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A contested move waiting on the GM: zoom and centre on everything involved (the two creatures where they stand
+  // and where they were when it happened, and the spot), in what's visible above the decision card.
+  useEffect(() => {
+    if (!contest || !canvasSize.w) return;
+    const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+    const fit = fitScene(canvasSize.w, canvasSize.h);
+    const box = contestBox(contest, state.tokens);
+    const px = (c: number) => fit.ox + (x0 + c * size) * fit.s, py = (r: number) => fit.oy + (y0 + r * size) * fit.s; // at zoom 1
+    const w = px(box.c1) - px(box.c0), h = py(box.r1) - py(box.r0);
+    const left = dockSide === "left" ? dockWidth : 0, right = canvasSize.w - (dockSide === "right" ? dockWidth : 0);
+    const bottom = canvasSize.h - 190; // the decision card sits along the bottom
+    const zoom = Math.min(3, Math.max(0.5, Math.min((right - left - 120) / w, (bottom - 100) / h)));
+    const mx = (px(box.c0) + px(box.c1)) / 2, my = (py(box.r0) + py(box.r1)) / 2;
+    setView({ zoom, x: (left + right) / 2 - zoom * mx, y: bottom / 2 + 20 - zoom * my });
+  }, [contest?.key, canvasSize.w > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wheel zooms around the cursor (non-passive so the page doesn't scroll).
   useEffect(() => {
@@ -1958,6 +1975,53 @@ export default function MapView({
         }
         ctx.restore();
       }
+      // A contested move waiting on the GM: a see-through box around everyone involved, where the two were when it
+      // happened (dashed rings, joined to where they stand now), and the contested spot pulsing.
+      if (contest) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const box = contestBox(contest, state.tokens);
+        const X = (c: number) => x0 + c * size, Y = (r: number) => y0 + r * size;
+        ctx.save();
+        ctx.fillStyle = "rgba(251,191,36,0.08)";
+        ctx.strokeStyle = "rgba(251,191,36,0.7)";
+        ctx.lineWidth = 2 / k;
+        ctx.setLineDash([8 / k, 5 / k]);
+        ctx.fillRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0));
+        ctx.strokeRect(X(box.c0), Y(box.r0), X(box.c1) - X(box.c0), Y(box.r1) - Y(box.r0));
+        for (const who of [contest.a, contest.b]) {
+          const t = state.tokens.find((x) => x.id === who.id);
+          const fx = X(who.from.col + 0.5), fy = Y(who.from.row + 0.5);
+          if (t && (t.col !== who.from.col || t.row !== who.from.row)) {
+            ctx.strokeStyle = "rgba(253,230,138,0.6)";
+            ctx.beginPath();
+            ctx.moveTo(X(t.col + 0.5), Y(t.row + 0.5));
+            ctx.lineTo(fx, fy);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = "rgba(253,230,138,0.95)";
+          ctx.beginPath();
+          ctx.arc(fx, fy, size * 0.42, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = "#fde68a";
+          ctx.font = `bold ${11 / k}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.fillText(who.name, fx, fy - size * 0.5);
+        }
+        ctx.setLineDash([]);
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
+        ctx.fillStyle = `rgba(245,158,11,${0.25 + 0.3 * pulse})`;
+        ctx.strokeStyle = "rgba(245,158,11,1)";
+        ctx.lineWidth = (2 + 2 * pulse) / k;
+        ctx.fillRect(X(contest.spot.col), Y(contest.spot.row), size, size);
+        ctx.strokeRect(X(contest.spot.col), Y(contest.spot.row), size, size);
+        ctx.fillStyle = "#fff7ed";
+        ctx.font = `bold ${16 / k}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", X(contest.spot.col + 0.5), Y(contest.spot.row + 0.5));
+        ctx.textBaseline = "alphabetic";
+        ctx.restore();
+      }
       // Planned moves: each plan's route as a linked trail of waypoints (numbered), from where the token stands.
       if (planRoutes.length && !replayFrame) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
@@ -2665,4 +2729,16 @@ function ControlButtons({
       ))}
     </>
   );
+}
+
+/** The cells (with a cell's margin) taking in a contested move: the two creatures where they stand and where they
+ * were when it happened, and the contested spot. */
+function contestBox(c: Contest, tokens: { id: number; col: number; row: number }[]) {
+  const pts = [c.spot, c.a.from, c.b.from, ...tokens.filter((t) => t.id === c.a.id || t.id === c.b.id)];
+  return {
+    c0: Math.floor(Math.min(...pts.map((p) => p.col))) - 1,
+    r0: Math.floor(Math.min(...pts.map((p) => p.row))) - 1,
+    c1: Math.ceil(Math.max(...pts.map((p) => p.col))) + 2,
+    r1: Math.ceil(Math.max(...pts.map((p) => p.row))) + 2,
+  };
 }

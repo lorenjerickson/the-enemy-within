@@ -41,8 +41,30 @@ export function usingDice<T>(dice: number[] | undefined, f: () => T): T {
 const die = (sides: number) => {
   if (thrown?.length && Number.isInteger(thrown[0]) && thrown[0] >= 1 && thrown[0] <= sides) return thrown.shift()!;
   thrown = null; // out of step: the rest are random
-  return 1 + Math.floor(Math.random() * sides);
+  return 1 + Math.floor(rng() * sides);
 };
+
+// Where random dice come from: Math.random, or a seeded sequence so a round can be worked out again (after the GM
+// settles a contested move) with exactly the same dice.
+let rng: () => number = Math.random;
+
+/** Runs `f` with random dice drawn from a sequence fixed by `seed` (mulberry32). */
+export function withSeed<T>(seed: number, f: () => T): T {
+  const before = rng;
+  let a = seed >>> 0;
+  rng = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  try {
+    return f();
+  } finally {
+    rng = before;
+  }
+}
 
 /** Rolls a dice formula such as "1d20+2" or "3d4 + 2d6 - 1" and returns the total. */
 export function rollDice(formula: string): number {

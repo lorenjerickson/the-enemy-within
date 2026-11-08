@@ -19,6 +19,20 @@ import { fits, relation, type Allegiance } from "@/lib/sides";
 type Pos = { col: number; row: number };
 
 /** Someone (or something) taking part in the round. */
+/** Two creatures ended a second in the same spot and the GM hasn't said who gets it: resolving stops here. */
+export interface Contest {
+  sec: number;
+  key: string; // "lowId:highId@col,row", for the GM's decision (it holds for the rest of the round)
+  a: { id: number; name: string; from: Pos }; // `from`: where they were at the start of that second
+  b: { id: number; name: string; from: Pos };
+  spot: Pos;
+}
+export class ContestedMove extends Error {
+  constructor(public contest: Contest) {
+    super(`Contested move at ${contest.sec} s`);
+  }
+}
+
 export interface Mover {
   tokenId: number;
   name: string;
@@ -110,6 +124,7 @@ export function resolveMovement(
   fighters: Map<number, Combatant> = new Map(),
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
+  decisions: Record<string, number> = {}, // the GM's calls on contested moves: "lowId:highId@col,row" → who gets the spot
 ) {
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
@@ -272,6 +287,7 @@ export function resolveMovement(
   const closingFor = new Map<number, { target: number; means: string }>();
   const lastHitBy = new Map<number, number>();
   const heldBy = new Map<number, number>();
+  const gaveWay = new Set<string>(); // contested moves already settled this round (told once)
   const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
     const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
     if (closing.has(m.tokenId) && closingFor.has(m.tokenId)) return { doing: "close", ...closingFor.get(m.tokenId)! };
@@ -365,13 +381,37 @@ export function resolveMovement(
     // Closing in pauses the rest of their plan (unless being held back already did).
     for (const id of autoPursue) if (lag.get(id) === lagBefore.get(id)) lag.set(id, lag.get(id)! + 1);
     // Result.
+    const before = new Map(pos); // where everyone was at the start of this second
     for (const s of settled) pos.set(s.id, s.at);
-    // Anyone left sharing a spot (a held-back mover whose spot was taken): the GM decides.
+    // Anyone left sharing a spot (a held-back mover whose spot was taken): the GM decides who has it. Until they
+    // have, the round stops here; once they have, the other gives way (back where they were this second, or aside).
     for (let i = 0; i < settled.length; i++) for (let j = i + 1; j < settled.length; j++) {
-      if (same(settled[i].at, settled[j].at)) {
-        const a = order.find((o) => o.tokenId === settled[i].id)!.name, b = order.find((o) => o.tokenId === settled[j].id)!.name;
-        log.push(`${sec} s: ${a} and ${b} end up in the same spot — GM to decide.`);
+      if (!same(settled[i].at, settled[j].at)) continue;
+      const spot = settled[i].at, ids = [settled[i].id, settled[j].id];
+      const key = `${Math.min(...ids)}:${Math.max(...ids)}@${Math.round(spot.col)},${Math.round(spot.row)}`, winner = decisions[key]; // the same call holds if it comes up again later in the round
+      const named = (id: number) => ({ id, name: nameOf(id), from: before.get(id)! });
+      if (winner === undefined || !ids.includes(winner)) throw new ContestedMove({ sec, key, a: named(ids[0]), b: named(ids[1]), spot });
+      const loser = ids.find((id) => id !== winner)!, entry = settled.find((s) => s.id === loser)!;
+      const taken = (p: Pos) => settled.some((s) => s.id !== loser && same(s.at, p)) || bystanders.some((b) => same(b.at, p));
+      const back = before.get(loser)!;
+      let to: Pos | undefined = !same(back, spot) && !taken(back) ? back : undefined;
+      if (!to) {
+        // Pushed aside: the nearest free spot next to the contested one (not through a wall).
+        const around = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].map(([dc, dr]) => ({ col: spot.col + dc, row: spot.row + dr }));
+        to = around.filter((p) => !taken(p) && inReach(spot, p, 1)).sort((p, q) => dist(p, back) - dist(q, back))[0];
       }
+      if (!to) {
+        log.push(`${sec} s: ${nameOf(loser)} has nowhere to give way to and stays squeezed in beside ${nameOf(winner)}.`);
+        continue;
+      }
+      entry.at = to;
+      pos.set(loser, to);
+      if (lag.get(loser) === lagBefore.get(loser)) lag.set(loser, lag.get(loser)! + 1);
+      const m = order.find((o) => o.tokenId === loser)!;
+      log.push(gaveWay.has(key) ? `${sec} s: ${m.name} is held back by ${nameOf(winner)}.` : `${sec} s: ${m.name} gives way to ${nameOf(winner)}${same(to, back) ? "" : " and is pushed aside"} (GM's call).`);
+      gaveWay.add(key);
+      story.push({ sec, k: "blocked", who: loser, by: winner, intent: intentOf(m, sec, autoPursue) });
+      heldBy.set(loser, winner);
     }
     // Reactions get ready in the second they're planned for (after anything planned before them): Dodge gives
     // attacks against them disadvantage from then until the round ends.

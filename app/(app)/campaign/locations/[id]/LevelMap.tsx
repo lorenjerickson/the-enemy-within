@@ -4,6 +4,7 @@ import { blockingSegments } from "@/lib/visibility";
 import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
+import type { Contest } from "@/lib/resolveRound";
 import type { DockTool } from "../../../../(play)/play/PlayDock";
 
 /** One map level with everything on it, editable: used by the location editor and the GM's session view. */
@@ -18,6 +19,7 @@ export default function LevelMap({
   replayName = null,
   planTargets = [],
   planRoutes = [],
+  contest = null,
 }: {
   locationId: number;
   level: MapLevel;
@@ -26,6 +28,7 @@ export default function LevelMap({
   replayName?: string | null; // a player's character name (they see only playback lines about them)
   planTargets?: PlanTarget[]; // planned attacks / pursuits / evasions to draw (from where they'll be)
   planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves, as trails of waypoints
+  contest?: Contest | null; // a contested move waiting on the GM (GM only)
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number }>; // GM planning creatures' rounds
   fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // a player's fog of war (and movement: left, and whether it's free)
   dock?: { side: "left" | "right"; tools: DockTool[]; initial?: string | null; opposite?: { tools: DockTool[]; initial?: string | null } }; // in a session: full screen, with this dock
@@ -42,7 +45,7 @@ export default function LevelMap({
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   return (
-    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

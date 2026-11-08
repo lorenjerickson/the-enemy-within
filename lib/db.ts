@@ -358,6 +358,7 @@ addColumn("map_structures", "lock_dc", "INTEGER NOT NULL DEFAULT 15"); // doors:
 addColumn("encounters", "replay", "TEXT"); // JSON Replay of the last resolved round (lib/resolveRound.ts)
 addColumn("encounters", "last_log", "TEXT NOT NULL DEFAULT '[]'"); // JSON lines: what happened in the last resolved round
 addColumn("encounters", "waiting", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids still to roll initiative (players)
+addColumn("encounters", "pending", "TEXT"); // JSON PendingRound: a round being resolved, waiting on the GM's call on a contested move
 addColumn("map_tokens", "moved", "REAL NOT NULL DEFAULT 0"); // feet moved this turn (counts against the creature's speed)
 addColumn("map_levels", "hide_walls", "INTEGER NOT NULL DEFAULT 0"); // 1 = the GM has hidden wall lines (they still act as walls)
 // Where the party starts the campaign: an area (x, y top-left, w × h cells) on one map level.
@@ -2136,6 +2137,23 @@ export function getEncounterWaiting(levelId: number): number[] {
 
 export function setEncounterWaiting(levelId: number, tokenIds: number[]): void {
   db.prepare<[string, number]>("UPDATE encounters SET waiting = ? WHERE level_id = ?").run(JSON.stringify(tokenIds), levelId);
+}
+
+/** A round stopped mid-resolution for the GM to settle a contested move: its dice seed, the calls made so far, and
+ * the contest waiting on them (see lib/resolveRound.ts). */
+export interface PendingRound {
+  seed: number;
+  decisions: Record<string, number>;
+  contest: import("@/lib/resolveRound").Contest;
+}
+
+export function getPendingRound(levelId: number): PendingRound | null {
+  const row = db.prepare<[number], { pending: string | null }>("SELECT pending FROM encounters WHERE level_id = ?").get(levelId);
+  return row?.pending ? JSON.parse(row.pending) : null;
+}
+
+export function setPendingRound(levelId: number, p: PendingRound | null): void {
+  db.prepare<[string | null, number]>("UPDATE encounters SET pending = ? WHERE level_id = ?").run(p ? JSON.stringify(p) : null, levelId);
 }
 
 // ---------- Round plans ----------

@@ -9,7 +9,9 @@ import {
 } from "@/lib/db";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
-import { resolveMovement, type Mover } from "@/lib/resolveRound";
+import { ContestedMove, resolveMovement, type Mover } from "@/lib/resolveRound";
+import { withSeed } from "@/lib/dice";
+import { getPendingRound, setPendingRound } from "@/lib/db";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
@@ -88,8 +90,41 @@ export async function gmSetReady(tokenId: number, ready: boolean) {
 export async function resolveRound() {
   await requireGm();
   const levelId = getGmLevelId();
-  const enc = levelId === undefined ? undefined : getEncounter(levelId);
-  if (levelId === undefined || !enc) return;
+  if (levelId === undefined || !getEncounter(levelId) || getPendingRound(levelId)) return;
+  workOutRound(levelId, Math.floor(Math.random() * 2 ** 32), {});
+  revalidatePath("/play");
+}
+
+/** The GM settles a contested move (`winner` gets the spot): the round is worked out again with that call. */
+export async function decideContest(winner: number) {
+  await requireGm();
+  const levelId = getGmLevelId();
+  const pending = levelId === undefined ? null : getPendingRound(levelId);
+  if (levelId === undefined || !pending) return;
+  const { a, b, key } = pending.contest;
+  if (winner !== a.id && winner !== b.id) return;
+  workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: winner });
+  revalidatePath("/play");
+}
+
+/** The GM leaves a contested move to chance: a roll-off (d20 each, ties re-rolled). */
+export async function rollOffContest() {
+  await requireGm();
+  const levelId = getGmLevelId();
+  const pending = levelId === undefined ? null : getPendingRound(levelId);
+  if (levelId === undefined || !pending) return;
+  let ra = 0, rb = 0;
+  while (ra === rb) [ra, rb] = [1 + Math.floor(Math.random() * 20), 1 + Math.floor(Math.random() * 20)];
+  const { a, b } = pending.contest;
+  logSessionEvent(`Contested move: ${a.name} rolls ${ra}, ${b.name} rolls ${rb}.`);
+  await decideContest(ra > rb ? a.id : b.id);
+}
+
+/** Works the round out with these dice and the GM's calls so far, and applies it, unless it stops on a contested
+ * move the GM hasn't settled yet (then it's kept pending for them, and nothing changes). */
+function workOutRound(levelId: number, seed: number, decisions: Record<string, number>) {
+  const enc = getEncounter(levelId);
+  if (!enc) return;
   const tokens = listTokens(levelId);
   const initiative = new Map(enc.order.map((o) => [o.token_id, o.initiative]));
   const labels = tokenLabels(levelId);
@@ -110,7 +145,16 @@ export async function resolveRound() {
   const fighters = fightersOn(levelId);
   const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
   const lasting = listLastingAreas(levelId);
-  const { final, hp, log, frames, created, statuses, refits, story } = resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting);
+  let result: ReturnType<typeof resolveMovement>;
+  try {
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions));
+  } catch (e) {
+    if (!(e instanceof ContestedMove)) throw e;
+    setPendingRound(levelId, { seed, decisions, contest: e.contest });
+    return;
+  }
+  setPendingRound(levelId, null);
+  const { final, hp, log, frames, created, statuses, refits, story } = result;
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
   const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
   for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
@@ -130,7 +174,6 @@ export async function resolveRound() {
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
   setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story });
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
-  revalidatePath("/play");
 }
 
 /** How long after resolving the playback starts (players' screens refresh every 3 s). */

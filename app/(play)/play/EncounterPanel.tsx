@@ -1,4 +1,4 @@
-import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses } from "@/lib/db";
+import { downTokens, characterPlayers, getGmLevelId, getEncounter, getEncounterWaiting, getLastRoundLog, getReplay, listTokens, readyTokens, rollingTokens, tokenLabels, listLastingAreas, getGameTime, listTokenStatuses, getPendingRound } from "@/lib/db";
 import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, removeLasting } from "./gmActions";
 import { planView } from "@/lib/roundPlanServer";
 import type { CreaturePlan } from "./CreaturePlans";
@@ -63,7 +63,8 @@ export default function EncounterPanel() {
               const notReady = [...enc.order.map((o) => o.token_id), ...waiting].filter((id) => !ready.has(id) && !down.has(id)).length;
               return (
                 <>
-                  <button className="btn btn-primary btn-sm w-full" data-resolve-round>Resolve round {enc.round}</button>
+                  <button className="btn btn-primary btn-sm w-full" data-resolve-round disabled={!!(levelId !== undefined && getPendingRound(levelId))}>Resolve round {enc.round}</button>
+                  {levelId !== undefined && getPendingRound(levelId) && <p className="text-xs text-warning">Waiting on your call on a contested move.</p>}
                   {notReady > 0 && <p className="text-xs opacity-60">{notReady} not ready yet; their plans so far will be used.</p>}
                 </>
               );
