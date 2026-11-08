@@ -1,6 +1,7 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
 import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
+import { allegianceOf, type Allegiance } from "@/lib/sides";
 import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
@@ -23,6 +24,7 @@ export interface Fighter {
   save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
   wear: (equipment: Equipment) => void; // a refit mid-round: attacks, damage and defense use the new gear from then on
   maxHp?: number; // full health (for how bad a wound sounds)
+  allegiance?: Allegiance; // whose side they're on (for actions aimed at friendlies or enemies)
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -82,7 +84,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
   for (const t of listTokens(levelId)) {
     const c = tokenWho(t.id);
     const h = c && tokenHealth(t.id);
-    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, statuses.get(t.id)), maxHp: h.maximum });
+    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, statuses.get(t.id)), maxHp: h.maximum, allegiance: allegianceOf(t) });
   }
   return out;
 }
@@ -200,6 +202,7 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
       const targets = a.area_shape ? "others" : a.targets || auto;
       return targets === "self" ? { targets, self: true } : { targets };
     })(),
+    targeting: { who: a.target_who, count: a.target_count, n: a.target_n },
   }));
 }
 

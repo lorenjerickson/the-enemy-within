@@ -1,6 +1,7 @@
 import type { AreaSpec } from "@/lib/aoe";
 import type { ActionStatuses } from "@/lib/status";
 import type { EquipSlot } from "@/lib/itemTypes";
+import type { Targeting } from "@/lib/sides";
 type Equipment = Partial<Record<EquipSlot, number | null>>;
 import { CHASE_ACTIONS, TARGETED_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
 
@@ -26,6 +27,7 @@ export interface GearAction {
   statuses?: ActionStatuses; // what it leaves on whoever uses it and on its target, and for how long
   self?: boolean; // only on themselves: planned without a target
   targets?: "self" | "others" | "anyone"; // who it can be used on
+  targeting?: Targeting; // friendlies / enemies; one, exactly N, up to N or all (in range, or in its area)
 }
 
 /** A gear action that does damage (an attack roll and a damage roll); one that doesn't just takes effect. */
@@ -35,7 +37,8 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number }
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[] };
+// picks: the targets chosen for an action aimed at several (or, in an area, which of those there it's meant for)
 // seconds: how long an Evade / Pursue lasts (unset = the rest of the round).
 
 /**
@@ -96,7 +99,7 @@ export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number)
   if (kind(step) === "action" && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round";
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
   if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";
-  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim)) return step.use?.area ? "Aim it on the map" : "Pick a target";
+  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim) && step.use?.targeting?.count !== "all") return step.use?.area ? "Aim it on the map" : "Pick a target";
   if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkingFeet).left <= 0) return "No time left this round";
   if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;

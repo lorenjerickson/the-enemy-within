@@ -8,6 +8,8 @@ import { ACTION_SECONDS } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
+import { planTargeted } from "./targetPlan";
+import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 
@@ -27,11 +29,11 @@ export default function PickLock({
   moveLeft: number;
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
-  targets?: { id: number; name: string }[]; // who they can see, to attack
+  targets?: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; // who they can see, to aim at
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
-  self?: { id: number; name: string } | null; // their own token (for actions they can use on themselves)
+  self?: { id: number; name: string; allegiance?: Allegiance } | null; // their own token (actions on themselves; whose side they're on)
   down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
@@ -73,10 +75,20 @@ export default function PickLock({
       {plan && choosing && (
         <TargetPicker
           title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
-          aiming={!!target?.area}
+          aiming={!!target?.area && !target.aimed}
           duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
           targets={targets}
           me={target?.canSelf && self ? self : null}
+          who={target?.targeting?.who ?? ""}
+          actor={self?.allegiance}
+          only={target?.pickFrom}
+          several={target && (picksSeveral(target.targeting) && !target.area || target.aimed) ? {
+            max: maxPicks(target.targeting),
+            exact: target.targeting?.count === "exactly" && !target.aimed,
+            picks: target.picks ?? [],
+            onToggle: (id) => setTargetMode({ ...target, picks: (target.picks ?? []).includes(id) ? (target.picks ?? []).filter((x) => x !== id) : [...(target.picks ?? []), id] }),
+            onDone: () => { const m = target; setTargetMode(null); run(() => planTargeted(m, { picks: m.picks, ...(m.aimed ? { aim: m.aimed } : {}) })); },
+          } : undefined}
           onCancel={() => setChoosing(null)}
           onPick={(picked) => {
             const action = choosing, use = target?.use, seconds = target?.seconds;
@@ -122,7 +134,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, null)))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, null)))} />}
           </section>
         );
       })}

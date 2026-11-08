@@ -15,6 +15,8 @@ import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
+import { ALLEGIANCES } from "@/lib/sides";
+import { setTokenAllegiance } from "@/lib/db";
 import { addPlanStep, setReady, tokenPlanner, undoPlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
 /**
@@ -186,4 +188,11 @@ export async function gmRollInitiativeFor(tokenId: number | null) {
 export async function gmSheet(tokenId: number): Promise<Sheet | null> {
   await requireGm();
   return sheetFor(Number(tokenId));
+}
+
+/** The GM sets whose side a token is on (party, hostile, neutral), for actions aimed at friendlies or enemies. */
+export async function gmSetAllegiance(tokenId: number, allegiance: string) {
+  await requireGm();
+  setTokenAllegiance(Number(tokenId), (ALLEGIANCES as string[]).includes(allegiance) ? allegiance : null);
+  revalidatePath("/play");
 }

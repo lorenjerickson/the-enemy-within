@@ -1,10 +1,11 @@
-import { downTokens, getItem, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 import { gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
+import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
@@ -19,7 +20,7 @@ export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 /** Their equipment as the plan so far leaves it (after any refit). */
 export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number } } | { kind: "move"; col: number; row: number };
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[] } | { kind: "move"; col: number; row: number };
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -91,7 +92,28 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
         ...(option.slot === "main hand" ? { reach: Math.max(1, Math.round(range / 5)) } : {}),
       };
     }
-    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}) };
+    // Several targets (exactly / up to N), or which of those in its area it's meant for: each must fit who it's for.
+    const tg = use?.targeting;
+    let picks: { id: number; name: string }[] | undefined;
+    if (tg && (step.picks?.length || (!use?.area && (tg.count === "exactly" || tg.count === "upto")))) {
+      const labels = tokenLabels(p.tok.level_id), tokens = listTokens(p.tok.level_id);
+      const me = allegianceOf(tokens.find((t) => t.id === p.tok.token_id) ?? { character_id: null });
+      const ids = [...new Set((step.picks ?? []).map(Number))];
+      for (const id of ids) {
+        const t = tokens.find((x) => x.id === id);
+        if (!t || (id === p.tok.token_id && use?.targets !== "anyone")) return "Pick someone else on this map";
+        if (id !== p.tok.token_id && !fits(tg.who, relation(me, allegianceOf(t)))) return `${labels.get(id)} isn't one of the ${tg.who === "enemy" ? "enemies" : "friendlies"}`;
+      }
+      if (!ids.length || ids.length > tg.n || (!use?.area && tg.count === "exactly" && ids.length !== tg.n)) return tg.count === "exactly" && !use?.area ? `Pick exactly ${tg.n}` : `Pick 1 to ${tg.n}`;
+      picks = ids.map((id) => ({ id, name: labels.get(id) ?? "someone" }));
+    }
+    else if (tg?.who && step.target !== undefined && Number(step.target) !== p.tok.token_id) {
+      const tokens = listTokens(p.tok.level_id), t = tokens.find((x) => x.id === Number(step.target));
+      const me = allegianceOf(tokens.find((x) => x.id === p.tok.token_id) ?? { character_id: null });
+      if (t && !fits(tg.who, relation(me, allegianceOf(t)))) return `${name} isn't one of the ${tg.who === "enemy" ? "enemies" : "friendlies"}`;
+    }
+    const first = picks && !aim ? picks[0] : undefined;
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking);
   if (why) return why;

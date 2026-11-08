@@ -1,10 +1,36 @@
 "use client";
 
-/** Who an action is aimed at (attack, evade, pursue): the targets offered (those in sight, or for the GM anyone on the map). */
-// aiming: an area attack, aimed at a spot on the map, so no one to pick from the list.
-// duration: for Evade / Pursue, how long to keep at it (1 s up to the time left, or the rest of the round).
-// me: the one acting, offered first when the action can be used on themselves.
-export default function TargetPicker({ targets, onPick, onCancel, title = "Attack who?", aiming = false, duration, me }: { me?: { id: number; name: string } | null; targets: { id: number; name: string }[]; onPick: (id: number) => void; onCancel: () => void; title?: string; aiming?: boolean; duration?: { left: number; seconds?: number; onChange: (s: number | undefined) => void } }) {
+import { allegianceOf, fits, relation, type Allegiance, type TargetWho } from "@/lib/sides";
+
+type Candidate = { id: number; name: string; allegiance?: string | null; character_id?: number | null };
+
+/**
+ * Who an action is aimed at (attack, evade, pursue, an ability): the targets offered (those in sight, or for the GM
+ * anyone on the map), only the kind it's for (friendlies / enemies, as the one acting sees them), and only those in an
+ * aimed area when there are more there than it may affect.
+ * aiming: an area attack, aimed at a spot on the map, so no one to pick from the list (yet).
+ * duration: for Evade / Pursue, how long to keep at it (1 s up to the time left, or the rest of the round).
+ * me: the one acting, offered first when the action can be used on themselves.
+ * several: picking more than one (exactly / up to N): toggle each, then Done.
+ */
+export default function TargetPicker({ targets, onPick, onCancel, title = "Attack who?", aiming = false, duration, me, who = "", actor, only, several }: {
+  me?: { id: number; name: string } | null;
+  targets: Candidate[];
+  onPick: (id: number) => void;
+  onCancel: () => void;
+  title?: string;
+  aiming?: boolean;
+  duration?: { left: number; seconds?: number; onChange: (s: number | undefined) => void };
+  who?: TargetWho;
+  actor?: Allegiance;
+  only?: number[];
+  several?: { max: number; exact: boolean; picks: number[]; onToggle: (id: number) => void; onDone: () => void };
+}) {
+  const shown = targets.filter((t) => (!only || only.includes(t.id)) && (!who || !actor || fits(who, relation(actor, allegianceOf({ allegiance: t.allegiance, character_id: t.character_id ?? null })))));
+  const self = me && (!only || only.includes(me.id)) ? me : null;
+  const picked = (id: number) => several?.picks.includes(id);
+  const pick = (id: number) => (several ? several.onToggle(id) : onPick(id));
+  const ready = several && (several.exact ? several.picks.length === several.max : several.picks.length >= 1 && several.picks.length <= several.max);
   return (
     <div className="space-y-1 rounded-box bg-base-100/70 p-2" data-target-picker>
       <div className="flex items-center text-xs">
@@ -20,14 +46,20 @@ export default function TargetPicker({ targets, onPick, onCancel, title = "Attac
           <button type="button" data-seconds="rest" className={`btn btn-xs ${!duration.seconds ? "btn-primary" : ""}`} onClick={() => duration.onChange(undefined)}>rest of round</button>
         </div>
       )}
-      {aiming ? null : targets.length === 0 && !me ? (
-        <p className="text-xs opacity-60">Nobody in sight.</p>
+      {aiming ? null : shown.length === 0 && !self ? (
+        <p className="text-xs opacity-60">{who ? `No ${who === "enemy" ? "enemies" : "friendlies"} in sight.` : "Nobody in sight."}</p>
       ) : (
         <div className="flex flex-wrap gap-1">
-          {me && <button type="button" data-target={me.id} data-target-self className="btn btn-xs btn-outline" onClick={() => onPick(me.id)}>Yourself ({me.name})</button>}
-          {targets.map((t) => (
-            <button key={t.id} type="button" data-target={t.id} className="btn btn-xs" onClick={() => onPick(t.id)}>{t.name}</button>
+          {self && <button type="button" data-target={self.id} data-target-self className={`btn btn-xs ${picked(self.id) ? "btn-primary" : "btn-outline"}`} onClick={() => pick(self.id)}>Yourself ({self.name})</button>}
+          {shown.map((t) => (
+            <button key={t.id} type="button" data-target={t.id} aria-pressed={several ? picked(t.id) : undefined} className={`btn btn-xs ${picked(t.id) ? "btn-primary" : ""}`} onClick={() => pick(t.id)}>{t.name}</button>
           ))}
+        </div>
+      )}
+      {several && !aiming && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="opacity-70">{several.picks.length} of {several.exact ? several.max : `up to ${several.max}`} picked</span>
+          <button type="button" data-targets-done className="btn btn-primary btn-xs ml-auto" disabled={!ready} onClick={several.onDone}>Done</button>
         </div>
       )}
     </div>

@@ -92,6 +92,23 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
           <option value="anyone">Themselves or others</option>
         </select>
       </label>
+      <label className="col-span-2 flex flex-wrap items-center gap-2 text-sm" data-action-targeting>
+        Targets
+        <select name="target_count" defaultValue={initial?.target_count ?? "one"} className="select select-sm w-auto">
+          <option value="one">one</option>
+          <option value="exactly">exactly N</option>
+          <option value="upto">up to N</option>
+          <option value="all">all</option>
+        </select>
+        N
+        <input name="target_n" type="number" min="1" defaultValue={initial?.target_n ?? 2} className="input input-sm w-16" />
+        <select name="target_who" defaultValue={initial?.target_who ?? ""} className="select select-sm w-auto">
+          <option value="">creatures</option>
+          <option value="friendly">friendlies</option>
+          <option value="enemy">enemies</option>
+        </select>
+        <span className="text-xs opacity-60">in range, or in its area if it has one (with more there than N, the player picks which)</span>
+      </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       {(["self", "target"] as const).map((on) => {
         const p = on === "target" ? "target_" : "";

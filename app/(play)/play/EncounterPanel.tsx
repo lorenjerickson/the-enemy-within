@@ -6,6 +6,7 @@ import TurnOrder from "./TurnOrder";
 import { describeStatus } from "@/lib/status";
 import { gearActions } from "@/lib/combat";
 import RoundScrubber from "./RoundScrubber";
+import { allegianceOf } from "@/lib/sides";
 
 /** The GM's Encounter tool: call for initiative on the party's map, and the turn order as rolls come in. */
 export default function EncounterPanel() {
@@ -19,7 +20,7 @@ export default function EncounterPanel() {
   // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
   const labels = levelId === undefined ? new Map<number, string>() : tokenLabels(levelId);
   const names = new Map(
-    (levelId === undefined ? [] : listTokens(levelId)).map((t) => [t.id, { name: labels.get(t.id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null }])
+    (levelId === undefined ? [] : listTokens(levelId)).map((t) => [t.id, { name: labels.get(t.id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null, allegiance: allegianceOf(t), character_id: t.character_id }])
   );
   return (
     <div className="space-y-3 text-sm" data-encounter-panel>
@@ -44,12 +45,12 @@ export default function EncounterPanel() {
             ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId), rolling: rolling.has(r.tokenId), statuses: (statuses.get(r.tokenId) ?? []).map((s) => ({ source: s.source, text: describeStatus(s) })) }))}
           />
           <CreaturePlans
-            targets={[...names].map(([id, n]) => ({ id, name: n.name }))}
+            targets={[...names].map(([id, n]) => ({ id, name: n.name, allegiance: n.allegiance, character_id: n.character_id }))}
             creatures={[...enc.order.map((o) => o.token_id), ...waiting]
               .filter((id) => names.get(id) && !down.has(id))
               .flatMap((id) => {
                 const v = planView(id);
-                return v ? [{ tokenId: id, name: names.get(id)!.name, player: names.get(id)!.player, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits }] : [];
+                return v ? [{ tokenId: id, name: names.get(id)!.name, player: names.get(id)!.player, plan: { steps: v.steps, used: v.used, ready: v.ready }, gear: v.gear, refits: v.refits, allegiance: names.get(id)!.allegiance }] : [];
               })}
           />
           {levelId !== undefined && listLastingAreas(levelId).length > 0 && (

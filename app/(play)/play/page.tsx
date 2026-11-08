@@ -19,6 +19,7 @@ import RoundSummary from "./RoundSummary";
 import CharacterSheet from "./CharacterSheet";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
+import { allegianceOf } from "@/lib/sides";
 import { playerStory } from "@/lib/roundStory";
 import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
@@ -138,7 +139,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
     ? (() => {
         const seen = visibilityPolygon({ x: me.col + 0.5, y: me.row + 0.5 }, 500, blockingSegments(listStructures(me.level_id)));
         const labels = tokenLabels(me.level_id);
-        return listTokens(me.level_id).filter((t) => t.id !== me.token_id && insidePolygon({ x: t.col + 0.5, y: t.row + 0.5 }, seen)).map((t) => ({ id: t.id, name: labels.get(t.id)! }));
+        return listTokens(me.level_id).filter((t) => t.id !== me.token_id && insidePolygon({ x: t.col + 0.5, y: t.row + 0.5 }, seen)).map((t) => ({ id: t.id, name: labels.get(t.id)!, allegiance: t.allegiance, character_id: t.character_id }));
       })()
     : [];
   // Their gear as the plan leaves it: a planned refit counts for what they plan after it.
@@ -180,7 +181,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name } : null} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

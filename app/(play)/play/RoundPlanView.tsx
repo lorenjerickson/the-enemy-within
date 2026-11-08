@@ -18,7 +18,7 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
   dice?: { count: number; rolled: 0 | 1 | 2; onRoll: () => void };
 }) {
   const mustRoll = !!dice && dice.count > 0 && dice.rolled !== 2;
-  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
+  const name = (s: TimedStep) => (s.kind === "move" ? `Move ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${(s.picks?.length ?? 0) > 1 ? ` ${s.picks!.map((x) => x.name).join(", ")}` : s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
   return (
     <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
       <div className="flex items-baseline gap-2">
@@ -48,7 +48,7 @@ export default function RoundPlanView({ plan, pending, label, onUndo, onReady, t
             <li key={i}>
               {s.kind === "move" ? `Move ${s.feet} ft` : s.use?.name ?? label(s.action)}
               {s.kind === "action" && s.swap && <span className="font-semibold"> {s.swap.from ? `${s.swap.from.name} → ` : ""}{s.swap.item.name}</span>}
-              {s.kind === "action" && s.target && <span className="font-semibold"> → {s.target.name}</span>}
+              {s.kind === "action" && (s.picks?.length ?? 0) > 1 ? <span className="font-semibold"> → {s.picks!.map((x) => x.name).join(", ")}</span> : s.kind === "action" && s.target && <span className="font-semibold"> → {s.target.name}</span>}
               {s.kind === "action" && s.aim && s.use?.area && <span className="opacity-70"> ({describeArea(s.use.area)}, aimed)</span>}
               <span className="opacity-60"> · {+s.start.toFixed(1)}–{+s.end.toFixed(1)} s</span>
             </li>

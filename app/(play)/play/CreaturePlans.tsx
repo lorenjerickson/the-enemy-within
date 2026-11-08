@@ -12,6 +12,8 @@ import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 import RefitPicker, { type RefitOption } from "./RefitPicker";
+import { planTargeted } from "./targetPlan";
+import { maxPicks, picksSeveral, type Allegiance } from "@/lib/sides";
 
 export interface CreaturePlan {
   tokenId: number;
@@ -20,10 +22,11 @@ export interface CreaturePlan {
   plan: { steps: TimedStep[]; used: number; ready: boolean };
   gear: { id: number; name: string; source: string; seconds: number; range: number }[]; // its own and its weapons' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
+  allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
-export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string }[] }) {
+export default function CreaturePlans({ creatures, targets }: { creatures: CreaturePlan[]; targets: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[] }) {
   const selected = useGmPlanToken();
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
   const target = useTargetMode();
@@ -52,10 +55,20 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           {choosing && (
             <TargetPicker
               title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
-          aiming={!!target?.area}
+          aiming={!!target?.area && !target.aimed}
           duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - current.plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
               targets={targets.filter((t) => t.id !== current.tokenId)}
               me={target?.canSelf ? { id: current.tokenId, name: current.name } : null}
+          who={target?.targeting?.who ?? ""}
+          actor={current.allegiance}
+          only={target?.pickFrom}
+          several={target && (picksSeveral(target.targeting) && !target.area || target.aimed) ? {
+            max: maxPicks(target.targeting),
+            exact: target.targeting?.count === "exactly" && !target.aimed,
+            picks: target.picks ?? [],
+            onToggle: (id) => setTargetMode({ ...target, picks: (target.picks ?? []).includes(id) ? (target.picks ?? []).filter((x) => x !== id) : [...(target.picks ?? []), id] }),
+            onDone: () => { const m = target; setTargetMode(null); run(() => planTargeted(m, { picks: m.picks, ...(m.aimed ? { aim: m.aimed } : {}) })); },
+          } : undefined}
               onCancel={() => setChoosing(null)}
               onPick={(picked) => {
                 const action = choosing, use = target?.use, seconds = target?.seconds;
@@ -99,7 +112,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </button>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, current.tokenId)))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : setTargetMode(gearTargetMode(g, current.tokenId)))} />}
               </section>
             );
           })}

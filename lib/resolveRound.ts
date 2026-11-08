@@ -14,6 +14,7 @@ const rangeOf = (step: Extract<PlanStep, { kind: "action" }>, m?: Mover) =>
 import type { Segment } from "@/lib/visibility";
 import type { EquipSlot } from "@/lib/itemTypes";
 import type { StoryEvent } from "@/lib/roundStory";
+import { fits, relation, type Allegiance } from "@/lib/sides";
 
 type Pos = { col: number; row: number };
 
@@ -90,6 +91,7 @@ export interface Combatant {
   save?: (attr: Attribute) => { total: number; text: string };
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
   maxHp?: number; // for how bad a wound sounds in the players' story
+  allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
 }
 
 /**
@@ -134,11 +136,11 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
   };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
-  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area"): AreaHit[] => {
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean): AreaHit[] => {
     const hits: AreaHit[] = [];
     for (const id of [...fighters.keys()]) {
       const p = where(id);
-      if (id === except || down.has(id) || !p || !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls)) continue;
+      if (id === except || down.has(id) || !p || !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls) || (only && !only(id))) continue;
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
       const s = f.save ? f.save(spec.save) : { total: 0, text: "no save" };
       const saved = s.total >= spec.dc;
@@ -416,6 +418,56 @@ export function resolveMovement(
         say(`${m.name}: ${step.action} (no effect yet).`);
         continue;
       }
+      // Aimed at several (exactly / up to N picked, or all of a kind in range): one attack roll against each one's
+      // defense and one damage roll for everyone hit; an ability without damage just takes effect on each in range.
+      const tg = step.use?.targeting;
+      if (step.use && !step.use.area && tg && ((step.picks?.length ?? 0) > 1 || tg.count === "all")) {
+        const use = step.use, mine = fighters.get(m.tokenId)?.allegiance ?? "hostile", here = pos.get(m.tokenId)!;
+        const list = tg.count === "all"
+          ? [...fighters.keys()].filter((id) => (id !== m.tokenId || use.targets === "anyone") && !down.has(id) && where(id) && (id === m.tokenId || fits(tg.who, relation(mine, fighters.get(id)?.allegiance ?? "hostile"))) && inReach(here, where(id)!, rangeOf(step, m)))
+          : step.picks!.map((x) => x.id);
+        const me = fighters.get(m.tokenId);
+        say(`${m.name} uses ${use.name} on ${list.length ? list.map(nameOf).join(", ") : "no one"}.`);
+        let a: { total: number; text: string } | null = null, dmg: { total: number; text: string } | null = null;
+        for (const id of list) {
+          const them = fighters.get(id), at = where(id);
+          if (!me || !them || !at || down.has(id)) continue;
+          if (!inReach(here, at, rangeOf(step, m))) {
+            say(`${nameOf(id)} is out of range of ${use.name}.`);
+            story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "reach" });
+            continue;
+          }
+          if (!use.damage) {
+            story.push({ sec, k: "ability", who: m.tokenId, name: use.name, target: id });
+            leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec);
+            continue;
+          }
+          a ??= usingDice(step.dice?.hit, () => me.attack(use, them));
+          const d = them.defense();
+          const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
+          if (a.total < d.total) {
+            say(`${use.name} misses ${nameOf(id)}: ${a.total} (${a.text}) vs defense ${d.total}.`);
+            story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "miss" });
+            fx.push({ look, from: m.tokenId, to: id, outcome: "miss" });
+            continue;
+          }
+          dmg ??= usingDice(step.dice?.damage, () => me.damage(use));
+          const left = Math.max(0, hp.get(id)! - dmg.total);
+          hp.set(id, left);
+          hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
+          say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text}); ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, dmg.total) });
+          fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
+          if (left <= 0) {
+            down.add(id);
+            story.push({ sec, k: "down", who: id });
+            say(`${nameOf(id)} is down.`);
+          }
+          leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec);
+        }
+        leave(m.tokenId, use.statuses?.self, use.statuses?.minutes ?? 0, sec);
+        continue;
+      }
       // An ability aimed at someone that does no damage (Mesmerize): no attack roll; it takes effect if they're in range.
       if (step.use && !step.use.damage && !step.use.area) {
         const target = step.target, at = target && where(target.id);
@@ -441,7 +493,17 @@ export function resolveMovement(
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
           say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
           story.push({ sec, k: "area", who: m.tokenId, name: step.use.name });
-          hits = catchIn(at, area, dmg.total, m.tokenId, sec, step.use.name);
+          // Selective: only the kind it's for (friendlies / enemies), the ones picked, or at most N of them (nearest the aim).
+          const tg = step.use.targeting, mine = fighters.get(m.tokenId)?.allegiance ?? "hostile";
+          const kind = (id: number) => !tg || fits(tg.who, relation(mine, fighters.get(id)?.allegiance ?? "hostile"));
+          const picked = step.picks?.length ? new Set(step.picks.map((x) => x.id)) : null;
+          let allowed: Set<number> | null = null;
+          if (tg && !picked && (tg.count === "exactly" || tg.count === "upto" || tg.count === "one")) {
+            const n = tg.count === "one" ? 1 : tg.n, aim = { col: step.aim.col - 0.5, row: step.aim.row - 0.5 };
+            allowed = new Set([...fighters.keys()].filter((id) => id !== m.tokenId && kind(id) && where(id) && caughtBy(at, { x: where(id)!.col + 0.5, y: where(id)!.row + 0.5 }, effectWalls) && !down.has(id))
+              .sort((a, b) => dist(where(a)!, aim) - dist(where(b)!, aim)).slice(0, n));
+          }
+          hits = catchIn(at, area, dmg.total, m.tokenId, sec, step.use.name, (id) => kind(id) && (!picked || picked.has(id)) && (!allowed || allowed.has(id)));
           if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
           // Statuses: on the user, and on each one caught who failed the save.
           const st = step.use.statuses;

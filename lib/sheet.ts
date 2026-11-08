@@ -3,6 +3,7 @@ import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
 import { describeStatus } from "@/lib/status";
 import type { EquipSlot } from "@/lib/itemTypes";
+import { allegianceOf, type Allegiance } from "@/lib/sides";
 
 /** What a character sheet shows for a token: art, how they're doing, what they wear and carry, and what's on them. */
 export interface Sheet {
@@ -10,6 +11,7 @@ export interface Sheet {
   name: string;
   kind: "character" | "creature";
   player: string | null;
+  allegiance: Allegiance; // whose side they're on
   image: string | null; // their artwork
   token: string | null; // their map token, if there's no artwork
   health: { current: number; maximum: number; temporary: number } | null;
@@ -23,7 +25,7 @@ const timeLeft = (minutes: number) => (minutes < 1 ? `${Math.max(1, Math.round(m
 
 /** The sheet for a token on the map (null if it's gone or isn't anyone). */
 export function sheetFor(tokenId: number): Sheet | null {
-  const t = db.prepare<[number], { id: number; level_id: number; character_id: number | null; creature_id: number | null }>("SELECT id, level_id, character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const t = db.prepare<[number], { id: number; level_id: number; character_id: number | null; creature_id: number | null; allegiance: string | null }>("SELECT id, level_id, character_id, creature_id, allegiance FROM map_tokens WHERE id = ?").get(tokenId);
   const who = t && tokenWho(t.id);
   if (!t || !who) return null;
   const h = tokenHealth(t.id);
@@ -33,6 +35,7 @@ export function sheetFor(tokenId: number): Sheet | null {
     name: tokenLabels(t.level_id).get(t.id) ?? who.name,
     kind: t.character_id ? "character" : "creature",
     player: t.character_id ? characterPlayers().get(t.character_id) ?? null : null,
+    allegiance: allegianceOf(t),
     image: who.image ?? null,
     token: who.token_overhead ?? null,
     health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },

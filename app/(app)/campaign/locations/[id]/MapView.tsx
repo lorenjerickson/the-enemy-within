@@ -21,6 +21,7 @@ import { drawAreaFx, drawFx, drawLasting } from "@/lib/vfx";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { setSheetToken } from "../../../../(play)/play/sheetToken";
+import { allegianceOf, fits, maxPicks, picksSeveral, relation } from "@/lib/sides";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Replay } from "@/lib/resolveRound";
@@ -1029,7 +1030,11 @@ export default function MapView({
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
-  const targetCandidates = targetMode && !targetMode.area ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken || targetMode.canSelf) : [];
+  // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
+  const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
+  const fitsTarget = (t: { id: number; allegiance: string | null; character_id: number | null }) =>
+    (t.id !== actingToken || !!targetMode?.canSelf) && (t.id === actingToken || fits(targetMode?.targeting?.who ?? "", relation(actorSide, allegianceOf(t)))) && (!targetMode?.pickFrom || targetMode.pickFrom.includes(t.id));
+  const targetCandidates = targetMode && (!targetMode.area || targetMode.aimed) ? (fogged ? fogged.tokens : drawnTokens).filter(fitsTarget) : [];
   // Aiming an area attack: where the pointer is, and where the actor will be (where their plan leaves them).
   const [aimAt, setAimAt] = useState<Point | null>(null);
   const aimFrom = (() => {
@@ -1187,10 +1192,20 @@ export default function MapView({
       return;
     }
     // Picking a target for a planned action: a click on a token chooses it (only tokens shown on this map).
-    if (targetMode?.area && e.button === 0) {
+    if (targetMode?.area && !targetMode.aimed && e.button === 0) {
       // Aiming an area: the click is where it goes (a circle's centre, or the way a cone or line points).
       const { gx, gy } = gridAt(e);
       const m = targetMode;
+      // More of the kind it's for in the area than it may affect (up to N enemies…): they pick which (in the panel or on the map).
+      if (m.area && m.targeting && m.targeting.count !== "all" && aimFrom) {
+        const placed = placeArea(m.area.shape, m.area.ft, aimFrom, { x: gx, y: gy }), walls = blockingSegments(optimisticStructures);
+        const inside = (fogged ? fogged.tokens : drawnTokens).filter((t) => fitsTarget(t) && caughtBy(placed, { x: t.col + 0.5, y: t.row + 0.5 }, walls)).map((t) => t.id);
+        if (inside.length > maxPicks(m.targeting)) {
+          setTargetMode({ ...m, aimed: { col: Math.round(gx * 20) / 20, row: Math.round(gy * 20) / 20 }, pickFrom: inside, picks: [] });
+          setAimAt(null);
+          return;
+        }
+      }
       setTargetMode(null);
       setAimAt(null);
       startTransition(async () => {
@@ -1205,6 +1220,12 @@ export default function MapView({
       const hit = targetCandidates.find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
       if (!hit) return;
       const m = targetMode;
+      // Picking several (or which of those in an aimed area): a click adds or removes one; Done in the panel plans it.
+      if ((picksSeveral(m.targeting) && !m.area) || m.aimed) {
+        const picks = m.picks ?? [];
+        setTargetMode({ ...m, picks: picks.includes(hit.id) ? picks.filter((x) => x !== hit.id) : [...picks, hit.id] });
+        return;
+      }
       setTargetMode(null);
       startTransition(async () => {
         const step = { kind: "action" as const, action: m.action, target: hit.id, ...(m.use !== undefined ? { use: m.use } : {}), ...(m.seconds ? { seconds: m.seconds } : {}) };
@@ -1375,7 +1396,7 @@ export default function MapView({
         changeTokens({
           add: {
             id: -Date.now(), creature_id: character ? null : c.id, character_id: character ? c.id : null, name: c.name, image: c.image,
-            token_overhead: c.token_overhead, token_side: c.token_side, height: c.height, col, row: settle(col, row), hp: null,
+            token_overhead: c.token_overhead, token_side: c.token_side, height: c.height, col, row: settle(col, row), hp: null, allegiance: null,
           },
         });
         if (character) await placeCharacterTokenAt(locationId, levelId, c.id, col, row);
@@ -1775,11 +1796,12 @@ export default function MapView({
       }
       // Aiming an area: the shape where it would go (red when a circle is out of range), the squares it covers on grid
       // maps, and a ring on everyone it would catch.
-      if (targetMode?.area && aimAt && aimFrom) {
+      const aimPoint = targetMode?.aimed ? { x: targetMode.aimed.col, y: targetMode.aimed.row } : aimAt;
+      if (targetMode?.area && aimPoint && aimFrom) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
         const px = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
-        const area = placeArea(targetMode.area.shape, targetMode.area.ft, aimFrom, aimAt);
-        const tooFar = targetMode.area.shape === "circle" && Math.hypot(aimAt.x - aimFrom.x, aimAt.y - aimFrom.y) > targetMode.area.range + 0.5;
+        const area = placeArea(targetMode.area.shape, targetMode.area.ft, aimFrom, aimPoint);
+        const tooFar = targetMode.area.shape === "circle" && Math.hypot(aimPoint.x - aimFrom.x, aimPoint.y - aimFrom.y) > targetMode.area.range + 0.5;
         const walls = blockingSegments(state.structures);
         ctx.save();
         if (targetMode.area.shape === "circle") {
@@ -1825,6 +1847,16 @@ export default function MapView({
         for (const t of targetCandidates) {
           ctx.beginPath();
           ctx.arc(x0 + (t.col + 0.5) * size, y0 + (t.row + 0.5) * size, size * 0.55, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        // Picked so far: a solid, bolder ring.
+        ctx.setLineDash([]);
+        ctx.lineWidth = 3.5 / k;
+        ctx.strokeStyle = "rgb(250,204,21)";
+        for (const t of targetCandidates) {
+          if (!targetMode.picks?.includes(t.id)) continue;
+          ctx.beginPath();
+          ctx.arc(x0 + (t.col + 0.5) * size, y0 + (t.row + 0.5) * size, size * 0.62, 0, Math.PI * 2);
           ctx.stroke();
         }
         ctx.restore();
