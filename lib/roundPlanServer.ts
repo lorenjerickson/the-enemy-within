@@ -56,10 +56,11 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     }
   } else {
     const name = step.target !== undefined ? tokenLabels(p.tok.level_id).get(Number(step.target)) : undefined;
-    if (step.target !== undefined && (!name || Number(step.target) === p.tok.token_id)) return "Pick someone else on this map";
-    // A gear action must be one this token actually has (an equipped item's, or a creature's own).
+    // A gear action must be one this token actually has (an equipped item's, a profession's, or a creature's own).
     const use = step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use)) : undefined;
     if (step.use !== undefined && !use) return "That isn't one of their actions";
+    // On themselves only when the action allows it (Healing Draught: themselves or others).
+    if (step.target !== undefined && (!name || (Number(step.target) === p.tok.token_id && use?.targets !== "anyone"))) return "Pick someone else on this map";
     const { source: _source, ...gear } = use ?? { source: "" };
     // An area is aimed at a spot: a circle's centre must be within the action's range of where the plan leaves them.
     let aim: { col: number; row: number } | undefined;

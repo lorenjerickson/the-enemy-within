@@ -319,6 +319,7 @@ addColumn("actions", "save_dc", "INTEGER NOT NULL DEFAULT 12"); // an area's sav
 addColumn("actions", "save_attr", "TEXT NOT NULL DEFAULT 'agility'");
 addColumn("actions", "save_half", "INTEGER NOT NULL DEFAULT 1"); // 1 = a successful save takes half damage, 0 = none
 addColumn("actions", "area_lasts", "INTEGER NOT NULL DEFAULT 0"); // 1 = the area stays on the map for the duration
+addColumn("actions", "targets", "TEXT NOT NULL DEFAULT ''"); // ActionTargets: who it can be used on; '' = worked out from what it does
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("items", "range_ft", "REAL NOT NULL DEFAULT 5"); // weapons: how far they reach (5 = melee)
 addColumn("items", "hands", "INTEGER NOT NULL DEFAULT 0"); // held in 0 (not held), 1 or 2 hands
@@ -779,13 +780,18 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   save_attr: Attribute;
   save_half: 0 | 1;
   area_lasts: 0 | 1; // the area stays on the map for the action's duration
+  targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
 }
+
+/** Who an action can be used on: only its user, anyone but its user, or either; '' = worked out from what it does. */
+export type ActionTargets = "" | "self" | "others" | "anyone";
+export const ACTION_TARGETS = ["", "self", "others", "anyone"] as const;
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -801,9 +807,9 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @targets)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
@@ -811,7 +817,7 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
          seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
-         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts WHERE id = @id`
+         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, targets = @targets WHERE id = @id`
     ).run({ ...params, id });
   }
 }

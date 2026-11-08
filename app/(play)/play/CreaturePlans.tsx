@@ -55,6 +55,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           aiming={!!target?.area}
           duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - current.plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
               targets={targets.filter((t) => t.id !== current.tokenId)}
+              me={target?.canSelf ? { id: current.tokenId, name: current.name } : null}
               onCancel={() => setChoosing(null)}
               onPick={(picked) => {
                 const action = choosing, use = target?.use, seconds = target?.seconds;

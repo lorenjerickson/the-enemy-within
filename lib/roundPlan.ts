@@ -24,7 +24,8 @@ export interface GearAction {
   roll: "normal" | "advantage" | "disadvantage";
   area?: AreaSpec; // an area attack: aimed at a spot, everyone caught rolls a save
   statuses?: ActionStatuses; // what it leaves on whoever uses it and on its target, and for how long
-  self?: boolean; // nothing to aim at anyone (no damage, no effect on a target): planned without a target
+  self?: boolean; // only on themselves: planned without a target
+  targets?: "self" | "others" | "anyone"; // who it can be used on
 }
 
 /** A gear action that does damage (an attack roll and a damage roll); one that doesn't just takes effect. */

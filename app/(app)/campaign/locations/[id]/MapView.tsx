@@ -1029,7 +1029,7 @@ export default function MapView({
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
-  const targetCandidates = targetMode && !targetMode.area ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken) : [];
+  const targetCandidates = targetMode && !targetMode.area ? (fogged ? fogged.tokens : drawnTokens).filter((t) => t.id !== actingToken || targetMode.canSelf) : [];
   // Aiming an area attack: where the pointer is, and where the actor will be (where their plan leaves them).
   const [aimAt, setAimAt] = useState<Point | null>(null);
   const aimFrom = (() => {

@@ -20,7 +20,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], gear = [], down = false, refits = [], dice, self = null,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -31,6 +31,7 @@ export default function PickLock({
   gear?: { id: number; name: string; source: string; seconds: number; range: number }[]; // actions from their equipped weapons
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
+  self?: { id: number; name: string } | null; // their own token (for actions they can use on themselves)
   down?: boolean; // their character is down (0 health): nothing to do until revived
 }) {
   // Picking a target: on the map (click a token) or from the list. Shared with the map through a small store.
@@ -75,6 +76,7 @@ export default function PickLock({
           aiming={!!target?.area}
           duration={CHASE_ACTIONS.includes(choosing) ? { left: 6 - plan.used, seconds: target?.seconds, onChange: (seconds) => setTargetMode(target ? { ...target, seconds } : null) } : undefined}
           targets={targets}
+          me={target?.canSelf && self ? self : null}
           onCancel={() => setChoosing(null)}
           onPick={(picked) => {
             const action = choosing, use = target?.use, seconds = target?.seconds;

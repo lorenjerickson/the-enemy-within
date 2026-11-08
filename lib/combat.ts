@@ -194,7 +194,12 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
       ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type) } }
       : {}),
     ...statusesOf(a),
-    ...(!a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") ? { self: true } : {}),
+    ...((): { targets: "self" | "others" | "anyone"; self?: true } => {
+      // Who it can be used on: as the GM set it, else others if it does damage or affects a target, else themselves.
+      const auto = !a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") ? "self" : "others";
+      const targets = a.area_shape ? "others" : a.targets || auto;
+      return targets === "self" ? { targets, self: true } : { targets };
+    })(),
   }));
 }
 

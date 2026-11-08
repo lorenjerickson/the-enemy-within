@@ -118,6 +118,16 @@ export function resolveMovement(
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
   const leave = (id: number, status: Status | undefined, minutes: number, sec: number) => {
     if (!status || down.has(id)) return;
+    // A health boost heals straight away (Healing Draught: +1d10), up to their full health.
+    const healing = status.boosts.filter((b) => b.target === "health").reduce((sum, b) => sum + rollDice(b.value.replace(/^\+/, "")), 0);
+    if (healing > 0 && hp.has(id)) {
+      const before = hp.get(id)!, max = fighters.get(id)?.maxHp ?? Infinity, after = Math.min(max, before + healing);
+      hp.set(id, after);
+      log.push(`${sec} s: ${nameOf(id)} is healed for ${after - before} (${status.source}); ${after} health.`);
+      story.push({ sec, k: "healed", who: id, source: status.source, much: after - before });
+    }
+    // Nothing more to it than healing: done (it doesn't linger as an effect).
+    if (status.boosts.every((b) => b.target === "health") && !status.grants.length) return;
     fighters.get(id)?.statuses?.push(status);
     statuses.push({ tokenId: id, status, minutes });
     story.push({ sec, k: "status", who: id, source: status.source });

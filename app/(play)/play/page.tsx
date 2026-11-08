@@ -180,7 +180,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock down={isDown} gear={me ? gearActions(me.token_id, equipped) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name } : null} targets={targets} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={lockedNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

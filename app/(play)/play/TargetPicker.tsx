@@ -3,7 +3,8 @@
 /** Who an action is aimed at (attack, evade, pursue): the targets offered (those in sight, or for the GM anyone on the map). */
 // aiming: an area attack, aimed at a spot on the map, so no one to pick from the list.
 // duration: for Evade / Pursue, how long to keep at it (1 s up to the time left, or the rest of the round).
-export default function TargetPicker({ targets, onPick, onCancel, title = "Attack who?", aiming = false, duration }: { targets: { id: number; name: string }[]; onPick: (id: number) => void; onCancel: () => void; title?: string; aiming?: boolean; duration?: { left: number; seconds?: number; onChange: (s: number | undefined) => void } }) {
+// me: the one acting, offered first when the action can be used on themselves.
+export default function TargetPicker({ targets, onPick, onCancel, title = "Attack who?", aiming = false, duration, me }: { me?: { id: number; name: string } | null; targets: { id: number; name: string }[]; onPick: (id: number) => void; onCancel: () => void; title?: string; aiming?: boolean; duration?: { left: number; seconds?: number; onChange: (s: number | undefined) => void } }) {
   return (
     <div className="space-y-1 rounded-box bg-base-100/70 p-2" data-target-picker>
       <div className="flex items-center text-xs">
@@ -19,10 +20,11 @@ export default function TargetPicker({ targets, onPick, onCancel, title = "Attac
           <button type="button" data-seconds="rest" className={`btn btn-xs ${!duration.seconds ? "btn-primary" : ""}`} onClick={() => duration.onChange(undefined)}>rest of round</button>
         </div>
       )}
-      {aiming ? null : targets.length === 0 ? (
+      {aiming ? null : targets.length === 0 && !me ? (
         <p className="text-xs opacity-60">Nobody in sight.</p>
       ) : (
         <div className="flex flex-wrap gap-1">
+          {me && <button type="button" data-target={me.id} data-target-self className="btn btn-xs btn-outline" onClick={() => onPick(me.id)}>Yourself ({me.name})</button>}
           {targets.map((t) => (
             <button key={t.id} type="button" data-target={t.id} className="btn btn-xs" onClick={() => onPick(t.id)}>{t.name}</button>
           ))}

@@ -83,6 +83,15 @@ function ActionForm({ owner, initial }: { owner: ActionOwner; initial?: Action }
         <input name="range_ft" type="number" min="0" step="5" placeholder={"item_id" in owner ? "weapon's" : "5"} defaultValue={initial ? initial.range_ft || "" : "item_id" in owner ? "" : 5} className="input input-sm w-24" />
         ft {"item_id" in owner ? "(blank = the weapon's range; 5 = within reach)" : "(5 = within reach)"}
       </label>
+      <label className="flex items-center gap-2 text-sm">
+        Can be used on
+        <select name="targets" defaultValue={initial?.targets ?? ""} className="select select-sm w-auto" data-action-targets>
+          <option value="">Automatic (others if it does damage or affects a target, else self)</option>
+          <option value="self">Only themselves</option>
+          <option value="others">Others only</option>
+          <option value="anyone">Themselves or others</option>
+        </select>
+      </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       {(["self", "target"] as const).map((on) => {
         const p = on === "target" ? "target_" : "";

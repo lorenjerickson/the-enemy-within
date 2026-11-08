@@ -5,7 +5,7 @@ import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 import { revalidatePath } from "next/cache";
 import { requireGm, requireUser } from "@/lib/auth";
-import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage } from "@/lib/db";
+import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage, ACTION_TARGETS, type ActionTargets } from "@/lib/db";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
@@ -93,6 +93,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     split: formData.get("split") === "on" ? 1 : 0,
     seconds: Math.min(6, Math.max(0.5, Number(formData.get("seconds")) || 2)),
     range_ft: Math.max(0, Number(formData.get("range_ft")) || 0), // 0: an item's action uses the item's range (else within reach)
+    targets: (ACTION_TARGETS as readonly string[]).includes(String(formData.get("targets"))) ? (String(formData.get("targets")) as ActionTargets) : "",
     ...areaFields(formData),
     boosts,
     roll_grants,
