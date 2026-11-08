@@ -13,7 +13,7 @@ const rangeOf = (step: Extract<PlanStep, { kind: "action" }>, m?: Mover) =>
   step.use?.range ?? (step.action === "attack" && m?.attackRange ? m.attackRange : ACTION_RANGE[step.action]);
 import type { Segment } from "@/lib/visibility";
 import type { EquipSlot } from "@/lib/itemTypes";
-import type { StoryEvent } from "@/lib/roundStory";
+import type { Intent, StoryEvent } from "@/lib/roundStory";
 import { fits, relation, type Allegiance } from "@/lib/sides";
 
 type Pos = { col: number; row: number };
@@ -149,6 +149,7 @@ export function resolveMovement(
       if (taken > 0) {
         hp.set(id, left);
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
+        if (except >= 0) lastHitBy.set(id, except);
       }
       log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
       hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
@@ -267,6 +268,16 @@ export function resolveMovement(
   const closingIn = new Set<number>(); // who has been told they're closing in (logged once)
   const readied = new Set<Act>(); // reactions that are ready
   const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
+  // For the players' story: what each was evidently up to, who last hit them, who last held them up.
+  const closingFor = new Map<number, { target: number; means: string }>();
+  const lastHitBy = new Map<number, number>();
+  const heldBy = new Map<number, number>();
+  const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
+    const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
+    if (closing.has(m.tokenId) && closingFor.has(m.tokenId)) return { doing: "close", ...closingFor.get(m.tokenId)! };
+    if (c && t > c.start && !chaseOver.has(m.tokenId) && t - 1 < c.end) return { doing: c.action === "pursue" ? "chase" : "evade", target: c.target.id };
+    return { doing: "move" };
+  };
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
     const fx: Fx[] = [];
@@ -288,7 +299,9 @@ export function resolveMovement(
               autoPursue.add(m.tokenId);
               if (!closingIn.has(m.tokenId)) {
                 log.push(`${sec} s: ${m.name} closes in on ${due.step.target!.name} to ${due.step.action}.`);
-                story.push({ sec, k: "close", who: m.tokenId, target: due.step.target!.id });
+                const means = due.step.use ? `use ${due.step.use.name}` : due.step.action;
+                closingFor.set(m.tokenId, { target: due.step.target!.id, means });
+                story.push({ sec, k: "close", who: m.tokenId, target: due.step.target!.id, means });
               }
               closingIn.add(m.tokenId);
               return [m.tokenId, chaseStep(m, here, them, true)];
@@ -301,7 +314,7 @@ export function resolveMovement(
           if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
             skipped.add(m.tokenId);
             log.push(`${sec} s: ${m.name}'s planned move is skipped: they closed in instead.`);
-            story.push({ sec, k: "skip", who: m.tokenId });
+            story.push({ sec, k: "skip", who: m.tokenId, after: "close", target: closingFor.get(m.tokenId)?.target ?? null });
           }
           return [m.tokenId, here];
         }
@@ -314,7 +327,7 @@ export function resolveMovement(
             if (!same(planned(t), planned(t - 1)) && !skipped.has(m.tokenId)) {
               skipped.add(m.tokenId);
               log.push(`${sec} s: ${m.name}'s planned move is skipped: they stay where the ${c.action} left them.`);
-              story.push({ sec, k: "skip", who: m.tokenId });
+              story.push({ sec, k: "skip", who: m.tokenId, after: c.action === "pursue" ? "chase" : "evade", target: c.target.id });
             }
             return [m.tokenId, here];
           }
@@ -336,12 +349,14 @@ export function resolveMovement(
       const blocker =
         settled.find((s) => same(s.at, want)) ??
         stillUnmoved.map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
-        (bystanders.some((b) => same(b.at, want)) ? { id: -1, at: want } : undefined);
+        bystanders.filter((b) => same(b.at, want)).map((b) => ({ id: b.tokenId, at: want }))[0];
       if (blocker) {
+        const intent = intentOf(m, sec, autoPursue); // what they were up to, before being set back a second
         lag.set(m.tokenId, lag.get(m.tokenId)! + 1);
-        const who = order.find((o) => o.tokenId === blocker.id)?.name ?? "someone";
+        const who = nameOf(blocker.id);
         log.push(`${sec} s: ${m.name} is held back by ${who}.`);
-        story.push({ sec, k: "blocked", who: m.tokenId, by: blocker.id >= 0 ? blocker.id : null });
+        story.push({ sec, k: "blocked", who: m.tokenId, by: blocker.id, intent });
+        heldBy.set(m.tokenId, blocker.id);
         settled.push({ id: m.tokenId, at: here });
       } else {
         settled.push({ id: m.tokenId, at: want });
@@ -403,7 +418,7 @@ export function resolveMovement(
       // Hit while doing it (not in the second it finishes: blows landing together both count).
       if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t < sec)) {
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);
-        story.push({ sec, k: "interrupted", who: m.tokenId, action: step.use ? "attack" : step.action });
+        story.push({ sec, k: "interrupted", who: m.tokenId, action: step.use ? `use ${step.use.name}` : step.action, by: lastHitBy.get(m.tokenId) ?? null });
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action) || REACTIONS.includes(step.action)) continue; // movement / reactions: handled above
@@ -455,6 +470,7 @@ export function resolveMovement(
           const left = Math.max(0, hp.get(id)! - dmg.total);
           hp.set(id, left);
           hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
+          lastHitBy.set(id, m.tokenId);
           say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text}); ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, dmg.total) });
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
@@ -544,6 +560,7 @@ export function resolveMovement(
           const left = Math.max(0, hp.get(target.id)! - dmg.total);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
+          lastHitBy.set(target.id, m.tokenId);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, dmg.total) });
           shown(left <= 0 ? "down" : "hit");
@@ -569,7 +586,7 @@ export function resolveMovement(
         chaseOver.add(id);
         if (now < next.start - 1e-9) lag.set(id, lag.get(id)! - (next.start - now));
         log.push(`${sec} s: ${m.name} stops their ${c.action}: ${next.step.target!.name} is within range to ${next.step.use?.name ?? next.step.action}.`);
-        story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: "range" });
+        story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: "range", next: next.step.target!.id });
         continue;
       }
       const them = where(c.target.id);
@@ -602,7 +619,7 @@ export function resolveMovement(
     if (down.has(m.tokenId)) continue;
     for (const a of acts.get(m.tokenId)!) if (!finished.has(a) && !CHASE_ACTIONS.includes(a.step.action)) {
       log.push(`${m.name}'s ${a.step.action} runs out of time this round.`);
-      story.push({ sec: ROUND_SECONDS, k: "late", who: m.tokenId, action: a.step.use ? "attack" : a.step.action });
+      story.push({ sec: ROUND_SECONDS, k: "late", who: m.tokenId, action: a.step.use ? `use ${a.step.use.name}` : a.step.action, heldBy: heldBy.get(m.tokenId) ?? null, target: a.step.target?.id ?? null });
     }
   }
   for (const m of order) {
