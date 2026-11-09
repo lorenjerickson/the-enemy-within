@@ -2120,11 +2120,14 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
   const haveCondition = new Set(db.prepare<[], { builtin: string }>("SELECT builtin FROM conditions WHERE builtin != ''").all().map((r) => r.builtin));
   const names = new Set(db.prepare<[], { name: string }>("SELECT name FROM conditions WHERE builtin = ''").all().map((r) => r.name.toLowerCase()));
   db.transaction(() => {
-    for (const e of BUILTIN_EFFECTS) if (!effectId.has(e.key)) {
-      effectId.set(e.key, Number(db.prepare("INSERT INTO effects (name, description, modifiers, builtin) VALUES (?, ?, ?, ?)").run(e.name, e.description, JSON.stringify(e.modifiers), e.key).lastInsertRowid));
+    for (const e of BUILTIN_EFFECTS) {
+      if (!effectId.has(e.key)) effectId.set(e.key, Number(db.prepare("INSERT INTO effects (name, description, modifiers, builtin) VALUES (?, ?, ?, ?)").run(e.name, e.description, JSON.stringify(e.modifiers), e.key).lastInsertRowid));
+      else db.prepare("UPDATE effects SET modifiers = ? WHERE builtin = ?").run(JSON.stringify(e.modifiers), e.key); // the rules follow the code (names stay the GM's)
     }
-    for (const c of BUILTIN_CONDITIONS) if (!haveCondition.has(c.key) && !names.has(c.name.toLowerCase())) {
-      db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, builtin) VALUES (?, ?, ?, 1, '', 12, ?)").run(c.name, c.description, JSON.stringify(c.effects.map((k) => effectId.get(k)!)), c.key);
+    for (const c of BUILTIN_CONDITIONS) {
+      const effects = JSON.stringify(c.effects.map((k) => effectId.get(k)!));
+      if (haveCondition.has(c.key)) db.prepare("UPDATE conditions SET effects = ? WHERE builtin = ?").run(effects, c.key);
+      else if (!names.has(c.name.toLowerCase())) db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, builtin) VALUES (?, ?, ?, 1, '', 12, ?)").run(c.name, c.description, effects, c.key);
     }
   })();
 }

@@ -90,10 +90,17 @@ const steady = (value: string) => {
 /** The boosts on one thing, added up as steady numbers. */
 export const steadyBoost = (changes: Status[], target: ModifierTarget) => changes.flatMap((s) => s.boosts.filter((b) => b.target === target)).reduce((sum, b) => sum + steady(b.value), 0);
 
-/** A token's speed (feet a round) of one kind, with what changes it; never below 0. */
+/** Speed multipliers on a token now (conditions, standing effects): Prone ×½, a haste ×2. */
+export function speedFactor(tokenId: number): number {
+  const t = db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const mods = [...standingEffects(tokenId).flatMap((e) => e.modifiers), ...(t ? (listAfflictions(t.level_id).get(tokenId) ?? []).flatMap((a) => modifiersOf(a.condition)) : [])];
+  return mods.reduce((f, m) => (m.kind === "speed" ? f * m.factor : f), 1);
+}
+
+/** A token's speed (feet a round) of one kind, with what changes it (boosts, then multipliers); never below 0. */
 export function speedOf(tokenId: number, movement: string | Record<string, number>, type: MovementType = "walking"): number {
   const base = (typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0;
-  return Math.max(0, base + steadyBoost(changesOn(tokenId), `movement:${type}`));
+  return Math.max(0, Math.floor((base + steadyBoost(changesOn(tokenId), `movement:${type}`)) * speedFactor(tokenId)));
 }
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);

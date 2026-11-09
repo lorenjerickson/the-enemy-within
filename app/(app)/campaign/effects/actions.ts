@@ -7,7 +7,8 @@ import { getEffectDef, removeEffectDef, saveEffectDef } from "@/lib/db";
 import { DAMAGE_TYPES, isRollKind, type DamageType } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
-import type { Modifier } from "@/lib/conditions";
+import { FORBIDS, type Forbid, type Modifier } from "@/lib/conditions";
+import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 /** Creates (id null) or saves a catalog effect (a named set of modifiers) from its form. */
 export async function submitEffect(id: number | null, formData: FormData) {
@@ -38,6 +39,12 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
     modifiers.push({ kind: "extra", value: extra, damage_type, when: text("extra_when") === "taking" ? "taking" : "dealing" });
   }
+  // What they can't do, and saves they fail outright.
+  for (const w of formData.getAll("forbid").map(String)) if (FORBIDS.some(([f]) => f === w)) modifiers.push({ kind: "forbid", what: w as Forbid });
+  for (const a of formData.getAll("autofail").map(String)) if ((ATTRIBUTES as readonly string[]).includes(a)) modifiers.push({ kind: "autofail", save: a as Attribute });
+  // Speed multiplied (half, double).
+  const factor = Number(text("speed_factor"));
+  if ([0.5, 2].includes(factor)) modifiers.push({ kind: "speed", factor });
   // Boosts (or penalties): a number or dice on something.
   const values = formData.getAll("boost_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
   formData.getAll("boost_target").forEach((t, i) => {

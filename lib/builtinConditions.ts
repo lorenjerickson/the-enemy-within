@@ -18,12 +18,13 @@ export const BUILTIN_EFFECTS: { key: string; name: string; description: string; 
   { key: "sickly", name: "Sickly", description: "Disadvantage on attacks and ability checks (poison in the blood).", modifiers: [{ kind: "roll", roll: "attack", mode: "disadvantage" }, ...ATTRIBUTES.map((a): Modifier => ({ kind: "roll", roll: `check:${a}`, mode: "disadvantage" }))] },
   { key: "unseen", name: "Unseen", description: "Advantage on their attacks; attacks against them have disadvantage.", modifiers: [{ kind: "roll", roll: "attack", mode: "advantage" }, { kind: "roll", roll: "attacked", mode: "disadvantage" }] },
   { key: "spellbound", name: "Spellbound", description: "Can't attack whoever put them in this state.", modifiers: [{ kind: "forbid", what: "attack-source" }] },
+  { key: "crawling", name: "Crawling", description: "Moves at half speed.", modifiers: [{ kind: "speed", factor: 0.5 }] },
   { key: "rigid", name: "Rigid", description: "Resistant to all damage.", modifiers: DAMAGE_TYPES.map((t): Modifier => ({ kind: "resist", damage_type: t, level: "resistant" })) },
 ];
 
 export const BUILTIN_CONDITIONS: { key: string; name: string; description: string; effects: string[] }[] = [
   { key: "incapacitated", name: "Incapacitated", description: "Can't act or react.", effects: ["incapacitated"] },
-  { key: "prone", name: "Prone", description: "On the ground: their attacks have disadvantage, attacks against them advantage.", effects: ["hampered", "exposed"] },
+  { key: "prone", name: "Prone", description: "On the ground: half speed; their attacks have disadvantage, attacks against them advantage.", effects: ["crawling", "hampered", "exposed"] },
   { key: "restrained", name: "Restrained", description: "Held fast: can't move, attacks hampered, easy to hit, clumsy.", effects: ["immobile", "hampered", "exposed", "clumsy"] },
   { key: "grappled", name: "Grappled", description: "Held: can't move.", effects: ["immobile"] },
   { key: "stunned", name: "Stunned", description: "Reeling: can't act, react or move; fails Might and Agility saves; easy to hit.", effects: ["incapacitated", "immobile", "limp", "exposed"] },

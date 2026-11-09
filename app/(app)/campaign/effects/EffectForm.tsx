@@ -1,4 +1,5 @@
-import { describeModifier, type EffectDef } from "@/lib/conditions";
+import { FORBIDS, describeModifier, type EffectDef } from "@/lib/conditions";
+import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, ROLL_KIND_GROUPS } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS } from "@/lib/modifiers";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
@@ -13,6 +14,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
  */
 export default function EffectForm({ initial }: { initial?: EffectDef }) {
   const mods = initial?.modifiers ?? [];
+  const speed = mods.find((m) => m.kind === "speed");
   const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
   return (
     <form action={submitEffect.bind(null, initial?.id ?? null)} className="max-w-2xl space-y-3" data-effect-form>
@@ -65,7 +67,34 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
             </select>
             <span className="text-xs opacity-60">a flaming weapon; a hex</span>
           </div>
-          <PairListInput title="Boosts (or penalties)" addLabel="+ Add boost" firstName="boost_target" firstPlaceholder="Changes…" groups={MODIFIER_TARGET_GROUPS} secondName="boost_value" secondPattern={MODIFIER_PATTERN} secondPlaceholder="+2 or -1d4" initial={mods.flatMap((m) => (m.kind === "boost" ? [[m.target, m.value] as [string, string]] : []))} />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-forbid>
+          <span className="font-semibold">Can&apos;t</span>
+          {FORBIDS.map(([what, label]) => (
+            <label key={what} className="flex items-center gap-1">
+              <input type="checkbox" name="forbid" value={what} defaultChecked={mods.some((m) => m.kind === "forbid" && m.what === what)} className="checkbox checkbox-xs" />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-autofail>
+          <span className="font-semibold">Fails saves</span>
+          {ATTRIBUTES.map((a) => (
+            <label key={a} className="flex items-center gap-1">
+              <input type="checkbox" name="autofail" value={a} defaultChecked={mods.some((m) => m.kind === "autofail" && m.save === a)} className="checkbox checkbox-xs" />
+              {cap(a)}
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold">Speed</span>
+          <select name="speed_factor" defaultValue={speed?.kind === "speed" ? String(speed.factor) : ""} className="select select-sm w-auto">
+            <option value="">unchanged</option>
+            <option value="0.5">half speed</option>
+            <option value="2">double speed</option>
+          </select>
+          <span className="text-xs opacity-60">(to stop them moving at all, use a can&apos;t-move effect)</span>
+        </div>
+        <PairListInput title="Boosts (or penalties)" addLabel="+ Add boost" firstName="boost_target" firstPlaceholder="Changes…" groups={MODIFIER_TARGET_GROUPS} secondName="boost_value" secondPattern={MODIFIER_PATTERN} secondPlaceholder="+2 or -1d4" initial={mods.flatMap((m) => (m.kind === "boost" ? [[m.target, m.value] as [string, string]] : []))} />
           <PairListInput title="Resistances" addLabel="+ Add resistance" firstName="resist_type" firstPlaceholder="Damage type…" groups={[["Damage types", DAMAGE_TYPES.map((t) => [t, cap(t)] as [string, string])]]} secondName="resist_level" secondOptions={["resistant", "vulnerable", "immune"]} initial={mods.flatMap((m) => (m.kind === "resist" ? [[m.damage_type, m.level] as [string, string]] : []))} />
           <PairListInput title="Advantage / disadvantage on rolls" addLabel="+ Add roll effect" firstName="grant_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="grant_mode" secondOptions={["advantage", "disadvantage"]} initial={mods.flatMap((m) => (m.kind === "roll" ? [[m.roll, m.mode] as [string, string]] : []))} />
         </fieldset>
