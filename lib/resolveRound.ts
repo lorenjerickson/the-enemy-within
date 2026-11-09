@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { describeCondition, modifiersOf, rollChanges, type Affliction, type Condition } from "@/lib/conditions";
+import { describeCondition, lingers, modifiersOf, rollChanges, type Affliction, type Condition } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -137,6 +137,28 @@ export function resolveMovement(
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
   const afflict = (id: number, c: Condition, by: number | null, sec: number) => {
+    // Instant modifiers happen as it lands (Healing Draught: +1d10 health, up to their full health).
+    for (const m of modifiersOf(c)) {
+      if (m.kind !== "instant" || !hp.has(id)) continue;
+      const n = Math.max(0, rollDice(m.value)), before = hp.get(id)!;
+      if (m.heal) {
+        const after = Math.min(fighters.get(id)?.maxHp ?? Infinity, before + n);
+        hp.set(id, after);
+        log.push(`${sec} s: ${nameOf(id)} is healed for ${after - before} (${c.name}); ${after} health.`);
+        story.push({ sec, k: "healed", who: id, source: c.name, much: after - before });
+      } else if (n > 0) {
+        const after = Math.max(0, before - n);
+        hp.set(id, after);
+        log.push(`${sec} s: ${c.name} deals ${nameOf(id)} ${n}${m.damage_type ? ` ${m.damage_type}` : ""} damage; ${after} left.`);
+        story.push({ sec, k: "effect", who: id, name: c.name, much: n, heal: false, hurt: hurt(id, n) });
+        if (after <= 0) {
+          down.add(id);
+          story.push({ sec, k: "down", who: id });
+          log.push(`${sec} s: ${nameOf(id)} is down.`);
+        }
+      }
+    }
+    if (!lingers(c)) return; // nothing more to it
     afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: c.rounds, by }]);
     const rolls = rollChanges(c);
     if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });

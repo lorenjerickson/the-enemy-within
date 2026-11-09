@@ -22,6 +22,14 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
     modifiers.push({ kind: "periodic", value: periodic, heal: text("periodic_kind") === "healing", damage_type });
   }
+  // Damage or healing once, as the condition lands.
+  const instant = text("instant_value").toLowerCase().replace(/\s/g, "");
+  if (instant) {
+    if (!isDiceFormula(instant)) throw new Error("Invalid dice for at once");
+    const damage_type = text("instant_type") as DamageType | "";
+    if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
+    modifiers.push({ kind: "instant", value: instant, heal: text("instant_kind") !== "damage", damage_type });
+  }
   // Boosts (or penalties): a number or dice on something.
   const values = formData.getAll("boost_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
   formData.getAll("boost_target").forEach((t, i) => {

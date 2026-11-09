@@ -14,7 +14,8 @@ import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 export type Modifier =
   | { kind: "boost"; target: ModifierTarget; value: string } // add a number or dice (+2, -1d4)
   | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
-  | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" }; // at the end of each round
+  | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" } // at the end of each round
+  | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" }; // once, as the condition lands (a healing draught)
 
 /** A named set of modifiers, reusable across conditions. */
 export interface EffectDef {
@@ -48,6 +49,9 @@ export interface Affliction {
 
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
 
+/** Whether a condition stays on once it has landed (an instant heal and nothing else doesn't). */
+export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant");
+
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
 export function rollChanges(c: Condition): { boosts: Boost[]; grants: RollGrant[] } {
   const mods = modifiersOf(c);
@@ -60,6 +64,7 @@ export function rollChanges(c: Condition): { boosts: Boost[]; grants: RollGrant[
 /** "1d2 poison damage a round", "disadvantage on their attack rolls", "+2 defense". */
 export function describeModifier(m: Modifier): string {
   if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round`;
+  if (m.kind === "instant") return m.heal ? `heals ${m.value}` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage at once`;
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
   return `${m.value} ${targetLabel(m.target).toLowerCase()}`;
 }
@@ -70,6 +75,6 @@ export const describeEffect = (e: Pick<EffectDef, "modifiers">) => e.modifiers.m
 export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc">, withRounds = true) =>
   [withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`, c.save_attr && `${c.save_attr[0].toUpperCase()}${c.save_attr.slice(1)} DC ${c.save_dc} ends it`].filter(Boolean).join(" · ");
 
-/** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it". */
+/** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it" ("heals 1d10" alone for an instant one). */
 export const describeCondition = (c: Condition, withRounds = true) =>
-  [c.effects.map(describeEffect).filter(Boolean).join(", "), describeLifecycle(c, withRounds)].filter(Boolean).join(" · ");
+  [c.effects.map(describeEffect).filter(Boolean).join(", "), lingers(c) && describeLifecycle(c, withRounds)].filter(Boolean).join(" · ");

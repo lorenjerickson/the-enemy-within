@@ -104,6 +104,7 @@ export function saveHp(tokenId: number, hp: number): void {
 /** The statuses an action leaves (on whoever uses it, and on its target), lasting its duration (instant: 1 round). */
 function statusesOf(a: { name: string; boosts: Boost[]; roll_grants: RollGrant[]; duration_amount: number; duration_unit: string; conditions?: { id: number; on: "self" | "target" }[] }): { statuses?: ActionStatuses } {
   const on = (who: "self" | "target"): Status | undefined => {
+    // (Actions' own boosts and roll effects were folded into catalog conditions; any left over still count.)
     const boosts = a.boosts.filter((b) => (b.on ?? "self") === who), grants = a.roll_grants.filter((g) => (g.on ?? "self") === who);
     const conditions = (a.conditions ?? []).filter((c) => c.on === who).flatMap((c) => getCondition(c.id) ?? []); // as they are now in the catalog
     return boosts.length || grants.length || conditions.length ? { source: a.name, boosts, grants, ...(conditions.length ? { conditions } : {}) } : undefined;

@@ -1,8 +1,6 @@
 import { AREA_SHAPES, describeArea } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
-import { DAMAGE_TYPES, DURATION_UNITS, ROLL_KIND_GROUPS, ROLL_MODES, formatDuration, rollKindLabel } from "@/lib/actions";
-import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
-import PairListInput from "./PairListInput";
+import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, formatDuration } from "@/lib/actions";
 import { getCondition, listConditionDefs, type Action, type ActionOwner } from "@/lib/db";
 import { describeCondition, type Condition } from "@/lib/conditions";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
@@ -18,11 +16,9 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
     a.attack && `to hit ${a.attack}`,
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.area_shape && `${describeArea({ shape: a.area_shape, ft: a.area_ft })}, ${a.save_attr} save DC ${a.save_dc}${a.save_half ? " (half on a save)" : ""}`,
-    ...a.boosts.map((b) => `${b.on === "target" ? "target: " : ""}${b.value} ${targetLabel(b.target)}`),
-    ...a.roll_grants.map((g) => `${g.on === "target" ? "target: " : ""}${g.mode} on ${rollKindLabel(g.roll)}`),
     a.area_shape && a.area_lasts ? "stays" : "",
     ...a.conditions.map((c) => `${c.on === "target" ? "target: " : ""}${conditionNames.get(c.id) ?? "a condition"}`),
-    a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
+    a.area_shape && a.area_lasts && a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
     a.range_ft > 5 ? `range ${a.range_ft} ft` : a.range_ft === 0 && fromItem ? "weapon's range" : "reach",
   ]
@@ -113,32 +109,9 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
       </label>
       <div className="col-span-2 text-xs opacity-60">Attack fields are optional — leave them blank for non-attack actions.</div>
       {(["self", "target"] as const).map((on) => {
-        const p = on === "target" ? "target_" : "";
-        const mine = <T extends { on?: "self" | "target" }>(xs: T[] | undefined) => (xs ?? []).filter((x) => (x.on ?? "self") === on);
         return (
           <fieldset key={on} className="col-span-2 space-y-2 rounded-box border border-base-300 p-2" data-effects-on={on}>
-            <legend className="px-1 text-sm font-semibold">{on === "self" ? "On whoever uses it" : "On the target (on a hit, or a failed save)"}</legend>
-            <PairListInput
-              title="Temporary boosts"
-              addLabel="+ Add boost"
-              firstName={`${p}boost_target`}
-              firstPlaceholder="Boosts…"
-              groups={MODIFIER_TARGET_GROUPS}
-              secondName={`${p}boost_value`}
-              secondPattern={MODIFIER_PATTERN}
-              secondPlaceholder="+2 or 1d4"
-              initial={mine(initial?.boosts).map((b) => [b.target, b.value])}
-            />
-            <PairListInput
-              title="Advantage / disadvantage on rolls"
-              addLabel="+ Add roll effect"
-              firstName={`${p}grant_roll`}
-              firstPlaceholder="Roll…"
-              groups={ROLL_KIND_GROUPS}
-              secondName={`${p}grant_mode`}
-              secondOptions={["advantage", "disadvantage"]}
-              initial={mine(initial?.roll_grants).map((g) => [g.roll, g.mode])}
-            />
+            <legend className="px-1 text-sm font-semibold">{on === "self" ? "Puts on whoever uses it" : "Puts on the target (on a hit, or a failed save)"}</legend>
             <div className="space-y-1" data-action-conditions={on}>
               <div className="text-xs font-semibold opacity-80">Conditions (from the catalog)</div>
               {conditions.length ? (
@@ -165,7 +138,7 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
             <option key={u} value={u}>{u ? `${u}(s)` : "Instant"}</option>
           ))}
         </select>
-        <span className="text-xs opacity-60">how long its boosts and roll effects last (1 round = until the end of the next round)</span>
+        <span className="text-xs opacity-60">how long an area that stays on the map lasts (conditions have their own rounds)</span>
       </div>
       <div className="col-span-2">
         <button className="btn btn-primary btn-sm">Save action</button>

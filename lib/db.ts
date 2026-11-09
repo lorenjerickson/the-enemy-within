@@ -2068,6 +2068,32 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
   }
 }
 
+// Once per action: its own boosts and roll effects become a catalog condition (named after it) applying an effect of
+// the same name, on whoever it was for; health boosts become an instant heal. Its lists are then emptied, so this runs
+// only for actions saved before conditions existed.
+{
+  type Row = { id: number; name: string; boosts: string; roll_grants: string; duration_amount: number; duration_unit: string; conditions: string };
+  const per: Record<string, number> = { round: 1, turn: 1, minute: 10, hour: 600, day: 14400, "short rest": 600, "long rest": 4800 };
+  const rows = db.prepare<[], Row>("SELECT id, name, boosts, roll_grants, duration_amount, duration_unit, conditions FROM actions WHERE boosts != '[]' OR roll_grants != '[]'").all();
+  if (rows.length) db.transaction(() => {
+    for (const r of rows) {
+      const boosts: Boost[] = JSON.parse(r.boosts), grants: RollGrant[] = JSON.parse(r.roll_grants), conditions: { id: number; on: "self" | "target" }[] = JSON.parse(r.conditions);
+      const sides = (["target", "self"] as const).filter((on) => boosts.some((b) => (b.on ?? "self") === on) || grants.some((g) => (g.on ?? "self") === on));
+      for (const on of sides) {
+        const modifiers: Modifier[] = [
+          ...boosts.filter((b) => (b.on ?? "self") === on).map((b): Modifier => (b.target === "health" ? { kind: "instant", value: b.value.replace(/^\+/, ""), heal: true, damage_type: "" } : { kind: "boost", target: b.target, value: b.value })),
+          ...grants.filter((g) => (g.on ?? "self") === on).map((g): Modifier => ({ kind: "roll", roll: g.roll, mode: g.mode })),
+        ];
+        const name = sides.length > 1 && on === "self" ? `${r.name} (self)` : r.name;
+        const effect = saveEffectDef(null, { name, description: `From ${r.name}.`, modifiers });
+        const rounds = Math.max(1, (per[r.duration_unit] ?? 1) * Math.max(1, r.duration_amount));
+        conditions.push({ id: saveConditionDef(null, { name, description: `From ${r.name}.`, effects: [effect], rounds, save_attr: "", save_dc: 12 }), on });
+      }
+      db.prepare("UPDATE actions SET boosts = '[]', roll_grants = '[]', conditions = ? WHERE id = ?").run(JSON.stringify(conditions), r.id);
+    }
+  })();
+}
+
 // Conditions on creatures right now: a copy of the condition (and its effects) as it was put on, the rounds it has
 // left, and who put it there.
 db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (

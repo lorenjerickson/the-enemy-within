@@ -1,5 +1,6 @@
 import { describeArea } from "@/lib/aoe";
 import { describeStatus } from "@/lib/status";
+import { describeCondition } from "@/lib/conditions";
 import { describeTargeting } from "@/lib/sides";
 import type { GearAction } from "@/lib/roundPlan";
 
@@ -18,7 +19,11 @@ export function gearSummary(g: GearAction & { damageType?: string }): string[] {
     if (!s) return null;
     const heal = s.boosts.filter((x) => x.target === "health").map((x) => x.value.replace(/^\+/, ""));
     const rest = { boosts: s.boosts.filter((x) => x.target !== "health"), grants: s.grants };
-    const parts = [...(heal.length ? [`heals ${heal.join(" + ")}`] : []), ...(rest.boosts.length || rest.grants.length ? [`${describeStatus(rest)} (${lasting(minutes)})`] : [])];
+    const parts = [
+      ...(heal.length ? [`heals ${heal.join(" + ")}`] : []),
+      ...(rest.boosts.length || rest.grants.length ? [`${describeStatus(rest)} (${lasting(minutes)})`] : []),
+      ...(s.conditions ?? []).map((c) => (c.effects.every((e) => e.modifiers.every((m) => m.kind === "instant")) ? describeCondition(c) : `${c.name}: ${describeCondition(c)}`)),
+    ];
     return parts.length ? parts.join("; ") : null;
   };
   const st = g.statuses;

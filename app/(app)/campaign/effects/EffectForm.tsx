@@ -13,7 +13,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
  */
 export default function EffectForm({ initial }: { initial?: EffectDef }) {
   const mods = initial?.modifiers ?? [];
-  const periodic = mods.find((m) => m.kind === "periodic");
+  const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant");
   return (
     <form action={submitEffect.bind(null, initial?.id ?? null)} className="max-w-2xl space-y-3" data-effect-form>
       <input name="name" placeholder="Effect name (e.g. Incapacitated, Venom)" required defaultValue={initial?.name} className="input w-full" />
@@ -32,6 +32,19 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
             {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{cap(t)}</option>)}
           </select>
           <span className="text-xs opacity-60">at the end of every round (blank = none)</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold">At once</span>
+          <input name="instant_value" pattern={DICE_PATTERN} placeholder="dice (e.g. 1d10)" defaultValue={instant?.kind === "instant" ? instant.value : ""} className="input input-sm w-28" />
+          <select name="instant_kind" defaultValue={instant?.kind === "instant" && !instant.heal ? "damage" : "healing"} className="select select-sm w-auto">
+            <option value="healing">healing</option>
+            <option value="damage">damage</option>
+          </select>
+          <select name="instant_type" defaultValue={instant?.kind === "instant" ? instant.damage_type : ""} className="select select-sm w-auto">
+            <option value="">type…</option>
+            {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{cap(t)}</option>)}
+          </select>
+          <span className="text-xs opacity-60">once, as the condition lands (a healing draught)</span>
         </div>
         <PairListInput title="Boosts (or penalties)" addLabel="+ Add boost" firstName="boost_target" firstPlaceholder="Changes…" groups={MODIFIER_TARGET_GROUPS} secondName="boost_value" secondPattern={MODIFIER_PATTERN} secondPlaceholder="+2 or -1d4" initial={mods.flatMap((m) => (m.kind === "boost" ? [[m.target, m.value] as [string, string]] : []))} />
         <PairListInput title="Advantage / disadvantage on rolls" addLabel="+ Add roll effect" firstName="grant_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="grant_mode" secondOptions={["advantage", "disadvantage"]} initial={mods.flatMap((m) => (m.kind === "roll" ? [[m.roll, m.mode] as [string, string]] : []))} />
