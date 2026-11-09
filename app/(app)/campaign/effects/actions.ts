@@ -102,6 +102,21 @@ export async function submitEffect(id: number | null, formData: FormData) {
     const who = text("aura_who");
     modifiers.push({ kind: "aura", condition: auraCondition, radius, who: who === "friendly" || who === "enemy" ? who : "", self: formData.get("aura_self") === "on" });
   }
+  // A trigger: when hit / when they hit, damage to the other creature and / or a condition on someone.
+  const on = text("trigger_on");
+  if (on === "hit" || on === "hitting") {
+    const damage = text("trigger_damage").toLowerCase().replace(/\s/g, ""), damage_type = text("trigger_type") as DamageType | "";
+    if (damage && !isDiceFormula(damage)) throw new Error("Invalid trigger damage dice");
+    if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
+    const save_attr = text("trigger_save_attr") as Attribute | "", condition = Number(text("trigger_condition")) || 0;
+    if (save_attr && !(ATTRIBUTES as readonly string[]).includes(save_attr)) throw new Error("Invalid save");
+    if (condition && !getConditionDef(condition)) throw new Error("Unknown condition for the trigger");
+    if (damage || condition) modifiers.push({
+      kind: "trigger", on, reach: text("trigger_reach") === "any" ? "any" : "melee", damage, damage_type, save_attr,
+      save_dc: Math.max(1, Math.round(Number(text("trigger_save_dc")) || 12)), save_halves: text("trigger_save_halves") !== "negates",
+      condition, condition_on: text("trigger_condition_on") === "self" ? "self" : "other",
+    });
+  }
   const was = id === null ? undefined : getEffectDef(id);
   const saved = saveEffectDef(id, { name: text("name"), description: text("description"), modifiers: was?.builtin ? was.modifiers : modifiers }); // a built-in's rules stay
   revalidatePath("/campaign/effects");

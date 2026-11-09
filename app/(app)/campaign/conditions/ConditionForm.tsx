@@ -91,6 +91,10 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
           when they attack
         </label>
         <label className="flex items-center gap-1">
+          <input name="ends_on_trigger" type="checkbox" defaultChecked={!!initial?.ends_on_trigger} className="checkbox checkbox-sm" />
+          once its trigger fires
+        </label>
+        <label className="flex items-center gap-1">
           <input name="concentration" type="checkbox" defaultChecked={!!initial?.concentration} className="checkbox checkbox-sm" />
           if whoever put it on loses concentration (they keep one going at a time; hurt: Fortitude save; down: it ends)
         </label>

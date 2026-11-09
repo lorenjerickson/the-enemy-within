@@ -1,4 +1,4 @@
-import { FORBIDS, describeModifier, type EffectDef } from "@/lib/conditions";
+import { FORBIDS, TRIGGER_EVENTS, describeModifier, type EffectDef } from "@/lib/conditions";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, ROLL_KIND_GROUPS } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS } from "@/lib/modifiers";
@@ -18,6 +18,8 @@ const SET_PATTERN = `\\d+(\\s*\\+\\s*(${ATTRIBUTES.join("|")}))?`;
 export default function EffectForm({ initial, conditions = [] }: { initial?: EffectDef; conditions?: { id: number; name: string }[] }) {
   const mods = initial?.modifiers ?? [];
   const aura = mods.find((m) => m.kind === "aura");
+  const tr = mods.find((m) => m.kind === "trigger");
+  const trig = tr?.kind === "trigger" ? tr : undefined;
   const speed = mods.find((m) => m.kind === "speed"), temphp = mods.find((m) => m.kind === "temphp"), maxhp = mods.find((m) => m.kind === "maxhp");
   const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
   return (
@@ -95,6 +97,52 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
               {cap(a)}
             </label>
           ))}
+        </div>
+        <div className="space-y-1 text-sm" data-trigger>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">Trigger</span>
+            <select name="trigger_on" defaultValue={trig?.on ?? ""} className="select select-sm w-auto">
+              <option value="">none</option>
+              {TRIGGER_EVENTS.map(([e, label]) => <option key={e} value={e}>{label}</option>)}
+            </select>
+            <select name="trigger_reach" defaultValue={trig?.reach ?? "melee"} className="select select-sm w-auto">
+              <option value="melee">in melee</option>
+              <option value="any">by any attack</option>
+            </select>
+            <span className="text-xs opacity-60">the other creature: the attacker (when hit) or whoever they hit</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pl-4">
+            deals
+            <input name="trigger_damage" pattern={DICE_PATTERN} placeholder="dice (e.g. 2d8)" defaultValue={trig?.damage ?? ""} className="input input-sm w-28" />
+            <select name="trigger_type" defaultValue={trig?.damage_type ?? ""} className="select select-sm w-auto">
+              <option value="">type…</option>
+              {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{cap(t)}</option>)}
+            </select>
+            to the other;
+            <select name="trigger_save_attr" defaultValue={trig?.save_attr ?? ""} className="select select-sm w-auto">
+              <option value="">no save</option>
+              {ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)} save</option>)}
+            </select>
+            DC
+            <input name="trigger_save_dc" type="number" min="1" defaultValue={trig?.save_dc ?? 12} className="input input-sm w-16" />
+            <select name="trigger_save_halves" defaultValue={trig && !trig.save_halves ? "negates" : "halves"} className="select select-sm w-auto">
+              <option value="halves">halves it</option>
+              <option value="negates">negates it</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pl-4">
+            puts
+            <select name="trigger_condition" defaultValue={trig?.condition ? String(trig.condition) : ""} className="select select-sm w-auto">
+              <option value="">no condition</option>
+              {conditions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            on
+            <select name="trigger_condition_on" defaultValue={trig?.condition_on ?? "other"} className="select select-sm w-auto">
+              <option value="other">the other creature</option>
+              <option value="self">themselves</option>
+            </select>
+            <span className="text-xs opacity-60">(to end the condition once it fires, tick &quot;once its trigger fires&quot; on the condition)</span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm" data-aura>
           <span className="font-semibold">Aura</span>

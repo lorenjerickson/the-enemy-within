@@ -2019,6 +2019,7 @@ addColumn("conditions", "save_action", "INTEGER NOT NULL DEFAULT 0"); // 1: Shak
 addColumn("conditions", "saves_needed", "INTEGER NOT NULL DEFAULT 1"); // successful saves to end it
 addColumn("conditions", "ends_on_damage", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when hurt
 addColumn("conditions", "ends_on_attack", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when they attack
+addColumn("conditions", "ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"); // 1: ends once its trigger fires
 addColumn("conditions", "concentration", "INTEGER NOT NULL DEFAULT 0"); // 1: needs whoever put it on to keep concentrating
 addColumn("conditions", "reapply", "TEXT NOT NULL DEFAULT 'refresh'"); // put on again: refresh | stack | ignore
 addColumn("conditions", "stack_limit", "INTEGER NOT NULL DEFAULT 0"); // stacking: at most this many (0 = no limit)
@@ -2029,14 +2030,15 @@ addColumn("conditions", "apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'")
 
 export function listEffectDefs(): EffectDef[] {
   const raw = db.prepare<[], { id: number; name: string; description: string; modifiers: string }>("SELECT * FROM effects ORDER BY name").all().map((r) => ({ ...r, modifiers: JSON.parse(r.modifiers) as Modifier[] }));
-  if (!raw.some((e) => e.modifiers.some((m) => m.kind === "aura"))) return raw;
-  // An aura's condition, filled in (one level: auras within it aren't, so they can't loop).
+  const gives = (m: Modifier) => m.kind === "aura" || (m.kind === "trigger" && !!m.condition);
+  if (!raw.some((e) => e.modifiers.some(gives))) return raw;
+  // An aura's (or trigger's) condition, filled in (one level: auras within it aren't, so they can't loop).
   const conditions = db.prepare<[], ConditionRow>("SELECT * FROM conditions").all();
   const given = (id: number): Condition | undefined => {
     const c = conditions.find((x) => x.id === id);
     return c ? { ...c, effects: (JSON.parse(c.effects) as number[]).flatMap((e) => raw.find((x) => x.id === e) ?? []) } : undefined;
   };
-  return raw.map((e) => ({ ...e, modifiers: e.modifiers.map((m) => (m.kind === "aura" ? { ...m, given: given(m.condition) } : m)) }));
+  return raw.map((e) => ({ ...e, modifiers: e.modifiers.map((m) => (gives(m) ? { ...m, given: given((m as { condition: number }).condition) } : m)) }));
 }
 
 export function getEffectDef(id: number): EffectDef | undefined {
@@ -2045,7 +2047,7 @@ export function getEffectDef(id: number): EffectDef | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveEffectDef(id: number | null, e: Omit<EffectDef, "id">): number {
-  const params = { name: e.name, description: e.description, modifiers: JSON.stringify(e.modifiers.map((m) => (m.kind === "aura" ? { ...m, given: undefined } : m))) }; // an aura's condition is filled in when read
+  const params = { name: e.name, description: e.description, modifiers: JSON.stringify(e.modifiers.map((m) => (m.kind === "aura" || m.kind === "trigger" ? { ...m, given: undefined } : m))) }; // an aura's condition is filled in when read
   if (id === null) return Number(db.prepare("INSERT INTO effects (name, description, modifiers) VALUES (@name, @description, @modifiers)").run(params).lastInsertRowid);
   db.prepare("UPDATE effects SET name = @name, description = @description, modifiers = @modifiers WHERE id = @id").run({ ...params, id });
   return id;
@@ -2078,9 +2080,9 @@ export function getCondition(id: number): Condition | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveConditionDef(id: number | null, c: Omit<ConditionDef, "id">): number {
-  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0, concentration: c.concentration ?? 0, reapply: c.reapply ?? "refresh", stack_limit: c.stack_limit ?? 0 };
-  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack, concentration, reapply, stack_limit) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack, @concentration, @reapply, @stack_limit)").run(params).lastInsertRowid);
-  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack, concentration = @concentration, reapply = @reapply, stack_limit = @stack_limit WHERE id = @id").run({ ...params, id });
+  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0, ends_on_trigger: c.ends_on_trigger ?? 0, concentration: c.concentration ?? 0, reapply: c.reapply ?? "refresh", stack_limit: c.stack_limit ?? 0 };
+  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack, ends_on_trigger, concentration, reapply, stack_limit) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack, @ends_on_trigger, @concentration, @reapply, @stack_limit)").run(params).lastInsertRowid);
+  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack, ends_on_trigger = @ends_on_trigger, concentration = @concentration, reapply = @reapply, stack_limit = @stack_limit WHERE id = @id").run({ ...params, id });
   return id;
 }
 

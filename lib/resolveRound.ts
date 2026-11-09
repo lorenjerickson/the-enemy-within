@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -128,6 +128,7 @@ export interface Combatant {
   extras?: { dealing: Extra[]; taking: Extra[] }; // extra damage on their hits, and on hits against them
   limits?: Restrictions; // what conditions stop them doing (a condition put on mid-round counts from then on)
   auras?: AuraModifier[]; // auras they give off of their own (or from what they wear); those from conditions on them come with the conditions
+  triggers?: { mod: Trigger; name: string }[]; // triggers of their own (or from what they wear), with the effect's name; those from conditions come with them
 }
 
 /**
@@ -179,18 +180,22 @@ export function resolveMovement(
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
   const temps = new Map<number, number>(); // temporary health granted this round (given after it, the highest)
+  /** A save against something landing on them: a player rolls their own (the round waits for it), the server rolls for the GM's creatures. */
+  const saveAgainst = (id: number, attr: Attribute, dc: number, key: string, what: string, sec: number): number => {
+    if (fighters.get(id)?.limits?.autofail.includes(attr)) return -99; // fails outright: nothing to roll
+    if (rollers.has(id)) {
+      if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: what, attr, dc });
+      return decisions[key];
+    }
+    return fighters.get(id)?.save?.(attr).total ?? 0;
+  };
   /** Puts a condition on someone mid-round (`aura`: from that creature's aura, while they're within it); false if they resist it or nothing changes. */
   const afflict = (id: number, c: Condition, by: number | null, sec: number, aura?: number): boolean => {
     // A save as it lands: a player rolls their own (the round waits for it), the server rolls for the GM's creatures.
     let rounds = c.rounds;
     if (c.apply_save_attr) {
-      const dc = c.apply_save_dc ?? 12, key = `save:${sec}:${c.id}:${id}`;
-      let total: number;
-      if (fighters.get(id)?.limits?.autofail.includes(c.apply_save_attr)) total = -99; // fails outright: nothing to roll
-      else if (rollers.has(id)) {
-        if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: c.name, attr: c.apply_save_attr, dc });
-        total = decisions[key];
-      } else total = fighters.get(id)?.save?.(c.apply_save_attr).total ?? 0;
+      const dc = c.apply_save_dc ?? 12;
+      const total = saveAgainst(id, c.apply_save_attr, dc, `save:${sec}:${c.id}:${id}`, c.name, sec);
       if (total >= dc) {
         if (c.apply_save_outcome !== "halves") {
           log.push(`${sec} s: ${nameOf(id)} resists ${c.name} (${c.apply_save_attr} ${total} vs DC ${dc}).`);
@@ -264,7 +269,7 @@ export function resolveMovement(
     return true;
   };
   /** A condition ends mid-round: off them, and what it did (rolls, limits, extras) stops counting from now on. */
-  const release = (id: number, a: Affliction, why: "save" | "damage" | "attack" | "concentration" | "left", sec: number) => {
+  const release = (id: number, a: Affliction, why: "save" | "damage" | "attack" | "concentration" | "left" | "trigger", sec: number) => {
     const c = a.condition, f = fighters.get(id);
     afflicted.set(id, (afflicted.get(id) ?? []).filter((x) => x !== a));
     if (f) {
@@ -275,6 +280,7 @@ export function resolveMovement(
       }
       if (f.extras) f.extras = { dealing: f.extras.dealing.filter((x) => x.name !== c.name), taking: f.extras.taking.filter((x) => x.name !== c.name) };
     }
+    if (why === "trigger") log.push(`${sec} s: ${nameOf(id)}'s ${c.name} is spent.`);
     if (why === "left") log.push(`${sec} s: ${nameOf(id)} is out of ${nameOf(a.aura ?? -1)}'s aura: no longer ${c.name.toLowerCase()}.`);
     if (why === "damage" || why === "attack") log.push(`${sec} s: ${nameOf(id)} is no longer ${c.name.toLowerCase()} (${why === "damage" ? "hurt" : "they attacked"}).`);
     story.push({ sec, k: "effectEnds", who: id, name: c.name, why });
@@ -310,6 +316,49 @@ export function resolveMovement(
     const dc = Math.max(10, Math.floor(amount / 2)), s = fighters.get(caster)?.save?.("fortitude");
     if (!s || s.total < dc) return breakConcentration(caster, sec, `Fortitude ${s?.total ?? "-"} vs DC ${dc}`);
     log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
+  };
+  /** A creature's triggers: its own (and its gear's), and those of conditions on it. */
+  const triggersOf = (id: number) => [
+    ...(fighters.get(id)?.triggers ?? []).map((t) => ({ ...t, a: undefined as Affliction | undefined })),
+    ...(afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition).flatMap((mod) => (mod.kind === "trigger" ? [{ mod, name: a.condition.name, a }] : []))),
+  ];
+  /**
+   * A hit landed: the target's "when hit" triggers fire (on the attacker) and the attacker's "when they hit" ones (on
+   * the target): damage to the other (a save may halve or negate it), a condition on someone, and a condition that
+   * ends once its trigger fires ends. Triggered damage isn't a hit, so it doesn't set off more.
+   */
+  const onHit = (attacker: number, target: number, melee: boolean, sec: number) => {
+    const fire = [
+      ...triggersOf(target).filter((t) => t.mod.on === "hit").map((t) => ({ ...t, owner: target, other: attacker })),
+      ...triggersOf(attacker).filter((t) => t.mod.on === "hitting").map((t) => ({ ...t, owner: attacker, other: target })),
+    ];
+    fire.forEach((t, i) => {
+      const m = t.mod;
+      if (m.reach === "melee" && !melee) return;
+      if (m.damage && hp.has(t.other) && !down.has(t.other)) {
+        let n = Math.max(0, rollDice(m.damage));
+        let saved = "";
+        if (m.save_attr) {
+          const total = saveAgainst(t.other, m.save_attr, m.save_dc, `tsave:${sec}:${attacker}:${target}:${i}`, t.name, sec);
+          if (total >= m.save_dc) {
+            n = m.save_halves ? Math.floor(n / 2) : 0;
+            saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc}: ${m.save_halves ? "halved" : "none"})`;
+          } else saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc})`;
+        }
+        const tk = takenBy(t.other, n, m.damage_type || undefined), before = hp.get(t.other)!, after = Math.max(0, before - tk.n);
+        hp.set(t.other, after);
+        log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) deals ${nameOf(t.other)} ${tk.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${tk.note}; ${after} left.`);
+        story.push({ sec, k: "effect", who: t.other, name: t.name, much: tk.n, heal: false, hurt: hurt(t.other, tk.n), from: t.owner });
+        if (tk.n > 0) wasHurt(t.other, sec, tk.n);
+        if (after <= 0 && before > 0) {
+          down.add(t.other);
+          story.push({ sec, k: "down", who: t.other });
+          log.push(`${sec} s: ${nameOf(t.other)} is down.`);
+        }
+      } else if (!m.damage) log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
+      if (m.given) afflict(m.condition_on === "self" ? t.owner : t.other, m.given, t.owner, sec);
+      if (t.a?.condition.ends_on_trigger && (afflicted.get(t.owner) ?? []).includes(t.a)) release(t.owner, t.a, "trigger", sec);
+    });
   };
   /** Attacked someone: conditions that end when they attack end (invisibility). */
   const didAttack = (id: number, sec: number) => {
@@ -780,6 +829,7 @@ export function resolveMovement(
             say(`${nameOf(id)} is down.`);
           }
           leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
+          onHit(m.tokenId, id, (rangeOf(step, m) ?? 1) <= 1, sec); // triggers: when hit, when they hit
         }
         leave(m.tokenId, use.statuses?.self, use.statuses?.minutes ?? 0, sec, m.tokenId);
         if (use.damage) didAttack(m.tokenId, sec);
@@ -878,6 +928,7 @@ export function resolveMovement(
             say(`${target.name} is down.`);
           }
           leave(target.id, step.use?.statuses?.target, step.use?.statuses?.minutes ?? 0, sec, m.tokenId); // on a hit
+          onHit(m.tokenId, target.id, (rangeOf(step, m) ?? 1) <= 1, sec); // triggers: when hit, when they hit
         }
         leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec, m.tokenId); // whether it hit or not
         didAttack(m.tokenId, sec);

@@ -26,7 +26,29 @@ export type Modifier =
   | { kind: "multiply"; target: ModifierTarget; factor: number } // multiplied after boosts and settings (damage ×2, defense ×½)
   | { kind: "temphp"; value: string } // temporary health as it lands (the highest counts, it doesn't add up)
   | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
+  | Trigger
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
+
+/**
+ * Something that fires on an event: when they're hit (the other creature: the attacker) or when they hit someone (the
+ * other: whoever they hit), in melee or by any attack. It can damage the other creature (a save may halve or negate it)
+ * and put a condition on the other creature or on themselves. Their condition can end as it fires (its lifecycle says).
+ */
+export type TriggerEvent = "hit" | "hitting";
+export type Trigger = {
+  kind: "trigger";
+  on: TriggerEvent;
+  reach: "melee" | "any";
+  damage: string; // dice to the other creature ('' = none)
+  damage_type: DamageType | "";
+  save_attr: Attribute | ""; // the other creature's save against the damage
+  save_dc: number;
+  save_halves: boolean; // a save halves it (else negates it)
+  condition: number; // a catalog condition put on someone (0 = none)
+  condition_on: "other" | "self";
+  given?: Condition; // that condition, filled in when read
+};
+export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're hit"], ["hitting", "when they hit someone"]];
 
 /** What a modifier can forbid: a kind of step, moving, or attacking whoever put the condition on them (Hypnotized). */
 export type Forbid = "actions" | "bonus" | "reactions" | "movement" | "attack-source";
@@ -109,6 +131,7 @@ export interface ConditionDef {
   saves_needed?: number; // successful saves it takes to end it (default 1)
   ends_on_damage?: number; // 1: ends when they take damage (a deep sleep)
   ends_on_attack?: number; // 1: ends when they attack (invisibility)
+  ends_on_trigger?: number; // 1: ends once one of its effects' triggers fires (a one-off burst)
   concentration?: number; // 1: whoever put it on must keep concentrating (one at a time; hurt: a Fortitude save; down: it ends)
   reapply?: "refresh" | "stack" | "ignore"; // put on again while it's on: its rounds start over (default), another runs alongside, or nothing happens
   stack_limit?: number; // stacking: at most this many at once (0 = no limit); past it, the one with the fewest rounds left starts over
@@ -169,6 +192,14 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
+  if (m.kind === "trigger") {
+    const other = m.on === "hit" ? "the attacker" : "whoever they hit";
+    const what = [
+      m.damage && `${m.damage}${m.damage_type ? ` ${m.damage_type}` : ""} damage to ${other}${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc} ${m.save_halves ? "halves" : "negates"})` : ""}`,
+      m.condition && `${m.given?.name ?? "a condition"} on ${m.condition_on === "self" ? "themselves" : other}`,
+    ].filter(Boolean).join(" and ");
+    return `${m.on === "hit" ? "when hit" : "when they hit"}${m.reach === "melee" ? " in melee" : ""}: ${what || "nothing"}`;
+  }
   if (m.kind === "aura") return `aura ${m.radius} ft: ${m.given?.name ?? "a condition"} on ${m.who === "friendly" ? "allies" : m.who === "enemy" ? "enemies" : "everyone"}${m.self ? " (itself too)" : ""} within it`;
   if (m.kind === "maxhp") return `${m.value >= 0 ? "+" : ""}${m.value} maximum health`;
   if (m.kind === "set") return `${targetLabel(m.target).toLowerCase()} becomes ${m.value}${m.plus ? ` + ${m.plus}` : ""}`;
@@ -197,13 +228,14 @@ export function describeEffect(e: Pick<EffectDef, "modifiers">): string {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** "Fortitude DC 12 when applied negates · 6 rounds · Fortitude DC 12 ends it". */
-export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "concentration" | "reapply" | "stack_limit">, withRounds = true) =>
+export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "ends_on_trigger" | "concentration" | "reapply" | "stack_limit">, withRounds = true) =>
   [
     c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
     withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,
     c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc}${(c.saves_needed ?? 1) > 1 ? ` ×${c.saves_needed}` : ""} ${c.save_when === "start" ? "at the start of each round" : c.save_when === "damaged" ? "when hurt" : "each round"}${c.save_action ? " (or as an action)" : ""} ends it`,
     c.ends_on_damage && "ends when hurt",
     c.ends_on_attack && "ends when they attack",
+    c.ends_on_trigger && "ends once its trigger fires",
     c.concentration && "needs concentration",
     c.reapply === "stack" ? `stacks${c.stack_limit ? ` (up to ${c.stack_limit})` : ""}` : c.reapply === "ignore" ? "doesn't renew" : "",
   ].filter(Boolean).join(" · ");
