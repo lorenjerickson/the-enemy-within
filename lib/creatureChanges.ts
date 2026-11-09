@@ -104,7 +104,7 @@ export function skillCheckFor(tokenId: number, skill: string, attributes: Attrib
     const m = modifier(score(best));
     if (m !== 0) parts.push({ formula: String(m), source: `${cap(best)} ${score(best)} (${formatModifier(m)})` });
   }
-  for (const s of changes) for (const b of s.boosts) if (b.target === `skill:${skill}`) parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });
+  for (const s of changes) for (const b of s.boosts) if (b.target === `skill:${skill}` || b.target === "check") parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });
   const mode = combineModes("normal", changes, `skill:${skill}`, best ? [combineModes("normal", changes, `check:${best}`)] : []);
   return { label: `${cap(skill)} check`, parts, mode };
 }
@@ -120,5 +120,6 @@ export function saveRollFor(tokenId: number, attr: Attribute, label: string): Ro
   const boosted = score + steadyBoost(changes, `attribute:${attr}`), m = modifier(boosted);
   const parts: RollPart[] = [{ formula: "1d20", source: `${cap(attr)} save` }];
   if (m !== 0) parts.push({ formula: String(m), source: `${cap(attr)} ${boosted} (${formatModifier(m)})` });
+  for (const s of changes) for (const b of s.boosts) if (b.target === "save" || b.target === `save:${attr}`) parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });
   return { label, parts, mode: combineModes("normal", changes, `save:${attr}`) };
 }

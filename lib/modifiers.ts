@@ -11,6 +11,9 @@ export type ModifierTarget =
   | "attack"
   | "damage"
   | "defense"
+  | "save" // every saving throw (Bless: +1d4)
+  | `save:${Attribute}`
+  | "check" // every ability and skill check (Guidance: +1d4)
   | `movement:${MovementType}`;
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -20,6 +23,7 @@ export const MODIFIER_TARGET_GROUPS: [string, [ModifierTarget, string][]][] = [
   ["Attributes", ATTRIBUTES.map((a) => [`attribute:${a}`, capitalize(a)])],
   ["Skills", SKILLS.map((s) => [`skill:${s}`, capitalize(s)])],
   ["Combat", [["health", "Health"], ["attack", "Attack (to-hit)"], ["damage", "Damage"], ["defense", "Defense"]]],
+  ["Rolls", [["save", "All saving throws"], ...ATTRIBUTES.map((a): [ModifierTarget, string] => [`save:${a}`, `${capitalize(a)} saves`]), ["check", "All ability and skill checks"]]],
   ["Movement", MOVEMENT_TYPES.map((m) => [`movement:${m}`, capitalize(m)])],
 ];
 
@@ -27,5 +31,5 @@ const LABELS = new Map(MODIFIER_TARGET_GROUPS.flatMap(([, opts]) => opts));
 export const isModifierTarget = (s: string): s is ModifierTarget => LABELS.has(s as ModifierTarget);
 export const targetLabel = (t: ModifierTarget) => {
   const group = MODIFIER_TARGET_GROUPS.find(([, opts]) => opts.some(([v]) => v === t))?.[0];
-  return group === "Combat" ? LABELS.get(t)! : `${LABELS.get(t)} (${group?.replace(/s$/, "").toLowerCase()})`;
+  return group === "Combat" || group === "Rolls" ? LABELS.get(t)! : `${LABELS.get(t)} (${group?.replace(/s$/, "").toLowerCase()})`;
 };

@@ -65,8 +65,8 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
     },
     save: (attr) => {
       const [d, text] = d20(combineModes("normal", f.statuses, `save:${attr}`));
-      const m = mod(attr);
-      return { total: d + m, text: `${text} ${formatModifier(m)}` };
+      const m = mod(attr), extra = boosted(f.statuses, "save") + boosted(f.statuses, `save:${attr}`); // Bless +1d4, rolled each time
+      return { total: d + m + extra, text: `${text} ${formatModifier(m)}${plus(extra, "boost")}` };
     },
     defense: () => {
       const agility = mod("agility"), armour = items.reduce((s, i) => s + roll(i.defense), 0), extra = boosted(f.statuses, "defense");
