@@ -16,7 +16,7 @@ import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
-import { addAffliction } from "@/lib/db";
+import { addAffliction, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest } from "@/lib/db";
 
 /**
@@ -104,6 +104,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const h = tokenHealth(id);
     if (h && n > h.temporary) saveTokenHealth(id, { ...h, temporary: n });
   }
+  // Players' characters saw from every spot they passed through, not just where they ended up (fog of war).
+  for (const fr of frames) for (const [id, p] of Object.entries(fr.pos)) if (tokens.find((t) => t.id === Number(id))?.character_id) recordSightingAt(Number(id), p.col, p.row);
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
     if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);

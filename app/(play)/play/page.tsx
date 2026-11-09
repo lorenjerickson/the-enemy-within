@@ -29,7 +29,7 @@ import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel, { planningData } from "./EncounterPanel";
 import ContestModal from "./ContestModal";
 import SaveWaitModal from "./SaveWaitModal";
-import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories } from "@/lib/db";
+import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories, listCharacterSightings } from "@/lib/db";
 import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
@@ -127,6 +127,10 @@ function GmView({ session }: { session: GameSession }) {
       return v ? [[o.token_id, { from: v.from, feetLeft: v.ready ? 0 : v.feetLeft, perSecond: v.perSecond }]] : [];
     })
   );
+  // Planning as a player's character: what that character has seen before stays shaded in (their fog of war).
+  const planExplored = Object.fromEntries(
+    listTokens(levelId!).filter((t) => t.character_id !== null && gmPlans[t.id]).map((t) => [t.id, listCharacterSightings(t.character_id!, levelId!)])
+  );
   return (
     <>
       {/* Players move their own tokens now, so the GM's map keeps up. */}
@@ -135,7 +139,7 @@ function GmView({ session }: { session: GameSession }) {
       <GmPlanningMode {...planningData()} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
-      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
+      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} gmPlans={gmPlans} planExplored={planExplored} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
     </>
   );
 }

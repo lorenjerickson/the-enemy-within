@@ -639,6 +639,7 @@ export default function MapView({
   planRoutes = [],
   contest = null,
   selectedTarget = null,
+  planExplored,
   downTokens = [],
   lasting = [],
   gmPlans,
@@ -679,6 +680,7 @@ export default function MapView({
   planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
   contest?: Contest | null; // a contested move waiting on the GM: zoomed to, boxed, the spot highlighted
   selectedTarget?: number | null; // a player's selected target (kept from round to round): marked; clicking another token changes it
+  planExplored?: Record<number, Point[]>; // GM planning as a character: where it has stood (what it's seen stays shaded in)
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
@@ -958,7 +960,8 @@ export default function MapView({
   const fogOn = (!!fog || planningAs !== null) && mapImage.perspective !== "portrait"; // side-on maps have no fog
   const wallsKey = optimisticStructures.map((w) => `${w.kind}${w.open}${w.x1},${w.y1},${w.x2},${w.y2}`).join("|"); // changes only when walls do
   const fogWalls = useMemo(() => blockingSegments(optimisticStructures), [wallsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const exploredKey = fogOn && fog && planningAs === null ? JSON.stringify(fog.explored) : "";
+  // What they've seen before: a player's characters' spots, or (GM planning as a character) that character's.
+  const exploredKey = !fogOn ? "" : planningAs !== null ? JSON.stringify(planExplored?.[planningAs] ?? []) : fog ? JSON.stringify(fog.explored) : "";
   const explored = useMemo(
     () => (exploredKey ? (JSON.parse(exploredKey) as Point[]).map((p) => visibilityPolygon(p, SIGHT, fogWalls)) : []),
     [exploredKey, fogWalls]

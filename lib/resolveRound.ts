@@ -362,6 +362,25 @@ export function resolveMovement(
   const close = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.05 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1);
   const dist = (a: Pos, b: Pos) => Math.hypot(a.col - b.col, a.row - b.row);
   const budget = new Map(order.map((m) => [m.tokenId, 0])); // squares (or units) of chase movement banked
+  /**
+   * One second of a planned move that has to leave its line: around a body lying in the way, or back onto its route
+   * after being pushed aside. Heads for `to` (where the plan has them by now), turning up to 120° either side for a
+   * spot clear of bodies and walls that gets closest.
+   */
+  function detourStep(m: Mover, from: Pos, to: Pos): Pos {
+    const step = m.walking / FEET_PER_SQUARE / ROUND_SECONDS, d = dist(from, to);
+    if (d < 1e-6 || step <= 0) return from;
+    const bodies = [...down].flatMap((id) => (id === m.tokenId ? [] : where(id) ?? []));
+    const len = Math.min(step, d), heading = Math.atan2(to.row - from.row, to.col - from.col);
+    const snap = (p: Pos) => (gridless ? { col: Math.round(p.col * 20) / 20, row: Math.round(p.row * 20) / 20 } : { col: Math.round(p.col), row: Math.round(p.row) });
+    let best: Pos | null = null;
+    for (const turn of [0, 30, -30, 60, -60, 90, -90, 120, -120]) {
+      const a = heading + (turn * Math.PI) / 180, p = snap({ col: from.col + Math.cos(a) * len, row: from.row + Math.sin(a) * len });
+      if (unmoved(p, from) || bodies.some((b) => same(b, p)) || !clearPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: p.col + 0.5, y: p.row + 0.5 }, walls)) continue;
+      if (!best || dist(p, to) < dist(best, to) - 1e-9) best = p;
+    }
+    return best ?? from;
+  }
   /** One second of Evade / Pursue from `from` with the target at `them`: toward by the most direct route, or as far away as it can get. */
   function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean): Pos {
     const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
@@ -435,6 +454,7 @@ export function resolveMovement(
   const lastHitBy = new Map<number, number>();
   const heldBy = new Map<number, number>();
   const frozen = new Set<number>(); // told they can't move this round (a condition)
+  const detoured = new Set<number>(); // told they went around a body this round
   const gaveWay = new Set<string>(); // contested moves already settled this round (told once)
   const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
     const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
@@ -505,7 +525,19 @@ export function resolveMovement(
           if (!them || down.has(c.target.id) || close(here, them)) return [m.tokenId, here];
           return [m.tokenId, chaseStep(m, here, them, c.action === "pursue")];
         }
-        return [m.tokenId, wants.get(m.tokenId)!(t)];
+        // A planned move: along its route, unless a body lies on the next spot (step around it) or they've been put off
+        // the route (pushed aside): then they make their own way towards where the plan has them by now.
+        const planned = wants.get(m.tokenId)!, next = planned(t);
+        const body = [...down].find((id) => { const p = where(id); return id !== m.tokenId && p && same(p, next); });
+        if (body !== undefined || !unmoved(here, planned(t - 1))) {
+          if (unmoved(here, next) || (body !== undefined && unmoved(planned(t + 1), next) && close(here, next))) return [m.tokenId, here]; // as close as they'll get to a spot a body lies on
+          if (body !== undefined && !detoured.has(m.tokenId)) {
+            detoured.add(m.tokenId);
+            log.push(`${sec} s: ${m.name} goes around ${nameOf(body)}, lying in the way.`);
+          }
+          return [m.tokenId, detourStep(m, here, next)];
+        }
+        return [m.tokenId, next];
       })
     );
     // Reconciliation, highest initiative first.

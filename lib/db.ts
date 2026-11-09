@@ -1244,6 +1244,18 @@ function recordSighting(tokenId: number): void {
   ).run(tokenId);
 }
 
+/** A spot a character's token passed through (each second of a round's movement): it saw from there too. */
+export function recordSightingAt(tokenId: number, col: number, row: number): void {
+  db.prepare<[number, number, number]>(
+    "INSERT OR IGNORE INTO sightings SELECT character_id, level_id, ? + 0.5, ? + 0.5 FROM map_tokens WHERE id = ? AND character_id IS NOT NULL"
+  ).run(col, row, tokenId);
+}
+
+/** Where one character has stood on this level (its fog of war viewpoints, for the GM planning as it). */
+export function listCharacterSightings(characterId: number, levelId: number): { x: number; y: number }[] {
+  return db.prepare<[number, number], { x: number; y: number }>("SELECT x, y FROM sightings WHERE character_id = ? AND level_id = ?").all(characterId, levelId);
+}
+
 /** Where a player's characters have stood on this level (fog of war viewpoints). */
 export function listSightings(playerId: number, levelId: number): { x: number; y: number }[] {
   return db
