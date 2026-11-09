@@ -102,6 +102,19 @@ export async function submitEffect(id: number | null, formData: FormData) {
     const who = text("aura_who");
     modifiers.push({ kind: "aura", condition: auraCondition, radius, who: who === "friendly" || who === "enemy" ? who : "", self: formData.get("aura_self") === "on" });
   }
+  // Dice: a wider critical range, criticals against them as normal hits, rerolls and a minimum d20.
+  const range = Number(text("crit_range"));
+  if (range === 18 || range === 19) modifiers.push({ kind: "crit", range });
+  if (formData.get("nocrit") === "on") modifiers.push({ kind: "nocrit" });
+  for (const [rollKey, numKey, kind] of [["reroll_roll", "reroll_at", "reroll"], ["minroll_roll", "minroll_min", "minroll"]] as const) {
+    const nums = formData.getAll(numKey).map((v) => Math.round(Number(v)));
+    formData.getAll(rollKey).forEach((r, i) => {
+      const roll = String(r), n = nums[i];
+      if (!roll || !n) return;
+      if (!isRollKind(roll) || n < 1 || n > 20) throw new Error(`Invalid ${kind === "reroll" ? "reroll" : "minimum"}`);
+      modifiers.push(kind === "reroll" ? { kind, roll, at: n } : { kind, roll, min: n });
+    });
+  }
   // A trigger: when hit / when they hit, damage to the other creature and / or a condition on someone.
   const on = text("trigger_on");
   if (on === "hit" || on === "hitting" || on === "moves" || on === "start") {

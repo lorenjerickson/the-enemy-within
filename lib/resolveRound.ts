@@ -1,7 +1,9 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
-import { describeStatus, type Status } from "@/lib/status";
+import { critImmune, describeStatus, type Status } from "@/lib/status";
+/** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
+const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
@@ -116,10 +118,10 @@ export interface Replay {
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
 export interface Combatant {
   hp: number;
-  attack: (use?: GearAction, against?: Combatant) => { total: number; text: string };
+  attack: (use?: GearAction, against?: Combatant) => { total: number; text: string; natural?: number; crit?: boolean; fumble?: boolean }; // crit: a critical hit; fumble: a natural 1
   statuses?: Status[]; // what actions left on them; a status added this round counts straight away
   defense: () => { total: number; text: string };
-  damage: (use?: GearAction) => { total: number; text: string };
+  damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
   save?: (attr: Attribute) => { total: number; text: string };
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
   maxHp?: number; // for how bad a wound sounds in the players' story
@@ -263,7 +265,7 @@ export function resolveMovement(
       afflicted.set(id, r.list);
     }
     const rolls = rollChanges(c);
-    if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
+    if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length || rolls.tweaks.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
     story.push({ sec, k: "afflicted", who: id, name: c.name, by, ...(aura != null ? { aura: true } : {}) });
     log.push(aura != null ? `${sec} s: ${nameOf(id)} comes within ${nameOf(aura)}'s aura: ${c.name} (${describeCondition(c, false)}) while there.` : `${sec} s: ${nameOf(id)} is affected by ${c.name} (${describeCondition(c)}).`);
     return true;
@@ -836,7 +838,7 @@ export function resolveMovement(
           : step.picks!.map((x) => x.id);
         const me = fighters.get(m.tokenId);
         say(`${m.name} uses ${use.name} on ${list.length ? list.map(nameOf).join(", ") : "no one"}.`);
-        let a: { total: number; text: string } | null = null, dmg: { total: number; text: string } | null = null;
+        let a: ReturnType<Combatant["attack"]> | null = null, dmg: { total: number; text: string } | null = null;
         for (const id of list) {
           const them = fighters.get(id), at = where(id);
           if (!me || !them || !at || down.has(id)) continue;
@@ -858,21 +860,23 @@ export function resolveMovement(
           a ??= usingDice(step.dice?.hit, () => me.attack(use, them));
           const d = them.defense();
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
-          if (a.total < d.total) {
-            say(`${use.name} misses ${nameOf(id)}: ${a.total} (${a.text}) vs defense ${d.total}.`);
+          // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
+          const crit = !!a.crit && !critImmune(them.statuses);
+          if (a.fumble || (!a.crit && a.total < d.total)) {
+            say(`${use.name} misses ${nameOf(id)}: ${a.total} (${a.text}) vs defense ${d.total}${a.fumble ? " (a natural 1)" : ""}.`);
             story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "miss" });
             fx.push({ look, from: m.tokenId, to: id, outcome: "miss" });
             continue;
           }
-          dmg ??= usingDice(step.dice?.damage, () => me.damage(use));
+          dmg ??= usingDice(step.dice?.damage, () => me.damage(use, crit));
           const t0 = takenBy(id, dmg.total, use.damageType), x = bonusOnHit(m.tokenId, id);
           const t = { ...t0, n: t0.n + x.n, note: t0.note + x.note };
           const left = Math.max(0, hp.get(id)! - t.n);
           hp.set(id, left);
           hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
           lastHitBy.set(id, m.tokenId);
-          say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text})${t.note}; ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
+          say(`${use.name} ${critNote(a.crit, crit)}hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text})${t.note}; ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}) });
           if (t.n > 0) wasHurt(id, sec, t.n);
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
           if (left <= 0) {
@@ -959,19 +963,20 @@ export function resolveMovement(
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
-        if (a.total < d.total) shown("miss");
-        if (a.total < d.total) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss.`);
-        if (a.total < d.total) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
+        const crit = !!a.crit && !critImmune(them.statuses), misses = a.fumble || (!a.crit && a.total < d.total); // a natural 1 misses; a critical hits
+        if (misses) shown("miss");
+        if (misses) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss${a.fumble ? " (a natural 1)" : ""}.`);
+        if (misses) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
         else {
-          const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
+          const dmg = usingDice(step.dice?.damage, () => me.damage(step.use, crit));
           const t0 = takenBy(target.id, dmg.total, step.use?.damageType), x = bonusOnHit(m.tokenId, target.id);
           const t = { ...t0, n: t0.n + x.n, note: t0.note + x.note };
           const left = Math.max(0, hp.get(target.id)! - t.n);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           lastHitBy.set(target.id, m.tokenId);
-          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
+          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: ${critNote(a.crit, crit)}hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}) });
           if (t.n > 0) wasHurt(target.id, sec, t.n);
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {

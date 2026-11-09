@@ -100,11 +100,12 @@ function Breakdown({ spec, parts }: { spec: RollSpec; parts?: RolledPart[] }) {
           {spec.parts.map((p, i) => (
             <tr key={i}>
               <td className="pr-3 font-mono whitespace-nowrap">{i === 0 ? p.formula : /^-/.test(p.formula) ? p.formula.replace("-", "− ") : `+ ${p.formula}`}</td>
-              <td className="opacity-80">{p.source}</td>
+              <td className="opacity-80">{p.source}{i === 0 && (spec.reroll || spec.min) ? <span className="ml-1 text-xs opacity-70">({[spec.reroll && `reroll ${spec.reroll === 1 ? "a 1" : `${spec.reroll} or less`}`, spec.min && `at least ${spec.min}`].filter(Boolean).join(", ")})</span> : null}</td>
               {parts && (
                 <td className="pl-2 text-right font-mono whitespace-nowrap">
                   {parts[i].dice.length ? `[${parts[i].dice.join(", ")}]` : ""}
                   {parts[i].dropped !== undefined && <span className="opacity-50 line-through"> {parts[i].dropped}</span>}
+                  {parts[i].note && <span className="ml-1 text-xs opacity-70">({parts[i].note})</span>}
                 </td>
               )}
             </tr>

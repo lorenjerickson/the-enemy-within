@@ -10,6 +10,7 @@ import { DAMAGE_TYPES, rollKindLabel } from "@/lib/actions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 import type { TargetWho } from "@/lib/sides";
+import type { RollTweak } from "@/lib/status";
 
 /** One change while it's active. More kinds (set, multiply, resist, forbid…) come with the backlog. */
 export type Modifier =
@@ -27,6 +28,7 @@ export type Modifier =
   | { kind: "temphp"; value: string } // temporary health as it lands (the highest counts, it doesn't add up)
   | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
   | Trigger
+  | RollTweak // reroll / minroll / crit / nocrit: what happens to the dice
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /**
@@ -174,13 +176,14 @@ export function reapplied(list: Affliction[], c: Condition, rounds: number, by: 
 export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
-export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[] } {
+export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[]; tweaks: RollTweak[] } {
   const mods = c.effects.flatMap((e) => e.modifiers);
   return {
     boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
     grants: mods.flatMap((m) => (m.kind === "roll" ? [{ roll: m.roll, mode: m.mode }] : [])),
     sets: mods.flatMap((m) => (m.kind === "set" ? [{ target: m.target, value: m.value, ...(m.plus ? { plus: m.plus } : {}) }] : [])),
     factors: mods.flatMap((m) => (m.kind === "multiply" ? [{ target: m.target, factor: m.factor }] : [])),
+    tweaks: mods.filter((m): m is RollTweak => m.kind === "reroll" || m.kind === "minroll" || m.kind === "crit" || m.kind === "nocrit"),
   };
 }
 
@@ -192,6 +195,10 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
+  if (m.kind === "reroll") return `rerolls ${m.at === 1 ? "a 1" : `${m.at} or less`} on ${rollKindLabel(m.roll).toLowerCase()} (keeps the new roll)`;
+  if (m.kind === "minroll") return `a d20 below ${m.min} counts as ${m.min} on ${rollKindLabel(m.roll).toLowerCase()}`;
+  if (m.kind === "crit") return `critical hits on ${m.range}–20`;
+  if (m.kind === "nocrit") return "critical hits against them are normal hits";
   if (m.kind === "trigger") {
     const other = m.on === "hit" ? "the attacker" : m.on === "hitting" ? "whoever they hit" : "them";
     const what = [

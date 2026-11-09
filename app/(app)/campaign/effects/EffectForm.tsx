@@ -19,6 +19,7 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
   const mods = initial?.modifiers ?? [];
   const aura = mods.find((m) => m.kind === "aura");
   const tr = mods.find((m) => m.kind === "trigger");
+  const crit = mods.find((m) => m.kind === "crit");
   const trig = tr?.kind === "trigger" ? tr : undefined;
   const speed = mods.find((m) => m.kind === "speed"), temphp = mods.find((m) => m.kind === "temphp"), maxhp = mods.find((m) => m.kind === "maxhp");
   const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
@@ -175,6 +176,17 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
           <PairListInput title="Resistances" addLabel="+ Add resistance" firstName="resist_type" firstPlaceholder="Damage type…" groups={[["Damage types", DAMAGE_TYPES.map((t) => [t, cap(t)] as [string, string])]]} secondName="resist_level" secondOptions={["resistant", "vulnerable", "immune"]} initial={mods.flatMap((m) => (m.kind === "resist" ? [[m.damage_type, m.level] as [string, string]] : []))} />
           <PairListInput title="Becomes (at least)" addLabel="+ Add setting" firstName="set_target" firstPlaceholder="Sets…" groups={SET_TARGETS} secondName="set_value" secondPattern={SET_PATTERN} secondPlaceholder="19, or 13+agility" initial={mods.flatMap((m) => (m.kind === "set" ? [[m.target, `${m.value}${m.plus ? `+${m.plus}` : ""}`] as [string, string]] : []))} />
         <PairListInput title="Multiplied" addLabel="+ Add multiplier" firstName="mul_target" firstPlaceholder="Multiplies…" groups={SET_TARGETS} secondName="mul_factor" secondOptions={["×0", "×½", "×2"]} initial={mods.flatMap((m) => (m.kind === "multiply" ? [[m.target, m.factor === 0.5 ? "×½" : `×${m.factor}`] as [string, string]] : []))} />
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-crit>
+          <span className="font-semibold">Critical hits</span>
+          <select name="crit_range" defaultValue={crit?.kind === "crit" ? String(crit.range) : ""} className="select select-sm w-auto">
+            <option value="">on a 20 (as usual)</option>
+            <option value="19">on 19–20</option>
+            <option value="18">on 18–20</option>
+          </select>
+          <label className="flex items-center gap-1"><input type="checkbox" name="nocrit" defaultChecked={mods.some((m) => m.kind === "nocrit")} className="checkbox checkbox-xs" /> criticals against them are normal hits</label>
+        </div>
+        <PairListInput title="Rerolls (keep the new roll)" addLabel="+ Add reroll" firstName="reroll_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="reroll_at" secondPattern="\d+" secondPlaceholder="at or below (1 = a 1)" initial={mods.flatMap((m) => (m.kind === "reroll" ? [[m.roll, String(m.at)] as [string, string]] : []))} />
+        <PairListInput title="Minimum d20 (a lower roll counts as this)" addLabel="+ Add minimum" firstName="minroll_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="minroll_min" secondPattern="\d+" secondPlaceholder="e.g. 10" initial={mods.flatMap((m) => (m.kind === "minroll" ? [[m.roll, String(m.min)] as [string, string]] : []))} />
         <PairListInput title="Advantage / disadvantage on rolls" addLabel="+ Add roll effect" firstName="grant_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="grant_mode" secondOptions={["advantage", "disadvantage"]} initial={mods.flatMap((m) => (m.kind === "roll" ? [[m.roll, m.mode] as [string, string]] : []))} />
         </fieldset>
       )}

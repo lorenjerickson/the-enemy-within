@@ -12,6 +12,8 @@ export interface RollSpec {
   label: string;
   parts: RollPart[];
   mode: RollMode;
+  reroll?: number; // a d20 at or below this is rerolled once (one more die thrown); the new roll is kept
+  min?: number; // a d20 below this counts as this
 }
 
 /** A rolled part: the dice that came up (a kept d20 first when rolling with advantage/disadvantage) and its value. */
@@ -19,6 +21,7 @@ export interface RolledPart extends RollPart {
   dice: number[];
   dropped?: number; // the other d20, with advantage / disadvantage
   value: number;
+  note?: string; // what happened to the d20 (rerolled, counted as the minimum)
 }
 
 const signed = (f: string) => (/^[+-]/.test(f) ? f : `+${f}`);
@@ -45,10 +48,10 @@ export const d20Part = (spec: RollSpec) => spec.parts.findIndex((p) => { const d
  * Flat parts throw nothing.
  */
 export function diceToThrow(spec: RollSpec): ({ count: number; sides: number } | null)[] {
-  const adv = spec.mode !== "normal" ? d20Part(spec) : -1;
+  const main = d20Part(spec), adv = spec.mode !== "normal" ? main : -1;
   return spec.parts.map((p, i) => {
     const d = partDice(p.formula);
-    return d && { count: i === adv ? 2 : d.count, sides: d.sides };
+    return d && { count: (i === adv ? 2 : d.count) + (i === main && spec.reroll ? 1 : 0), sides: d.sides }; // a reroll: one more d20, used if needed
   });
 }
 
@@ -66,9 +69,19 @@ export function scoreRoll(spec: RollSpec, thrown: number[][]): { total: number; 
     }
     if (got.length !== w.count || got.some((v) => !Number.isInteger(v) || v < 1 || v > w.sides)) return null;
     const sign = partDice(p.formula)!.sign;
-    if (w.count === 2 && partDice(p.formula)!.count === 1) {
-      const keep = spec.mode === "advantage" ? Math.max(...got) : Math.min(...got);
-      parts.push({ ...p, dice: [keep], dropped: keep === got[0] ? got[1] : got[0], value: sign * keep });
+    if (i === d20Part(spec) && w.count > 1) {
+      // The d20: advantage / disadvantage keeps one of two; a reroll uses the spare die; a minimum lifts it.
+      const pair = spec.mode !== "normal" ? got.slice(0, 2) : got.slice(0, 1), spare = spec.reroll ? got[got.length - 1] : undefined;
+      let keep = pair.length === 2 ? (spec.mode === "advantage" ? Math.max(...pair) : Math.min(...pair)) : pair[0];
+      const dropped = pair.length === 2 ? (keep === pair[0] ? pair[1] : pair[0]) : undefined;
+      const notes: string[] = [];
+      if (spare !== undefined && keep <= spec.reroll!) { notes.push(`rerolled ${keep} → ${spare}`); keep = spare; }
+      let value = keep;
+      if (spec.min && value < spec.min) { notes.push(`${value} counts as ${spec.min}`); value = spec.min; }
+      parts.push({ ...p, dice: [keep], ...(dropped !== undefined ? { dropped } : {}), value: sign * value, ...(notes.length ? { note: notes.join(", ") } : {}) });
+    } else if (i === d20Part(spec) && spec.min) {
+      const v = got[0], value = Math.max(v, spec.min);
+      parts.push({ ...p, dice: [v], value: sign * value, ...(value !== v ? { note: `${v} counts as ${spec.min}` } : {}) });
     } else {
       parts.push({ ...p, dice: got, value: sign * got.reduce((a, v) => a + v, 0) });
     }

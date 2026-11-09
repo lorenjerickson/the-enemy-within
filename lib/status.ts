@@ -15,7 +15,29 @@ export interface Status {
   conditions?: Condition[]; // catalog conditions it puts on them (Poisoned…): these run on by rounds, apart from the status
   sets?: { target: ModifierTarget; value: number; plus?: Attribute }[]; // "becomes" (at least): Strength 19, defense 13 + Agility
   factors?: { target: ModifierTarget; factor: number }[]; // multiplied: damage ×2, defense ×½
+  tweaks?: RollTweak[]; // what happens to the dice: rerolls, a minimum, a wider critical range, no criticals against them
 }
+
+/**
+ * Changes to how a d20 comes up: reroll a result at or below `at` once and keep the new one (Lucky: 1); count a
+ * result below `min` as `min` (Reliable Talent: 10 on skill checks); attacks critical on `range`–20 (Improved
+ * Critical: 19); critical hits against them are normal hits (adamantine armour).
+ */
+export type RollTweak = { kind: "reroll"; roll: RollKind; at: number } | { kind: "minroll"; roll: RollKind; min: number } | { kind: "crit"; range: number } | { kind: "nocrit" };
+
+/** The reroll and minimum on a d20 for any of these kinds of roll (the most generous of each), and where they come from. */
+export function d20Tweaks(statuses: Status[], kinds: RollKind[]): { reroll: number; min: number } {
+  let reroll = 0, min = 0;
+  for (const s of statuses) for (const t of s.tweaks ?? []) {
+    if (t.kind === "reroll" && kinds.includes(t.roll)) reroll = Math.max(reroll, t.at);
+    if (t.kind === "minroll" && kinds.includes(t.roll)) min = Math.max(min, t.min);
+  }
+  return { reroll, min };
+}
+/** The lowest natural roll that's a critical hit for them (20 unless something widens it). */
+export const critRange = (statuses: Status[]) => Math.min(20, ...statuses.flatMap((s) => (s.tweaks ?? []).flatMap((t) => (t.kind === "crit" ? [t.range] : []))));
+/** Whether critical hits against them count as normal hits. */
+export const critImmune = (statuses: Status[] = []) => statuses.some((s) => (s.tweaks ?? []).some((t) => t.kind === "nocrit"));
 
 /** An action's statuses: on whoever uses it, on who it's used on, and how long they last (game minutes). */
 export interface ActionStatuses {

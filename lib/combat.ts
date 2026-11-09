@@ -2,7 +2,9 @@ import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
 import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, listAfflictions, getCondition, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { allegianceOf, type Allegiance } from "@/lib/sides";
-import { boostsOn, combineModes, settled, type ActionStatuses, type Status } from "@/lib/status";
+import { boostsOn, combineModes, critRange, d20Tweaks, settled, type ActionStatuses, type Status } from "@/lib/status";
+/** An attack roll: its total, how it was rolled, and the natural d20 (crit: a critical hit; fumble: a natural 1, a miss). */
+export type AttackRoll = { total: number; text: string; natural?: number; crit?: boolean; fumble?: boolean };
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
@@ -22,9 +24,9 @@ import { areaFires } from "@/lib/aoe";
 export interface Fighter {
   hp: number;
   statuses: Status[]; // what actions left on them (statuses added during a round count straight away)
-  attack: (use?: GearAction, against?: { statuses?: Status[] }) => { total: number; text: string };
+  attack: (use?: GearAction, against?: { statuses?: Status[] }) => AttackRoll;
   defense: () => { total: number; text: string };
-  damage: (use?: GearAction) => { total: number; text: string };
+  damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
   save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
   wear: (equipment: Equipment) => void; // a refit mid-round: attacks, damage and defense use the new gear from then on
   maxHp?: number; // full health (for how bad a wound sounds)
@@ -37,11 +39,25 @@ export interface Fighter {
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
-/** A d20 with advantage / disadvantage: the roll kept, and how it was rolled for the log. */
-function d20(mode: RollMode): [number, string] {
+/**
+ * A d20 with advantage / disadvantage, a reroll (at or below: once, keep the new one) and a minimum: the value counted,
+ * how it was rolled for the log, and the natural roll (before any minimum; for critical hits and misses).
+ */
+function d20(mode: RollMode, t: { reroll: number; min: number } = { reroll: 0, min: 0 }): [number, string, number] {
   const a = rollDice("1d20"), b = rollDice("1d20");
-  if (mode === "normal") return [a, `d20 ${a}`];
-  return [mode === "advantage" ? Math.max(a, b) : Math.min(a, b), `d20 ${mode === "advantage" ? Math.max(a, b) : Math.min(a, b)} (${mode}: ${a}, ${b})`];
+  let kept = mode === "normal" ? a : mode === "advantage" ? Math.max(a, b) : Math.min(a, b);
+  let text = mode === "normal" ? `d20 ${a}` : `d20 ${kept} (${mode}: ${a}, ${b})`;
+  if (t.reroll && kept <= t.reroll) {
+    const c = mode === "normal" ? b : rollDice("1d20"); // a plain roll's second die is the reroll
+    text += ` rerolled → ${c}`;
+    kept = c;
+  }
+  const natural = kept;
+  if (t.min && kept < t.min) {
+    text += ` (counts as ${t.min})`;
+    kept = t.min;
+  }
+  return [kept, text, natural];
 }
 /** Statuses' boosts on one thing, rolled (they may be dice); 0 when none. */
 const boosted = (statuses: Status[], target: ModifierTarget) => boostsOn(statuses, target).reduce((sum, v) => sum + roll(v), 0);
@@ -64,12 +80,13 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
       // A gear action (Aimed shot…) uses its own to-hit modifier; advantage / disadvantage from it, from statuses on the
       // attacker (their attack rolls) and on the target (attack rolls against them) — one of each cancels out.
       const mode = combineModes(use?.roll ?? "normal", f.statuses, "attack", against ? [combineModes("normal", against.statuses ?? [], "attacked")] : []);
-      const [d, text] = d20(mode);
+      const [d, text, natural] = d20(mode, d20Tweaks(f.statuses, ["attack"]));
       const might = mod("might"), w = roll(use ? use.attack : weapon?.attack), extra = boosted(f.statuses, "attack");
-      return { total: d + might + w + extra, text: `${text} ${formatModifier(might)}${w ? ` ${formatModifier(w)} ${use?.name ?? weapon?.name}` : ""}${plus(extra, "boost")}` };
+      // A natural 20 (or within a wider critical range) always hits, a critical; a natural 1 always misses.
+      return { total: d + might + w + extra, text: `${text} ${formatModifier(might)}${w ? ` ${formatModifier(w)} ${use?.name ?? weapon?.name}` : ""}${plus(extra, "boost")}`, natural, crit: natural >= critRange(f.statuses), fumble: natural === 1 };
     },
     save: (attr) => {
-      const [d, text] = d20(combineModes("normal", f.statuses, `save:${attr}`));
+      const [d, text] = d20(combineModes("normal", f.statuses, `save:${attr}`), d20Tweaks(f.statuses, [`save:${attr}`]));
       const m = mod(attr), extra = boosted(f.statuses, "save") + boosted(f.statuses, `save:${attr}`); // Bless +1d4, rolled each time
       return { total: d + m + extra, text: `${text} ${formatModifier(m)}${plus(extra, "boost")}` };
     },
@@ -78,11 +95,11 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
       const s = settled(10 + agility + armour + extra, f.statuses, "defense", mod); // Mage Armor: 13 + Agility if better
       return { total: s.value, text: `10 ${formatModifier(agility)}${armour ? ` +${armour} armour` : ""}${plus(extra, "boost")}${s.note}` };
     },
-    damage: (use) => {
+    damage: (use, crit) => {
       const dice = use?.damage || weapon?.damage || "1d4";
-      const d = roll(dice), might = mod("might"), extra = boosted(f.statuses, "damage");
+      const d = roll(dice) + (crit ? roll(dice) : 0), might = mod("might"), extra = boosted(f.statuses, "damage");
       const s = settled(Math.max(1, d + might + extra), f.statuses, "damage");
-      return { total: s.value, text: `${use?.damage ? `${dice} (${use.name})` : weapon?.damage ? `${dice} (${weapon.name})` : "1d4 unarmed"} ${d} ${formatModifier(might)}${plus(extra, "boost")}${s.note}` };
+      return { total: s.value, text: `${use?.damage ? `${dice} (${use.name})` : weapon?.damage ? `${dice} (${weapon.name})` : "1d4 unarmed"}${crit ? " ×2 dice (critical)" : ""} ${d} ${formatModifier(might)}${plus(extra, "boost")}${s.note}` };
     },
   };
   return f;

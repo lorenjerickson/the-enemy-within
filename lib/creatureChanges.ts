@@ -5,7 +5,7 @@
  */
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
-import { combineModes, settled, type Status } from "@/lib/status";
+import { combineModes, d20Tweaks, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
 import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE, formatModifier, modifier, type Attribute, type Attributes } from "@/lib/attributes";
 import type { RollPart, RollSpec } from "@/lib/rolls";
@@ -41,7 +41,7 @@ export function standingEffects(tokenId: number, equipment?: Equipment): (Effect
 
 /** Standing effects as statuses (their boosts and roll effects). */
 export const standingStatuses = (tokenId: number, equipment?: Equipment): Status[] =>
-  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length || s.sets.length || s.factors.length);
+  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length || s.sets.length || s.factors.length || s.tweaks.length);
 
 /** How a token takes each kind of damage now: its standing effects and the conditions on it. */
 export function resistancesOf(tokenId: number, levelId: number, equipment?: Equipment): Record<string, Resist[]> {
@@ -140,7 +140,8 @@ export function skillCheckFor(tokenId: number, skill: string, attributes: Attrib
   }
   for (const s of changes) for (const b of s.boosts) if (b.target === `skill:${skill}` || b.target === "check") parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });
   const mode = combineModes("normal", changes, `skill:${skill}`, best ? [combineModes("normal", changes, `check:${best}`)] : []);
-  return { label: `${cap(skill)} check`, parts, mode };
+  const t = d20Tweaks(changes, [`skill:${skill}`, ...(best ? [`check:${best}` as const] : [])]);
+  return { label: `${cap(skill)} check`, parts, mode, ...(t.reroll ? { reroll: t.reroll } : {}), ...(t.min ? { min: t.min } : {}) };
 }
 
 /** A saving throw for a token: d20 + the attribute's modifier (as boosted now), with advantage or disadvantage from anything granting it on that save. */
@@ -155,5 +156,6 @@ export function saveRollFor(tokenId: number, attr: Attribute, label: string): Ro
   const parts: RollPart[] = [{ formula: "1d20", source: `${cap(attr)} save` }];
   if (m !== 0) parts.push({ formula: String(m), source: `${cap(attr)} ${boosted} (${formatModifier(m)})` });
   for (const s of changes) for (const b of s.boosts) if (b.target === "save" || b.target === `save:${attr}`) parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });
-  return { label, parts, mode: combineModes("normal", changes, `save:${attr}`) };
+  const tw = d20Tweaks(changes, [`save:${attr}`]);
+  return { label, parts, mode: combineModes("normal", changes, `save:${attr}`), ...(tw.reroll ? { reroll: tw.reroll } : {}), ...(tw.min ? { min: tw.min } : {}) };
 }
