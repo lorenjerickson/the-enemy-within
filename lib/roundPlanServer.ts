@@ -69,8 +69,9 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     if (step.use !== undefined && !use) return "That isn't one of their actions";
     // On themselves only when the action allows it (Healing Draught: themselves or others).
     if (step.target !== undefined && (!name || (Number(step.target) === p.tok.token_id && use?.targets !== "anyone"))) return "Pick someone else on this map";
-    // Only someone they could see from where the plan has them by then (no aiming at, chasing or fleeing the unseen).
-    const sees = seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), p.tok.token_id);
+    // Only someone they could see from where the plan has them by then (no aiming at, chasing or fleeing what's out of
+    // sight); someone invisible in their line of sight can still be aimed at (a guess: disadvantage when it resolves).
+    const sees = seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), p.tok.token_id, { unseenToo: true });
     const unseen = [...(step.target !== undefined ? [Number(step.target)] : []), ...(step.picks ?? []).map(Number)].find((id) => id !== p.tok.token_id && !sees.has(id));
     if (unseen !== undefined) return `They can't see ${tokenLabels(p.tok.level_id).get(unseen) ?? "them"} from there`;
     const { source: _source, ...gear } = use ?? { source: "" };

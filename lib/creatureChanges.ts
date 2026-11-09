@@ -4,6 +4,7 @@
  * modifiers (always on).
  */
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
+import { sensesFrom, type Senses } from "@/lib/conditions";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import { combineModes, d20Tweaks, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
@@ -50,6 +51,12 @@ export function resistancesOf(tokenId: number, levelId: number, equipment?: Equi
   return out;
 }
 export const resistanceTo = (r: Record<string, Resist[]>, type: string) => combineResist(r[type]);
+
+/** What a token can see, and whether it can be seen, now: its standing effects and the conditions on it. */
+export function sensesOf(tokenId: number, levelId?: number): Senses {
+  const level = levelId ?? db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(tokenId)?.level_id;
+  return sensesFrom([...standingEffects(tokenId).flatMap((e) => e.modifiers), ...(level !== undefined ? (listAfflictions(level).get(tokenId) ?? []).flatMap((a) => modifiersOf(a.condition)) : [])]);
+}
 
 /** What a token can't do now (conditions on it, its standing effects), and why. */
 export function restrictionsOn(tokenId: number, levelId?: number): Restrictions {

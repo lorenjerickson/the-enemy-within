@@ -4,8 +4,9 @@ import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Senses, sensesFrom, unseenModes, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
+import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
 import { DODGE_DC, ROUND_SECONDS, stepKind, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
@@ -118,7 +119,7 @@ export interface Replay {
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
 export interface Combatant {
   hp: number;
-  attack: (use?: GearAction, against?: Combatant) => { total: number; text: string; natural?: number; crit?: boolean; fumble?: boolean }; // crit: a critical hit; fumble: a natural 1
+  attack: (use?: GearAction, against?: Combatant, more?: RollMode[]) => { total: number; text: string; natural?: number; crit?: boolean; fumble?: boolean }; // crit: a critical hit; fumble: a natural 1
   statuses?: Status[]; // what actions left on them; a status added this round counts straight away
   defense: () => { total: number; text: string };
   damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
@@ -131,6 +132,7 @@ export interface Combatant {
   limits?: Restrictions; // what conditions stop them doing (a condition put on mid-round counts from then on)
   auras?: AuraModifier[]; // auras they give off of their own (or from what they wear); those from conditions on them come with the conditions
   triggers?: { mod: Trigger; name: string }[]; // triggers of their own (or from what they wear), with the effect's name; those from conditions come with them
+  senses?: Senses; // their own senses (and their gear's); conditions on them add to these as the round goes
 }
 
 /**
@@ -318,6 +320,11 @@ export function resolveMovement(
     const dc = Math.max(10, Math.floor(amount / 2)), s = fighters.get(caster)?.save?.("fortitude");
     if (!s || s.total < dc) return breakConcentration(caster, sec, `Fortitude ${s?.total ?? "-"} vs DC ${dc}`);
     log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
+  };
+  /** What someone can see and whether they can be seen, now: their own senses and the conditions on them as they stand this second. */
+  const sensesNow = (id: number): Senses => {
+    const own = fighters.get(id)?.senses, c = sensesFrom((afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition)));
+    return { blind: !!own?.blind || c.blind, invisible: !!own?.invisible || c.invisible, seeInvisible: !!own?.seeInvisible || c.seeInvisible };
   };
   /** A creature's triggers: its own (and its gear's), and those of conditions on it. */
   const triggersOf = (id: number) => [
@@ -857,7 +864,7 @@ export function resolveMovement(
             leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
             continue;
           }
-          a ??= usingDice(step.dice?.hit, () => me.attack(use, them));
+          a ??= usingDice(step.dice?.hit, () => me.attack(use, them, unseenModes(sensesNow(m.tokenId), sensesNow(id))));
           const d = them.defense();
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
           // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
@@ -959,7 +966,7 @@ export function resolveMovement(
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
         story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "reach" });
       } else {
-        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them)), d = them.defense();
+        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them, unseenModes(sensesNow(m.tokenId), sensesNow(target.id)))), d = them.defense(); // unseen: advantage / disadvantage
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });

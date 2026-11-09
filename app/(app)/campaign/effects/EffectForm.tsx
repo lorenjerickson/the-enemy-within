@@ -1,4 +1,4 @@
-import { FORBIDS, TRIGGER_EVENTS, describeModifier, type EffectDef } from "@/lib/conditions";
+import { FORBIDS, SENSES, TRIGGER_EVENTS, describeModifier, type EffectDef } from "@/lib/conditions";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, ROLL_KIND_GROUPS } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS } from "@/lib/modifiers";
@@ -86,6 +86,15 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
           {FORBIDS.map(([what, label]) => (
             <label key={what} className="flex items-center gap-1">
               <input type="checkbox" name="forbid" value={what} defaultChecked={mods.some((m) => m.kind === "forbid" && m.what === what)} className="checkbox checkbox-xs" />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-senses>
+          <span className="font-semibold">Senses</span>
+          {SENSES.map(([sense, label]) => (
+            <label key={sense} className="flex items-center gap-1">
+              <input type="checkbox" name="sense" value={sense} defaultChecked={mods.some((m) => m.kind === "sense" && m.sense === sense)} className="checkbox checkbox-xs" />
               {label}
             </label>
           ))}

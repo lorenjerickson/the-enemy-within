@@ -7,7 +7,7 @@ import { getConditionDef, getEffectDef, removeEffectDef, saveEffectDef } from "@
 import { DAMAGE_TYPES, isRollKind, type DamageType } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
-import { FORBIDS, type Forbid, type Modifier } from "@/lib/conditions";
+import { FORBIDS, SENSES, type Forbid, type Modifier, type Sense } from "@/lib/conditions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 /** Creates (id null) or saves a catalog effect (a named set of modifiers) from its form. */
@@ -49,6 +49,7 @@ export async function submitEffect(id: number | null, formData: FormData) {
   if (maxhp) modifiers.push({ kind: "maxhp", value: maxhp });
   // What they can't do, and saves they fail outright.
   for (const w of formData.getAll("forbid").map(String)) if (FORBIDS.some(([f]) => f === w)) modifiers.push({ kind: "forbid", what: w as Forbid });
+  for (const s of formData.getAll("sense").map(String)) if (SENSES.some(([k]) => k === s)) modifiers.push({ kind: "sense", sense: s as Sense });
   for (const a of formData.getAll("autofail").map(String)) if ((ATTRIBUTES as readonly string[]).includes(a)) modifiers.push({ kind: "autofail", save: a as Attribute });
   // "Becomes (at least)": a number, maybe plus an attribute's modifier (13 + agility); and multipliers.
   const setValues = formData.getAll("set_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));

@@ -4,6 +4,8 @@ import { blockingSegments } from "@/lib/visibility";
 import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
+import { sensesOf } from "@/lib/creatureChanges";
+import { BLIND_RANGE } from "@/lib/conditions";
 import type { Contest } from "@/lib/resolveRound";
 import type { DockTool } from "../../../../(play)/play/PlayDock";
 
@@ -46,14 +48,20 @@ export default function LevelMap({
   const mine = gm ? [] : listTokens(level.id).filter((t) => t.character_id !== null && (fog?.viewers ?? []).includes(t.character_id)).map((t) => t.id);
   const replay = raw && (gm ? { ...raw, story: undefined } : playerReplay(raw, mine, (id) => labels.get(id) ?? "someone", blockingSegments(listStructures(level.id))));
   const start = getPartyStart();
+  // Senses: a player doesn't get invisible tokens (unless one of their characters sees invisible things), and a blind
+  // character of theirs sees only what's around it.
+  const all = listTokens(level.id);
+  const seeInvisible = !gm && mine.some((id) => sensesOf(id, level.id).seeInvisible);
+  const tokens = gm || seeInvisible ? all : all.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
+  const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null && sensesOf(t.id, level.id).blind).map((t) => [t.character_id!, BLIND_RANGE]));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   return (
-    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight }} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}
-      tokens={listTokens(level.id)}
+      tokens={tokens}
       sounds={gm ? listAmbientSounds(level.id) : []}
       positional={gm ? listPositionalSounds(level.id) : []}
       illumination={level.illumination}

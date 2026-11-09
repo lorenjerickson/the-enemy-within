@@ -687,7 +687,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -971,11 +971,11 @@ export default function MapView({
     const centre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
     const own = planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
     const planEndAt = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
-    const visible = own.map((t) => visibilityPolygon(centre(planEndAt ?? t), SIGHT, fogWalls));
+    const visible = own.map((t) => visibilityPolygon(centre(planEndAt ?? t), (t.character_id !== null && fog?.sight?.[t.character_id]) || SIGHT, fogWalls)); // blind: only what's around them
     // Only tokens in sight are shown (and their own, always).
     const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
     return { visible, explored, tokens };
-  }, [fogOn, fog?.viewers.join(), fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fogOn, fog?.viewers.join(), JSON.stringify(fog?.sight ?? {}), fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.
