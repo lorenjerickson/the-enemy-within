@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { describeEffect, type Affliction, type EffectDef } from "@/lib/conditions";
+import { describeCondition, modifiersOf, rollChanges, type Affliction, type Condition } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -126,7 +126,7 @@ export function resolveMovement(
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
   decisions: Record<string, number> = {}, // the GM's calls on contested moves: "lowId:highId@col,row" → who gets the spot
-  afflictions: Map<number, Affliction[]> = new Map(), // effects on anyone (Poisoned…): ticked at the end of the round
+  afflictions: Map<number, Affliction[]> = new Map(), // conditions on anyone (Poisoned…): ticked at the end of the round
 ) {
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
@@ -136,11 +136,12 @@ export function resolveMovement(
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
-  const afflict = (id: number, e: EffectDef, by: number | null, sec: number) => {
-    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.effect.id !== e.id), { effect: e, left: e.rounds, by }]);
-    if (e.boosts.length || e.roll_grants.length) fighters.get(id)?.statuses?.push({ source: e.name, boosts: e.boosts, grants: e.roll_grants });
-    story.push({ sec, k: "afflicted", who: id, name: e.name, by });
-    log.push(`${sec} s: ${nameOf(id)} is affected by ${e.name} (${describeEffect(e)}).`);
+  const afflict = (id: number, c: Condition, by: number | null, sec: number) => {
+    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: c.rounds, by }]);
+    const rolls = rollChanges(c);
+    if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
+    story.push({ sec, k: "afflicted", who: id, name: c.name, by });
+    log.push(`${sec} s: ${nameOf(id)} is affected by ${c.name} (${describeCondition(c)}).`);
   };
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
   const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null) => {
@@ -154,7 +155,7 @@ export function resolveMovement(
       story.push({ sec, k: "healed", who: id, source: status.source, much: after - before });
     }
     // Catalog effects (Poisoned…) run on by rounds of their own.
-    for (const e of status.effects ?? []) afflict(id, e, by, sec);
+    for (const c of status.conditions ?? []) afflict(id, c, by, sec);
     // Nothing more to it than healing (and effects): done (it doesn't linger as a status).
     if (status.boosts.every((b) => b.target === "health") && !status.grants.length) return;
     fighters.get(id)?.statuses?.push(status);
@@ -684,8 +685,8 @@ export function resolveMovement(
 }
 
 /**
- * The end of a round for everyone's effects: each does its damage (or healing), loses a round, and unless that was
- * its last, its creature rolls the save to end it. Also used for rounds passing out of an encounter (the clock).
+ * The end of a round for everyone's conditions: each effect's periodic modifiers do their damage (or healing), the
+ * condition loses a round, and unless that was its last, its creature rolls the save to end it. Also used for rounds passing out of an encounter (the clock).
  */
 export function tickAfflictions(
   afflicted: Map<number, Affliction[]>,
@@ -695,22 +696,24 @@ export function tickAfflictions(
   for (const [id, list] of afflicted) {
     const f = fighters.get(id), keep: Affliction[] = [];
     for (const a of list) {
-      const e = a.effect;
-      if (e.per_round && hp.has(id) && !down.has(id)) {
-        const n = Math.max(0, rollDice(e.per_round));
+      const c = a.condition;
+      // Each of its effects' periodic modifiers: damage or healing.
+      for (const m of modifiersOf(c)) {
+        if (m.kind !== "periodic" || !hp.has(id) || down.has(id)) continue;
+        const n = Math.max(0, rollDice(m.value));
         const before = hp.get(id)!;
-        if (e.per_round_kind === "healing") {
+        if (m.heal) {
           const after = Math.min(f?.maxHp ?? Infinity, before + n);
           hp.set(id, after);
           if (after > before) {
-            at(`${nameOf(id)} is healed for ${after - before} by ${e.name}; ${after} health.`);
-            story?.push({ sec, k: "effect", who: id, name: e.name, much: after - before, heal: true });
+            at(`${nameOf(id)} is healed for ${after - before} by ${c.name}; ${after} health.`);
+            story?.push({ sec, k: "effect", who: id, name: c.name, much: after - before, heal: true });
           }
         } else if (n > 0) {
           const after = Math.max(0, before - n);
           hp.set(id, after);
-          at(`${e.name} deals ${nameOf(id)} ${n}${e.damage_type ? ` ${e.damage_type}` : ""} damage; ${after} left.`);
-          story?.push({ sec, k: "effect", who: id, name: e.name, much: n, heal: false, hurt: hurt(id, n) });
+          at(`${c.name} deals ${nameOf(id)} ${n}${m.damage_type ? ` ${m.damage_type}` : ""} damage; ${after} left.`);
+          story?.push({ sec, k: "effect", who: id, name: c.name, much: n, heal: false, hurt: hurt(id, n) });
           if (after <= 0) {
             down.add(id);
             at(`${nameOf(id)} is down.`);
@@ -720,18 +723,18 @@ export function tickAfflictions(
       }
       const left = a.left - 1;
       if (left <= 0) {
-        at(`${e.name} wears off ${nameOf(id)}.`);
-        story?.push({ sec, k: "effectEnds", who: id, name: e.name, why: "time" });
+        at(`${c.name} wears off ${nameOf(id)}.`);
+        story?.push({ sec, k: "effectEnds", who: id, name: c.name, why: "time" });
         continue;
       }
-      if (e.save_attr && f?.save && !down.has(id)) {
-        const s = f.save(e.save_attr);
-        if (s.total >= e.save_dc) {
-          at(`${nameOf(id)} shakes off ${e.name} (${s.total}: ${s.text} vs DC ${e.save_dc}).`);
-          story?.push({ sec, k: "effectEnds", who: id, name: e.name, why: "save" });
+      if (c.save_attr && f?.save && !down.has(id)) {
+        const s = f.save(c.save_attr);
+        if (s.total >= c.save_dc) {
+          at(`${nameOf(id)} shakes off ${c.name} (${s.total}: ${s.text} vs DC ${c.save_dc}).`);
+          story?.push({ sec, k: "effectEnds", who: id, name: c.name, why: "save" });
           continue;
         }
-        at(`${nameOf(id)} fails to shake off ${e.name} (${s.total} vs DC ${e.save_dc}); ${left} round${left === 1 ? "" : "s"} left.`);
+        at(`${nameOf(id)} fails to shake off ${c.name} (${s.total} vs DC ${c.save_dc}); ${left} round${left === 1 ? "" : "s"} left.`);
       }
       keep.push({ ...a, left });
     }

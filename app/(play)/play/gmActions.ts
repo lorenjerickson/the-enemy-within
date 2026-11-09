@@ -5,8 +5,8 @@ import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
   getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea } from "@/lib/db";
-import { getPendingRound, listEffectDefs, getEffectDef, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
-import { describeEffect } from "@/lib/conditions";
+import { getPendingRound, listConditionDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
+import { describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
 import { rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -185,23 +185,23 @@ export async function gmSetAllegiance(tokenId: number, allegiance: string) {
   revalidatePath("/play");
 }
 
-/** The effects catalog, for putting one on a token by hand. */
-export async function gmEffectCatalog(): Promise<{ id: number; name: string; text: string }[]> {
+/** The conditions catalog, for putting one on a token by hand. */
+export async function gmConditionCatalog(): Promise<{ id: number; name: string; text: string }[]> {
   await requireGm();
-  return listEffectDefs().map((e) => ({ id: e.id, name: e.name, text: describeEffect(e) }));
+  return listConditionDefs().flatMap((d) => { const c = getCondition(d.id); return c ? [{ id: c.id, name: c.name, text: describeCondition(c) }] : []; });
 }
 
-/** The GM puts a catalog effect on a token (again: its rounds start over). */
-export async function gmApplyEffect(tokenId: number, effectId: number) {
+/** The GM puts a catalog condition on a token (again: its rounds start over). */
+export async function gmApplyCondition(tokenId: number, conditionId: number) {
   await requireGm();
-  const t = listTokensById(Number(tokenId)), e = getEffectDef(Number(effectId));
-  if (!t || !e) return;
-  addAffliction(t.level_id, t.id, e, null);
-  logSessionEvent(`The GM puts ${e.name} on ${tokenLabels(t.level_id).get(t.id) ?? "someone"}.`);
+  const t = listTokensById(Number(tokenId)), c = getCondition(Number(conditionId));
+  if (!t || !c) return;
+  addAffliction(t.level_id, t.id, c, null);
+  logSessionEvent(`The GM puts ${c.name} on ${tokenLabels(t.level_id).get(t.id) ?? "someone"}.`);
   revalidatePath("/play");
 }
 
-/** The GM takes an effect off. */
+/** The GM takes a condition off. */
 export async function gmRemoveAffliction(id: number) {
   await requireGm();
   removeAffliction(Number(id));

@@ -3,15 +3,15 @@ import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_KIND_GROUPS, ROLL_MODES, formatDuration, rollKindLabel } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
 import PairListInput from "./PairListInput";
-import { listEffectDefs, type Action, type ActionOwner } from "@/lib/db";
-import { describeEffect, type EffectDef } from "@/lib/conditions";
+import { getCondition, listConditionDefs, type Action, type ActionOwner } from "@/lib/db";
+import { describeCondition, type Condition } from "@/lib/conditions";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** One-line summary, e.g. "disadvantage · to hit -1 · 3d6 fire · split within 3 m · +2 Stealth (skill) · 1 hour". */
-function summary(a: Action, effectNames: Map<number, string>): string {
+function summary(a: Action, conditionNames: Map<number, string>): string {
   const fromItem = a.item_id !== null;
   return [
     (a.attack || a.damage) && a.roll !== "normal" && a.roll,
@@ -21,7 +21,7 @@ function summary(a: Action, effectNames: Map<number, string>): string {
     ...a.boosts.map((b) => `${b.on === "target" ? "target: " : ""}${b.value} ${targetLabel(b.target)}`),
     ...a.roll_grants.map((g) => `${g.on === "target" ? "target: " : ""}${g.mode} on ${rollKindLabel(g.roll)}`),
     a.area_shape && a.area_lasts ? "stays" : "",
-    ...a.effects.map((e) => `${e.on === "target" ? "target: " : ""}${effectNames.get(e.id) ?? "an effect"}`),
+    ...a.conditions.map((c) => `${c.on === "target" ? "target: " : ""}${conditionNames.get(c.id) ?? "a condition"}`),
     a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
     a.range_ft > 5 ? `range ${a.range_ft} ft` : a.range_ft === 0 && fromItem ? "weapon's range" : "reach",
@@ -30,7 +30,7 @@ function summary(a: Action, effectNames: Map<number, string>): string {
     .join(" · ");
 }
 
-function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?: Action; effects: EffectDef[] }) {
+function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initial?: Action; conditions: Condition[] }) {
   return (
     <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
       <input name="name" placeholder="Action name (e.g. Circle of Flames)" required defaultValue={initial?.name} className="input input-sm col-span-2 w-full" />
@@ -139,19 +139,19 @@ function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?:
               secondOptions={["advantage", "disadvantage"]}
               initial={mine(initial?.roll_grants).map((g) => [g.roll, g.mode])}
             />
-            <div className="space-y-1" data-action-effects={on}>
-              <div className="text-xs font-semibold opacity-80">Effects (from the catalog)</div>
-              {effects.length ? (
+            <div className="space-y-1" data-action-conditions={on}>
+              <div className="text-xs font-semibold opacity-80">Conditions (from the catalog)</div>
+              {conditions.length ? (
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {effects.map((e) => (
-                    <label key={e.id} className="flex items-center gap-1 text-sm" title={describeEffect(e)}>
-                      <input type="checkbox" name={`effect_${on}`} value={e.id} defaultChecked={(initial?.effects ?? []).some((x) => x.id === e.id && x.on === on)} className="checkbox checkbox-xs" />
-                      {e.name}
+                  {conditions.map((c) => (
+                    <label key={c.id} className="flex items-center gap-1 text-sm" title={describeCondition(c)}>
+                      <input type="checkbox" name={`condition_${on}`} value={c.id} defaultChecked={(initial?.conditions ?? []).some((x) => x.id === c.id && x.on === on)} className="checkbox checkbox-xs" />
+                      {c.name}
                     </label>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs opacity-60">None in the catalog yet (Campaign › Effects).</p>
+                <p className="text-xs opacity-60">None in the catalog yet (Campaign › Conditions).</p>
               )}
             </div>
           </fieldset>
@@ -176,7 +176,7 @@ function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?:
 
 /** Lists, adds and edits the actions an owner (profession, item or creature) grants. */
 export default function ActionsSection({ owner, actions }: { owner: ActionOwner; actions: Action[] }) {
-  const effects = listEffectDefs();
+  const conditions = listConditionDefs().flatMap((d) => getCondition(d.id) ?? []);
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">Actions</h3>
@@ -186,10 +186,10 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
           <details className="flex-1">
             <summary className="link link-hover list-none">
               <span className="font-medium">{a.name}</span>{" "}
-              <span className="text-sm opacity-70">{summary(a, new Map(effects.map((e) => [e.id, e.name])))}</span>
+              <span className="text-sm opacity-70">{summary(a, new Map(conditions.map((c) => [c.id, c.name])))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionForm owner={owner} initial={a} effects={effects} />
+            <ActionForm owner={owner} initial={a} conditions={conditions} />
           </details>
           <form action={deleteAction.bind(null, owner, a.id)}>
             <button className="btn btn-ghost btn-xs">Remove</button>
@@ -198,7 +198,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionForm owner={owner} effects={effects} />
+        <ActionForm owner={owner} conditions={conditions} />
       </details>
     </div>
   );

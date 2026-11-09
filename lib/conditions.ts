@@ -1,42 +1,75 @@
 /**
- * Effects (conditions): named effects kept in the catalog (Poisoned: 1d2 poison damage a round for 6 rounds, Fortitude DC 12
- * ends it). Actions put them on whoever they're used on (or their user); while one lasts it may hurt or heal each
- * round, boost or hinder rolls, and the creature rolls its save at the end of each round to shake it off.
+ * Conditions, Effects and Modifiers (see the backlog doc's conceptual model):
+ * - a Modifier is one change while it's active (+2 defense, disadvantage on attacks, 1d2 poison damage a round);
+ * - an Effect is a named, reusable set of modifiers (Incapacitated, Entranced) with no lifecycle of its own;
+ * - a Condition is what's put on a creature (Poisoned, Mesmerized): the effects it applies, plus its lifecycle (how
+ *   long it lasts, the save that ends it). Actions apply conditions; the engine only ever reads modifiers.
  */
-import type { Boost, DamageType, RollGrant } from "@/lib/actions";
+import type { Boost, DamageType, RollGrant, RollKind } from "@/lib/actions";
 import { rollKindLabel } from "@/lib/actions";
 import type { Attribute } from "@/lib/attributes";
-import { targetLabel } from "@/lib/modifiers";
+import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 
+/** One change while it's active. More kinds (set, multiply, resist, forbid…) come with the backlog. */
+export type Modifier =
+  | { kind: "boost"; target: ModifierTarget; value: string } // add a number or dice (+2, -1d4)
+  | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
+  | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" }; // at the end of each round
+
+/** A named set of modifiers, reusable across conditions. */
 export interface EffectDef {
   id: number;
   name: string;
   description: string;
-  per_round: string; // dice taken (or healed) at the end of each round; '' = none
-  per_round_kind: "damage" | "healing";
-  damage_type: DamageType | "";
-  rounds: number; // how many rounds it lasts (6 s each; out of an encounter, every 6 s of game time is a round)
-  save_attr: Attribute | ""; // the save that ends it, rolled at the end of each round; '' = none
-  save_dc: number;
-  boosts: Boost[]; // while it lasts
-  roll_grants: RollGrant[];
+  modifiers: Modifier[];
 }
 
-/** An effect on a creature: how many rounds it has left, and who put it there. */
+/** What's put on a creature: the effects it applies, how long it lasts, and the save that ends it. */
+export interface ConditionDef {
+  id: number;
+  name: string;
+  description: string;
+  effects: number[]; // effect ids
+  rounds: number; // 6 s each; out of an encounter, every 6 s of game time is a round
+  save_attr: Attribute | ""; // rolled at the end of each round; success ends it ('' = none)
+  save_dc: number;
+}
+
+/** A condition with its effects filled in, as it was when it was put on someone (later catalog edits don't reach it). */
+export type Condition = Omit<ConditionDef, "effects"> & { effects: EffectDef[] };
+
+/** A condition on a creature: how many rounds it has left, and who put it there. */
 export interface Affliction {
   id?: number;
-  effect: EffectDef;
+  condition: Condition;
   left: number;
   by: number | null;
 }
 
-/** "1d2 poison damage a round · 6 rounds · Fortitude DC 12 ends it · disadvantage on attacks". */
-export function describeEffect(e: Pick<EffectDef, "per_round" | "per_round_kind" | "damage_type" | "rounds" | "save_attr" | "save_dc" | "boosts" | "roll_grants">, withRounds = true): string {
-  return [
-    e.per_round && (e.per_round_kind === "healing" ? `heals ${e.per_round} a round` : `${e.per_round}${e.damage_type ? ` ${e.damage_type}` : ""} damage a round`),
-    ...e.roll_grants.map((g) => `${g.mode} on ${rollKindLabel(g.roll).toLowerCase()}`),
-    ...e.boosts.map((b) => `${b.value} ${targetLabel(b.target).toLowerCase()}`),
-    withRounds && `${e.rounds} round${e.rounds === 1 ? "" : "s"}`,
-    e.save_attr && `${e.save_attr[0].toUpperCase()}${e.save_attr.slice(1)} DC ${e.save_dc} ends it`,
-  ].filter(Boolean).join(" · ");
+export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
+
+/** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
+export function rollChanges(c: Condition): { boosts: Boost[]; grants: RollGrant[] } {
+  const mods = modifiersOf(c);
+  return {
+    boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
+    grants: mods.flatMap((m) => (m.kind === "roll" ? [{ roll: m.roll, mode: m.mode }] : [])),
+  };
 }
+
+/** "1d2 poison damage a round", "disadvantage on their attack rolls", "+2 defense". */
+export function describeModifier(m: Modifier): string {
+  if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round`;
+  if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
+  return `${m.value} ${targetLabel(m.target).toLowerCase()}`;
+}
+
+export const describeEffect = (e: Pick<EffectDef, "modifiers">) => e.modifiers.map(describeModifier).join(", ");
+
+/** "6 rounds · Fortitude DC 12 ends it". */
+export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc">, withRounds = true) =>
+  [withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`, c.save_attr && `${c.save_attr[0].toUpperCase()}${c.save_attr.slice(1)} DC ${c.save_dc} ends it`].filter(Boolean).join(" · ");
+
+/** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it". */
+export const describeCondition = (c: Condition, withRounds = true) =>
+  [c.effects.map(describeEffect).filter(Boolean).join(", "), describeLifecycle(c, withRounds)].filter(Boolean).join(" · ");

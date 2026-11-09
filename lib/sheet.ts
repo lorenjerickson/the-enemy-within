@@ -1,5 +1,5 @@
 import { characterContainers, characterPlayers, db, getGameTime, getItem, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
-import { describeEffect } from "@/lib/conditions";
+import { describeCondition } from "@/lib/conditions";
 import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
 import { describeStatus } from "@/lib/status";
@@ -44,7 +44,7 @@ export function sheetFor(tokenId: number): Sheet | null {
     health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },
     down: !!h && h.current + h.temporary <= 0,
     effects: [
-      ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => ({ source: a.effect.name, text: describeEffect(a.effect, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id })),
+      ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => ({ source: a.condition.name, text: describeCondition(a.condition, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id })),
       ...(listTokenStatuses(t.level_id).get(t.id) ?? []).filter((s) => s.boosts.length || s.grants.length).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
     ],
     equipment: (Object.entries(who.equipment ?? {}) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
