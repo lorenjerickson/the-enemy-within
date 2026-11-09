@@ -39,6 +39,14 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
     modifiers.push({ kind: "extra", value: extra, damage_type, when: text("extra_when") === "taking" ? "taking" : "dealing" });
   }
+  // Temporary health as it lands; maximum health while it lasts.
+  const temphp = text("temphp_value").toLowerCase().replace(/\s/g, "");
+  if (temphp) {
+    if (!isDiceFormula(temphp)) throw new Error("Invalid temporary health dice");
+    modifiers.push({ kind: "temphp", value: temphp });
+  }
+  const maxhp = Math.round(Number(text("maxhp_value")) || 0);
+  if (maxhp) modifiers.push({ kind: "maxhp", value: maxhp });
   // What they can't do, and saves they fail outright.
   for (const w of formData.getAll("forbid").map(String)) if (FORBIDS.some(([f]) => f === w)) modifiers.push({ kind: "forbid", what: w as Forbid });
   for (const a of formData.getAll("autofail").map(String)) if ((ATTRIBUTES as readonly string[]).includes(a)) modifiers.push({ kind: "autofail", save: a as Attribute });

@@ -22,7 +22,9 @@ export type Modifier =
   | { kind: "autofail"; save: Attribute } // fails that kind of save without rolling (Stunned: Might and Agility)
   | { kind: "speed"; factor: number } // their speed multiplied (×½ crawling, ×2 hasted), after any boosts; several multiply together
   | { kind: "set"; target: ModifierTarget; value: number; plus?: Attribute } // becomes at least this (Strength 19; defense 13 + Agility); the highest wins
-  | { kind: "multiply"; target: ModifierTarget; factor: number }; // multiplied after boosts and settings (damage ×2, defense ×½)
+  | { kind: "multiply"; target: ModifierTarget; factor: number } // multiplied after boosts and settings (damage ×2, defense ×½)
+  | { kind: "temphp"; value: string } // temporary health as it lands (the highest counts, it doesn't add up)
+  | { kind: "maxhp"; value: number }; // maximum health raised (or lowered) while it lasts
 
 /** What a modifier can forbid: a kind of step, moving, or attacking whoever put the condition on them (Hypnotized). */
 export type Forbid = "actions" | "bonus" | "reactions" | "movement" | "attack-source";
@@ -123,7 +125,7 @@ export interface Affliction {
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
 
 /** Whether a condition stays on once it has landed (an instant heal and nothing else doesn't). */
-export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant");
+export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
 export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[] } {
@@ -143,6 +145,8 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
+  if (m.kind === "temphp") return `${m.value} temporary health`;
+  if (m.kind === "maxhp") return `${m.value >= 0 ? "+" : ""}${m.value} maximum health`;
   if (m.kind === "set") return `${targetLabel(m.target).toLowerCase()} becomes ${m.value}${m.plus ? ` + ${m.plus}` : ""}`;
   if (m.kind === "multiply") return `${targetLabel(m.target).toLowerCase()} ×${m.factor === 0.5 ? "½" : m.factor}`;
   if (m.kind === "speed") return m.factor === 0 ? "speed 0" : m.factor === 0.5 ? "half speed" : `speed ×${m.factor}`;

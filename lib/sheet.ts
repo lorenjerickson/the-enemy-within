@@ -1,6 +1,6 @@
 import { characterContainers, characterPlayers, db, getGameTime, getItem, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
 import { describeCondition, describeEffect } from "@/lib/conditions";
-import { standingEffects } from "@/lib/creatureChanges";
+import { effectiveMaxHp, standingEffects } from "@/lib/creatureChanges";
 import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
 import { describeStatus } from "@/lib/status";
@@ -42,7 +42,7 @@ export function sheetFor(tokenId: number): Sheet | null {
     allegiance: allegianceOf(t),
     image: who.image ?? null,
     token: who.token_overhead ?? null,
-    health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },
+    health: h && (() => { const maximum = effectiveMaxHp(t.id, h.maximum); return { current: Math.min(h.current, maximum), maximum, temporary: h.temporary }; })(),
     down: !!h && h.current + h.temporary <= 0,
     effects: [
       ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${describeEffect(e)} (from ${e.from})`, left: "always" })),

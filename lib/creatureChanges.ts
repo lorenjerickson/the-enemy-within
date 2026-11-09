@@ -60,6 +60,18 @@ export function restrictionsOn(tokenId: number, levelId?: number): Restrictions 
   return out;
 }
 
+/**
+ * A token's maximum health now: the rolled maximum, plus professions' health modifiers (always on) and conditions'
+ * or standing effects' changes to it (Aid +5; a necrotic drain); never below 1.
+ */
+export function effectiveMaxHp(tokenId: number, stored: number): number {
+  const t = db.prepare<[number], { level_id: number; character_id: number | null }>("SELECT level_id, character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t) return stored;
+  const fromProfessions = steadyBoost(professionStatuses(t.character_id), "health");
+  const mods = [...standingEffects(tokenId).flatMap((e) => e.modifiers), ...(listAfflictions(t.level_id).get(tokenId) ?? []).flatMap((a) => modifiersOf(a.condition))];
+  return Math.max(1, stored + fromProfessions + mods.reduce((sum, m) => sum + (m.kind === "maxhp" ? m.value : 0), 0));
+}
+
 /** Whether a token has a condition it can spend its action shaking off (Shake off). */
 export function canShakeOff(tokenId: number, levelId: number): boolean {
   return (listAfflictions(levelId).get(tokenId) ?? []).some((a) => a.condition.save_action && a.condition.save_attr);

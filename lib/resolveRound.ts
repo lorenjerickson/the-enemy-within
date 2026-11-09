@@ -174,6 +174,7 @@ export function resolveMovement(
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
+  const temps = new Map<number, number>(); // temporary health granted this round (given after it, the highest)
   const afflict = (id: number, c: Condition, by: number | null, sec: number) => {
     // A save as it lands: a player rolls their own (the round waits for it), the server rolls for the GM's creatures.
     let rounds = c.rounds;
@@ -217,6 +218,13 @@ export function resolveMovement(
           log.push(`${sec} s: ${nameOf(id)} is down.`);
         }
       }
+    }
+    // Temporary health as it lands (kept after the round: the highest counts).
+    for (const m of modifiersOf(c)) if (m.kind === "temphp" && hp.has(id)) {
+      const n = Math.max(0, rollDice(m.value));
+      if (n > (temps.get(id) ?? 0)) temps.set(id, n);
+      log.push(`${sec} s: ${nameOf(id)} gains ${n} temporary health (${c.name}).`);
+      story.push({ sec, k: "temphp", who: id, source: c.name, much: n });
     }
     if (!lingers(c)) return; // nothing more to it
     const f = fighters.get(id);
@@ -851,7 +859,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps };
 }
 
 /**

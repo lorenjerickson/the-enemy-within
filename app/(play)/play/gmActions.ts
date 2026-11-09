@@ -8,7 +8,7 @@ import {
 import { getPendingRound, listConditionDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
 import { describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
-import { rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
+import { applyConditionNow, rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
@@ -205,8 +205,8 @@ export async function gmApplyCondition(tokenId: number, conditionId: number) {
   await requireGm();
   const t = listTokensById(Number(tokenId)), c = getCondition(Number(conditionId));
   if (!t || !c) return;
-  addAffliction(t.level_id, t.id, c, null);
-  logSessionEvent(`The GM puts ${c.name} on ${tokenLabels(t.level_id).get(t.id) ?? "someone"}.`);
+  const happened = applyConditionNow(t.level_id, t.id, c); // instant parts now (healing, temporary health), the rest stays
+  logSessionEvent(`The GM puts ${c.name} on ${tokenLabels(t.level_id).get(t.id) ?? "someone"}${happened.length ? `: ${happened.join(", ")}` : ""}.`);
   revalidatePath("/play");
 }
 

@@ -12,7 +12,11 @@ import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, saveAfflictions } from "@/lib/db";
 import { tickAfflictions } from "@/lib/resolveRound";
-import { saveRollFor, speedOf } from "@/lib/creatureChanges";
+import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
+import { saveTokenHealth, tokenHealth } from "@/lib/health";
+import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
+import { rollDice } from "@/lib/dice";
+import { addAffliction } from "@/lib/db";
 import { openConditionSaveRequest } from "@/lib/db";
 
 /**
@@ -95,6 +99,11 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
+  // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
+  for (const [id, n] of result.temps) {
+    const h = tokenHealth(id);
+    if (h && n > h.temporary) saveTokenHealth(id, { ...h, temporary: n });
+  }
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
     if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);
@@ -185,4 +194,27 @@ export function rollConditionSaveFor(levelId: number) {
     closeRollRequest(req.id, req.player_id);
   }
   recordConditionSave(levelId, key, rolled.total);
+}
+
+/**
+ * A condition put on by hand (the GM's sheet), out of a round: its instant parts happen now (healing, damage,
+ * temporary health) and, if there's more to it, it stays on them. Returns what happened, for the log.
+ */
+export function applyConditionNow(levelId: number, tokenId: number, c: Condition): string[] {
+  const out: string[] = [];
+  const h = tokenHealth(tokenId);
+  if (h) {
+    let next = { ...h };
+    for (const m of modifiersOf(c)) {
+      if (m.kind === "instant") {
+        const n = Math.max(0, rollDice(m.value));
+        if (m.heal) { const max = effectiveMaxHp(tokenId, h.maximum); const to = Math.min(max, next.current + n); out.push(`healed for ${to - next.current}`); next.current = to; }
+        else { const fromTemp = Math.min(next.temporary, n); next = { ...next, temporary: next.temporary - fromTemp, current: Math.max(0, next.current - (n - fromTemp)) }; out.push(`${n} damage`); }
+      }
+      if (m.kind === "temphp") { const n = Math.max(0, rollDice(m.value)); if (n > next.temporary) next.temporary = n; out.push(`${n} temporary health`); }
+    }
+    if (next.current !== h.current || next.temporary !== h.temporary) saveTokenHealth(tokenId, next);
+  }
+  if (lingers(c)) addAffliction(levelId, tokenId, c, null);
+  return out;
 }

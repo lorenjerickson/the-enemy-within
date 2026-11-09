@@ -17,7 +17,7 @@ const SET_PATTERN = `\\d+(\\s*\\+\\s*(${ATTRIBUTES.join("|")}))?`;
  */
 export default function EffectForm({ initial }: { initial?: EffectDef }) {
   const mods = initial?.modifiers ?? [];
-  const speed = mods.find((m) => m.kind === "speed");
+  const speed = mods.find((m) => m.kind === "speed"), temphp = mods.find((m) => m.kind === "temphp"), maxhp = mods.find((m) => m.kind === "maxhp");
   const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
   return (
     <form action={submitEffect.bind(null, initial?.id ?? null)} className="max-w-2xl space-y-3" data-effect-form>
@@ -70,7 +70,14 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
             </select>
             <span className="text-xs opacity-60">a flaming weapon; a hex</span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-forbid>
+          <div className="flex flex-wrap items-center gap-2 text-sm" data-health-mods>
+          <span className="font-semibold">Temporary health</span>
+          <input name="temphp_value" pattern={DICE_PATTERN} placeholder="e.g. 1d4+4" defaultValue={temphp?.kind === "temphp" ? temphp.value : ""} className="input input-sm w-28" />
+          <span className="font-semibold">Maximum health</span>
+          <input name="maxhp_value" type="number" placeholder="+5 or -3" defaultValue={maxhp?.kind === "maxhp" ? maxhp.value : ""} className="input input-sm w-24" />
+          <span className="text-xs opacity-60">temporary health as it lands (the highest counts); maximum while it lasts</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-forbid>
           <span className="font-semibold">Can&apos;t</span>
           {FORBIDS.map(([what, label]) => (
             <label key={what} className="flex items-center gap-1">

@@ -10,7 +10,7 @@ import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 import { rollChanges, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
-import { extrasOn, professionStatuses, resistancesOf, restrictionsOn, standingStatuses } from "@/lib/creatureChanges";
+import { effectiveMaxHp, extrasOn, professionStatuses, resistancesOf, restrictionsOn, standingStatuses } from "@/lib/creatureChanges";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -96,7 +96,8 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
     // Professions' modifiers are always on (attack, damage, defense, attributes).
     // So are what they have on: standing effects of their creature and their equipment, and how they take damage.
     if (!c || !h) continue;
-    const f: Fighter = { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp: h.maximum, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId) };
+    const maxHp = effectiveMaxHp(t.id, h.maximum); // professions' and conditions' changes to it
+    const f: Fighter = { ...fighterOf(c, Math.min(h.current, maxHp) + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId) };
     // Saves they fail outright (Stunned: Might and Agility), checked when rolled (a condition put on mid-round counts too).
     const roll = f.save;
     f.save = (attr) => (f.limits?.autofail.includes(attr) ? { total: -99, text: "fails automatically" } : roll(attr));
