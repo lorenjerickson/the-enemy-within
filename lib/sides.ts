@@ -37,6 +37,7 @@ export function describeTargeting(t: Targeting, area: boolean): string {
 }
 
 /** Whether the player picks several targets (exactly / up to N). */
-export const picksSeveral = (t?: Targeting) => !!t && (t.count === "exactly" || t.count === "upto");
+/** Picking several (exactly / up to N, for N above 1): "exactly 1" or "up to 1" is just one target, picked with a click. */
+export const picksSeveral = (t?: Targeting) => !!t && (t.count === "exactly" || t.count === "upto") && t.n > 1;
 /** The most targets they may pick (one for "one"; all: no limit). */
 export const maxPicks = (t?: Targeting) => (!t || t.count === "one" ? 1 : t.count === "all" ? Infinity : t.n);

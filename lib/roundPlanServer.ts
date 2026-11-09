@@ -6,7 +6,7 @@ import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, stepKind, timeline, una
 import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
-import { allegianceOf, fits, relation } from "@/lib/sides";
+import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
 import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
 
@@ -106,7 +106,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     // Several targets (exactly / up to N), or which of those in its area it's meant for: each must fit who it's for.
     const tg = use?.targeting;
     let picks: { id: number; name: string }[] | undefined;
-    if (tg && (step.picks?.length || (!use?.area && (tg.count === "exactly" || tg.count === "upto")))) {
+    if (tg && (step.picks?.length || (!use?.area && picksSeveral(tg)))) {
       const labels = tokenLabels(p.tok.level_id), tokens = listTokens(p.tok.level_id);
       const me = allegianceOf(tokens.find((t) => t.id === p.tok.token_id) ?? { character_id: null });
       const ids = [...new Set((step.picks ?? []).map(Number))];
