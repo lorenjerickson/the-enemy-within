@@ -1,14 +1,14 @@
 import { downTokens, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
-import { CHASE_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
-import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
+import { CHASE_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
+import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
-import { speedOf } from "@/lib/creatureChanges";
+import { restrictionsOn, speedOf } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
 export function tokenPlanner(tokenId: number) {
@@ -28,6 +28,10 @@ export type StepRequest = { kind: "action"; action: PlayerActionId; target?: num
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (p.rolled) return "The dice are rolled: the plan is set";
   if (p.ready) return "Ready already; undo that to change the plan";
+  // A condition stopping that kind of step (Stunned: anything; Restrained: moving).
+  const kind = step.kind === "move" ? "movement" : step.use !== undefined ? "action" : actionKind(step.action);
+  const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
+  if (stopped) return stopped;
   let add: PlanStep;
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
@@ -121,7 +125,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     const first = picks && !aim ? picks[0] : undefined;
     add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}) };
   }
-  const why = cannotAdd(p.plan, add, p.walking);
+  const why = cannotAdd(p.plan, add, p.walking) ?? unavailable(p.plan, 0, stepKind(add), 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (why) return why;
   saveRoundPlan(p.tok.level_id, p.tok.token_id, [...p.plan, add], false);
   // Whoever it's aimed at (someone else) stays their selected target, this round and the next.
@@ -210,5 +214,6 @@ export function planView(tokenId: number) {
     refits: refitOptions(tokenId, plannedEquipment(p)),
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)
     sees: [...seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), tokenId)], // who they could aim at from where the plan has them
+    forbidden: restrictionsOn(tokenId, p.tok.level_id).forbid, // what conditions stop them doing (Stunned: everything)
   };
 }

@@ -23,6 +23,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "healed"; who: number; source: string; much: number }
   | { k: "late"; who: number; action: string; heldBy?: number | null; target?: number | null }
   | { k: "afflicted"; who: number; name: string; by: number | null } // an effect (Poisoned…) put on them
+  | { k: "stopped"; who: number; action: string; target: number | null; why: string } // a condition stopped it (why: its name, or "spare": they can't attack whoever hypnotized them)
   | { k: "effect"; who: number; name: string; much: number; heal: boolean; hurt?: number } // an effect's round of damage or healing
   | { k: "effectEnds"; who: number; name: string; why: "save" | "time" | "resisted" } // resisted: it never took hold
 );
@@ -125,6 +126,10 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         break;
       }
       case "status": add(e.sec, `You're affected by ${e.source}.`); break;
+      case "stopped":
+        if (mine) add(e.sec, e.why === "spare" ? `You can't bring yourself to ${deed(e.action)} ${e.target !== null ? name(e.target) : "them"}.` : `You're ${e.why.toLowerCase()} and can't ${deed(e.action)}.`);
+        else if (e.why === "spare") add(e.sec, `${subj} can't bring themselves to ${deed(e.action)} you.`);
+        break;
       case "afflicted":
         if (mine) add(e.sec, e.by !== null && e.by !== me ? `${cap(name(e.by))} leaves you ${e.name.toLowerCase()}.` : `You're ${e.name.toLowerCase()}.`);
         else add(e.sec, `You leave ${name(e.who)} ${e.name.toLowerCase()}.`);
@@ -184,6 +189,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       }
       case "status": add(e.sec, `${who} is affected by ${e.source}.`); break;
       case "healed": add(e.sec, e.much > 0 ? `${who} is healed for ${e.much} (${e.source}).` : `${who} gets nothing from ${e.source} (already well).`); break;
+      case "stopped": add(e.sec, e.why === "spare" ? `${who} can't bring themselves to ${does(e.action)} ${n(e.target)}.` : `${who} is ${e.why.toLowerCase()} and can't ${does(e.action)}.`); break;
       case "afflicted": add(e.sec, `${who} is ${e.name.toLowerCase()}${e.by !== null && e.by !== e.who ? ` by ${n(e.by)}` : ""}.`); break;
       case "effect": add(e.sec, e.heal ? `${e.name} heals ${who} for ${e.much}.` : `${e.name} deals ${who} ${e.much} damage.`); break;
       case "effectEnds": add(e.sec, e.why === "resisted" ? `${who} resists being ${e.name.toLowerCase()}.` : e.why === "save" ? `${who} shakes off ${e.name.toLowerCase()}.` : `${who}'s ${e.name.toLowerCase()} wears off.`); break;

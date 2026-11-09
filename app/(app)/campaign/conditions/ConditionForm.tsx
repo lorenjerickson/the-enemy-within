@@ -15,11 +15,11 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
       <input name="name" placeholder="Condition name (e.g. Poisoned, Mesmerized)" required defaultValue={initial?.name} className="input w-full" />
       <textarea name="description" placeholder="What it is (e.g. venom in the blood)" defaultValue={initial?.description} className="textarea w-full" />
       <fieldset className="space-y-1 rounded-box border border-base-300 p-2" data-condition-effects>
-        <legend className="px-1 text-sm font-semibold">Applies these effects</legend>
+        <legend className="px-1 text-sm font-semibold">Applies these effects{initial?.builtin ? " (built in: fixed)" : ""}</legend>
         {effects.length ? (
           effects.map((e) => (
             <label key={e.id} className="flex items-start gap-2 text-sm">
-              <input type="checkbox" name="effect" value={e.id} defaultChecked={initial?.effects.includes(e.id)} className="checkbox checkbox-sm mt-0.5" />
+              <input type="checkbox" name="effect" value={e.id} defaultChecked={initial?.effects.includes(e.id)} disabled={!!initial?.builtin} className="checkbox checkbox-sm mt-0.5" />
               <span><span className="font-medium">{e.name}</span> <span className="opacity-60">{describeEffect(e) || e.description}</span></span>
             </label>
           ))

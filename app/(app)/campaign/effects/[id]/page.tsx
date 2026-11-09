@@ -14,9 +14,11 @@ export default async function EditEffect({ params }: { params: Promise<{ id: str
     <section className="space-y-3">
       <h2 className="text-xl font-semibold">Edit effect</h2>
       <EffectForm key={JSON.stringify(effect)} initial={effect} />
-      <form action={deleteEffect.bind(null, effect.id)}>
-        <button className="btn btn-ghost btn-sm text-error">Delete effect</button>
-      </form>
+      {!effect.builtin && (
+        <form action={deleteEffect.bind(null, effect.id)}>
+          <button className="btn btn-ghost btn-sm text-error">Delete effect</button>
+        </form>
+      )}
     </section>
   );
 }

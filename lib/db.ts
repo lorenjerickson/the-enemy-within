@@ -1,4 +1,5 @@
 import type { Affliction, Condition, ConditionDef, EffectDef, Modifier } from "@/lib/conditions";
+import { BUILTIN_CONDITIONS, BUILTIN_EFFECTS } from "@/lib/builtinConditions";
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
@@ -2000,6 +2001,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS conditions (
   save_dc INTEGER NOT NULL DEFAULT 12
 )`);
 addColumn("conditions", "apply_save_attr", "TEXT NOT NULL DEFAULT ''"); // a save as it lands ('' = none)
+addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in effect's key (lib/builtinConditions.ts): its modifiers are fixed
+addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in condition's key: the effects it applies are fixed
 addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
 addColumn("conditions", "apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"); // on a success: negates | halves (its rounds)
 
@@ -2106,6 +2109,22 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
         conditions.push({ id: saveConditionDef(null, { name, description: `From ${r.name}.`, effects: [effect], rounds, save_attr: "", save_dc: 12 }), on });
       }
       db.prepare("UPDATE actions SET boosts = '[]', roll_grants = '[]', conditions = ? WHERE id = ?").run(JSON.stringify(conditions), r.id);
+    }
+  })();
+}
+
+// The built-in conditions and their effects, each seeded once (by key). A built-in that shares its name with a
+// condition the GM already made (their own Poisoned) is left out, so the catalog doesn't hold two of the same name.
+{
+  const effectId = new Map(db.prepare<[], { id: number; builtin: string }>("SELECT id, builtin FROM effects WHERE builtin != ''").all().map((r) => [r.builtin, r.id]));
+  const haveCondition = new Set(db.prepare<[], { builtin: string }>("SELECT builtin FROM conditions WHERE builtin != ''").all().map((r) => r.builtin));
+  const names = new Set(db.prepare<[], { name: string }>("SELECT name FROM conditions WHERE builtin = ''").all().map((r) => r.name.toLowerCase()));
+  db.transaction(() => {
+    for (const e of BUILTIN_EFFECTS) if (!effectId.has(e.key)) {
+      effectId.set(e.key, Number(db.prepare("INSERT INTO effects (name, description, modifiers, builtin) VALUES (?, ?, ?, ?)").run(e.name, e.description, JSON.stringify(e.modifiers), e.key).lastInsertRowid));
+    }
+    for (const c of BUILTIN_CONDITIONS) if (!haveCondition.has(c.key) && !names.has(c.name.toLowerCase())) {
+      db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, builtin) VALUES (?, ?, ?, 1, '', 12, ?)").run(c.name, c.description, JSON.stringify(c.effects.map((k) => effectId.get(k)!)), c.key);
     }
   })();
 }

@@ -16,7 +16,7 @@ export default async function Conditions() {
         <Link href="/campaign/conditions/new" className="btn btn-primary btn-sm">Add condition</Link>
       </div>
       <p className="text-sm opacity-70">What actions put on creatures (Poisoned, Mesmerized): the effects they apply, how long they last and the save that ends them.</p>
-      <FilterableList empty="No conditions yet." entries={conditions.map((c) => ({ id: c.id, href: `/campaign/conditions/${c.id}`, name: c.name, description: c.description, note: `${c.effects.map((e) => e.name).join(", ") || "no effects"} · ${describeCondition(c)}` }))} />
+      <FilterableList empty="No conditions yet." entries={conditions.map((c) => ({ id: c.id, href: `/campaign/conditions/${c.id}`, name: c.name, description: c.description, type: c.builtin ? "built-in" : "custom", note: `${c.effects.map((e) => e.name).join(", ") || "no effects"} · ${describeCondition(c)}` }))} />
     </section>
   );
 }

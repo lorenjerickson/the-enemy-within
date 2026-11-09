@@ -14,9 +14,11 @@ export default async function EditCondition({ params }: { params: Promise<{ id: 
     <section className="space-y-3">
       <h2 className="text-xl font-semibold">Edit condition</h2>
       <ConditionForm key={JSON.stringify(condition)} initial={condition} effects={listEffectDefs()} />
-      <form action={deleteCondition.bind(null, condition.id)}>
-        <button className="btn btn-ghost btn-sm text-error">Delete condition</button>
-      </form>
+      {!condition.builtin && (
+        <form action={deleteCondition.bind(null, condition.id)}>
+          <button className="btn btn-ghost btn-sm text-error">Delete condition</button>
+        </form>
+      )}
     </section>
   );
 }

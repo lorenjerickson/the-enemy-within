@@ -27,6 +27,7 @@ export interface CreaturePlan {
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
   attackRange?: number; // squares its plain Attack reaches
   sees?: number[]; // who it could see (and so aim at) from where its plan has it
+  forbidden?: Partial<Record<string, string>>; // what conditions stop it doing (by step kind), and which condition
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
@@ -94,12 +95,12 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 <div className="text-xs font-semibold opacity-80">{title}</div>
               <div className="grid grid-cols-4 gap-1">
             {group.map((a) => (
-              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0) ?? (a.id === "dash" ? "Not in yet" : null)}>
+              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden) ?? (a.id === "dash" ? "Not in yet" : null)}>
               <button
                 type="button"
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
-                disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0)}
+                disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden)}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
                   a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!moving))
@@ -117,7 +118,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
+                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

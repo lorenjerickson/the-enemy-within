@@ -17,7 +17,7 @@ export default async function Effects() {
         <Link href="/campaign/effects/new" className="btn btn-primary btn-sm">Add effect</Link>
       </div>
       <p className="text-sm opacity-70">Named sets of modifiers (Incapacitated: no actions or reactions). Conditions apply them; one effect can serve several conditions.</p>
-      <FilterableList empty="No effects yet." entries={effects.map((e) => ({ id: e.id, href: `/campaign/effects/${e.id}`, name: e.name, description: describeEffect(e) || e.description, note: usedBy(e.id).length ? `in ${usedBy(e.id).join(", ")}` : "in no condition yet" }))} />
+      <FilterableList empty="No effects yet." entries={effects.map((e) => ({ id: e.id, href: `/campaign/effects/${e.id}`, name: e.name, description: describeEffect(e) || e.description, type: e.builtin ? "built-in" : "custom", note: usedBy(e.id).length ? `in ${usedBy(e.id).join(", ")}` : "in no condition yet" }))} />
     </section>
   );
 }

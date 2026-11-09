@@ -2,11 +2,11 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, resistsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
-import { DODGE_DC, ROUND_SECONDS, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
+import { DODGE_DC, ROUND_SECONDS, stepKind, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
 /** How far an action reaches (squares): a gear action's own range, a plain Attack the mover's weapon's. */
@@ -125,6 +125,7 @@ export interface Combatant {
   allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
   resist?: Record<string, Resist[]>; // how they take each kind of damage, by type (conditions put on mid-round add to it)
   extras?: { dealing: Extra[]; taking: Extra[] }; // extra damage on their hits, and on hits against them
+  limits?: Restrictions; // what conditions stop them doing (a condition put on mid-round counts from then on)
 }
 
 /**
@@ -179,7 +180,8 @@ export function resolveMovement(
     if (c.apply_save_attr) {
       const dc = c.apply_save_dc ?? 12, key = `save:${sec}:${c.id}:${id}`;
       let total: number;
-      if (rollers.has(id)) {
+      if (fighters.get(id)?.limits?.autofail.includes(c.apply_save_attr)) total = -99; // fails outright: nothing to roll
+      else if (rollers.has(id)) {
         if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: c.name, attr: c.apply_save_attr, dc });
         total = decisions[key];
       } else total = fighters.get(id)?.save?.(c.apply_save_attr).total ?? 0;
@@ -221,6 +223,8 @@ export function resolveMovement(
       f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
       const x = extrasOf(modifiersOf(c), c.name, by);
       f.extras = { dealing: [...(f.extras?.dealing ?? []), ...x.dealing], taking: [...(f.extras?.taking ?? []), ...x.taking] };
+      const was = f.limits ?? noRestrictions();
+      f.limits = restrictionsOf(modifiersOf(c), c.name, by, { forbid: { ...was.forbid }, autofail: [...was.autofail], spare: [...was.spare] });
     }
     afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: rounds, by }]);
     const rolls = rollChanges(c);
@@ -386,6 +390,7 @@ export function resolveMovement(
   const closingFor = new Map<number, { target: number; means: string }>();
   const lastHitBy = new Map<number, number>();
   const heldBy = new Map<number, number>();
+  const frozen = new Set<number>(); // told they can't move this round (a condition)
   const gaveWay = new Set<string>(); // contested moves already settled this round (told once)
   const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
     const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
@@ -403,6 +408,11 @@ export function resolveMovement(
       order.map((m) => {
         const here = pos.get(m.tokenId)!;
         if (down.has(m.tokenId)) return [m.tokenId, here];
+        const held = fighters.get(m.tokenId)?.limits?.forbid.movement;
+        if (held) {
+          if (!frozen.has(m.tokenId)) { frozen.add(m.tokenId); log.push(`${sec} s: ${m.name} can't move (${held}).`); }
+          return [m.tokenId, here];
+        }
         const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
         // A ranged action due now on someone out of reach: pursue them first, while that still leaves time to do it.
         const tp = t - 1;
@@ -519,6 +529,12 @@ export function resolveMovement(
       for (const a of acts.get(m.tokenId)!) {
         if (!REACTIONS.includes(a.step.action) || readied.has(a) || a.start > sec - 1 - lag.get(m.tokenId)! + 1e-9) continue;
         readied.add(a);
+        const noReact = fighters.get(m.tokenId)?.limits?.forbid.reaction;
+        if (noReact) {
+          log.push(`${sec} s: ${m.name} can't ${a.step.action} (${noReact}).`);
+          story.push({ sec, k: "stopped", who: m.tokenId, action: a.step.action, target: null, why: noReact });
+          continue;
+        }
         // d20 + agility (their own dice, if they rolled with the plan) against DODGE_DC.
         const f = fighters.get(m.tokenId), check = f?.save ? usingDice(a.step.dice?.check, () => f.save!("agility")) : undefined;
         if (check && check.total < DODGE_DC) {
@@ -542,6 +558,13 @@ export function resolveMovement(
       const start = act.start + lag.get(m.tokenId)!; // when it really started
       const say = (text: string) => log.push(`${sec} s: ${text}`);
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
+      // A condition stopping that kind of step (Stunned, Incapacitated): it doesn't happen.
+      const stopped = fighters.get(m.tokenId)?.limits?.forbid[stepKind(step)];
+      if (stopped) {
+        say(`${m.name} can't ${step.use ? `use ${step.use.name}` : step.action} (${stopped}).`);
+        story.push({ sec, k: "stopped", who: m.tokenId, action: step.use ? `use ${step.use.name}` : step.action, target: step.target?.id ?? null, why: stopped });
+        continue;
+      }
       // A refit (a bonus action) is done: from now on they fight with the new gear.
       if (step.swap) {
         const before = { ...(m.equipment ?? {}) };
@@ -586,6 +609,11 @@ export function resolveMovement(
         for (const id of list) {
           const them = fighters.get(id), at = where(id);
           if (!me || !them || !at || down.has(id)) continue;
+          if (me.limits?.spare.includes(id) && use.damage) {
+            say(`${m.name} can't bring themselves to harm ${nameOf(id)}.`);
+            story.push({ sec, k: "stopped", who: m.tokenId, action: `use ${use.name}`, target: id, why: "spare" });
+            continue;
+          }
           if (!inReach(here, at, rangeOf(step, m))) {
             say(`${nameOf(id)} is out of range of ${use.name}.`);
             story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "reach" });
@@ -682,6 +710,9 @@ export function resolveMovement(
       const at = target && where(target.id);
       if (!target || !me || !them || !at) {
         say(`${m.name}'s attack fails: no target.`);
+      } else if (me.limits?.spare.includes(target.id)) {
+        say(`${m.name} can't bring themselves to attack ${target.name}.`);
+        story.push({ sec, k: "stopped", who: m.tokenId, action: step.use ? `use ${step.use.name}` : step.action, target: target.id, why: "spare" });
       } else if (down.has(target.id)) {
         say(`${m.name}'s attack fails: ${target.name} is already down.`);
         story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "gone" });

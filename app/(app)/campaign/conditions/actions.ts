@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { listEffectDefs, removeConditionDef, saveConditionDef } from "@/lib/db";
+import { getConditionDef, listEffectDefs, removeConditionDef, saveConditionDef } from "@/lib/db";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 /** Creates (id null) or saves a catalog condition: the effects it applies, how long it lasts, the save that ends it. */
@@ -13,7 +13,8 @@ export async function submitCondition(id: number | null, formData: FormData) {
   const save_attr = text("save_attr") as Attribute | "";
   if (save_attr && !ATTRIBUTES.includes(save_attr)) throw new Error("Invalid save");
   const known = new Set(listEffectDefs().map((e) => e.id));
-  const effects = [...new Set(formData.getAll("effect").map(Number))].filter((e) => known.has(e));
+  const was = id === null ? undefined : getConditionDef(id);
+  const effects = was?.builtin ? was.effects : [...new Set(formData.getAll("effect").map(Number))].filter((e) => known.has(e)); // a built-in's effects stay
   const saved = saveConditionDef(id, {
     name: text("name"),
     description: text("description"),
@@ -32,6 +33,7 @@ export async function submitCondition(id: number | null, formData: FormData) {
 
 export async function deleteCondition(id: number) {
   await requireGm();
+  if (getConditionDef(Number(id))?.builtin) throw new Error("Built-in conditions can't be deleted");
   removeConditionDef(Number(id));
   revalidatePath("/campaign/conditions");
   redirect("/campaign/conditions");

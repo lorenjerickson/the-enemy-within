@@ -26,7 +26,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string }[];
   onMap: boolean;
@@ -34,6 +34,7 @@ export default function PickLock({
   freeMovement: boolean;
   plan: { steps: TimedStep[]; used: number; ready: boolean } | null; // set while an encounter runs
   targets?: { id: number; name: string; allegiance?: string | null; character_id?: number | null }[]; // who they can see, to aim at
+  forbidden?: Partial<Record<string, string>>; // what conditions on them stop them doing (by step kind), and which condition
   history?: { round: number; showAt: number; lines: string[] }[]; // every round of the encounter so far, told from their side
   selected?: number | null; // their selected target (kept from last round): used for a targeted action straight away
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
@@ -73,7 +74,7 @@ export default function PickLock({
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
-  const spent = (id: PlayerActionId) => (plan ? unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0) : null);
+  const spent = (id: PlayerActionId) => (plan ? unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden) : null);
   const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search"); // Evade / Pursue: encounters only
   const press = (id: PlayerActionId) => {
     if (id === "move") {
@@ -181,7 +182,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
+            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds, forbidden) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
           </section>
         );
       })}

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { removeEffectDef, saveEffectDef } from "@/lib/db";
+import { getEffectDef, removeEffectDef, saveEffectDef } from "@/lib/db";
 import { DAMAGE_TYPES, isRollKind, type DamageType } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
@@ -64,7 +64,8 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (!DAMAGE_TYPES.includes(damage_type) || !["resistant", "vulnerable", "immune"].includes(level)) throw new Error("Invalid resistance");
     modifiers.push({ kind: "resist", damage_type, level: level as "resistant" | "vulnerable" | "immune" });
   });
-  const saved = saveEffectDef(id, { name: text("name"), description: text("description"), modifiers });
+  const was = id === null ? undefined : getEffectDef(id);
+  const saved = saveEffectDef(id, { name: text("name"), description: text("description"), modifiers: was?.builtin ? was.modifiers : modifiers }); // a built-in's rules stay
   revalidatePath("/campaign/effects");
   revalidatePath("/campaign/conditions");
   if (id === null) redirect(`/campaign/effects/${saved}`);
@@ -72,6 +73,7 @@ export async function submitEffect(id: number | null, formData: FormData) {
 
 export async function deleteEffect(id: number) {
   await requireGm();
+  if (getEffectDef(Number(id))?.builtin) throw new Error("Built-in effects can't be deleted");
   removeEffectDef(Number(id));
   revalidatePath("/campaign/effects");
   redirect("/campaign/effects");

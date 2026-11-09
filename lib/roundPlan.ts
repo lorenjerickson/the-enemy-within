@@ -102,7 +102,8 @@ export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use
  * Why something of this kind, taking these seconds, can't be added to the plan now (for greying out its button), or
  * null if it can: one action, one bonus action and one reaction a round, and only what fits the time left.
  */
-export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typeof stepKind>, seconds: number): string | null {
+export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typeof stepKind>, seconds: number, forbidden: Partial<Record<string, string>> = {}): string | null {
+  if (forbidden[kind]) return `${forbidden[kind]}: can't ${kind === "movement" ? "move" : kind === "action" ? "take actions" : kind === "bonus" ? "take bonus actions" : "react"}`;
   const left = ROUND_SECONDS - used;
   if (kind !== "movement" && plan.some((s) => stepKind(s) === kind)) return `You've already planned your ${kind === "bonus" ? "bonus action" : kind} this round`;
   if (left <= 1e-9) return "No time left this round";
