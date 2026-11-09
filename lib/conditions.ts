@@ -108,6 +108,8 @@ export interface ConditionDef {
   ends_on_damage?: number; // 1: ends when they take damage (a deep sleep)
   ends_on_attack?: number; // 1: ends when they attack (invisibility)
   concentration?: number; // 1: whoever put it on must keep concentrating (one at a time; hurt: a Fortitude save; down: it ends)
+  reapply?: "refresh" | "stack" | "ignore"; // put on again while it's on: its rounds start over (default), another runs alongside, or nothing happens
+  stack_limit?: number; // stacking: at most this many at once (0 = no limit); past it, the one with the fewest rounds left starts over
   builtin?: string; // a built-in condition's key: the effects it applies are fixed
 }
 
@@ -124,6 +126,23 @@ export interface Affliction {
 }
 
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
+
+/**
+ * A creature's conditions with `c` put on again (lasting `rounds`, by `by`), by its re-application rule: refresh (its
+ * rounds start over), stack (another alongside, up to its limit; past that the one with fewest rounds left starts
+ * over) or ignore (no change). `applied` says whether anything changed.
+ */
+export function reapplied(list: Affliction[], c: Condition, rounds: number, by: number | null): { list: Affliction[]; applied: boolean } {
+  const same = list.filter((a) => a.condition.id === c.id), fresh: Affliction = { condition: c, left: rounds, by };
+  if (!same.length) return { list: [...list, fresh], applied: true };
+  if (c.reapply === "ignore") return { list, applied: false };
+  if (c.reapply === "stack") {
+    if (!c.stack_limit || same.length < c.stack_limit) return { list: [...list, fresh], applied: true };
+    const oldest = same.reduce((a, b) => (b.left < a.left ? b : a));
+    return { list: list.map((a) => (a === oldest ? fresh : a)), applied: true };
+  }
+  return { list: [...list.filter((a) => a.condition.id !== c.id), fresh], applied: true };
+}
 
 /** Whether a condition stays on once it has landed (an instant heal and nothing else doesn't). */
 export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp");
@@ -174,7 +193,7 @@ export function describeEffect(e: Pick<EffectDef, "modifiers">): string {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** "Fortitude DC 12 when applied negates · 6 rounds · Fortitude DC 12 ends it". */
-export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "concentration">, withRounds = true) =>
+export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "concentration" | "reapply" | "stack_limit">, withRounds = true) =>
   [
     c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
     withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,
@@ -182,6 +201,7 @@ export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" |
     c.ends_on_damage && "ends when hurt",
     c.ends_on_attack && "ends when they attack",
     c.concentration && "needs concentration",
+    c.reapply === "stack" ? `stacks${c.stack_limit ? ` (up to ${c.stack_limit})` : ""}` : c.reapply === "ignore" ? "doesn't renew" : "",
   ].filter(Boolean).join(" · ");
 
 /** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it" ("heals 1d10" alone for an instant one). */

@@ -69,6 +69,17 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
           they can spend an action (Shake off) to roll it
         </label>
       </fieldset>
+      <fieldset className="flex flex-wrap items-center gap-2 text-sm" data-reapply>
+        <span className="font-semibold">Put on again</span>
+        <select name="reapply" defaultValue={initial?.reapply ?? "refresh"} className="select select-sm w-auto">
+          <option value="refresh">its rounds start over</option>
+          <option value="stack">another runs alongside (stacks)</option>
+          <option value="ignore">nothing happens</option>
+        </select>
+        at most
+        <input name="stack_limit" type="number" min="0" defaultValue={initial?.stack_limit ?? 0} className="input input-sm w-16" />
+        <span className="text-xs opacity-60">at once when stacking (0 = no limit; past it, the one with fewest rounds left starts over)</span>
+      </fieldset>
       <fieldset className="flex flex-wrap items-center gap-3 text-sm" data-ends-on>
         <span className="font-semibold">Also ends</span>
         <label className="flex items-center gap-1">

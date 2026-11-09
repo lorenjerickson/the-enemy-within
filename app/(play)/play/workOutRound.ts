@@ -217,6 +217,6 @@ export function applyConditionNow(levelId: number, tokenId: number, c: Condition
     }
     if (next.current !== h.current || next.temporary !== h.temporary) saveTokenHealth(tokenId, next);
   }
-  if (lingers(c)) addAffliction(levelId, tokenId, c, null);
+  if (lingers(c) && !addAffliction(levelId, tokenId, c, null)) out.push(`already ${c.name.toLowerCase()}: no change`);
   return out;
 }

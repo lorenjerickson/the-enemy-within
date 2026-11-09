@@ -31,6 +31,8 @@ export async function submitCondition(id: number | null, formData: FormData) {
     ends_on_damage: formData.get("ends_on_damage") === "on" ? 1 : 0,
     ends_on_attack: formData.get("ends_on_attack") === "on" ? 1 : 0,
     concentration: formData.get("concentration") === "on" ? 1 : 0,
+    reapply: text("reapply") === "stack" ? "stack" : text("reapply") === "ignore" ? "ignore" : "refresh",
+    stack_limit: Math.max(0, Math.round(Number(formData.get("stack_limit")) || 0)),
   });
   revalidatePath("/campaign/conditions");
   revalidatePath("/campaign/effects");

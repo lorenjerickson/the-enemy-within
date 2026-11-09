@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -243,7 +243,12 @@ export function resolveMovement(
       const was = f.limits ?? noRestrictions();
       f.limits = restrictionsOf(modifiersOf(c), c.name, by, { forbid: { ...was.forbid }, autofail: [...was.autofail], spare: [...was.spare] });
     }
-    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: rounds, by }]);
+    const r = reapplied(afflicted.get(id) ?? [], c, rounds, by); // refresh, stack or ignore (the condition says)
+    if (!r.applied) {
+      log.push(`${sec} s: ${nameOf(id)} is already ${c.name.toLowerCase()}: no change.`);
+      return;
+    }
+    afflicted.set(id, r.list);
     const rolls = rollChanges(c);
     if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
     story.push({ sec, k: "afflicted", who: id, name: c.name, by });
