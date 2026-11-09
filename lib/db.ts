@@ -332,6 +332,7 @@ addColumn("actions", "save_dc", "INTEGER NOT NULL DEFAULT 12"); // an area's sav
 addColumn("actions", "save_attr", "TEXT NOT NULL DEFAULT 'agility'");
 addColumn("actions", "save_half", "INTEGER NOT NULL DEFAULT 1"); // 1 = a successful save takes half damage, 0 = none
 addColumn("actions", "area_lasts", "INTEGER NOT NULL DEFAULT 0"); // 1 = the area stays on the map for the duration
+addColumn("actions", "area_fires", "TEXT NOT NULL DEFAULT 'end'"); // a lasting area catches whoever: enter,start,end
 addColumn("actions", "targets", "TEXT NOT NULL DEFAULT ''");
 addColumn("actions", "target_who", "TEXT NOT NULL DEFAULT ''"); // TargetWho: '' anyone, friendly, enemy
 addColumn("actions", "target_count", "TEXT NOT NULL DEFAULT 'one'"); // TargetCount: one, exactly, upto, all
@@ -804,6 +805,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   save_attr: Attribute;
   save_half: 0 | 1;
   area_lasts: 0 | 1; // the area stays on the map for the action's duration
+  area_fires: string; // when a lasting area catches someone: "enter", "start", "end", comma-separated
   target_who: TargetWho; // only friendlies / enemies ("" = anyone)
   target_count: TargetCount; // one, exactly N, up to N, or all
   target_n: number;
@@ -819,7 +821,7 @@ type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants" | "conditions"> & { boosts: string; roll_grants: string; conditions: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n, conditions";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -831,13 +833,13 @@ export function listActions(owner: ActionOwner): Action[] {
 
 /** Inserts when id is null, otherwise updates. */
 export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
-  const params = { ...a, boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants), conditions: JSON.stringify(a.conditions) };
+  const params = { ...a, area_fires: a.area_fires ?? "end", boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants), conditions: JSON.stringify(a.conditions) };
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n, conditions)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @targets, @target_who, @target_count, @target_n, @conditions)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @area_fires, @targets, @target_who, @target_count, @target_n, @conditions)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
@@ -845,7 +847,7 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
          seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
-         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n, conditions = @conditions WHERE id = @id`
+         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, area_fires = @area_fires, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n, conditions = @conditions WHERE id = @id`
     ).run({ ...params, id });
   }
 }

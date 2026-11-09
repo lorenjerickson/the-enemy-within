@@ -1,6 +1,6 @@
 "use server";
 
-import { AREA_SHAPES, type AreaShape } from "@/lib/aoe";
+import { AREA_SHAPES, areaFires, type AreaShape } from "@/lib/aoe";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 import { revalidatePath } from "next/cache";
@@ -124,6 +124,7 @@ function areaFields(formData: FormData) {
     save_attr: (ATTRIBUTES as readonly string[]).includes(attr) ? (attr as Attribute) : ("agility" as const),
     save_half: (formData.get("save_half") === "on" ? 1 : 0) as 0 | 1,
     area_lasts: (formData.get("area_lasts") === "on" ? 1 : 0) as 0 | 1,
+    area_fires: areaFires(formData.getAll("area_fires").map(String).join(",")).join(","),
   };
 }
 

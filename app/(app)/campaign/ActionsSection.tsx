@@ -1,4 +1,4 @@
-import { AREA_SHAPES, describeArea } from "@/lib/aoe";
+import { AREA_FIRES, AREA_SHAPES, areaFires, describeArea } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, formatDuration } from "@/lib/actions";
 import { getCondition, listConditionDefs, type Action, type ActionOwner } from "@/lib/db";
@@ -16,7 +16,7 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
     a.attack && `to hit ${a.attack}`,
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.area_shape && `${describeArea({ shape: a.area_shape, ft: a.area_ft })}, ${a.save_attr} save DC ${a.save_dc}${a.save_half ? " (half on a save)" : ""}`,
-    a.area_shape && a.area_lasts ? "stays" : "",
+    a.area_shape && a.area_lasts ? `stays, catching whoever ${areaFires(a.area_fires).map((f) => AREA_FIRES.find(([k]) => k === f)![1]).join(" or ")}` : "",
     ...a.conditions.map((c) => `${c.on === "target" ? "target: " : ""}${conditionNames.get(c.id) ?? "a condition"}`),
     a.area_shape && a.area_lasts && a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
@@ -69,7 +69,17 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
           <input name="area_lasts" type="checkbox" defaultChecked={!!initial?.area_lasts} className="checkbox checkbox-sm" />
           stays on the map for the duration
         </label>
-        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), whoever is in it at the end of each round rolls the save again.</span>
+        <span className="flex flex-wrap items-center gap-2" data-area-fires>
+          and catches whoever
+          {AREA_FIRES.map(([f, label]) => (
+            <label key={f} className="flex items-center gap-1">
+              <input name="area_fires" value={f} type="checkbox" defaultChecked={areaFires(initial?.area_fires).includes(f)} className="checkbox checkbox-xs" />
+              {label}
+            </label>
+          ))}
+          <span className="text-xs opacity-60">(once a round each, at most)</span>
+        </span>
+        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), it catches whoever comes into it, starts a round in it or ends one in it (as ticked; at most once a round each): they roll the save again, and a failed save puts its conditions on them too.</span>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
         Takes

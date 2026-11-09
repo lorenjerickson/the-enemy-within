@@ -4,6 +4,7 @@
  */
 import type { Attribute } from "@/lib/attributes";
 import type { EffectKind } from "@/lib/effects";
+import type { Condition } from "@/lib/conditions";
 import { FEET_PER_SQUARE, crosses } from "@/lib/movement";
 import type { Point, Segment } from "@/lib/visibility";
 
@@ -19,7 +20,16 @@ export interface AreaSpec {
   half: boolean; // a successful save takes half damage (else none)
   minutes?: number; // lasting: stays on the map this long (game time; a round is 6 s), catching whoever is in it each round
   look?: EffectKind; // how a lasting area looks (from the damage type)
+  fires?: AreaFires[]; // lasting: when it catches someone in it (default: the end of each round)
 }
+
+/** When a lasting area catches someone: as they come into it, at the start of a round in it, at the end of one. Once a round each, at most. */
+export type AreaFires = "enter" | "start" | "end";
+export const AREA_FIRES: [AreaFires, string][] = [["enter", "comes into it"], ["start", "starts a round in it"], ["end", "ends a round in it"]];
+export const areaFires = (s: string | null | undefined): AreaFires[] => {
+  const f = (s ?? "").split(",").filter((x): x is AreaFires => AREA_FIRES.some(([k]) => k === x));
+  return f.length ? f : ["end"];
+};
 
 /** An area left on the map for a while (a fire wall): whoever is in it at the end of each round rolls the save. */
 export interface LastingArea {
@@ -32,6 +42,9 @@ export interface LastingArea {
   save: Attribute;
   half: boolean;
   ends: number; // game minutes
+  fires?: AreaFires[]; // when it catches someone (default: the end of each round)
+  conditions?: Condition[]; // put on whoever fails its save (as the action that left it did)
+  by?: number | null; // whose it is
 }
 
 /** An area placed on the map: a circle centred where it's aimed; a cone or line from the actor towards the aim. */

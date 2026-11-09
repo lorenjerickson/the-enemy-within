@@ -1,5 +1,5 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
+import { caughtBy, describeArea, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Resist, type Restrictions } from "@/lib/conditions";
@@ -424,6 +424,27 @@ export function resolveMovement(
     }
     return hits;
   };
+  /** Who is in a lasting area now (and not down). */
+  const insideOf = (l: LastingArea) => new Set([...fighters.keys()].filter((id) => { const p = where(id); return p && !down.has(id) && caughtBy(l.area, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls); }));
+  const caughtIn = new Set<string>(); // "area:token": caught by that lasting area this round (once a round each)
+  /**
+   * A lasting area catches whoever is in it (or `only` those) when it fires: as they come in, at the start of the
+   * round or at its end (as the area says). Each rolls the save (the damage dice rolled once for all); a failed save
+   * puts its conditions on them too.
+   */
+  const areaCatch = (l: LastingArea, sec: number, when: AreaFires, fx: Fx[], only?: Set<number>) => {
+    if (!(l.fires ?? ["end"]).includes(when)) return;
+    const total = l.damage ? rollDice(l.damage) : 0, before = log.length;
+    const hits = catchIn(l.area, l, total, -1, sec, l.name, (id) => !caughtIn.has(`${l.id}:${id}`) && (!only || only.has(id)));
+    if (!hits.length) return;
+    const how = when === "enter" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} coming into it` : when === "start" ? "catches whoever starts the round in it" : "lingers";
+    log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage, ${l.save} save DC ${l.dc}.`);
+    for (const h of hits) {
+      caughtIn.add(`${l.id}:${h.id}`);
+      if (h.outcome === "hit") for (const c of l.conditions ?? []) afflict(h.id, c, l.by ?? null, sec);
+    }
+    fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
+  };
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
   const lag = new Map(order.map((m) => [m.tokenId, 0])); // seconds each has been held back
@@ -564,6 +585,7 @@ export function resolveMovement(
     if (c && t > c.start && !chaseOver.has(m.tokenId) && t - 1 < c.end) return { doing: c.action === "pursue" ? "chase" : "evade", target: c.target.id };
     return { doing: "move" };
   };
+  const wasIn = new Map(lasting.map((l) => [l.id, insideOf(l)])); // who is in each lasting area (at the start: being there isn't coming in)
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
     const logFrom = log.length;
     // The start of the round: saves against conditions rolled then.
@@ -571,6 +593,8 @@ export function resolveMovement(
     // The start of the round: triggers that fire then (a burning curse), on whoever has them.
     if (sec === 1) for (const id of [...new Set([...fighters.keys(), ...afflicted.keys()])]) if (where(id)) onOwn(id, "start", sec);
     const fx: Fx[] = [];
+    // The start of the round: lasting areas that catch whoever starts a round in them (Spirit Guardians).
+    if (sec === 1) for (const l of lasting) areaCatch(l, sec, "start", fx);
     const lagBefore = new Map(lag);
     const autoPursue = new Set<number>(); // closing in on an out-of-reach target this second (their plan waits)
     // Evaluation: where each would like to be at the end of this second (Evade / Pursue decided afresh from where their target is now).
@@ -711,6 +735,13 @@ export function resolveMovement(
     for (const m of order) if (!movedYet.has(m.tokenId) && !shoved.has(m.tokenId) && !down.has(m.tokenId) && !unmoved(before.get(m.tokenId)!, pos.get(m.tokenId)!)) {
       movedYet.add(m.tokenId);
       onOwn(m.tokenId, "moves", sec);
+    }
+    // Lasting areas that catch whoever comes into them (a fire wall): those in one now who weren't a second ago.
+    for (const l of lasting) {
+      const now = insideOf(l), was = wasIn.get(l.id) ?? new Set<number>();
+      const entering = new Set([...now].filter((id) => !was.has(id)));
+      if (entering.size) areaCatch(l, sec, "enter", fx, entering);
+      wasIn.set(l.id, now);
     }
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
     syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,
@@ -903,7 +934,7 @@ export function resolveMovement(
         }
         // A lasting one stays on the map, catching whoever is in it at the end of each round.
         if (area.minutes) {
-          created.push({ name: step.use.name, look: area.look ?? "fog", area: at, damage: step.use.damage, dc: area.dc, save: area.save, half: area.half, minutes: area.minutes });
+          created.push({ name: step.use.name, look: area.look ?? "fog", area: at, damage: step.use.damage, dc: area.dc, save: area.save, half: area.half, minutes: area.minutes, fires: area.fires, conditions: step.use.statuses?.target?.conditions, by: m.tokenId });
           say(`${step.use.name} stays for ${area.minutes < 1 ? `${Math.round(area.minutes * 10)} round(s)` : `${area.minutes} min`}.`);
         }
         fx.push({ look: "area", from: m.tokenId, area: at, hits });
@@ -985,13 +1016,7 @@ export function resolveMovement(
     }
     // The end of the round: whoever is in a lasting area rolls its save (its damage dice rolled once for everyone).
     if (sec === ROUND_SECONDS) {
-      for (const l of lasting) {
-        const total = l.damage ? rollDice(l.damage) : 0;
-        const before = log.length;
-        const hits = catchIn(l.area, l, total, -1, sec, l.name);
-        if (hits.length) log.splice(before, 0, `${sec} s: ${l.name} lingers: ${total} damage, ${l.save} save DC ${l.dc}.`);
-        fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
-      }
+      for (const l of lasting) areaCatch(l, sec, "end", fx);
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
       const beforeTick = new Map(hp);
       tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt });
