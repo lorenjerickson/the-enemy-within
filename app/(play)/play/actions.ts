@@ -1,13 +1,14 @@
 "use server";
 
 import { recordRollOff } from "./workOutRound";
+import { skillCheckFor, speedOf } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db";
 import { seenFrom } from "@/lib/sight";
 import { planEnd } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
-  addPing, listPings, type Ping, characterModifiers, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
+  addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
@@ -17,7 +18,7 @@ import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, 
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import type { Attributes } from "@/lib/attributes";
-import { scoreRoll, skillCheck } from "@/lib/rolls";
+import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 
 /** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
@@ -29,7 +30,7 @@ export async function pickLock(doorId: number): Promise<{ error?: string }> {
   if (!me || !door || door.level_id !== me.level_id) return { error: "That door isn't here" };
   if (!door.locked) return { error: "It isn't locked" };
   if (distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, door) > REACH) return { error: "You're too far away" };
-  const spec = skillCheck("sleight of hand", JSON.parse(me.attributes) as Attributes, characterModifiers(me.character_id, "skill:sleight of hand"));
+  const spec = skillCheckFor(me.token_id, "sleight of hand", JSON.parse(me.attributes) as Attributes);
   spec.label = `Pick the lock on ${door.name ?? `Door ${door.id}`}: ${spec.label}`;
   requestRoll(user.id, me.character_id, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
   revalidatePath("/play");
@@ -42,7 +43,7 @@ export async function search(): Promise<{ error?: string }> {
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
   if (!me) return { error: "You're not on the map yet" };
-  const spec = skillCheck("investigation", JSON.parse(me.attributes) as Attributes, characterModifiers(me.character_id, "skill:investigation"));
+  const spec = skillCheckFor(me.token_id, "investigation", JSON.parse(me.attributes) as Attributes);
   spec.label = `Search: ${spec.label}`;
   requestRoll(user.id, me.character_id, spec, { kind: "search", dc: SEARCH_DC });
   revalidatePath("/play");
@@ -137,7 +138,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   if (!me) return { error: "You're not on the map yet" };
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
-  const left = Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved);
+  const left = Math.max(0, speedOf(me.token_id, me.movement) - me.moved);
   const walls = movementBlockers(listStructures(me.level_id));
   let feet: number;
   if (isGridlessLevel(me.level_id)) {

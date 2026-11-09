@@ -10,6 +10,7 @@ import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 import { rollChanges, type Condition } from "@/lib/conditions";
+import { professionStatuses } from "@/lib/creatureChanges";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -87,7 +88,8 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
     const h = c && tokenHealth(t.id);
     // Conditions on them (Poisoned…) count as statuses for their rolls while they last.
     const fromEffects = (afflictions.get(t.id) ?? []).map((a) => conditionStatus(a.condition));
-    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects]), maxHp: h.maximum, allegiance: allegianceOf(t) });
+    // Professions' modifiers are always on (attack, damage, defense, attributes).
+    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...professionStatuses(t.character_id)]), maxHp: h.maximum, allegiance: allegianceOf(t) });
   }
   return out;
 }

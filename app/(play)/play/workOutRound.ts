@@ -12,6 +12,7 @@ import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, saveAfflictions } from "@/lib/db";
 import { tickAfflictions } from "@/lib/resolveRound";
+import { speedOf } from "@/lib/creatureChanges";
 
 /**
  * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
@@ -55,7 +56,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
       initiative: initiative.get(t.id) ?? -1000, // hasn't rolled: loses every tie
       start: { col: t.col, row: t.row },
       plan: getRoundPlan(levelId, t.id).plan,
-      walking: JSON.parse(getTokenMover(t.id)?.movement ?? "{}").walking ?? 0,
+      walking: speedOf(t.id, getTokenMover(t.id)?.movement ?? "{}"),
       attackRange: attackRange(t.id),
       equipment: tokenWho(t.id)?.equipment ?? {},
     }));

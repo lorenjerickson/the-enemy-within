@@ -29,6 +29,7 @@ import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel, { planningData } from "./EncounterPanel";
 import ContestModal from "./ContestModal";
 import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories } from "@/lib/db";
+import { speedOf } from "@/lib/creatureChanges";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
@@ -145,7 +146,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   // Locked doors within reach of their character.
   const me = getPlayerToken(user.id);
   // In an encounter: their round plan (laid out in time) and where it leaves them.
-  const walking: number = me ? JSON.parse(me.movement).walking ?? 0 : 0;
+  const walking: number = me ? speedOf(me.token_id, me.movement) : 0; // as boosted now
   const isDown = !!me && downTokens(me.level_id).has(me.token_id); // down: sits out planning until revived
   const rp = me && !isDown && getEncounter(me.level_id) ? getRoundPlan(me.level_id, me.token_id) : null;
   // Who they can see (to pick who to attack): other tokens in their line of sight.

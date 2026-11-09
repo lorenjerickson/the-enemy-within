@@ -8,13 +8,14 @@ import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
+import { speedOf } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
 export function tokenPlanner(tokenId: number) {
   const tok = getTokenMover(tokenId);
   if (!tok || !getEncounter(tok.level_id)) return null;
   if (downTokens(tok.level_id).has(tok.token_id)) return null; // down: no planning until revived
-  return { tok, walking: (JSON.parse(tok.movement).walking as number) ?? 0, ...getRoundPlan(tok.level_id, tok.token_id) };
+  return { tok, walking: speedOf(tok.token_id, tok.movement), ...getRoundPlan(tok.level_id, tok.token_id) }; // speed as boosted now
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
