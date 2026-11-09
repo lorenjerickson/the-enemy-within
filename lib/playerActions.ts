@@ -16,6 +16,7 @@ export const PLAYER_ACTIONS = [
   { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Try to get out of sight (no effect yet)." },
   { id: "ready", label: "Ready", icon: "GiHourglass", kind: "action", desc: "Hold yourself ready to act (no effect yet)." },
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action", desc: "Look around: an Investigation check for anything hidden within 10 ft." },
+  { id: "shake", label: "Shake off", icon: "GiBiceps", kind: "action", desc: "Spend your action fighting off a condition that allows it (it says so): roll its save; a success counts towards ending it." },
   { id: "refit", label: "Refit", icon: "GiSwordClash", kind: "bonus", desc: "Swap what's in one equipment slot for something you carry; what you plan after it uses the new gear." },
   { id: "dodge", label: "Dodge", icon: "GiDodging", kind: "reaction", desc: "From the second it's planned for, attacks against you have disadvantage for the rest of the round, if you beat DC 12 (d20 + Agility). Plan it first." },
 ] as const;

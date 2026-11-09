@@ -2001,6 +2001,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS conditions (
   save_dc INTEGER NOT NULL DEFAULT 12
 )`);
 addColumn("conditions", "apply_save_attr", "TEXT NOT NULL DEFAULT ''"); // a save as it lands ('' = none)
+addColumn("conditions", "save_when", "TEXT NOT NULL DEFAULT 'end'"); // when the save to end it is rolled: end | start | damaged
+addColumn("conditions", "save_action", "INTEGER NOT NULL DEFAULT 0"); // 1: Shake off (an action) rolls it too
+addColumn("conditions", "saves_needed", "INTEGER NOT NULL DEFAULT 1"); // successful saves to end it
+addColumn("conditions", "ends_on_damage", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when hurt
+addColumn("conditions", "ends_on_attack", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when they attack
 addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in effect's key (lib/builtinConditions.ts): its modifiers are fixed
 addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in condition's key: the effects it applies are fixed
 addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
@@ -2049,9 +2054,9 @@ export function getCondition(id: number): Condition | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveConditionDef(id: number | null, c: Omit<ConditionDef, "id">): number {
-  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates" };
-  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome)").run(params).lastInsertRowid);
-  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome WHERE id = @id").run({ ...params, id });
+  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0 };
+  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack)").run(params).lastInsertRowid);
+  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack WHERE id = @id").run({ ...params, id });
   return id;
 }
 
@@ -2144,6 +2149,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (
   by_token INTEGER
 )`);
 
+addColumn("token_afflictions", "saved", "INTEGER NOT NULL DEFAULT 0"); // successful saves so far
+
 /** A kept copy as a Condition (one kept by the first version is an old effect). */
 const keptCondition = (json: string): Condition => {
   const c = JSON.parse(json);
@@ -2153,8 +2160,8 @@ const keptCondition = (json: string): Condition => {
 /** The conditions on a level's tokens, by token id. */
 export function listAfflictions(levelId: number): Map<number, Affliction[]> {
   const out = new Map<number, Affliction[]>();
-  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null }>("SELECT id, token_id, effect, rounds_left, by_token FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
-    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token }]);
+  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null; saved: number }>("SELECT id, token_id, effect, rounds_left, by_token, saved FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
+    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token, saved: r.saved }]);
   }
   return out;
 }
@@ -2163,8 +2170,8 @@ export function listAfflictions(levelId: number): Map<number, Affliction[]> {
 export function saveAfflictions(levelId: number, all: Map<number, Affliction[]>): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM token_afflictions WHERE level_id = ?").run(levelId);
-    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token) VALUES (?, ?, ?, ?, ?, ?)");
-    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by);
+    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token, saved) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by, a.saved ?? 0);
   })();
 }
 

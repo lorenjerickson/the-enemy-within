@@ -28,6 +28,7 @@ export interface CreaturePlan {
   attackRange?: number; // squares its plain Attack reaches
   sees?: number[]; // who it could see (and so aim at) from where its plan has it
   forbidden?: Partial<Record<string, string>>; // what conditions stop it doing (by step kind), and which condition
+  shakeable?: boolean; // a condition on it that it can spend its action fighting off
 }
 
 /** The GM plans a round for whoever they picked in the initiative order: their creatures, or a player's character. */
@@ -95,12 +96,12 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 <div className="text-xs font-semibold opacity-80">{title}</div>
               <div className="grid grid-cols-4 gap-1">
             {group.map((a) => (
-              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden) ?? (a.id === "dash" ? "Not in yet" : null)}>
+              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={(a.id === "shake" && !current.shakeable ? "Nothing to shake off" : unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden)) ?? (a.id === "dash" ? "Not in yet" : null)}>
               <button
                 type="button"
                 data-gm-action={a.id}
                 aria-pressed={a.id === "move" ? moving : undefined}
-                disabled={pending || current.plan.ready || a.id === "dash" || !!unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden)}
+                disabled={pending || current.plan.ready || a.id === "dash" || !!(a.id === "shake" && !current.shakeable ? "Nothing to shake off" : unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden))}
                 className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
                 onClick={() =>
                   a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!moving))

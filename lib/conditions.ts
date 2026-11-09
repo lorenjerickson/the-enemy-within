@@ -100,6 +100,11 @@ export interface ConditionDef {
   apply_save_attr?: Attribute | ""; // rolled as it lands; success negates it or halves its rounds ('' = none)
   apply_save_dc?: number;
   apply_save_outcome?: "negates" | "halves";
+  save_when?: "end" | "start" | "damaged"; // when the save to end it is rolled (default: the end of each round)
+  save_action?: number; // 1: they can also spend their action (Shake off) to roll it
+  saves_needed?: number; // successful saves it takes to end it (default 1)
+  ends_on_damage?: number; // 1: ends when they take damage (a deep sleep)
+  ends_on_attack?: number; // 1: ends when they attack (invisibility)
   builtin?: string; // a built-in condition's key: the effects it applies are fixed
 }
 
@@ -112,6 +117,7 @@ export interface Affliction {
   condition: Condition;
   left: number;
   by: number | null;
+  saved?: number; // successful saves so far (when it takes more than one)
 }
 
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
@@ -163,11 +169,13 @@ export function describeEffect(e: Pick<EffectDef, "modifiers">): string {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** "Fortitude DC 12 when applied negates · 6 rounds · Fortitude DC 12 ends it". */
-export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome">, withRounds = true) =>
+export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack">, withRounds = true) =>
   [
     c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
     withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,
-    c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc} ends it`,
+    c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc}${(c.saves_needed ?? 1) > 1 ? ` ×${c.saves_needed}` : ""} ${c.save_when === "start" ? "at the start of each round" : c.save_when === "damaged" ? "when hurt" : "each round"}${c.save_action ? " (or as an action)" : ""} ends it`,
+    c.ends_on_damage && "ends when hurt",
+    c.ends_on_attack && "ends when they attack",
   ].filter(Boolean).join(" · ");
 
 /** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it" ("heals 1d10" alone for an instant one). */

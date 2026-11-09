@@ -60,6 +60,11 @@ export function restrictionsOn(tokenId: number, levelId?: number): Restrictions 
   return out;
 }
 
+/** Whether a token has a condition it can spend its action shaking off (Shake off). */
+export function canShakeOff(tokenId: number, levelId: number): boolean {
+  return (listAfflictions(levelId).get(tokenId) ?? []).some((a) => a.condition.save_action && a.condition.save_attr);
+}
+
 /** Extra damage on hits a token carries now: from its standing effects (taking: from anyone) and conditions (taking: from whoever put it on them). */
 export function extrasOn(tokenId: number, levelId: number): { dealing: Extra[]; taking: Extra[] } {
   const out = { dealing: [] as Extra[], taking: [] as Extra[] };

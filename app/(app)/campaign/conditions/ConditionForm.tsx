@@ -57,7 +57,28 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
         </select>
         DC
         <input name="save_dc" type="number" min="1" defaultValue={initial?.save_dc ?? 12} className="input input-sm w-16" />
-        <span className="text-xs opacity-60">rolled at the end of each round; success ends it</span>
+        <select name="save_when" defaultValue={initial?.save_when ?? "end"} className="select select-sm w-auto">
+          <option value="end">at the end of each round</option>
+          <option value="start">at the start of each round</option>
+          <option value="damaged">whenever they&apos;re hurt</option>
+        </select>
+        successes needed
+        <input name="saves_needed" type="number" min="1" defaultValue={initial?.saves_needed ?? 1} className="input input-sm w-16" />
+        <label className="flex items-center gap-1">
+          <input name="save_action" type="checkbox" defaultChecked={!!initial?.save_action} className="checkbox checkbox-sm" />
+          they can spend an action (Shake off) to roll it
+        </label>
+      </fieldset>
+      <fieldset className="flex flex-wrap items-center gap-3 text-sm" data-ends-on>
+        <span className="font-semibold">Also ends</span>
+        <label className="flex items-center gap-1">
+          <input name="ends_on_damage" type="checkbox" defaultChecked={!!initial?.ends_on_damage} className="checkbox checkbox-sm" />
+          when they&apos;re hurt
+        </label>
+        <label className="flex items-center gap-1">
+          <input name="ends_on_attack" type="checkbox" defaultChecked={!!initial?.ends_on_attack} className="checkbox checkbox-sm" />
+          when they attack
+        </label>
       </fieldset>
       <button className="btn btn-primary btn-sm">{initial ? "Save condition" : "Create condition"}</button>
     </form>

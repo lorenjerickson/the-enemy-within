@@ -8,7 +8,7 @@ import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
-import { restrictionsOn, speedOf } from "@/lib/creatureChanges";
+import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
 export function tokenPlanner(tokenId: number) {
@@ -32,6 +32,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const kind = step.kind === "move" ? "movement" : step.use !== undefined ? "action" : actionKind(step.action);
   const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (stopped) return stopped;
+  if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
   let add: PlanStep;
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
@@ -215,5 +216,6 @@ export function planView(tokenId: number) {
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)
     sees: [...seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), tokenId)], // who they could aim at from where the plan has them
     forbidden: restrictionsOn(tokenId, p.tok.level_id).forbid, // what conditions stop them doing (Stunned: everything)
+    shakeable: canShakeOff(tokenId, p.tok.level_id), // a condition on them they can spend their action fighting off
   };
 }

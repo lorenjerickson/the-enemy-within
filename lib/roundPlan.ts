@@ -10,7 +10,7 @@ export const ROUND_SECONDS = 6;
 
 /** How long each action takes, in seconds (defaults; tune freely). Move and Dash are movement, timed by distance. */
 export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
-  interact: 1, use: 2, attack: 2, refit: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
+  interact: 1, use: 2, attack: 2, refit: 2, shake: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
 };
 
 /** One step of a round plan, in the order declared. */

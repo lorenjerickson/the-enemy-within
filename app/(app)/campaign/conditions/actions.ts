@@ -25,6 +25,11 @@ export async function submitCondition(id: number | null, formData: FormData) {
     apply_save_attr: (ATTRIBUTES as readonly string[]).includes(text("apply_save_attr")) ? (text("apply_save_attr") as Attribute) : "",
     apply_save_dc: Math.max(1, Math.round(Number(formData.get("apply_save_dc")) || 12)),
     apply_save_outcome: text("apply_save_outcome") === "halves" ? "halves" : "negates",
+    save_when: text("save_when") === "start" ? "start" : text("save_when") === "damaged" ? "damaged" : "end",
+    save_action: formData.get("save_action") === "on" ? 1 : 0,
+    saves_needed: Math.max(1, Math.round(Number(formData.get("saves_needed")) || 1)),
+    ends_on_damage: formData.get("ends_on_damage") === "on" ? 1 : 0,
+    ends_on_attack: formData.get("ends_on_attack") === "on" ? 1 : 0,
   });
   revalidatePath("/campaign/conditions");
   revalidatePath("/campaign/effects");
