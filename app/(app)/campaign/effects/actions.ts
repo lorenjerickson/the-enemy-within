@@ -104,7 +104,7 @@ export async function submitEffect(id: number | null, formData: FormData) {
   }
   // A trigger: when hit / when they hit, damage to the other creature and / or a condition on someone.
   const on = text("trigger_on");
-  if (on === "hit" || on === "hitting") {
+  if (on === "hit" || on === "hitting" || on === "moves" || on === "start") {
     const damage = text("trigger_damage").toLowerCase().replace(/\s/g, ""), damage_type = text("trigger_type") as DamageType | "";
     if (damage && !isDiceFormula(damage)) throw new Error("Invalid trigger damage dice");
     if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");

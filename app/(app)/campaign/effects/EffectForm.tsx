@@ -109,7 +109,7 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
               <option value="melee">in melee</option>
               <option value="any">by any attack</option>
             </select>
-            <span className="text-xs opacity-60">the other creature: the attacker (when hit) or whoever they hit</span>
+            <span className="text-xs opacity-60">the other creature: the attacker (when hit), whoever they hit, or themselves (moving, start of the round); &quot;in melee&quot; only matters for hits</span>
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-4">
             deals

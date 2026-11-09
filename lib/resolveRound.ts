@@ -332,14 +332,25 @@ export function resolveMovement(
       ...triggersOf(target).filter((t) => t.mod.on === "hit").map((t) => ({ ...t, owner: target, other: attacker })),
       ...triggersOf(attacker).filter((t) => t.mod.on === "hitting").map((t) => ({ ...t, owner: attacker, other: target })),
     ];
-    fire.forEach((t, i) => {
+    fire.forEach((t, i) => { if (t.mod.reach !== "melee" || melee) fireTrigger(t, `tsave:${sec}:${attacker}:${target}:${i}`, sec); });
+  };
+  /** Their own triggers for an event with no one else in it (start of the round, moving): they take what it does. */
+  const onOwn = (id: number, on: "start" | "moves", sec: number) => {
+    if (down.has(id)) return;
+    triggersOf(id).filter((t) => t.mod.on === on).forEach((t, i) => {
+      if (t.mod.on === "moves") log.push(`${sec} s: ${nameOf(id)} moves, setting off ${t.name}.`);
+      fireTrigger({ ...t, owner: id, other: id }, `tsave:${sec}:${on}:${id}:${i}`, sec);
+    });
+  };
+  /** A trigger fires: damage to the other creature (a save may halve or negate it), a condition on someone, and its condition may end. */
+  const fireTrigger = (t: { mod: Trigger; name: string; a?: Affliction; owner: number; other: number }, key: string, sec: number) => {
+    {
       const m = t.mod;
-      if (m.reach === "melee" && !melee) return;
       if (m.damage && hp.has(t.other) && !down.has(t.other)) {
         let n = Math.max(0, rollDice(m.damage));
         let saved = "";
         if (m.save_attr) {
-          const total = saveAgainst(t.other, m.save_attr, m.save_dc, `tsave:${sec}:${attacker}:${target}:${i}`, t.name, sec);
+          const total = saveAgainst(t.other, m.save_attr, m.save_dc, key, t.name, sec);
           if (total >= m.save_dc) {
             n = m.save_halves ? Math.floor(n / 2) : 0;
             saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc}: ${m.save_halves ? "halved" : "none"})`;
@@ -347,18 +358,18 @@ export function resolveMovement(
         }
         const tk = takenBy(t.other, n, m.damage_type || undefined), before = hp.get(t.other)!, after = Math.max(0, before - tk.n);
         hp.set(t.other, after);
-        log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) deals ${nameOf(t.other)} ${tk.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${tk.note}; ${after} left.`);
-        story.push({ sec, k: "effect", who: t.other, name: t.name, much: tk.n, heal: false, hurt: hurt(t.other, tk.n), from: t.owner });
+        log.push(`${sec} s: ${t.name}${t.other === t.owner ? "" : ` (${nameOf(t.owner)})`} deals ${nameOf(t.other)} ${tk.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${tk.note}; ${after} left.`);
+        story.push({ sec, k: "effect", who: t.other, name: t.name, much: tk.n, heal: false, hurt: hurt(t.other, tk.n), ...(t.other !== t.owner ? { from: t.owner } : t.a?.by != null && t.a.by !== t.owner ? { from: t.a.by } : {}) }); // from: whose it was (their own trigger, or whoever put the condition on)
         if (tk.n > 0) wasHurt(t.other, sec, tk.n);
         if (after <= 0 && before > 0) {
           down.add(t.other);
           story.push({ sec, k: "down", who: t.other });
           log.push(`${sec} s: ${nameOf(t.other)} is down.`);
         }
-      } else if (!m.damage) log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
+      } else if (!m.damage && m.on !== "moves") log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
       if (m.given) afflict(m.condition_on === "self" ? t.owner : t.other, m.given, t.owner, sec);
       if (t.a?.condition.ends_on_trigger && (afflicted.get(t.owner) ?? []).includes(t.a)) release(t.owner, t.a, "trigger", sec);
-    });
+    }
   };
   /** Attacked someone: conditions that end when they attack end (invisibility). */
   const didAttack = (id: number, sec: number) => {
@@ -544,6 +555,7 @@ export function resolveMovement(
   const lastHitBy = new Map<number, number>();
   const heldBy = new Map<number, number>();
   const frozen = new Set<number>(); // told they can't move this round (a condition)
+  const movedYet = new Set<number>(); // who has moved of their own accord this round (for "when they move" triggers)
   const detoured = new Set<number>(); // told they went around a body this round
   const gaveWay = new Set<string>(); // contested moves already settled this round (told once)
   const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
@@ -556,6 +568,8 @@ export function resolveMovement(
     const logFrom = log.length;
     // The start of the round: saves against conditions rolled then.
     if (sec === 1) for (const [id, list] of [...afflicted]) for (const a of [...list]) if (a.condition.save_when === "start" && a.condition.save_attr && a.aura == null && !down.has(id)) endSave(id, a, sec);
+    // The start of the round: triggers that fire then (a burning curse), on whoever has them.
+    if (sec === 1) for (const id of [...new Set([...fighters.keys(), ...afflicted.keys()])]) if (where(id)) onOwn(id, "start", sec);
     const fx: Fx[] = [];
     const lagBefore = new Map(lag);
     const autoPursue = new Set<number>(); // closing in on an out-of-reach target this second (their plan waits)
@@ -660,6 +674,7 @@ export function resolveMovement(
     for (const id of autoPursue) if (lag.get(id) === lagBefore.get(id)) lag.set(id, lag.get(id)! + 1);
     // Result.
     const before = new Map(pos); // where everyone was at the start of this second
+    const shoved = new Set<number>(); // pushed aside this second (not moving of their own accord)
     for (const s of settled) pos.set(s.id, s.at);
     // Anyone left sharing a spot (a held-back mover whose spot was taken): the GM decides who has it. Until they
     // have, the round stops here; once they have, the other gives way (back where they were this second, or aside).
@@ -684,12 +699,18 @@ export function resolveMovement(
       }
       entry.at = to;
       pos.set(loser, to);
+      shoved.add(loser);
       if (lag.get(loser) === lagBefore.get(loser)) lag.set(loser, lag.get(loser)! + 1);
       const m = order.find((o) => o.tokenId === loser)!;
       log.push(gaveWay.has(key) ? `${sec} s: ${m.name} is held back by ${nameOf(winner)}.` : `${sec} s: ${m.name} gives way to ${nameOf(winner)}${same(to, back) ? "" : " and is pushed aside"} (GM's call).`);
       gaveWay.add(key);
       story.push({ sec, k: "blocked", who: loser, by: winner, intent: intentOf(m, sec, autoPursue) });
       heldBy.set(loser, winner);
+    }
+    // Moving of their own accord: "when they move" triggers fire, the first second they do in a round (Booming Blade).
+    for (const m of order) if (!movedYet.has(m.tokenId) && !shoved.has(m.tokenId) && !down.has(m.tokenId) && !unmoved(before.get(m.tokenId)!, pos.get(m.tokenId)!)) {
+      movedYet.add(m.tokenId);
+      onOwn(m.tokenId, "moves", sec);
     }
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
     syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,

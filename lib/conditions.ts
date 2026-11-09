@@ -34,7 +34,7 @@ export type Modifier =
  * other: whoever they hit), in melee or by any attack. It can damage the other creature (a save may halve or negate it)
  * and put a condition on the other creature or on themselves. Their condition can end as it fires (its lifecycle says).
  */
-export type TriggerEvent = "hit" | "hitting";
+export type TriggerEvent = "hit" | "hitting" | "moves" | "start"; // moves / start: no one else in it (they take its damage; "the other" is themselves)
 export type Trigger = {
   kind: "trigger";
   on: TriggerEvent;
@@ -48,7 +48,7 @@ export type Trigger = {
   condition_on: "other" | "self";
   given?: Condition; // that condition, filled in when read
 };
-export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're hit"], ["hitting", "when they hit someone"]];
+export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're hit"], ["hitting", "when they hit someone"], ["moves", "when they move (first time each round)"], ["start", "at the start of each round"]];
 
 /** What a modifier can forbid: a kind of step, moving, or attacking whoever put the condition on them (Hypnotized). */
 export type Forbid = "actions" | "bonus" | "reactions" | "movement" | "attack-source";
@@ -193,12 +193,13 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
   if (m.kind === "trigger") {
-    const other = m.on === "hit" ? "the attacker" : "whoever they hit";
+    const other = m.on === "hit" ? "the attacker" : m.on === "hitting" ? "whoever they hit" : "them";
     const what = [
       m.damage && `${m.damage}${m.damage_type ? ` ${m.damage_type}` : ""} damage to ${other}${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc} ${m.save_halves ? "halves" : "negates"})` : ""}`,
       m.condition && `${m.given?.name ?? "a condition"} on ${m.condition_on === "self" ? "themselves" : other}`,
     ].filter(Boolean).join(" and ");
-    return `${m.on === "hit" ? "when hit" : "when they hit"}${m.reach === "melee" ? " in melee" : ""}: ${what || "nothing"}`;
+    const own = m.on === "moves" || m.on === "start";
+    return `${m.on === "hit" ? "when hit" : m.on === "hitting" ? "when they hit" : m.on === "moves" ? "when they move" : "at the start of each round"}${!own && m.reach === "melee" ? " in melee" : ""}: ${what.replace(" on themselves", " on them") || "nothing"}`;
   }
   if (m.kind === "aura") return `aura ${m.radius} ft: ${m.given?.name ?? "a condition"} on ${m.who === "friendly" ? "allies" : m.who === "enemy" ? "enemies" : "everyone"}${m.self ? " (itself too)" : ""} within it`;
   if (m.kind === "maxhp") return `${m.value >= 0 ? "+" : ""}${m.value} maximum health`;
