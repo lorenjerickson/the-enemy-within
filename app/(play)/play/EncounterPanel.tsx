@@ -66,7 +66,7 @@ export default function EncounterPanel() {
               return (
                 <>
                   <button className="btn btn-primary btn-sm w-full" data-resolve-round disabled={!!(levelId !== undefined && getPendingRound(levelId))}>Resolve round {enc.round}</button>
-                  {levelId !== undefined && getPendingRound(levelId) && <p className="text-xs text-warning">Waiting on your call on a contested move.</p>}
+                  {levelId !== undefined && getPendingRound(levelId) && <p className="text-xs text-warning">{getPendingRound(levelId)?.save ? "Waiting on a player's save." : "Waiting on your call on a contested move."}</p>}
                   {notReady > 0 && <p className="text-xs opacity-60">{notReady} not ready yet; their plans so far will be used.</p>}
                 </>
               );

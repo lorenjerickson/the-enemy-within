@@ -99,3 +99,17 @@ export function skillCheckFor(tokenId: number, skill: string, attributes: Attrib
   const mode = combineModes("normal", changes, `skill:${skill}`, best ? [combineModes("normal", changes, `check:${best}`)] : []);
   return { label: `${cap(skill)} check`, parts, mode };
 }
+
+/** A saving throw for a token: d20 + the attribute's modifier (as boosted now), with advantage or disadvantage from anything granting it on that save. */
+export function saveRollFor(tokenId: number, attr: Attribute, label: string): RollSpec {
+  const changes = changesOn(tokenId);
+  const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const row = t?.character_id
+    ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM characters WHERE id = ?").get(t.character_id)
+    : t?.creature_id ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM creatures WHERE id = ?").get(t.creature_id) : undefined;
+  const score = (JSON.parse(row?.attributes ?? "{}") as Partial<Attributes>)[attr] ?? 10;
+  const boosted = score + steadyBoost(changes, `attribute:${attr}`), m = modifier(boosted);
+  const parts: RollPart[] = [{ formula: "1d20", source: `${cap(attr)} save` }];
+  if (m !== 0) parts.push({ formula: String(m), source: `${cap(attr)} ${boosted} (${formatModifier(m)})` });
+  return { label, parts, mode: combineModes("normal", changes, `save:${attr}`) };
+}

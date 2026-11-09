@@ -5,14 +5,15 @@ import {
 } from "@/lib/db";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
-import { ContestedMove, resolveMovement, type Mover } from "@/lib/resolveRound";
+import { ContestedMove, SaveNeeded, resolveMovement, type Mover } from "@/lib/resolveRound";
 import { withSeed } from "@/lib/dice";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, saveAfflictions } from "@/lib/db";
 import { tickAfflictions } from "@/lib/resolveRound";
-import { speedOf } from "@/lib/creatureChanges";
+import { saveRollFor, speedOf } from "@/lib/creatureChanges";
+import { openConditionSaveRequest } from "@/lib/db";
 
 /**
  * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
@@ -64,10 +65,21 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const fighters = fightersOn(levelId);
   const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
   const lasting = listLastingAreas(levelId);
+  // Players' characters roll their own saves against conditions (the round waits for them).
+  const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers));
   } catch (e) {
+    if (e instanceof SaveNeeded) {
+      // A player's character must save against a condition landing on it: they're asked to roll; the round waits.
+      setPendingRound(levelId, { seed, decisions, save: e.save });
+      const t = tokens.find((x) => x.id === e.save.tokenId), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
+      if (t?.character_id && player && !openConditionSaveRequest(t.id)) {
+        requestRoll(player, t.character_id, saveRollFor(t.id, e.save.attr, `${e.save.attr[0].toUpperCase()}${e.save.attr.slice(1)} save against ${e.save.condition} (DC ${e.save.dc})`), { kind: "conditionSave", levelId, tokenId: t.id, key: e.save.key });
+      }
+      return;
+    }
     if (!(e instanceof ContestedMove)) throw e;
     setPendingRound(levelId, { seed, decisions, contest: e.contest });
     return;
@@ -106,7 +118,7 @@ const ROLL_OFF: RollSpec = { label: "Roll off for the contested spot", parts: [{
 /** Starts (or, after a tie, restarts) the roll-off on the pending contest: players are asked to roll, the GM's creatures roll now. */
 export function startRollOff(levelId: number) {
   const pending = getPendingRound(levelId);
-  if (!pending) return;
+  if (!pending?.contest) return;
   const rolloff: Record<number, number | null> = {};
   for (const { id } of [pending.contest.a, pending.contest.b]) {
     const t = listTokens(levelId).find((x) => x.id === id);
@@ -144,11 +156,33 @@ export function rollOffFor(levelId: number, tokenId: number, byGm: boolean) {
 /** Once both have rolled: the higher gets the spot and the round is worked out again; a tie rolls again. */
 function settleRollOff(levelId: number) {
   const pending = getPendingRound(levelId);
-  if (!pending?.rolloff) return;
+  if (!pending?.rolloff || !pending.contest) return;
   const { a, b, key } = pending.contest;
   const ra = pending.rolloff[a.id], rb = pending.rolloff[b.id];
   if (ra == null || rb == null) return;
   logSessionEvent(`Roll-off for a contested spot: ${a.name} ${ra}, ${b.name} ${rb}${ra === rb ? " — a tie, rolling again" : ""}.`);
   if (ra === rb) return startRollOff(levelId);
   workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: ra > rb ? a.id : b.id });
+}
+
+/** A player's (or, for them, the GM's) save against a condition lands: the round is worked out again with it. */
+export function recordConditionSave(levelId: number, key: string, total: number) {
+  const pending = getPendingRound(levelId);
+  if (!pending?.save || pending.save.key !== key) return;
+  logSessionEvent(`${pending.save.name} rolls ${total} to resist ${pending.save.condition} (DC ${pending.save.dc}).`);
+  workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: total });
+}
+
+/** The GM rolls the waiting condition save for its player (they're away, or slow). */
+export function rollConditionSaveFor(levelId: number) {
+  const pending = getPendingRound(levelId);
+  if (!pending?.save) return;
+  const { tokenId, attr, condition, dc, key } = pending.save;
+  const req = openConditionSaveRequest(tokenId);
+  const rolled = rollSpec(req?.spec ?? saveRollFor(tokenId, attr, `${attr} save against ${condition} (DC ${dc})`));
+  if (req) {
+    saveRollResult(req.id, { ...rolled, outcome: `Rolled ${rolled.total} (rolled by the GM).`, success: rolled.total >= dc });
+    closeRollRequest(req.id, req.player_id);
+  }
+  recordConditionSave(levelId, key, rolled.total);
 }

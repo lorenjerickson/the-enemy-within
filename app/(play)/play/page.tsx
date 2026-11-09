@@ -28,6 +28,7 @@ import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
 import EncounterPanel, { planningData } from "./EncounterPanel";
 import ContestModal from "./ContestModal";
+import SaveWaitModal from "./SaveWaitModal";
 import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories } from "@/lib/db";
 import { speedOf } from "@/lib/creatureChanges";
 import LocationsPanel from "./LocationsPanel";
@@ -133,6 +134,7 @@ function GmView({ session }: { session: GameSession }) {
       <GmSheetPanel />
       <GmPlanningMode {...planningData()} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
+      {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
       <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} gmPlans={gmPlans} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
     </>
   );

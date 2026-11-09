@@ -8,7 +8,7 @@ import {
 import { getPendingRound, listConditionDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
 import { describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
-import { rollOffFor, startRollOff, workOutRound } from "./workOutRound";
+import { rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
@@ -97,7 +97,7 @@ export async function decideContest(winner: number) {
   await requireGm();
   const levelId = getGmLevelId();
   const pending = levelId === undefined ? null : getPendingRound(levelId);
-  if (levelId === undefined || !pending) return;
+  if (levelId === undefined || !pending?.contest) return;
   const { a, b, key } = pending.contest;
   if (winner !== a.id && winner !== b.id) return;
   workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: winner });
@@ -111,6 +111,15 @@ export async function rollOffContest() {
   const levelId = getGmLevelId();
   if (levelId === undefined || !getPendingRound(levelId)) return;
   startRollOff(levelId);
+  revalidatePath("/play");
+}
+
+/** The GM rolls a waiting condition save for its player (they're away, or slow). */
+export async function gmRollConditionSave() {
+  await requireGm();
+  const levelId = getGmLevelId();
+  if (levelId === undefined) return;
+  rollConditionSaveFor(levelId);
   revalidatePath("/play");
 }
 

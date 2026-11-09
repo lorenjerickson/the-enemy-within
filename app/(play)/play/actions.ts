@@ -1,6 +1,6 @@
 "use server";
 
-import { recordRollOff } from "./workOutRound";
+import { recordConditionSave, recordRollOff } from "./workOutRound";
 import { skillCheckFor, speedOf } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db";
 import { seenFrom } from "@/lib/sight";
@@ -88,6 +88,14 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     success = true;
     outcome = `Initiative ${scored.total}.`;
     logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} rolled ${scored.total} for initiative.`);
+  }
+  if (a.kind === "conditionSave") {
+    success = true;
+    outcome = `You rolled ${scored.total}.`;
+    saveRollResult(req.id, { ...scored, outcome, success });
+    recordConditionSave(a.levelId, a.key, scored.total);
+    revalidatePath("/play");
+    return {};
   }
   if (a.kind === "rolloff") {
     success = true;

@@ -56,6 +56,9 @@ export interface ConditionDef {
   rounds: number; // 6 s each; out of an encounter, every 6 s of game time is a round
   save_attr: Attribute | ""; // rolled at the end of each round; success ends it ('' = none)
   save_dc: number;
+  apply_save_attr?: Attribute | ""; // rolled as it lands; success negates it or halves its rounds ('' = none)
+  apply_save_dc?: number;
+  apply_save_outcome?: "negates" | "halves";
 }
 
 /** A condition with its effects filled in, as it was when it was put on someone (later catalog edits don't reach it). */
@@ -94,9 +97,15 @@ export function describeModifier(m: Modifier): string {
 
 export const describeEffect = (e: Pick<EffectDef, "modifiers">) => e.modifiers.map(describeModifier).join(", ");
 
-/** "6 rounds · Fortitude DC 12 ends it". */
-export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc">, withRounds = true) =>
-  [withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`, c.save_attr && `${c.save_attr[0].toUpperCase()}${c.save_attr.slice(1)} DC ${c.save_dc} ends it`].filter(Boolean).join(" · ");
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+/** "Fortitude DC 12 when applied negates · 6 rounds · Fortitude DC 12 ends it". */
+export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome">, withRounds = true) =>
+  [
+    c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
+    withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,
+    c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc} ends it`,
+  ].filter(Boolean).join(" · ");
 
 /** "1d2 poison damage a round, disadvantage on their attack rolls · 6 rounds · Fortitude DC 12 ends it" ("heals 1d10" alone for an instant one). */
 export const describeCondition = (c: Condition, withRounds = true) =>

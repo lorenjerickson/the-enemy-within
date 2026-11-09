@@ -28,6 +28,22 @@ export interface Contest {
   b: { id: number; name: string; from: Pos };
   spot: Pos;
 }
+/** A player's character must save against a condition landing on it mid-round: resolving waits for their roll. */
+export interface SaveRequest {
+  sec: number;
+  key: string; // "save:sec:conditionId:tokenId", where their roll's total is kept among the decisions
+  tokenId: number;
+  name: string; // their character's name
+  condition: string;
+  attr: Attribute;
+  dc: number;
+}
+export class SaveNeeded extends Error {
+  constructor(public save: SaveRequest) {
+    super(`Save needed at ${save.sec} s`);
+  }
+}
+
 export class ContestedMove extends Error {
   constructor(public contest: Contest) {
     super(`Contested move at ${contest.sec} s`);
@@ -128,6 +144,7 @@ export function resolveMovement(
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
   decisions: Record<string, number> = {}, // the GM's calls on contested moves: "lowId:highId@col,row" → who gets the spot
   afflictions: Map<number, Affliction[]> = new Map(), // conditions on anyone (Poisoned…): ticked at the end of the round
+  rollers: Set<number> = new Set(), // players' characters: they roll their own saves (kept in `decisions` as "save:…")
 ) {
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
@@ -144,6 +161,25 @@ export function resolveMovement(
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
   const afflict = (id: number, c: Condition, by: number | null, sec: number) => {
+    // A save as it lands: a player rolls their own (the round waits for it), the server rolls for the GM's creatures.
+    let rounds = c.rounds;
+    if (c.apply_save_attr) {
+      const dc = c.apply_save_dc ?? 12, key = `save:${sec}:${c.id}:${id}`;
+      let total: number;
+      if (rollers.has(id)) {
+        if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: c.name, attr: c.apply_save_attr, dc });
+        total = decisions[key];
+      } else total = fighters.get(id)?.save?.(c.apply_save_attr).total ?? 0;
+      if (total >= dc) {
+        if (c.apply_save_outcome !== "halves") {
+          log.push(`${sec} s: ${nameOf(id)} resists ${c.name} (${c.apply_save_attr} ${total} vs DC ${dc}).`);
+          story.push({ sec, k: "effectEnds", who: id, name: c.name, why: "resisted" });
+          return;
+        }
+        rounds = Math.max(1, Math.ceil(c.rounds / 2));
+        log.push(`${sec} s: ${nameOf(id)} partly resists ${c.name} (${c.apply_save_attr} ${total} vs DC ${dc}): ${rounds} round${rounds === 1 ? "" : "s"}.`);
+      } else log.push(`${sec} s: ${nameOf(id)} fails to resist ${c.name} (${c.apply_save_attr} ${total} vs DC ${dc}).`);
+    }
     // Instant modifiers happen as it lands (Healing Draught: +1d10 health, up to their full health).
     for (const m of modifiersOf(c)) {
       if (m.kind !== "instant" || !hp.has(id)) continue;
@@ -169,7 +205,7 @@ export function resolveMovement(
     if (!lingers(c)) return; // nothing more to it
     const f = fighters.get(id);
     if (f) f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
-    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: c.rounds, by }]);
+    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: rounds, by }]);
     const rolls = rollChanges(c);
     if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
     story.push({ sec, k: "afflicted", who: id, name: c.name, by });

@@ -1999,6 +1999,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS conditions (
   save_attr TEXT NOT NULL DEFAULT '',
   save_dc INTEGER NOT NULL DEFAULT 12
 )`);
+addColumn("conditions", "apply_save_attr", "TEXT NOT NULL DEFAULT ''"); // a save as it lands ('' = none)
+addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
+addColumn("conditions", "apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"); // on a success: negates | halves (its rounds)
 
 export function listEffectDefs(): EffectDef[] {
   return db.prepare<[], { id: number; name: string; description: string; modifiers: string }>("SELECT * FROM effects ORDER BY name").all().map((r) => ({ ...r, modifiers: JSON.parse(r.modifiers) }));
@@ -2043,9 +2046,9 @@ export function getCondition(id: number): Condition | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveConditionDef(id: number | null, c: Omit<ConditionDef, "id">): number {
-  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc };
-  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc)").run(params).lastInsertRowid);
-  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc WHERE id = @id").run({ ...params, id });
+  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates" };
+  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome)").run(params).lastInsertRowid);
+  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome WHERE id = @id").run({ ...params, id });
   return id;
 }
 
@@ -2241,7 +2244,8 @@ export type RollAction =
   | { kind: "pickLock"; doorId: number; dc: number }
   | { kind: "search"; dc: number }
   | { kind: "initiative"; levelId: number; tokenId: number }
-  | { kind: "rolloff"; levelId: number; tokenId: number }; // a roll-off for a contested spot
+  | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
+  | { kind: "conditionSave"; levelId: number; tokenId: number; key: string }; // a save against a condition as it lands, mid-round
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
@@ -2270,6 +2274,12 @@ export function openInitiativeRequest(tokenId: number): RollRequest | undefined 
 export function openRollOffRequest(tokenId: number): RollRequest | undefined {
   return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
     .map(parseRequest).find((r) => r.action.kind === "rolloff" && r.action.tokenId === tokenId);
+}
+
+/** The open condition save asked of whoever plays this token, if they haven't rolled it. */
+export function openConditionSaveRequest(tokenId: number): RollRequest | undefined {
+  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
+    .map(parseRequest).find((r) => r.action.kind === "conditionSave" && r.action.tokenId === tokenId);
 }
 
 /** Puts away any roll-offs still asked for (the contest was settled another way). */
@@ -2366,7 +2376,8 @@ export function setEncounterWaiting(levelId: number, tokenIds: number[]): void {
 export interface PendingRound {
   seed: number;
   decisions: Record<string, number>;
-  contest: import("@/lib/resolveRound").Contest;
+  contest?: import("@/lib/resolveRound").Contest; // a contested move waiting on the GM's call
+  save?: import("@/lib/resolveRound").SaveRequest; // or a player's save against a condition, waiting on their roll
   rolloff?: Record<number, number | null>; // a roll-off under way: each side's d20 (null = their player hasn't rolled yet)
 }
 

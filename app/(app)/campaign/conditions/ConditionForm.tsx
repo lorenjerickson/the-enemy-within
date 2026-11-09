@@ -28,6 +28,21 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
         )}
         <Link href="/campaign/effects/new" className="link link-hover text-xs">+ New effect</Link>
       </fieldset>
+      <fieldset className="flex flex-wrap items-center gap-2 text-sm" data-apply-save>
+        <span className="font-semibold">Save when applied</span>
+        <select name="apply_save_attr" defaultValue={initial?.apply_save_attr ?? ""} className="select select-sm w-auto">
+          <option value="">no save</option>
+          {ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)}</option>)}
+        </select>
+        DC
+        <input name="apply_save_dc" type="number" min="1" defaultValue={initial?.apply_save_dc ?? 12} className="input input-sm w-16" />
+        a success
+        <select name="apply_save_outcome" defaultValue={initial?.apply_save_outcome ?? "negates"} className="select select-sm w-auto">
+          <option value="negates">means it doesn&apos;t take hold</option>
+          <option value="halves">halves its rounds</option>
+        </select>
+        <span className="w-full text-xs opacity-60">Players roll their own (the round waits for them); the server rolls for your creatures.</span>
+      </fieldset>
       <fieldset className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold">Lasts</span>
         <input name="rounds" type="number" min="1" defaultValue={initial?.rounds ?? 6} className="input input-sm w-20" />

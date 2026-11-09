@@ -21,6 +21,9 @@ export async function submitCondition(id: number | null, formData: FormData) {
     rounds: Math.max(1, Math.round(Number(formData.get("rounds")) || 1)),
     save_attr,
     save_dc: Math.max(1, Math.round(Number(formData.get("save_dc")) || 12)),
+    apply_save_attr: (ATTRIBUTES as readonly string[]).includes(text("apply_save_attr")) ? (text("apply_save_attr") as Attribute) : "",
+    apply_save_dc: Math.max(1, Math.round(Number(formData.get("apply_save_dc")) || 12)),
+    apply_save_outcome: text("apply_save_outcome") === "halves" ? "halves" : "negates",
   });
   revalidatePath("/campaign/conditions");
   revalidatePath("/campaign/effects");
