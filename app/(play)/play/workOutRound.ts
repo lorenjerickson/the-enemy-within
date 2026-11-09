@@ -11,6 +11,7 @@ import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/comb
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
+import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
 import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -73,7 +74,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.

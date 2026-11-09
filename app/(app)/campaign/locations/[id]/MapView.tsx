@@ -5,6 +5,7 @@ import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type Ma
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
+import { DARK_BELOW, brightEnough } from "@/lib/light";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
@@ -687,7 +688,7 @@ export default function MapView({
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -971,11 +972,15 @@ export default function MapView({
     const centre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
     const own = planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
     const planEndAt = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
+    const blindOf = (t: MapToken) => t.character_id !== null && !!fog?.sight?.[t.character_id];
     const visible = own.map((t) => visibilityPolygon(centre(planEndAt ?? t), (t.character_id !== null && fog?.sight?.[t.character_id]) || SIGHT, fogWalls)); // blind: only what's around them
-    // Only tokens in sight are shown (and their own, always).
-    const tokens = drawnTokens.filter((t) => own.includes(t) || visible.some((poly) => insidePolygon(centre(t), poly)));
-    return { visible, explored, tokens };
-  }, [fogOn, fog?.viewers.join(), JSON.stringify(fog?.sight ?? {}), fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
+    // In the dark (overall light below DARK_BELOW), they see only what's lit or within their darkvision.
+    const dark = shownIllumination < DARK_BELOW && planningAs === null;
+    const viewers = own.map((t) => ({ at: centre(planEndAt ?? t), dv: (t.character_id !== null && fog?.darkvision?.[t.character_id]) || 0, blind: blindOf(t) }));
+    // Only tokens they can see are shown (and their own, always).
+    const tokens = drawnTokens.filter((t) => own.includes(t) || viewers.some((v, i) => insidePolygon(centre(t), visible[i]) && (!dark || v.blind || brightEnough(v.at, centre(t), v.dv, shownIllumination, optimisticLights, fogWalls))));
+    return { visible, explored, tokens, dark, viewers };
+  }, [fogOn, fog?.viewers.join(), JSON.stringify(fog?.sight ?? {}), JSON.stringify(fog?.darkvision ?? {}), shownIllumination, optimisticLights, fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.
@@ -1792,8 +1797,40 @@ export default function MapView({
         fc.globalAlpha = 0.45;
         fc.drawImage(m, 0, 0);
         fc.globalAlpha = 1;
-        fc.setTransform(t);
-        fc.fill(shapes(fogged.visible));
+        if (!fogged.dark) {
+          fc.setTransform(t);
+          fc.fill(shapes(fogged.visible));
+        } else {
+          // In the dark: what's in sight AND (lit by a light source OR within their darkvision), merged on the mask canvas.
+          mc.setTransform(1, 0, 0, 1, 0, 0);
+          mc.clearRect(0, 0, m.width, m.height);
+          mc.setTransform(t);
+          mc.fillStyle = "#fff";
+          for (const l of state.lights) {
+            if (!l.enabled) continue;
+            const seen = visibilityPolygon({ x: l.x, y: l.y }, l.radius, fogWalls);
+            mc.save();
+            mc.clip(shapes([seen]));
+            mc.beginPath();
+            const cx = x0 + l.x * size, cy = y0 + l.y * size, r = l.radius * size;
+            if (l.kind === "point" || l.spread >= 360) mc.arc(cx, cy, r, 0, Math.PI * 2);
+            else { const half = (l.spread * Math.PI) / 360, dir = (l.angle * Math.PI) / 180; mc.moveTo(cx, cy); mc.arc(cx, cy, r, dir - half, dir + half); mc.closePath(); }
+            mc.fill();
+            mc.restore();
+          }
+          fogged.viewers.forEach((v) => {
+            if (v.blind) { mc.fill(shapes([visibilityPolygon(v.at, SIGHT, fogWalls)])); return; } // blind: their sight is already only what's around them
+            if (!v.dv) return;
+            mc.beginPath();
+            mc.arc(x0 + v.at.x * size, y0 + v.at.y * size, (v.dv / 5) * size, 0, Math.PI * 2);
+            mc.fill();
+          });
+          mc.globalCompositeOperation = "destination-in"; // keep only what's also in their line of sight
+          mc.fill(shapes(fogged.visible));
+          mc.globalCompositeOperation = "source-over";
+          fc.setTransform(1, 0, 0, 1, 0, 0);
+          fc.drawImage(m, 0, 0);
+        }
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.drawImage(f, 0, 0);

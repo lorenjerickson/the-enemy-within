@@ -4,7 +4,7 @@ import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Senses, sensesFrom, unseenModes, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
@@ -155,6 +155,7 @@ export function resolveMovement(
   afflictions: Map<number, Affliction[]> = new Map(), // conditions on anyone (Poisoned…): ticked at the end of the round
   rollers: Set<number> = new Set(), // players' characters: they roll their own saves (kept in `decisions` as "save:…")
   auraPasses: Set<string> = new Set(), // who passed the save against an aura's condition ("token:condition"): safe until they leave it
+  lit: (p: Pos) => boolean = () => true, // whether a spot is lit (light sources, the level's overall light): in the dark, only darkvision sees
 ) {
   const passes = new Set(auraPasses);
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
@@ -324,8 +325,19 @@ export function resolveMovement(
   /** What someone can see and whether they can be seen, now: their own senses and the conditions on them as they stand this second. */
   const sensesNow = (id: number): Senses => {
     const own = fighters.get(id)?.senses, c = sensesFrom((afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition)));
-    return { blind: !!own?.blind || c.blind, invisible: !!own?.invisible || c.invisible, seeInvisible: !!own?.seeInvisible || c.seeInvisible };
+    return { blind: !!own?.blind || c.blind, invisible: !!own?.invisible || c.invisible, seeInvisible: !!own?.seeInvisible || c.seeInvisible, darkvision: Math.max(own?.darkvision ?? 0, c.darkvision) };
   };
+  /** Whether `viewer` can see `target` now: not invisible to them, within 5 ft if they're blind, and lit or within their darkvision. */
+  const sightOf = (viewer: number, target: number) => {
+    const sv = sensesNow(viewer), st = sensesNow(target), pv = where(viewer), pt = where(target);
+    if (!seesThem(sv, st)) return false;
+    if (!pv || !pt) return true;
+    const d = Math.hypot(pv.col - pt.col, pv.row - pt.row);
+    if (sv.blind) return d <= BLIND_RANGE;
+    return lit(pt) || d * FEET_PER_SQUARE <= sv.darkvision + 1e-6;
+  };
+  /** Advantage / disadvantage from not being seen: attacking someone you can't see, attacking someone who can't see you. */
+  const unseen = (attacker: number, target: number): RollMode[] => [...(!sightOf(attacker, target) ? (["disadvantage"] as const) : []), ...(!sightOf(target, attacker) ? (["advantage"] as const) : [])];
   /** A creature's triggers: its own (and its gear's), and those of conditions on it. */
   const triggersOf = (id: number) => [
     ...(fighters.get(id)?.triggers ?? []).map((t) => ({ ...t, a: undefined as Affliction | undefined })),
@@ -864,7 +876,7 @@ export function resolveMovement(
             leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
             continue;
           }
-          a ??= usingDice(step.dice?.hit, () => me.attack(use, them, unseenModes(sensesNow(m.tokenId), sensesNow(id))));
+          a ??= usingDice(step.dice?.hit, () => me.attack(use, them, unseen(m.tokenId, id)));
           const d = them.defense();
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
           // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
@@ -966,7 +978,7 @@ export function resolveMovement(
         say(`${m.name}'s attack on ${target.name} fails: out of reach.`);
         story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "reach" });
       } else {
-        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them, unseenModes(sensesNow(m.tokenId), sensesNow(target.id)))), d = them.defense(); // unseen: advantage / disadvantage
+        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them, unseen(m.tokenId, target.id))), d = them.defense(); // unseen: advantage / disadvantage
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });

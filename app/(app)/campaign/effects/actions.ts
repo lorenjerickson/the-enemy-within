@@ -49,7 +49,9 @@ export async function submitEffect(id: number | null, formData: FormData) {
   if (maxhp) modifiers.push({ kind: "maxhp", value: maxhp });
   // What they can't do, and saves they fail outright.
   for (const w of formData.getAll("forbid").map(String)) if (FORBIDS.some(([f]) => f === w)) modifiers.push({ kind: "forbid", what: w as Forbid });
-  for (const s of formData.getAll("sense").map(String)) if (SENSES.some(([k]) => k === s)) modifiers.push({ kind: "sense", sense: s as Sense });
+  for (const s of formData.getAll("sense").map(String)) if (SENSES.some(([k]) => k === s) && s !== "darkvision") modifiers.push({ kind: "sense", sense: s as Sense });
+  const darkvision = Math.round(Number(text("darkvision_ft")) || 0);
+  if (darkvision > 0) modifiers.push({ kind: "sense", sense: "darkvision", range: darkvision });
   for (const a of formData.getAll("autofail").map(String)) if ((ATTRIBUTES as readonly string[]).includes(a)) modifiers.push({ kind: "autofail", save: a as Attribute });
   // "Becomes (at least)": a number, maybe plus an attribute's modifier (13 + agility); and multipliers.
   const setValues = formData.getAll("set_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));

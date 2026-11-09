@@ -29,7 +29,7 @@ export type Modifier =
   | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
   | Trigger
   | RollTweak // reroll / minroll / crit / nocrit: what happens to the dice
-  | { kind: "sense"; sense: Sense } // what they can see, and whether they can be seen
+  | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft)
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /**
@@ -54,13 +54,14 @@ export type Trigger = {
 export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're hit"], ["hitting", "when they hit someone"], ["moves", "when they move (first time each round)"], ["start", "at the start of each round"]];
 
 /** Senses: blind (sees only within 5 ft), invisible (unseen by those who can't see invisible), sees invisible. */
-export type Sense = "blind" | "invisible" | "seeinvisible";
+export type Sense = "blind" | "invisible" | "seeinvisible" | "darkvision";
 export const SENSES: [Sense, string][] = [["blind", "blind (sees only within 5 ft)"], ["invisible", "invisible"], ["seeinvisible", "sees invisible things"]];
-export type Senses = { blind: boolean; invisible: boolean; seeInvisible: boolean };
+export type Senses = { blind: boolean; invisible: boolean; seeInvisible: boolean; darkvision: number }; // darkvision: ft (0 = none)
 /** Senses from a set of modifiers. */
 export function sensesFrom(mods: Modifier[]): Senses {
   const has = (s: Sense) => mods.some((m) => m.kind === "sense" && m.sense === s);
-  return { blind: has("blind"), invisible: has("invisible"), seeInvisible: has("seeinvisible") };
+  const dark = mods.reduce((r, m) => (m.kind === "sense" && m.sense === "darkvision" ? Math.max(r, m.range ?? 60) : r), 0);
+  return { blind: has("blind"), invisible: has("invisible"), seeInvisible: has("seeinvisible"), darkvision: dark };
 }
 /** How far a blind creature perceives (grid units: the squares around them, diagonals too). */
 export const BLIND_RANGE = 1.5;
@@ -214,7 +215,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
-  if (m.kind === "sense") return m.sense === "blind" ? "blind: sees only within 5 ft" : m.sense === "invisible" ? "invisible" : "sees invisible things";
+  if (m.kind === "sense") return m.sense === "blind" ? "blind: sees only within 5 ft" : m.sense === "invisible" ? "invisible" : m.sense === "darkvision" ? `darkvision ${m.range ?? 60} ft` : "sees invisible things";
   if (m.kind === "reroll") return `rerolls ${m.at === 1 ? "a 1" : `${m.at} or less`} on ${rollKindLabel(m.roll).toLowerCase()} (keeps the new roll)`;
   if (m.kind === "minroll") return `a d20 below ${m.min} counts as ${m.min} on ${rollKindLabel(m.roll).toLowerCase()}`;
   if (m.kind === "crit") return `critical hits on ${m.range}–20`;

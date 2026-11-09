@@ -92,12 +92,17 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-senses>
           <span className="font-semibold">Senses</span>
-          {SENSES.map(([sense, label]) => (
+          {SENSES.filter(([sense]) => sense !== "darkvision").map(([sense, label]) => (
             <label key={sense} className="flex items-center gap-1">
               <input type="checkbox" name="sense" value={sense} defaultChecked={mods.some((m) => m.kind === "sense" && m.sense === sense)} className="checkbox checkbox-xs" />
               {label}
             </label>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-darkvision>
+          <span className="font-semibold">Darkvision</span>
+          <input name="darkvision_ft" type="number" min="0" step="5" placeholder="ft" defaultValue={(() => { const d = mods.find((m) => m.kind === "sense" && m.sense === "darkvision"); return d?.kind === "sense" ? d.range ?? 60 : ""; })()} className="input input-sm w-20" />
+          ft <span className="text-xs opacity-60">sees in the dark this far (blank = none)</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-autofail>
           <span className="font-semibold">Fails saves</span>
