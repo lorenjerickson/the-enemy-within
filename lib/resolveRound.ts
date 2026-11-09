@@ -366,8 +366,9 @@ export function resolveMovement(
   function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean): Pos {
     const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
     const b = budget.get(m.tokenId)! + perSecond;
-    // Spots someone else stands in now: a chaser goes around them rather than waiting behind them.
-    const others = [...[...pos].filter(([id]) => id !== m.tokenId).map(([, p]) => p), ...bystanders.map((x) => x.at)];
+    // Spots someone else stands in now: a chaser goes around them rather than waiting behind them (anyone down is
+    // no obstacle: they can be stepped over).
+    const others = [...[...pos].filter(([id]) => id !== m.tokenId && !down.has(id)).map(([, p]) => p), ...bystanders.filter((x) => !down.has(x.tokenId)).map((x) => x.at)];
     const taken = (p: Pos) => others.some((o) => same(o, p));
     if (gridless) {
       budget.set(m.tokenId, 0);
@@ -516,10 +517,11 @@ export function resolveMovement(
         continue;
       }
       const stillUnmoved = order.filter((o) => !settled.some((s) => s.id === o.tokenId) && o.tokenId !== m.tokenId && unmoved(proposed.get(o.tokenId)!, pos.get(o.tokenId)!));
+      // Who's in the way (anyone down isn't: a body on the ground can be stepped over).
       const blocker =
-        settled.find((s) => same(s.at, want)) ??
-        stillUnmoved.map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
-        bystanders.filter((b) => same(b.at, want)).map((b) => ({ id: b.tokenId, at: want }))[0];
+        settled.find((s) => !down.has(s.id) && same(s.at, want)) ??
+        stillUnmoved.filter((o) => !down.has(o.tokenId)).map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
+        bystanders.filter((b) => !down.has(b.tokenId) && same(b.at, want)).map((b) => ({ id: b.tokenId, at: want }))[0];
       if (blocker) {
         const intent = intentOf(m, sec, autoPursue); // what they were up to, before being set back a second
         lag.set(m.tokenId, lag.get(m.tokenId)! + 1);
@@ -540,13 +542,13 @@ export function resolveMovement(
     // Anyone left sharing a spot (a held-back mover whose spot was taken): the GM decides who has it. Until they
     // have, the round stops here; once they have, the other gives way (back where they were this second, or aside).
     for (let i = 0; i < settled.length; i++) for (let j = i + 1; j < settled.length; j++) {
-      if (!same(settled[i].at, settled[j].at)) continue;
+      if (!same(settled[i].at, settled[j].at) || down.has(settled[i].id) || down.has(settled[j].id)) continue; // sharing a spot with a body is fine
       const spot = settled[i].at, ids = [settled[i].id, settled[j].id];
       const key = `${Math.min(...ids)}:${Math.max(...ids)}@${Math.round(spot.col)},${Math.round(spot.row)}`, winner = decisions[key]; // the same call holds if it comes up again later in the round
       const named = (id: number) => ({ id, name: nameOf(id), from: before.get(id)! });
       if (winner === undefined || !ids.includes(winner)) throw new ContestedMove({ sec, key, a: named(ids[0]), b: named(ids[1]), spot });
       const loser = ids.find((id) => id !== winner)!, entry = settled.find((s) => s.id === loser)!;
-      const taken = (p: Pos) => settled.some((s) => s.id !== loser && same(s.at, p)) || bystanders.some((b) => same(b.at, p));
+      const taken = (p: Pos) => settled.some((s) => s.id !== loser && !down.has(s.id) && same(s.at, p)) || bystanders.some((b) => !down.has(b.tokenId) && same(b.at, p));
       const back = before.get(loser)!;
       let to: Pos | undefined = !same(back, spot) && !taken(back) ? back : undefined;
       if (!to) {
