@@ -1,3 +1,4 @@
+import type { Affliction, EffectDef } from "@/lib/conditions";
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
@@ -333,6 +334,7 @@ addColumn("actions", "targets", "TEXT NOT NULL DEFAULT ''");
 addColumn("actions", "target_who", "TEXT NOT NULL DEFAULT ''"); // TargetWho: '' anyone, friendly, enemy
 addColumn("actions", "target_count", "TEXT NOT NULL DEFAULT 'one'"); // TargetCount: one, exactly, upto, all
 addColumn("actions", "target_n", "INTEGER NOT NULL DEFAULT 1"); // N for exactly / up to N
+addColumn("actions", "effects", "TEXT NOT NULL DEFAULT '[]'"); // JSON [{ id, on }]: catalog effects it puts on its user / target
 addColumn("map_tokens", "allegiance", "TEXT"); // Allegiance (party, hostile, neutral); null = by kind (characters party, creatures hostile) // ActionTargets: who it can be used on; '' = worked out from what it does
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("items", "range_ft", "REAL NOT NULL DEFAULT 5"); // weapons: how far they reach (5 = melee)
@@ -801,6 +803,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   target_count: TargetCount; // one, exactly N, up to N, or all
   target_n: number;
   targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
+  effects: { id: number; on: "self" | "target" }[]; // catalog effects it puts on its user / its target (on a hit, or a failed save)
 }
 
 /** Who an action can be used on: only its user, anyone but its user, or either; '' = worked out from what it does. */
@@ -808,28 +811,28 @@ export type ActionTargets = "" | "self" | "others" | "anyone";
 export const ACTION_TARGETS = ["", "self", "others", "anyone"] as const;
 
 type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
-type ActionRow = Omit<Action, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
+type ActionRow = Omit<Action, "boosts" | "roll_grants" | "effects"> & { boosts: string; roll_grants: string; effects: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n, effects";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
   return db
     .prepare<[number], ActionRow>(`SELECT ${ACTION_COLUMNS} FROM actions WHERE ${column} = ? ORDER BY name`)
     .all(id)
-    .map((r) => ({ ...r, boosts: JSON.parse(r.boosts), roll_grants: JSON.parse(r.roll_grants) }));
+    .map((r) => ({ ...r, boosts: JSON.parse(r.boosts), roll_grants: JSON.parse(r.roll_grants), effects: JSON.parse(r.effects) }));
 }
 
 /** Inserts when id is null, otherwise updates. */
 export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
-  const params = { ...a, boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants) };
+  const params = { ...a, boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants), effects: JSON.stringify(a.effects) };
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, targets, target_who, target_count, target_n, effects)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @targets, @target_who, @target_count, @target_n)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @targets, @target_who, @target_count, @target_n, @effects)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
@@ -837,7 +840,7 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
          seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
-         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n WHERE id = @id`
+         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n, effects = @effects WHERE id = @id`
     ).run({ ...params, id });
   }
 }
@@ -1961,6 +1964,97 @@ export function listTokenStatuses(levelId: number): Map<number, (Status & { id: 
 
 export function removeTokenStatus(id: number): void {
   db.prepare("DELETE FROM token_statuses WHERE id = ?").run(id);
+}
+
+// ---------- Effects (conditions such as Poisoned) ----------
+
+// The catalog: named effects actions can put on creatures (see lib/effects.ts).
+db.exec(`CREATE TABLE IF NOT EXISTS effect_defs (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  per_round TEXT NOT NULL DEFAULT '',
+  per_round_kind TEXT NOT NULL DEFAULT 'damage',
+  damage_type TEXT NOT NULL DEFAULT '',
+  rounds INTEGER NOT NULL DEFAULT 1,
+  save_attr TEXT NOT NULL DEFAULT '',
+  save_dc INTEGER NOT NULL DEFAULT 12,
+  boosts TEXT NOT NULL DEFAULT '[]',
+  roll_grants TEXT NOT NULL DEFAULT '[]'
+)`);
+
+type EffectRow = Omit<EffectDef, "boosts" | "roll_grants"> & { boosts: string; roll_grants: string };
+const parseEffect = (r: EffectRow): EffectDef => ({ ...r, boosts: JSON.parse(r.boosts), roll_grants: JSON.parse(r.roll_grants) });
+
+export function listEffectDefs(): EffectDef[] {
+  return db.prepare<[], EffectRow>("SELECT * FROM effect_defs ORDER BY name").all().map(parseEffect);
+}
+
+export function getEffectDef(id: number): EffectDef | undefined {
+  const r = db.prepare<[number], EffectRow>("SELECT * FROM effect_defs WHERE id = ?").get(id);
+  return r && parseEffect(r);
+}
+
+/** Inserts when id is null, otherwise updates; returns the id. */
+export function saveEffectDef(id: number | null, e: Omit<EffectDef, "id">): number {
+  const params = { ...e, boosts: JSON.stringify(e.boosts), roll_grants: JSON.stringify(e.roll_grants) };
+  if (id === null) {
+    return Number(db.prepare(`INSERT INTO effect_defs (name, description, per_round, per_round_kind, damage_type, rounds, save_attr, save_dc, boosts, roll_grants)
+      VALUES (@name, @description, @per_round, @per_round_kind, @damage_type, @rounds, @save_attr, @save_dc, @boosts, @roll_grants)`).run(params).lastInsertRowid);
+  }
+  db.prepare(`UPDATE effect_defs SET name = @name, description = @description, per_round = @per_round, per_round_kind = @per_round_kind, damage_type = @damage_type,
+    rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, boosts = @boosts, roll_grants = @roll_grants WHERE id = @id`).run({ ...params, id });
+  return id;
+}
+
+export function removeEffectDef(id: number): void {
+  db.prepare<[number]>("DELETE FROM effect_defs WHERE id = ?").run(id);
+}
+
+// Effects on creatures right now: a copy of the effect as it was put on (later catalog edits don't change it), the
+// rounds it has left, and who put it there.
+db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  effect_id INTEGER NOT NULL,
+  effect TEXT NOT NULL,
+  rounds_left INTEGER NOT NULL,
+  by_token INTEGER
+)`);
+
+/** The effects on a level's tokens, by token id. */
+export function listAfflictions(levelId: number): Map<number, Affliction[]> {
+  const out = new Map<number, Affliction[]>();
+  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null }>("SELECT id, token_id, effect, rounds_left, by_token FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
+    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, effect: JSON.parse(r.effect), left: r.rounds_left, by: r.by_token }]);
+  }
+  return out;
+}
+
+/** Replaces a level's effects with these (after a round, or time passing). */
+export function saveAfflictions(levelId: number, all: Map<number, Affliction[]>): void {
+  db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM token_afflictions WHERE level_id = ?").run(levelId);
+    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token) VALUES (?, ?, ?, ?, ?, ?)");
+    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.effect.id, JSON.stringify(a.effect), a.left, a.by);
+  })();
+}
+
+/** Puts an effect on a token (again: its rounds start over). */
+export function addAffliction(levelId: number, tokenId: number, effect: EffectDef, by: number | null): void {
+  const all = listAfflictions(levelId);
+  all.set(tokenId, [...(all.get(tokenId) ?? []).filter((a) => a.effect.id !== effect.id), { effect, left: effect.rounds, by }]);
+  saveAfflictions(levelId, all);
+}
+
+export function removeAffliction(id: number): void {
+  db.prepare<[number]>("DELETE FROM token_afflictions WHERE id = ?").run(id);
+}
+
+/** Levels with effects on anyone (for time passing out of an encounter). */
+export function afflictedLevels(): number[] {
+  return db.prepare<[], { level_id: number }>("SELECT DISTINCT level_id FROM token_afflictions").all().map((r) => r.level_id);
 }
 
 // ---------- Effects played by scripts ----------

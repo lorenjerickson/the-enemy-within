@@ -102,6 +102,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     roll_grants,
     duration_amount,
     duration_unit,
+    effects: (["self", "target"] as const).flatMap((on) => formData.getAll(`effect_${on}`).map((v) => ({ id: Number(v), on })).filter((e) => Number.isInteger(e.id) && e.id > 0)),
   });
   revalidatePath(ownerPath(owner));
 }

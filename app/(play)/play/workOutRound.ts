@@ -10,6 +10,31 @@ import { withSeed } from "@/lib/dice";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
+import { afflictedLevels, listAfflictions, saveAfflictions } from "@/lib/db";
+import { tickAfflictions } from "@/lib/resolveRound";
+
+/**
+ * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
+ * running (an encounter's rounds tick them as they're resolved).
+ */
+export function passTimeForEffects(minutes: number) {
+  const rounds = Math.min(600, Math.floor(minutes * 10 + 1e-9));
+  if (rounds <= 0) return;
+  for (const levelId of afflictedLevels()) {
+    if (getEncounter(levelId)) continue;
+    const afflicted = listAfflictions(levelId), fighters = fightersOn(levelId), labels = tokenLabels(levelId);
+    const hp = new Map([...fighters].map(([id, f]) => [id, f.hp])), start = new Map(hp);
+    const down = new Set([...hp].filter(([, h]) => h <= 0).map(([id]) => id));
+    const log: string[] = [];
+    const nameOf = (id: number) => labels.get(id) ?? "someone";
+    for (let i = 0; i < rounds && [...afflicted.values()].some((l) => l.length); i++) {
+      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, sec: i + 1, hurt: () => 0 });
+    }
+    for (const [id, h] of hp) if (h !== start.get(id)) saveHp(id, h);
+    saveAfflictions(levelId, afflicted);
+    if (log.length) logSessionEvent(`Time passes: ${log.join(" ")}`);
+  }
+}
 
 // Resolving a round on the server (not server actions: the GM's and players' actions call these after their own checks).
 
@@ -40,7 +65,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const lasting = listLastingAreas(levelId);
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId)));
   } catch (e) {
     if (!(e instanceof ContestedMove)) throw e;
     setPendingRound(levelId, { seed, decisions, contest: e.contest });
@@ -55,7 +80,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
-  for (const [id, h] of hp) saveHp(id, h); // also keeps health rolled for the first time
+  for (const [id, h] of hp) saveHp(id, h);
+  saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   for (const m of movers) {
     const end = final.get(m.tokenId)!;
     if (end.col !== m.start.col || end.row !== m.start.row) moveToken(m.tokenId, end.col, end.row);

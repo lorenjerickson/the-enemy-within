@@ -22,6 +22,9 @@ export type StoryEvent = { sec: number } & (
   | { k: "status"; who: number; source: string }
   | { k: "healed"; who: number; source: string; much: number }
   | { k: "late"; who: number; action: string; heldBy?: number | null; target?: number | null }
+  | { k: "afflicted"; who: number; name: string; by: number | null } // an effect (Poisoned…) put on them
+  | { k: "effect"; who: number; name: string; much: number; heal: boolean; hurt?: number } // an effect's round of damage or healing
+  | { k: "effectEnds"; who: number; name: string; why: "save" | "time" }
 );
 
 /**
@@ -36,7 +39,7 @@ const ACTION_WORD: Record<string, string> = { attack: "attack", use: "use your i
 
 /** Whether this event involves the token (they did it, or it was done to them). */
 const involves = (e: StoryEvent, id: number) =>
-  e.who === id || (e.k === "chase" && e.next === id) || (e.k !== "late" && e.k !== "skip" && "target" in e && e.target === id) || (e.k === "blocked" && (e.by === id || (e.intent && "target" in e.intent && e.intent.target === id))) || (e.k === "caught" && e.by === id);
+  e.who === id || (e.k === "chase" && e.next === id) || (e.k !== "late" && e.k !== "skip" && "target" in e && e.target === id) || (e.k === "blocked" && (e.by === id || (e.intent && "target" in e.intent && e.intent.target === id))) || (e.k === "caught" && e.by === id) || (e.k === "afflicted" && e.by === id);
 
 /** "attack", "use Bite", "search"… as something to do. */
 const deed = (action: string) => (action.startsWith("use ") ? action : ACTION_WORD[action] ?? action);
@@ -122,6 +125,12 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         break;
       }
       case "status": add(e.sec, `You're affected by ${e.source}.`); break;
+      case "afflicted":
+        if (mine) add(e.sec, e.by !== null && e.by !== me ? `${cap(name(e.by))} leaves you ${e.name.toLowerCase()}.` : `You're ${e.name.toLowerCase()}.`);
+        else add(e.sec, `You leave ${name(e.who)} ${e.name.toLowerCase()}.`);
+        break;
+      case "effect": add(e.sec, e.heal ? `${e.name} restores you (+${e.much}).` : `${e.name} hurts you (-${e.much}).`); break;
+      case "effectEnds": add(e.sec, e.why === "save" ? `You shake off ${e.name.toLowerCase()}.` : `You're no longer ${e.name.toLowerCase()}.`); break;
       case "late": add(e.sec, `${e.heldBy ? `Held up by ${name(e.heldBy)}, you` : "You"} run out of time to ${deed(e.action)}${e.target ? `${e.action.startsWith("use ") ? " on" : ""} ${e.target === me ? "yourself" : name(e.target)}` : ""}.`); break;
     }
   }
@@ -175,6 +184,9 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       }
       case "status": add(e.sec, `${who} is affected by ${e.source}.`); break;
       case "healed": add(e.sec, e.much > 0 ? `${who} is healed for ${e.much} (${e.source}).` : `${who} gets nothing from ${e.source} (already well).`); break;
+      case "afflicted": add(e.sec, `${who} is ${e.name.toLowerCase()}${e.by !== null && e.by !== e.who ? ` by ${n(e.by)}` : ""}.`); break;
+      case "effect": add(e.sec, e.heal ? `${e.name} heals ${who} for ${e.much}.` : `${e.name} deals ${who} ${e.much} damage.`); break;
+      case "effectEnds": add(e.sec, e.why === "save" ? `${who} shakes off ${e.name.toLowerCase()}.` : `${who}'s ${e.name.toLowerCase()} wears off.`); break;
       case "late": add(e.sec, `${who}${e.heldBy ? `, held up by ${n(e.heldBy)},` : ""} runs out of time to ${does(e.action)}${e.target ? ` ${e.target === e.who ? "themselves" : n(e.target)}` : ""}.`); break;
     }
   }

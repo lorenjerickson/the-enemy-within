@@ -2,6 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
+import { describeEffect, type Affliction, type EffectDef } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -125,6 +126,7 @@ export function resolveMovement(
   effectWalls: Segment[] = walls, // what stops an area (walls, closed doors; not windows)
   lasting: LastingArea[] = [], // areas already on the map: whoever is in one at the end of the round rolls its save
   decisions: Record<string, number> = {}, // the GM's calls on contested moves: "lowId:highId@col,row" → who gets the spot
+  afflictions: Map<number, Affliction[]> = new Map(), // effects on anyone (Poisoned…): ticked at the end of the round
 ) {
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
@@ -132,8 +134,16 @@ export function resolveMovement(
   const story: StoryEvent[] = []; // the round as events, for each player's own account of it
   const hurt = (id: number, dmg: number) => dmg / Math.max(1, fighters.get(id)?.maxHp ?? hp.get(id) ?? 1);
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
+  // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
+  const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
+  const afflict = (id: number, e: EffectDef, by: number | null, sec: number) => {
+    afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.effect.id !== e.id), { effect: e, left: e.rounds, by }]);
+    if (e.boosts.length || e.roll_grants.length) fighters.get(id)?.statuses?.push({ source: e.name, boosts: e.boosts, grants: e.roll_grants });
+    story.push({ sec, k: "afflicted", who: id, name: e.name, by });
+    log.push(`${sec} s: ${nameOf(id)} is affected by ${e.name} (${describeEffect(e)}).`);
+  };
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
-  const leave = (id: number, status: Status | undefined, minutes: number, sec: number) => {
+  const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null) => {
     if (!status || down.has(id)) return;
     // A health boost heals straight away (Healing Draught: +1d10), up to their full health.
     const healing = status.boosts.filter((b) => b.target === "health").reduce((sum, b) => sum + rollDice(b.value.replace(/^\+/, "")), 0);
@@ -143,7 +153,9 @@ export function resolveMovement(
       log.push(`${sec} s: ${nameOf(id)} is healed for ${after - before} (${status.source}); ${after} health.`);
       story.push({ sec, k: "healed", who: id, source: status.source, much: after - before });
     }
-    // Nothing more to it than healing: done (it doesn't linger as an effect).
+    // Catalog effects (Poisoned…) run on by rounds of their own.
+    for (const e of status.effects ?? []) afflict(id, e, by, sec);
+    // Nothing more to it than healing (and effects): done (it doesn't linger as a status).
     if (status.boosts.every((b) => b.target === "health") && !status.grants.length) return;
     fighters.get(id)?.statuses?.push(status);
     statuses.push({ tokenId: id, status, minutes });
@@ -466,7 +478,7 @@ export function resolveMovement(
       if (step.action === "use" && step.use) {
         say(`${m.name} uses ${step.use.name}.`);
         story.push({ sec, k: "ability", who: m.tokenId, name: step.use.name, target: null });
-        leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec);
+        leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec, m.tokenId);
         continue;
       }
       if (step.action !== "attack") {
@@ -494,7 +506,7 @@ export function resolveMovement(
           }
           if (!use.damage) {
             story.push({ sec, k: "ability", who: m.tokenId, name: use.name, target: id });
-            leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec);
+            leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
             continue;
           }
           a ??= usingDice(step.dice?.hit, () => me.attack(use, them));
@@ -519,9 +531,9 @@ export function resolveMovement(
             story.push({ sec, k: "down", who: id });
             say(`${nameOf(id)} is down.`);
           }
-          leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec);
+          leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
         }
-        leave(m.tokenId, use.statuses?.self, use.statuses?.minutes ?? 0, sec);
+        leave(m.tokenId, use.statuses?.self, use.statuses?.minutes ?? 0, sec, m.tokenId);
         continue;
       }
       // An ability aimed at someone that does no damage (Mesmerize): no attack roll; it takes effect if they're in range.
@@ -534,8 +546,8 @@ export function resolveMovement(
         } else {
           say(`${m.name} uses ${step.use.name} on ${target.name}.`);
           story.push({ sec, k: "ability", who: m.tokenId, name: step.use.name, target: target.id });
-          leave(target.id, step.use.statuses?.target, step.use.statuses?.minutes ?? 0, sec);
-          leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec);
+          leave(target.id, step.use.statuses?.target, step.use.statuses?.minutes ?? 0, sec, m.tokenId);
+          leave(m.tokenId, step.use.statuses?.self, step.use.statuses?.minutes ?? 0, sec, m.tokenId);
         }
         continue;
       }
@@ -564,8 +576,8 @@ export function resolveMovement(
           // Statuses: on the user, and on each one caught who failed the save.
           const st = step.use.statuses;
           if (st) {
-            leave(m.tokenId, st.self, st.minutes, sec);
-            for (const h of hits) if (h.outcome === "hit") leave(h.id, st.target, st.minutes, sec);
+            leave(m.tokenId, st.self, st.minutes, sec, m.tokenId);
+            for (const h of hits) if (h.outcome === "hit") leave(h.id, st.target, st.minutes, sec, m.tokenId);
           }
         }
         // A lasting one stays on the map, catching whoever is in it at the end of each round.
@@ -609,9 +621,9 @@ export function resolveMovement(
             down.add(target.id);
             say(`${target.name} is down.`);
           }
-          leave(target.id, step.use?.statuses?.target, step.use?.statuses?.minutes ?? 0, sec); // on a hit
+          leave(target.id, step.use?.statuses?.target, step.use?.statuses?.minutes ?? 0, sec, m.tokenId); // on a hit
         }
-        leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec); // whether it hit or not
+        leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec, m.tokenId); // whether it hit or not
       }
     }
     // Evade / Pursue end: within range of what's planned next, within 5 ft, the target down, or their time up.
@@ -651,6 +663,8 @@ export function resolveMovement(
         if (hits.length) log.splice(before, 0, `${sec} s: ${l.name} lingers: ${total} damage, ${l.save} save DC ${l.dc}.`);
         fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
       }
+      // Effects tick: damage or healing, a round off each, then a save to shake it off.
+      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt });
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
   }
@@ -666,5 +680,61 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted };
+}
+
+/**
+ * The end of a round for everyone's effects: each does its damage (or healing), loses a round, and unless that was
+ * its last, its creature rolls the save to end it. Also used for rounds passing out of an encounter (the clock).
+ */
+export function tickAfflictions(
+  afflicted: Map<number, Affliction[]>,
+  { hp, fighters, down, nameOf, log, story, sec, hurt }: { hp: Map<number, number>; fighters: Map<number, Combatant>; down: Set<number>; nameOf: (id: number) => string; log: string[]; story?: StoryEvent[]; sec: number; hurt: (id: number, dmg: number) => number },
+) {
+  const at = (line: string) => log.push(story ? `${sec} s: ${line}` : line);
+  for (const [id, list] of afflicted) {
+    const f = fighters.get(id), keep: Affliction[] = [];
+    for (const a of list) {
+      const e = a.effect;
+      if (e.per_round && hp.has(id) && !down.has(id)) {
+        const n = Math.max(0, rollDice(e.per_round));
+        const before = hp.get(id)!;
+        if (e.per_round_kind === "healing") {
+          const after = Math.min(f?.maxHp ?? Infinity, before + n);
+          hp.set(id, after);
+          if (after > before) {
+            at(`${nameOf(id)} is healed for ${after - before} by ${e.name}; ${after} health.`);
+            story?.push({ sec, k: "effect", who: id, name: e.name, much: after - before, heal: true });
+          }
+        } else if (n > 0) {
+          const after = Math.max(0, before - n);
+          hp.set(id, after);
+          at(`${e.name} deals ${nameOf(id)} ${n}${e.damage_type ? ` ${e.damage_type}` : ""} damage; ${after} left.`);
+          story?.push({ sec, k: "effect", who: id, name: e.name, much: n, heal: false, hurt: hurt(id, n) });
+          if (after <= 0) {
+            down.add(id);
+            at(`${nameOf(id)} is down.`);
+            story?.push({ sec, k: "down", who: id });
+          }
+        }
+      }
+      const left = a.left - 1;
+      if (left <= 0) {
+        at(`${e.name} wears off ${nameOf(id)}.`);
+        story?.push({ sec, k: "effectEnds", who: id, name: e.name, why: "time" });
+        continue;
+      }
+      if (e.save_attr && f?.save && !down.has(id)) {
+        const s = f.save(e.save_attr);
+        if (s.total >= e.save_dc) {
+          at(`${nameOf(id)} shakes off ${e.name} (${s.total}: ${s.text} vs DC ${e.save_dc}).`);
+          story?.push({ sec, k: "effectEnds", who: id, name: e.name, why: "save" });
+          continue;
+        }
+        at(`${nameOf(id)} fails to shake off ${e.name} (${s.total} vs DC ${e.save_dc}); ${left} round${left === 1 ? "" : "s"} left.`);
+      }
+      keep.push({ ...a, left });
+    }
+    afflicted.set(id, keep);
+  }
 }

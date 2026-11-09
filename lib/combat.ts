@@ -1,5 +1,5 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
-import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, listAfflictions, getEffectDef, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { allegianceOf, type Allegiance } from "@/lib/sides";
 import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
@@ -9,6 +9,7 @@ import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
 import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
+import type { EffectDef } from "@/lib/conditions";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -80,14 +81,19 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
 /** Fighters for every token on a level; their hp is current plus temporary health (temporary goes first). */
 export function fightersOn(levelId: number): Map<number, Fighter> {
   const out = new Map<number, Fighter>();
-  const statuses = listTokenStatuses(levelId);
+  const statuses = listTokenStatuses(levelId), afflictions = listAfflictions(levelId);
   for (const t of listTokens(levelId)) {
     const c = tokenWho(t.id);
     const h = c && tokenHealth(t.id);
-    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, statuses.get(t.id)), maxHp: h.maximum, allegiance: allegianceOf(t) });
+    // Effects on them (Poisoned…) count as statuses for their rolls while they last.
+    const fromEffects = (afflictions.get(t.id) ?? []).map((a) => effectStatus(a.effect));
+    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects]), maxHp: h.maximum, allegiance: allegianceOf(t) });
   }
   return out;
 }
+
+/** What an effect does to rolls while it lasts, as a status. */
+export const effectStatus = (e: EffectDef): Status => ({ source: e.name, boosts: e.boosts, grants: e.roll_grants });
 
 /** Saves a token's health after a round: the drop from current + temporary comes off temporary first. */
 export function saveHp(tokenId: number, hp: number): void {
@@ -96,10 +102,11 @@ export function saveHp(tokenId: number, hp: number): void {
 }
 
 /** The statuses an action leaves (on whoever uses it, and on its target), lasting its duration (instant: 1 round). */
-function statusesOf(a: { name: string; boosts: Boost[]; roll_grants: RollGrant[]; duration_amount: number; duration_unit: string }): { statuses?: ActionStatuses } {
+function statusesOf(a: { name: string; boosts: Boost[]; roll_grants: RollGrant[]; duration_amount: number; duration_unit: string; effects?: { id: number; on: "self" | "target" }[] }): { statuses?: ActionStatuses } {
   const on = (who: "self" | "target"): Status | undefined => {
     const boosts = a.boosts.filter((b) => (b.on ?? "self") === who), grants = a.roll_grants.filter((g) => (g.on ?? "self") === who);
-    return boosts.length || grants.length ? { source: a.name, boosts, grants } : undefined;
+    const effects = (a.effects ?? []).filter((e) => e.on === who).flatMap((e) => getEffectDef(e.id) ?? []); // as they are now in the catalog
+    return boosts.length || grants.length || effects.length ? { source: a.name, boosts, grants, ...(effects.length ? { effects } : {}) } : undefined;
   };
   const self = on("self"), target = on("target");
   if (!self && !target) return {};
@@ -214,7 +221,7 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
     ...statusesOf(a),
     ...((): { targets: "self" | "others" | "anyone"; self?: true } => {
       // Who it can be used on: as the GM set it, else others if it does damage or affects a target, else themselves.
-      const auto = !a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") ? "self" : "others";
+      const auto = !a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") && !a.effects.some((e) => e.on === "target") ? "self" : "others";
       const targets = a.area_shape ? "others" : a.targets || auto;
       return targets === "self" ? { targets, self: true } : { targets };
     })(),

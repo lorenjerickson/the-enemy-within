@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { passTimeForEffects } from "../../(play)/play/workOutRound";
 import { redirect } from "next/navigation";
 import { requireGm, setActingAs } from "@/lib/auth";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
@@ -21,7 +22,9 @@ export async function runScript(source: string, answers: ScriptAnswers = []): Pr
 /** Moves game time forward by this many minutes. */
 export async function advanceTime(minutes: number) {
   await requireGm();
-  setGameTime(getGameTime() + Math.max(0, Number(minutes) || 0));
+  const step = Math.max(0, Number(minutes) || 0);
+  setGameTime(getGameTime() + step);
+  passTimeForEffects(step); // effects (Poisoned…) tick a round per 6 s out of an encounter
   fireTriggers(); // e.g. ON timer.expired
   revalidatePath("/", "layout");
 }

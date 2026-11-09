@@ -14,7 +14,7 @@ export const ARCHIVE_FORMAT = "the-enemy-within/campaign/1";
 /** Tables left out: what happens at the table (and logins), not the campaign. */
 const SESSION_TABLES = new Set([
   "game_sessions", "session_presence", "session_events", "sessions", // game nights, their log, logins
-  "pings", "roll_requests", "round_plans", "encounters", "map_fx", "token_statuses", "gm_view", // in play
+  "pings", "roll_requests", "round_plans", "encounters", "map_fx", "token_statuses", "token_afflictions", "gm_view", // in play
 ]);
 
 const campaignTables = () =>

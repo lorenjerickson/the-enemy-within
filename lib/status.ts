@@ -4,12 +4,14 @@
  */
 import type { Boost, RollGrant, RollKind, RollMode } from "@/lib/actions";
 import { rollKindLabel } from "@/lib/actions";
+import type { EffectDef } from "@/lib/conditions";
 import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 
 export interface Status {
   source: string; // the action's name
   boosts: Boost[];
   grants: RollGrant[];
+  effects?: EffectDef[]; // catalog effects it puts on them (Poisoned…): these run on by rounds, apart from the status
 }
 
 /** An action's statuses: on whoever uses it, on who it's used on, and how long they last (game minutes). */

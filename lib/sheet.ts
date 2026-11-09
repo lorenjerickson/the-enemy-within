@@ -1,4 +1,5 @@
-import { characterContainers, characterPlayers, db, getGameTime, getItem, listTokenStatuses, tokenLabels } from "@/lib/db";
+import { characterContainers, characterPlayers, db, getGameTime, getItem, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
+import { describeEffect } from "@/lib/conditions";
 import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
 import { describeStatus } from "@/lib/status";
@@ -16,7 +17,7 @@ export interface Sheet {
   token: string | null; // their map token, if there's no artwork
   health: { current: number; maximum: number; temporary: number } | null;
   down: boolean;
-  effects: { source: string; text: string; left: string }[]; // active statuses, with time left
+  effects: { source: string; text: string; left: string; affliction?: number }[]; // active statuses and effects, with time left (affliction: a catalog effect's id on them, for the GM to remove)
   equipment: { slot: EquipSlot; name: string; id: number; container: boolean }[];
   containers: { id: number; slot: EquipSlot; name: string; capacity: number; stacks: { id: number; name: string; qty: number; slots: EquipSlot[] }[] }[];
   characterId: number | null; // for changing what they carry (characters only)
@@ -42,7 +43,10 @@ export function sheetFor(tokenId: number): Sheet | null {
     token: who.token_overhead ?? null,
     health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },
     down: !!h && h.current + h.temporary <= 0,
-    effects: (listTokenStatuses(t.level_id).get(t.id) ?? []).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
+    effects: [
+      ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => ({ source: a.effect.name, text: describeEffect(a.effect, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id })),
+      ...(listTokenStatuses(t.level_id).get(t.id) ?? []).filter((s) => s.boosts.length || s.grants.length).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
+    ],
     equipment: (Object.entries(who.equipment ?? {}) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
       const item = id ? getItem(id) : undefined;
       return item ? [{ slot, name: item.name, id: item.id, container: !!item.capacity }] : [];
