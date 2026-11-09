@@ -42,6 +42,22 @@ export async function submitEffect(id: number | null, formData: FormData) {
   // What they can't do, and saves they fail outright.
   for (const w of formData.getAll("forbid").map(String)) if (FORBIDS.some(([f]) => f === w)) modifiers.push({ kind: "forbid", what: w as Forbid });
   for (const a of formData.getAll("autofail").map(String)) if ((ATTRIBUTES as readonly string[]).includes(a)) modifiers.push({ kind: "autofail", save: a as Attribute });
+  // "Becomes (at least)": a number, maybe plus an attribute's modifier (13 + agility); and multipliers.
+  const setValues = formData.getAll("set_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
+  formData.getAll("set_target").forEach((t, i) => {
+    const target = String(t), v = setValues[i] ?? "";
+    if (!target || !v) return;
+    const m = v.match(/^(\d+)(?:\+([a-z]+))?$/);
+    if (!isModifierTarget(target) || !m || (m[2] && !(ATTRIBUTES as readonly string[]).includes(m[2]))) throw new Error("Invalid setting");
+    modifiers.push({ kind: "set", target, value: Number(m[1]), ...(m[2] ? { plus: m[2] as Attribute } : {}) });
+  });
+  const factors = formData.getAll("mul_factor").map(String);
+  formData.getAll("mul_target").forEach((t, i) => {
+    const target = String(t), f = ({ "×0": 0, "×½": 0.5, "×2": 2 } as Record<string, number>)[factors[i] ?? ""];
+    if (!target || f === undefined) return;
+    if (!isModifierTarget(target)) throw new Error("Invalid multiplier");
+    modifiers.push({ kind: "multiply", target, factor: f });
+  });
   // Speed multiplied (half, double).
   const factor = Number(text("speed_factor"));
   if ([0.5, 2].includes(factor)) modifiers.push({ kind: "speed", factor });

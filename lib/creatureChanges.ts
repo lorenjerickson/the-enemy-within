@@ -5,7 +5,7 @@
  */
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
-import { combineModes, type Status } from "@/lib/status";
+import { combineModes, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
 import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE, formatModifier, modifier, type Attribute, type Attributes } from "@/lib/attributes";
 import type { RollPart, RollSpec } from "@/lib/rolls";
@@ -41,7 +41,7 @@ export function standingEffects(tokenId: number, equipment?: Equipment): (Effect
 
 /** Standing effects as statuses (their boosts and roll effects). */
 export const standingStatuses = (tokenId: number, equipment?: Equipment): Status[] =>
-  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length);
+  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length || s.sets.length || s.factors.length);
 
 /** How a token takes each kind of damage now: its standing effects and the conditions on it. */
 export function resistancesOf(tokenId: number, levelId: number, equipment?: Equipment): Record<string, Resist[]> {
@@ -100,7 +100,8 @@ export function speedFactor(tokenId: number): number {
 /** A token's speed (feet a round) of one kind, with what changes it (boosts, then multipliers); never below 0. */
 export function speedOf(tokenId: number, movement: string | Record<string, number>, type: MovementType = "walking"): number {
   const base = (typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0;
-  return Math.max(0, Math.floor((base + steadyBoost(changesOn(tokenId), `movement:${type}`)) * speedFactor(tokenId)));
+  const changes = changesOn(tokenId);
+  return Math.max(0, Math.floor(settled(base + steadyBoost(changes, `movement:${type}`), changes, `movement:${type}`).value * speedFactor(tokenId)));
 }
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -112,7 +113,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
  */
 export function skillCheckFor(tokenId: number, skill: string, attributes: Attributes): RollSpec {
   const changes = changesOn(tokenId);
-  const score = (a: Attribute) => (attributes[a] ?? 10) + steadyBoost(changes, `attribute:${a}`);
+  const score = (a: Attribute) => settled((attributes[a] ?? 10) + steadyBoost(changes, `attribute:${a}`), changes, `attribute:${a}`).value;
   const attrs = ATTRIBUTES.filter((a) => SKILLS_BY_ATTRIBUTE[a].includes(skill));
   const best = attrs.reduce((b, a) => (modifier(score(a)) > modifier(score(b)) ? a : b), attrs[0]);
   const parts: RollPart[] = [{ formula: "1d20", source: `${cap(skill)} check` }];
@@ -133,7 +134,7 @@ export function saveRollFor(tokenId: number, attr: Attribute, label: string): Ro
     ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM characters WHERE id = ?").get(t.character_id)
     : t?.creature_id ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM creatures WHERE id = ?").get(t.creature_id) : undefined;
   const score = (JSON.parse(row?.attributes ?? "{}") as Partial<Attributes>)[attr] ?? 10;
-  const boosted = score + steadyBoost(changes, `attribute:${attr}`), m = modifier(boosted);
+  const boosted = settled(score + steadyBoost(changes, `attribute:${attr}`), changes, `attribute:${attr}`).value, m = modifier(boosted);
   const parts: RollPart[] = [{ formula: "1d20", source: `${cap(attr)} save` }];
   if (m !== 0) parts.push({ formula: String(m), source: `${cap(attr)} ${boosted} (${formatModifier(m)})` });
   for (const s of changes) for (const b of s.boosts) if (b.target === "save" || b.target === `save:${attr}`) parts.push({ formula: b.value.replace(/^\+/, ""), source: s.source });

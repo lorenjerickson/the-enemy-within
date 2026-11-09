@@ -7,6 +7,9 @@ import PairListInput from "../PairListInput";
 import { submitEffect } from "./actions";
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+/** What can be set or multiplied: attributes, defense, damage, speeds. */
+const SET_TARGETS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Skills" && g !== "Rolls").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "attack")] as [string, [string, string][]]);
+const SET_PATTERN = `\\d+(\\s*\\+\\s*(${ATTRIBUTES.join("|")}))?`;
 
 /**
  * A catalog effect: a named set of modifiers (what changes while it's active). How long it lasts and what ends it
@@ -96,7 +99,9 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
         </div>
         <PairListInput title="Boosts (or penalties)" addLabel="+ Add boost" firstName="boost_target" firstPlaceholder="Changes…" groups={MODIFIER_TARGET_GROUPS} secondName="boost_value" secondPattern={MODIFIER_PATTERN} secondPlaceholder="+2 or -1d4" initial={mods.flatMap((m) => (m.kind === "boost" ? [[m.target, m.value] as [string, string]] : []))} />
           <PairListInput title="Resistances" addLabel="+ Add resistance" firstName="resist_type" firstPlaceholder="Damage type…" groups={[["Damage types", DAMAGE_TYPES.map((t) => [t, cap(t)] as [string, string])]]} secondName="resist_level" secondOptions={["resistant", "vulnerable", "immune"]} initial={mods.flatMap((m) => (m.kind === "resist" ? [[m.damage_type, m.level] as [string, string]] : []))} />
-          <PairListInput title="Advantage / disadvantage on rolls" addLabel="+ Add roll effect" firstName="grant_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="grant_mode" secondOptions={["advantage", "disadvantage"]} initial={mods.flatMap((m) => (m.kind === "roll" ? [[m.roll, m.mode] as [string, string]] : []))} />
+          <PairListInput title="Becomes (at least)" addLabel="+ Add setting" firstName="set_target" firstPlaceholder="Sets…" groups={SET_TARGETS} secondName="set_value" secondPattern={SET_PATTERN} secondPlaceholder="19, or 13+agility" initial={mods.flatMap((m) => (m.kind === "set" ? [[m.target, `${m.value}${m.plus ? `+${m.plus}` : ""}`] as [string, string]] : []))} />
+        <PairListInput title="Multiplied" addLabel="+ Add multiplier" firstName="mul_target" firstPlaceholder="Multiplies…" groups={SET_TARGETS} secondName="mul_factor" secondOptions={["×0", "×½", "×2"]} initial={mods.flatMap((m) => (m.kind === "multiply" ? [[m.target, m.factor === 0.5 ? "×½" : `×${m.factor}`] as [string, string]] : []))} />
+        <PairListInput title="Advantage / disadvantage on rolls" addLabel="+ Add roll effect" firstName="grant_roll" firstPlaceholder="Roll…" groups={ROLL_KIND_GROUPS} secondName="grant_mode" secondOptions={["advantage", "disadvantage"]} initial={mods.flatMap((m) => (m.kind === "roll" ? [[m.roll, m.mode] as [string, string]] : []))} />
         </fieldset>
       )}
       <button className="btn btn-primary btn-sm">{initial ? "Save effect" : "Create effect"}</button>

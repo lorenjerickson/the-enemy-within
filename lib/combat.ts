@@ -2,7 +2,7 @@ import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
 import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, listAfflictions, getCondition, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { allegianceOf, type Allegiance } from "@/lib/sides";
-import { boostsOn, combineModes, type ActionStatuses, type Status } from "@/lib/status";
+import { boostsOn, combineModes, settled, type ActionStatuses, type Status } from "@/lib/status";
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
@@ -50,8 +50,8 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
     weapon = equipment?.["main hand"] ? getItem(equipment["main hand"]!) : undefined;
   };
   wear(who.equipment);
-  // Attribute modifiers, with statuses' attribute boosts (read when rolled, so new statuses count).
-  const mod = (a: Attribute) => modifier((who.attributes[a] ?? 10) + boosted(f.statuses, `attribute:${a}`));
+  // Attribute modifiers, with statuses' attribute boosts, settings and multipliers (read when rolled, so new statuses count).
+  const mod = (a: Attribute) => modifier(settled((who.attributes[a] ?? 10) + boosted(f.statuses, `attribute:${a}`), f.statuses, `attribute:${a}`).value);
   const f: Fighter = {
     hp,
     statuses: [...statuses],
@@ -71,12 +71,14 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
     },
     defense: () => {
       const agility = mod("agility"), armour = items.reduce((s, i) => s + roll(i.defense), 0), extra = boosted(f.statuses, "defense");
-      return { total: 10 + agility + armour + extra, text: `10 ${formatModifier(agility)}${armour ? ` +${armour} armour` : ""}${plus(extra, "boost")}` };
+      const s = settled(10 + agility + armour + extra, f.statuses, "defense", mod); // Mage Armor: 13 + Agility if better
+      return { total: s.value, text: `10 ${formatModifier(agility)}${armour ? ` +${armour} armour` : ""}${plus(extra, "boost")}${s.note}` };
     },
     damage: (use) => {
       const dice = use?.damage || weapon?.damage || "1d4";
       const d = roll(dice), might = mod("might"), extra = boosted(f.statuses, "damage");
-      return { total: Math.max(1, d + might + extra), text: `${use?.damage ? `${dice} (${use.name})` : weapon?.damage ? `${dice} (${weapon.name})` : "1d4 unarmed"} ${d} ${formatModifier(might)}${plus(extra, "boost")}` };
+      const s = settled(Math.max(1, d + might + extra), f.statuses, "damage");
+      return { total: s.value, text: `${use?.damage ? `${dice} (${use.name})` : weapon?.damage ? `${dice} (${weapon.name})` : "1d4 unarmed"} ${d} ${formatModifier(might)}${plus(extra, "boost")}${s.note}` };
     },
   };
   return f;

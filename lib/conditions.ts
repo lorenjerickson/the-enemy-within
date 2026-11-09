@@ -20,7 +20,9 @@ export type Modifier =
   | { kind: "extra"; value: string; damage_type: DamageType | ""; when: "dealing" | "taking" } // extra dice on a hit: on their hits, or on hits against them (by whoever put it on them)
   | { kind: "forbid"; what: Forbid } // can't do it at all (Incapacitated: no actions, bonus actions or reactions)
   | { kind: "autofail"; save: Attribute } // fails that kind of save without rolling (Stunned: Might and Agility)
-  | { kind: "speed"; factor: number }; // their speed multiplied (×½ crawling, ×2 hasted), after any boosts; several multiply together
+  | { kind: "speed"; factor: number } // their speed multiplied (×½ crawling, ×2 hasted), after any boosts; several multiply together
+  | { kind: "set"; target: ModifierTarget; value: number; plus?: Attribute } // becomes at least this (Strength 19; defense 13 + Agility); the highest wins
+  | { kind: "multiply"; target: ModifierTarget; factor: number }; // multiplied after boosts and settings (damage ×2, defense ×½)
 
 /** What a modifier can forbid: a kind of step, moving, or attacking whoever put the condition on them (Hypnotized). */
 export type Forbid = "actions" | "bonus" | "reactions" | "movement" | "attack-source";
@@ -118,11 +120,13 @@ export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) =
 export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
-export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[] } {
+export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[] } {
   const mods = c.effects.flatMap((e) => e.modifiers);
   return {
     boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
     grants: mods.flatMap((m) => (m.kind === "roll" ? [{ roll: m.roll, mode: m.mode }] : [])),
+    sets: mods.flatMap((m) => (m.kind === "set" ? [{ target: m.target, value: m.value, ...(m.plus ? { plus: m.plus } : {}) }] : [])),
+    factors: mods.flatMap((m) => (m.kind === "multiply" ? [{ target: m.target, factor: m.factor }] : [])),
   };
 }
 
@@ -133,6 +137,8 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
+  if (m.kind === "set") return `${targetLabel(m.target).toLowerCase()} becomes ${m.value}${m.plus ? ` + ${m.plus}` : ""}`;
+  if (m.kind === "multiply") return `${targetLabel(m.target).toLowerCase()} ×${m.factor === 0.5 ? "½" : m.factor}`;
   if (m.kind === "speed") return m.factor === 0 ? "speed 0" : m.factor === 0.5 ? "half speed" : `speed ×${m.factor}`;
   if (m.kind === "extra") return m.when === "dealing" ? `+${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage on their hits` : `takes +${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage when hit by its source`;
   if (m.kind === "resist") return `${m.level === "immune" ? "immune to" : m.level} ${m.level === "immune" ? "" : "to "}${m.damage_type}`.replace("  ", " ");

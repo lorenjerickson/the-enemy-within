@@ -228,7 +228,7 @@ export function resolveMovement(
     }
     afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: rounds, by }]);
     const rolls = rollChanges(c);
-    if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
+    if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
     story.push({ sec, k: "afflicted", who: id, name: c.name, by });
     log.push(`${sec} s: ${nameOf(id)} is affected by ${c.name} (${describeCondition(c)}).`);
   };
