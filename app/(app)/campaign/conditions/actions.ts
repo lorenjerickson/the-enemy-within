@@ -30,6 +30,7 @@ export async function submitCondition(id: number | null, formData: FormData) {
     saves_needed: Math.max(1, Math.round(Number(formData.get("saves_needed")) || 1)),
     ends_on_damage: formData.get("ends_on_damage") === "on" ? 1 : 0,
     ends_on_attack: formData.get("ends_on_attack") === "on" ? 1 : 0,
+    concentration: formData.get("concentration") === "on" ? 1 : 0,
   });
   revalidatePath("/campaign/conditions");
   revalidatePath("/campaign/effects");

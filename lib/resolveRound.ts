@@ -211,7 +211,7 @@ export function resolveMovement(
         hp.set(id, after);
         log.push(`${sec} s: ${c.name} deals ${nameOf(id)} ${t.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${t.note}; ${after} left.`);
         story.push({ sec, k: "effect", who: id, name: c.name, much: t.n, heal: false, hurt: hurt(id, t.n) });
-        if (t.n > 0) wasHurt(id, sec, c.id);
+        if (t.n > 0) wasHurt(id, sec, t.n, c.id);
         if (after <= 0) {
           down.add(id);
           story.push({ sec, k: "down", who: id });
@@ -227,6 +227,14 @@ export function resolveMovement(
       story.push({ sec, k: "temphp", who: id, source: c.name, much: n });
     }
     if (!lingers(c)) return; // nothing more to it
+    // Concentration: a caster keeps up one concentration condition at a time; a different one ends the old.
+    if (c.concentration && by !== null) {
+      const old = keptUpBy(by).filter((k) => k.a.condition.id !== c.id);
+      if (old.length) {
+        log.push(`${sec} s: ${nameOf(by)} turns their concentration to ${c.name}: ${[...new Set(old.map((k) => k.a.condition.name))].join(", ")} ends.`);
+        for (const k of old) release(k.id, k.a, "concentration", sec);
+      }
+    }
     const f = fighters.get(id);
     if (f) {
       f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
@@ -242,7 +250,7 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)} is affected by ${c.name} (${describeCondition(c)}).`);
   };
   /** A condition ends mid-round: off them, and what it did (rolls, limits, extras) stops counting from now on. */
-  const release = (id: number, a: Affliction, why: "save" | "damage" | "attack", sec: number) => {
+  const release = (id: number, a: Affliction, why: "save" | "damage" | "attack" | "concentration", sec: number) => {
     const c = a.condition, f = fighters.get(id);
     afflicted.set(id, (afflicted.get(id) ?? []).filter((x) => x !== a));
     if (f) {
@@ -253,7 +261,7 @@ export function resolveMovement(
       }
       if (f.extras) f.extras = { dealing: f.extras.dealing.filter((x) => x.name !== c.name), taking: f.extras.taking.filter((x) => x.name !== c.name) };
     }
-    if (why !== "save") log.push(`${sec} s: ${nameOf(id)} is no longer ${c.name.toLowerCase()} (${why === "damage" ? "hurt" : "they attacked"}).`);
+    if (why === "damage" || why === "attack") log.push(`${sec} s: ${nameOf(id)} is no longer ${c.name.toLowerCase()} (${why === "damage" ? "hurt" : "they attacked"}).`);
     story.push({ sec, k: "effectEnds", who: id, name: c.name, why });
   };
   /** A save to end a condition, now (start of the round, when hurt, or spending an action on it). */
@@ -263,12 +271,30 @@ export function resolveMovement(
     if (s.ended) release(id, a, "save", sec);
   };
   /** Hurt: conditions that end when hurt end; those saved against when hurt get their save (not `except`, the one hurting them). */
-  const wasHurt = (id: number, sec: number, except?: number) => {
+  const wasHurt = (id: number, sec: number, amount: number, except?: number) => {
     for (const a of [...(afflicted.get(id) ?? [])]) {
       if (a.condition.id === except) continue;
       if (a.condition.ends_on_damage) release(id, a, "damage", sec);
       else if (a.condition.save_when === "damaged" && !down.has(id)) endSave(id, a, sec);
     }
+    concentrationCheck(id, sec, amount);
+  };
+  /** Everything a caster keeps up by concentrating (their concentration conditions on anyone). */
+  const keptUpBy = (caster: number) => [...afflicted].flatMap(([id, list]) => list.filter((a) => a.by === caster && a.condition.concentration).map((a) => ({ id, a })));
+  /** Their concentration breaks: everything they kept up ends, on everyone. */
+  const breakConcentration = (caster: number, sec: number, why: string) => {
+    const kept = keptUpBy(caster);
+    if (!kept.length) return;
+    log.push(`${sec} s: ${nameOf(caster)}'s concentration breaks (${why}): ${[...new Set(kept.map((k) => k.a.condition.name))].join(", ")} ends.`);
+    for (const { id, a } of kept) release(id, a, "concentration", sec);
+  };
+  /** A concentrating caster hurt: down breaks it; otherwise a Fortitude save, DC 10 or half the damage if higher. */
+  const concentrationCheck = (caster: number, sec: number, amount: number) => {
+    if (!keptUpBy(caster).length) return;
+    if ((hp.get(caster) ?? 1) <= 0) return breakConcentration(caster, sec, "down");
+    const dc = Math.max(10, Math.floor(amount / 2)), s = fighters.get(caster)?.save?.("fortitude");
+    if (!s || s.total < dc) return breakConcentration(caster, sec, `Fortitude ${s?.total ?? "-"} vs DC ${dc}`);
+    log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
   };
   /** Attacked someone: conditions that end when they attack end (invisibility). */
   const didAttack = (id: number, sec: number) => {
@@ -308,7 +334,7 @@ export function resolveMovement(
       const left = Math.max(0, hp.get(id)! - taken);
       if (taken > 0) {
         hp.set(id, left);
-        wasHurt(id, sec);
+        wasHurt(id, sec, taken);
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
         if (except >= 0) lastHitBy.set(id, except);
       }
@@ -728,7 +754,7 @@ export function resolveMovement(
           lastHitBy.set(id, m.tokenId);
           say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text})${t.note}; ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
-          if (t.n > 0) wasHurt(id, sec);
+          if (t.n > 0) wasHurt(id, sec, t.n);
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
           if (left <= 0) {
             down.add(id);
@@ -826,7 +852,7 @@ export function resolveMovement(
           lastHitBy.set(target.id, m.tokenId);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
-          if (t.n > 0) wasHurt(target.id, sec);
+          if (t.n > 0) wasHurt(target.id, sec, t.n);
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             story.push({ sec, k: "down", who: target.id });
@@ -877,7 +903,9 @@ export function resolveMovement(
         fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
       }
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
+      const beforeTick = new Map(hp);
       tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt });
+      for (const [id, h] of hp) if (h < (beforeTick.get(id) ?? h)) concentrationCheck(id, sec, beforeTick.get(id)! - h); // hurt by damage over time
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
   }

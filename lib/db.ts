@@ -2018,6 +2018,7 @@ addColumn("conditions", "save_action", "INTEGER NOT NULL DEFAULT 0"); // 1: Shak
 addColumn("conditions", "saves_needed", "INTEGER NOT NULL DEFAULT 1"); // successful saves to end it
 addColumn("conditions", "ends_on_damage", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when hurt
 addColumn("conditions", "ends_on_attack", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when they attack
+addColumn("conditions", "concentration", "INTEGER NOT NULL DEFAULT 0"); // 1: needs whoever put it on to keep concentrating
 addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in effect's key (lib/builtinConditions.ts): its modifiers are fixed
 addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in condition's key: the effects it applies are fixed
 addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
@@ -2066,9 +2067,9 @@ export function getCondition(id: number): Condition | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveConditionDef(id: number | null, c: Omit<ConditionDef, "id">): number {
-  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0 };
-  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack)").run(params).lastInsertRowid);
-  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack WHERE id = @id").run({ ...params, id });
+  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0, concentration: c.concentration ?? 0 };
+  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack, concentration) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack, @concentration)").run(params).lastInsertRowid);
+  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack, concentration = @concentration WHERE id = @id").run({ ...params, id });
   return id;
 }
 

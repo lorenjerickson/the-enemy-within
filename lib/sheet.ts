@@ -45,6 +45,12 @@ export function sheetFor(tokenId: number): Sheet | null {
     health: h && (() => { const maximum = effectiveMaxHp(t.id, h.maximum); return { current: Math.min(h.current, maximum), maximum, temporary: h.temporary }; })(),
     down: !!h && h.current + h.temporary <= 0,
     effects: [
+      // What they keep up by concentrating (on whoever it's on).
+      ...(() => {
+        const kept = [...listAfflictions(t.level_id)].flatMap(([id, list]) => list.filter((a) => a.by === t.id && a.condition.concentration).map((a) => ({ id, a })));
+        const names = tokenLabels(t.level_id);
+        return [...new Set(kept.map((k) => k.a.condition.name))].map((name) => ({ source: "Concentrating", text: `${name} on ${kept.filter((k) => k.a.condition.name === name).map((k) => names.get(k.id) ?? "someone").join(", ")}`, left: `${Math.max(...kept.filter((k) => k.a.condition.name === name).map((k) => k.a.left))} rounds` }));
+      })(),
       ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${describeEffect(e)} (from ${e.from})`, left: "always" })),
       ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => ({ source: a.condition.name, text: describeCondition(a.condition, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id })),
       ...(listTokenStatuses(t.level_id).get(t.id) ?? []).filter((s) => s.boosts.length || s.grants.length).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
