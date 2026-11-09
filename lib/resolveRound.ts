@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { describeCondition, lingers, modifiersOf, rollChanges, type Affliction, type Condition } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, lingers, modifiersOf, resistsOf, rollChanges, type Affliction, type Condition, type Resist } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -107,6 +107,7 @@ export interface Combatant {
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
   maxHp?: number; // for how bad a wound sounds in the players' story
   allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
+  resist?: Record<string, Resist[]>; // how they take each kind of damage, by type (conditions put on mid-round add to it)
 }
 
 /**
@@ -133,6 +134,12 @@ export function resolveMovement(
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
   const story: StoryEvent[] = []; // the round as events, for each player's own account of it
   const hurt = (id: number, dmg: number) => dmg / Math.max(1, fighters.get(id)?.maxHp ?? hp.get(id) ?? 1);
+  /** Damage of a type as someone takes it (resistant: half, vulnerable: double, immune: none), and a note for the log. */
+  const takenBy = (id: number, amount: number, type: string | undefined) => {
+    const r = type ? combineResist(fighters.get(id)?.resist?.[type]) : null;
+    const n = afterResist(amount, r);
+    return { n, r, note: r ? ` (${r === "immune" ? "immune" : `${r}: ${n} of ${amount}`})` : "" };
+  };
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
@@ -147,10 +154,11 @@ export function resolveMovement(
         log.push(`${sec} s: ${nameOf(id)} is healed for ${after - before} (${c.name}); ${after} health.`);
         story.push({ sec, k: "healed", who: id, source: c.name, much: after - before });
       } else if (n > 0) {
-        const after = Math.max(0, before - n);
+        const t = takenBy(id, n, m.damage_type);
+        const after = Math.max(0, before - t.n);
         hp.set(id, after);
-        log.push(`${sec} s: ${c.name} deals ${nameOf(id)} ${n}${m.damage_type ? ` ${m.damage_type}` : ""} damage; ${after} left.`);
-        story.push({ sec, k: "effect", who: id, name: c.name, much: n, heal: false, hurt: hurt(id, n) });
+        log.push(`${sec} s: ${c.name} deals ${nameOf(id)} ${t.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${t.note}; ${after} left.`);
+        story.push({ sec, k: "effect", who: id, name: c.name, much: t.n, heal: false, hurt: hurt(id, t.n) });
         if (after <= 0) {
           down.add(id);
           story.push({ sec, k: "down", who: id });
@@ -159,6 +167,8 @@ export function resolveMovement(
       }
     }
     if (!lingers(c)) return; // nothing more to it
+    const f = fighters.get(id);
+    if (f) f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
     afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: c.rounds, by }]);
     const rolls = rollChanges(c);
     if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
@@ -186,7 +196,7 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
   };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
-  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean): AreaHit[] => {
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean, type?: string): AreaHit[] => {
     const hits: AreaHit[] = [];
     for (const id of [...fighters.keys()]) {
       const p = where(id);
@@ -194,14 +204,15 @@ export function resolveMovement(
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
       const s = f.save ? f.save(spec.save) : { total: 0, text: "no save" };
       const saved = s.total >= spec.dc;
-      const taken = saved ? (spec.half ? Math.floor(total / 2) : 0) : total;
+      const t = takenBy(id, saved ? (spec.half ? Math.floor(total / 2) : 0) : total, type);
+      const taken = t.n;
       const left = Math.max(0, hp.get(id)! - taken);
       if (taken > 0) {
         hp.set(id, left);
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
         if (except >= 0) lastHitBy.set(id, except);
       }
-      log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}; ${left} left.`);
+      log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}${t.note}; ${left} left.`);
       hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
       story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken), dmg: taken });
       if (left <= 0) {
@@ -542,12 +553,13 @@ export function resolveMovement(
             continue;
           }
           dmg ??= usingDice(step.dice?.damage, () => me.damage(use));
-          const left = Math.max(0, hp.get(id)! - dmg.total);
+          const t = takenBy(id, dmg.total, use.damageType);
+          const left = Math.max(0, hp.get(id)! - t.n);
           hp.set(id, left);
           hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
           lastHitBy.set(id, m.tokenId);
-          say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text}); ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, dmg.total), dmg: dmg.total });
+          say(`${use.name} hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text})${t.note}; ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
           if (left <= 0) {
             down.add(id);
@@ -594,7 +606,7 @@ export function resolveMovement(
             allowed = new Set([...fighters.keys()].filter((id) => id !== m.tokenId && kind(id) && where(id) && caughtBy(at, { x: where(id)!.col + 0.5, y: where(id)!.row + 0.5 }, effectWalls) && !down.has(id))
               .sort((a, b) => dist(where(a)!, aim) - dist(where(b)!, aim)).slice(0, n));
           }
-          hits = catchIn(at, area, dmg.total, m.tokenId, sec, step.use.name, (id) => kind(id) && (!picked || picked.has(id)) && (!allowed || allowed.has(id)));
+          hits = catchIn(at, area, dmg.total, m.tokenId, sec, step.use.name, (id) => kind(id) && (!picked || picked.has(id)) && (!allowed || allowed.has(id)), step.use.damageType);
           if (!hits.length) say(`${m.name}'s ${step.use.name} catches no one.`);
           // Statuses: on the user, and on each one caught who failed the save.
           const st = step.use.statuses;
@@ -632,12 +644,13 @@ export function resolveMovement(
         if (a.total < d.total) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
         else {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
-          const left = Math.max(0, hp.get(target.id)! - dmg.total);
+          const t = takenBy(target.id, dmg.total, step.use?.damageType);
+          const left = Math.max(0, hp.get(target.id)! - t.n);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           lastHitBy.set(target.id, m.tokenId);
-          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text}); ${target.name} has ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, dmg.total), dmg: dmg.total });
+          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}) });
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             story.push({ sec, k: "down", who: target.id });
@@ -732,11 +745,12 @@ export function tickAfflictions(
             story?.push({ sec, k: "effect", who: id, name: c.name, much: after - before, heal: true });
           }
         } else if (n > 0) {
-          const after = Math.max(0, before - n);
+          const r = m.damage_type ? combineResist(f?.resist?.[m.damage_type]) : null, took = afterResist(n, r);
+          const after = Math.max(0, before - took);
           hp.set(id, after);
-          at(`${c.name} deals ${nameOf(id)} ${n}${m.damage_type ? ` ${m.damage_type}` : ""} damage; ${after} left.`);
-          story?.push({ sec, k: "effect", who: id, name: c.name, much: n, heal: false, hurt: hurt(id, n) });
-          if (after <= 0) {
+          at(`${c.name} deals ${nameOf(id)} ${took}${m.damage_type ? ` ${m.damage_type}` : ""} damage${r ? ` (${r === "immune" ? "immune" : `${r}: ${took} of ${n}`})` : ""}; ${after} left.`);
+          if (took > 0) story?.push({ sec, k: "effect", who: id, name: c.name, much: took, heal: false, hurt: hurt(id, took) });
+          if (after <= 0 && before > 0) {
             down.add(id);
             at(`${nameOf(id)} is down.`);
             story?.push({ sec, k: "down", who: id });

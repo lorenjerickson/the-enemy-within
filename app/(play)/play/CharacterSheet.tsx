@@ -53,7 +53,7 @@ export default function CharacterSheet({ sheet, manage }: { sheet: Sheet; manage
         {sheet.effects.length ? (
           <ul className="space-y-0.5" data-sheet-effects>
             {sheet.effects.map((e, i) => (
-              <li key={i}><span className="badge badge-warning badge-sm mr-1">{e.source}</span>{e.text} <span className="opacity-60">({e.left} left)</span></li>
+              <li key={i}><span className="badge badge-warning badge-sm mr-1">{e.source}</span>{e.text} {e.left !== "always" && <span className="opacity-60">({e.left} left)</span>}</li>
             ))}
           </ul>
         ) : (

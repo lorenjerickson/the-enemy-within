@@ -3,8 +3,8 @@
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
  * modifiers (always on).
  */
-import { db, getProfession, listAfflictions, listCharacterProfessionIds, listProfessionModifiers, listTokenStatuses } from "@/lib/db";
-import { rollChanges } from "@/lib/conditions";
+import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
+import { combineResist, modifiersOf, resistsOf, rollChanges, type EffectDef, type Resist } from "@/lib/conditions";
 import { combineModes, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
 import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE, formatModifier, modifier, type Attribute, type Attributes } from "@/lib/attributes";
@@ -21,13 +21,44 @@ export function professionStatuses(characterId: number | null): Status[] {
   });
 }
 
-/** Every status-like change on a token now: statuses, conditions, professions. */
+/**
+ * A token's standing effects: a creature's own (always on) and those of what it has equipped, each with where it
+ * comes from ("Giant Rat", "Rubber gloves").
+ */
+export function standingEffects(tokenId: number, equipment?: Equipment): (EffectDef & { from: string })[] {
+  const t = db.prepare<[number], { creature_id: number | null; character_id: number | null; equipment: string | null }>("SELECT creature_id, character_id, equipment FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t) return [];
+  const all = listEffectDefs(), byId = (ids: number[], from: string) => ids.flatMap((id) => { const e = all.find((x) => x.id === id); return e ? [{ ...e, from }] : []; });
+  const creature = t.creature_id ? db.prepare<[number], { name: string; equipment: string }>("SELECT name, equipment FROM creatures WHERE id = ?").get(t.creature_id) : undefined;
+  const worn: Equipment = equipment ?? JSON.parse(
+    (t.character_id ? db.prepare<[number], { equipment: string }>("SELECT equipment FROM characters WHERE id = ?").get(t.character_id)?.equipment : t.equipment ?? creature?.equipment) ?? "{}",
+  );
+  return [
+    ...(t.creature_id && creature ? byId(getStandingEffects({ creature_id: t.creature_id }), creature.name) : []),
+    ...[...new Set(Object.values(worn).filter((id): id is number => !!id))].flatMap((id) => { const item = getItem(id); return item ? byId(getStandingEffects({ item_id: id }), item.name) : []; }),
+  ];
+}
+
+/** Standing effects as statuses (their boosts and roll effects). */
+export const standingStatuses = (tokenId: number, equipment?: Equipment): Status[] =>
+  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length);
+
+/** How a token takes each kind of damage now: its standing effects and the conditions on it. */
+export function resistancesOf(tokenId: number, levelId: number, equipment?: Equipment): Record<string, Resist[]> {
+  const out = resistsOf(standingEffects(tokenId, equipment).flatMap((e) => e.modifiers));
+  for (const a of listAfflictions(levelId).get(tokenId) ?? []) resistsOf(modifiersOf(a.condition), out);
+  return out;
+}
+export const resistanceTo = (r: Record<string, Resist[]>, type: string) => combineResist(r[type]);
+
+/** Every status-like change on a token now: statuses, conditions, standing effects, professions. */
 export function changesOn(tokenId: number): Status[] {
   const t = db.prepare<[number], { level_id: number; character_id: number | null }>("SELECT level_id, character_id FROM map_tokens WHERE id = ?").get(tokenId);
   if (!t) return [];
   return [
     ...(listTokenStatuses(t.level_id).get(tokenId) ?? []),
     ...(listAfflictions(t.level_id).get(tokenId) ?? []).map((a) => ({ source: a.condition.name, ...rollChanges(a.condition) })),
+    ...standingStatuses(tokenId),
     ...professionStatuses(t.character_id),
   ];
 }

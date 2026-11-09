@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { getCreature, listActions, listItems } from "@/lib/db";
 import ActionsSection from "../../ActionsSection";
+import StandingEffects from "../../StandingEffects";
 import CreatureForm from "../new/CreatureForm";
 
 export default async function EditCreature({ params }: { params: Promise<{ id: string }> }) {
@@ -18,6 +19,9 @@ export default async function EditCreature({ params }: { params: Promise<{ id: s
       <CreatureForm items={items} initial={creature} />
       <div className="max-w-2xl">
         <ActionsSection owner={{ creature_id: creature.id }} actions={listActions({ creature_id: creature.id })} />
+      </div>
+      <div className="max-w-2xl">
+        <StandingEffects owner={{ creature_id: creature.id }} />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { characterContainers, characterPlayers, db, getGameTime, getItem, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
-import { describeCondition } from "@/lib/conditions";
+import { describeCondition, describeEffect } from "@/lib/conditions";
+import { standingEffects } from "@/lib/creatureChanges";
 import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
 import { describeStatus } from "@/lib/status";
@@ -44,6 +45,7 @@ export function sheetFor(tokenId: number): Sheet | null {
     health: h && { current: h.current, maximum: h.maximum, temporary: h.temporary },
     down: !!h && h.current + h.temporary <= 0,
     effects: [
+      ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${describeEffect(e)} (from ${e.from})`, left: "always" })),
       ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => ({ source: a.condition.name, text: describeCondition(a.condition, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id })),
       ...(listTokenStatuses(t.level_id).get(t.id) ?? []).filter((s) => s.boosts.length || s.grants.length).map((s) => ({ source: s.source, text: describeStatus(s), left: timeLeft(s.ends - now) })),
     ],

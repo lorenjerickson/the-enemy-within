@@ -15,7 +15,29 @@ export type Modifier =
   | { kind: "boost"; target: ModifierTarget; value: string } // add a number or dice (+2, -1d4)
   | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
   | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" } // at the end of each round
-  | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" }; // once, as the condition lands (a healing draught)
+  | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" } // once, as the condition lands (a healing draught)
+  | { kind: "resist"; damage_type: DamageType; level: Resist }; // how they take a kind of damage
+
+/** How a creature takes a kind of damage: half, double, or none. */
+export type Resist = "resistant" | "vulnerable" | "immune";
+export const RESISTS: Resist[] = ["resistant", "vulnerable", "immune"];
+
+/** Several sources together: immune wins; resistant and vulnerable cancel out. */
+export function combineResist(levels: Resist[] | undefined): Resist | null {
+  if (!levels?.length) return null;
+  if (levels.includes("immune")) return "immune";
+  const r = levels.includes("resistant"), v = levels.includes("vulnerable");
+  return r && v ? null : r ? "resistant" : v ? "vulnerable" : null;
+}
+
+/** Damage as a creature with that resistance takes it (resistant: half, rounded down). */
+export const afterResist = (amount: number, r: Resist | null) => (r === "immune" ? 0 : r === "resistant" ? Math.floor(amount / 2) : r === "vulnerable" ? amount * 2 : amount);
+
+/** Resistances from modifiers, by damage type. */
+export function resistsOf(mods: Modifier[], into: Record<string, Resist[]> = {}): Record<string, Resist[]> {
+  for (const m of mods) if (m.kind === "resist") (into[m.damage_type] ??= []).push(m.level);
+  return into;
+}
 
 /** A named set of modifiers, reusable across conditions. */
 export interface EffectDef {
@@ -53,8 +75,8 @@ export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) =
 export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
-export function rollChanges(c: Condition): { boosts: Boost[]; grants: RollGrant[] } {
-  const mods = modifiersOf(c);
+export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[] } {
+  const mods = c.effects.flatMap((e) => e.modifiers);
   return {
     boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
     grants: mods.flatMap((m) => (m.kind === "roll" ? [{ roll: m.roll, mode: m.mode }] : [])),
@@ -66,6 +88,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round`;
   if (m.kind === "instant") return m.heal ? `heals ${m.value}` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage at once`;
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
+  if (m.kind === "resist") return `${m.level === "immune" ? "immune to" : m.level} ${m.level === "immune" ? "" : "to "}${m.damage_type}`.replace("  ", " ");
   return `${m.value} ${targetLabel(m.target).toLowerCase()}`;
 }
 

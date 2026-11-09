@@ -48,6 +48,14 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (!isRollKind(roll) || (mode !== "advantage" && mode !== "disadvantage")) throw new Error("Invalid roll effect");
     modifiers.push({ kind: "roll", roll, mode });
   });
+  // Resistant, vulnerable or immune to a damage type.
+  const levels = formData.getAll("resist_level").map(String);
+  formData.getAll("resist_type").forEach((t, i) => {
+    const damage_type = String(t) as DamageType, level = levels[i];
+    if (!damage_type || !level) return;
+    if (!DAMAGE_TYPES.includes(damage_type) || !["resistant", "vulnerable", "immune"].includes(level)) throw new Error("Invalid resistance");
+    modifiers.push({ kind: "resist", damage_type, level: level as "resistant" | "vulnerable" | "immune" });
+  });
   const saved = saveEffectDef(id, { name: text("name"), description: text("description"), modifiers });
   revalidatePath("/campaign/effects");
   revalidatePath("/campaign/conditions");

@@ -340,6 +340,8 @@ addColumn("map_tokens", "allegiance", "TEXT"); // Allegiance (party, hostile, ne
 addColumn("items", "slots", "TEXT NOT NULL DEFAULT '[]'"); // JSON array of EquipSlot
 addColumn("items", "range_ft", "REAL NOT NULL DEFAULT 5"); // weapons: how far they reach (5 = melee)
 addColumn("items", "hands", "INTEGER NOT NULL DEFAULT 0"); // held in 0 (not held), 1 or 2 hands
+addColumn("items", "effects", "TEXT NOT NULL DEFAULT '[]'"); // JSON effect ids: on whoever has it equipped (fire resistance, +1 defense)
+addColumn("creatures", "effects", "TEXT NOT NULL DEFAULT '[]'"); // JSON effect ids: always on the creature (immune to poison)
 addColumn("characters", "hp", "INTEGER"); // current health; null until first rolled from the health formula
 addColumn("characters", "hp_max", "INTEGER"); // maximum health, rolled once from the formula
 addColumn("characters", "hp_temp", "INTEGER"); // temporary health, lost before current
@@ -1968,6 +1970,17 @@ export function removeTokenStatus(id: number): void {
 }
 
 // ---------- Conditions, effects and modifiers (Poisoned…) ----------
+
+/** The catalog effects an item gives whoever has it equipped, or a creature always has (its "standing" effects). */
+export function getStandingEffects(owner: { item_id: number } | { creature_id: number }): number[] {
+  const [table, id] = "item_id" in owner ? ["items", owner.item_id] : ["creatures", owner.creature_id];
+  return JSON.parse(db.prepare<[number], { effects: string }>(`SELECT effects FROM ${table} WHERE id = ?`).get(id)?.effects ?? "[]");
+}
+
+export function setStandingEffects(owner: { item_id: number } | { creature_id: number }, effects: number[]): void {
+  const [table, id] = "item_id" in owner ? ["items", owner.item_id] : ["creatures", owner.creature_id];
+  db.prepare<[string, number]>(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(effects), id);
+}
 
 // The catalog: effects (named sets of modifiers) and conditions (what actions put on creatures: the effects they
 // apply, plus how long they last and the save that ends them). See lib/conditions.ts.

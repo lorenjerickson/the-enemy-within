@@ -13,7 +13,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "dodge"; who: number; ok: boolean }
   | { k: "refit"; who: number; from: string | null; to: string }
   | { k: "interrupted"; who: number; action: string; by?: number | null }
-  | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number; dmg?: number } // hurt: share of their health; dmg: how much (told only to whoever took it)
+  | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number; dmg?: number; resist?: "resistant" | "vulnerable" | "immune" } // hurt: share of their health; dmg: how much (told only to whoever took it)
   | { k: "area"; who: number; name: string }
   | { k: "ability"; who: number; name: string; target: number | null } // an ability that does no damage (on themselves, or on someone)
   | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number }
@@ -89,12 +89,12 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         const weapon = e.with ? ` with ${e.with}` : "";
         if (mine) {
           const them = name(e.target);
-          add(e.sec, e.outcome === "hit" ? `You attack ${them}${weapon} and hit, causing ${severity(e.hurt ?? 0)} damage.`
+          add(e.sec, e.outcome === "hit" ? (e.resist === "immune" ? `You attack ${them}${weapon} and hit, but it does them no harm.` : `You attack ${them}${weapon} and hit, causing ${severity(e.hurt ?? 0)} damage.`)
             : e.outcome === "miss" ? `You attack ${them}${weapon} but miss.`
             : e.outcome === "reach" ? `You can't reach ${them} to attack.`
             : `${cap(them)} is already down.`);
         } else if (e.outcome === "hit" || e.outcome === "miss") {
-          add(e.sec, e.outcome === "hit" ? `${subj} attacks you${weapon} and hits, causing ${taken(e.hurt ?? 0, e.dmg)} damage.` : `${subj} attacks you${weapon} but misses.`);
+          add(e.sec, e.outcome === "hit" ? (e.resist === "immune" ? `${subj} attacks you${weapon} and hits, but it does you no harm.` : `${subj} attacks you${weapon} and hits, causing ${taken(e.hurt ?? 0, e.dmg)} damage.`) : `${subj} attacks you${weapon} but misses.`);
         }
         break;
       }
@@ -170,7 +170,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "interrupted": add(e.sec, `${who} is thrown off by ${e.by ? `${n(e.by)}'s blow` : "a blow"} and can't ${does(e.action)}.`); break;
       case "attack": {
         const w = e.with ? ` with ${e.with}` : "", t = n(e.target);
-        add(e.sec, e.outcome === "hit" ? `${who} hits ${t}${w}: ${hurt(e.hurt ?? 0, e.dmg)}.` : e.outcome === "miss" ? `${who} attacks ${t}${w} and misses.` : e.outcome === "reach" ? `${who} can't reach ${t}.` : `${who} finds ${t} already down.`);
+        add(e.sec, e.outcome === "hit" ? `${who} hits ${t}${w}: ${e.resist === "immune" ? "no damage (immune)" : `${hurt(e.hurt ?? 0, e.dmg)}${e.resist ? ` (${e.resist})` : ""}`}.` : e.outcome === "miss" ? `${who} attacks ${t}${w} and misses.` : e.outcome === "reach" ? `${who} can't reach ${t}.` : `${who} finds ${t} already down.`);
         break;
       }
       case "area": add(e.sec, `${who} uses ${e.name}.`); break;
