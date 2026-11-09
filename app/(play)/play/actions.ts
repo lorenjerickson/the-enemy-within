@@ -12,6 +12,7 @@ import {
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
+import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
@@ -224,6 +225,7 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
       break;
     }
   }
+  syncAurasOn(me.level_id); // walked into (or out of) an aura
   revalidatePath("/play");
   return { route: walked, stopped };
 }

@@ -14,6 +14,7 @@ import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
 import { ALLEGIANCES } from "@/lib/sides";
 import { setTokenAllegiance } from "@/lib/db";
+import { syncAurasOn } from "@/lib/auraSync";
 import { addPlanStep, setReady, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 
 /**
@@ -191,6 +192,8 @@ export async function gmSheet(tokenId: number): Promise<Sheet | null> {
 export async function gmSetAllegiance(tokenId: number, allegiance: string) {
   await requireGm();
   setTokenAllegiance(Number(tokenId), (ALLEGIANCES as string[]).includes(allegiance) ? allegiance : null);
+  const t = listTokensById(Number(tokenId));
+  if (t) syncAurasOn(t.level_id); // allies and enemies changed
   revalidatePath("/play");
 }
 
@@ -207,12 +210,14 @@ export async function gmApplyCondition(tokenId: number, conditionId: number) {
   if (!t || !c) return;
   const happened = applyConditionNow(t.level_id, t.id, c); // instant parts now (healing, temporary health), the rest stays
   logSessionEvent(`The GM puts ${c.name} on ${tokenLabels(t.level_id).get(t.id) ?? "someone"}${happened.length ? `: ${happened.join(", ")}` : ""}.`);
+  syncAurasOn(t.level_id); // it may carry an aura
   revalidatePath("/play");
 }
 
 /** The GM takes a condition off. */
 export async function gmRemoveAffliction(id: number) {
   await requireGm();
-  removeAffliction(Number(id));
+  const levelId = removeAffliction(Number(id));
+  if (levelId !== undefined) syncAurasOn(levelId); // it may have carried an aura
   revalidatePath("/play");
 }

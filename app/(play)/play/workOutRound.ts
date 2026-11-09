@@ -10,7 +10,7 @@ import { withSeed } from "@/lib/dice";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
-import { afflictedLevels, listAfflictions, saveAfflictions } from "@/lib/db";
+import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
 import { tickAfflictions } from "@/lib/resolveRound";
 import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -73,7 +73,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.
@@ -99,6 +99,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
+  saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {
     const h = tokenHealth(id);

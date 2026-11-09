@@ -9,6 +9,7 @@ import type { Boost, DamageType, RollGrant, RollKind } from "@/lib/actions";
 import { DAMAGE_TYPES, rollKindLabel } from "@/lib/actions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
+import type { TargetWho } from "@/lib/sides";
 
 /** One change while it's active. More kinds (set, multiply, resist, forbid…) come with the backlog. */
 export type Modifier =
@@ -24,7 +25,8 @@ export type Modifier =
   | { kind: "set"; target: ModifierTarget; value: number; plus?: Attribute } // becomes at least this (Strength 19; defense 13 + Agility); the highest wins
   | { kind: "multiply"; target: ModifierTarget; factor: number } // multiplied after boosts and settings (damage ×2, defense ×½)
   | { kind: "temphp"; value: string } // temporary health as it lands (the highest counts, it doesn't add up)
-  | { kind: "maxhp"; value: number }; // maximum health raised (or lowered) while it lasts
+  | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
+  | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /** What a modifier can forbid: a kind of step, moving, or attacking whoever put the condition on them (Hypnotized). */
 export type Forbid = "actions" | "bonus" | "reactions" | "movement" | "attack-source";
@@ -123,6 +125,7 @@ export interface Affliction {
   left: number;
   by: number | null;
   saved?: number; // successful saves so far (when it takes more than one)
+  aura?: number; // given by this creature's aura: lasts while they're within it (no rounds, no saves to end it)
 }
 
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
@@ -133,7 +136,7 @@ export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) =
  * over) or ignore (no change). `applied` says whether anything changed.
  */
 export function reapplied(list: Affliction[], c: Condition, rounds: number, by: number | null): { list: Affliction[]; applied: boolean } {
-  const same = list.filter((a) => a.condition.id === c.id), fresh: Affliction = { condition: c, left: rounds, by };
+  const same = list.filter((a) => a.condition.id === c.id && a.aura == null), fresh: Affliction = { condition: c, left: rounds, by };
   if (!same.length) return { list: [...list, fresh], applied: true };
   if (c.reapply === "ignore") return { list, applied: false };
   if (c.reapply === "stack") {
@@ -141,7 +144,7 @@ export function reapplied(list: Affliction[], c: Condition, rounds: number, by: 
     const oldest = same.reduce((a, b) => (b.left < a.left ? b : a));
     return { list: list.map((a) => (a === oldest ? fresh : a)), applied: true };
   }
-  return { list: [...list.filter((a) => a.condition.id !== c.id), fresh], applied: true };
+  return { list: [...list.filter((a) => !same.includes(a)), fresh], applied: true }; // (one from an aura stays, for as long as they're within it)
 }
 
 /** Whether a condition stays on once it has landed (an instant heal and nothing else doesn't). */
@@ -166,6 +169,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
+  if (m.kind === "aura") return `aura ${m.radius} ft: ${m.given?.name ?? "a condition"} on ${m.who === "friendly" ? "allies" : m.who === "enemy" ? "enemies" : "everyone"}${m.self ? " (itself too)" : ""} within it`;
   if (m.kind === "maxhp") return `${m.value >= 0 ? "+" : ""}${m.value} maximum health`;
   if (m.kind === "set") return `${targetLabel(m.target).toLowerCase()} becomes ${m.value}${m.plus ? ` + ${m.plus}` : ""}`;
   if (m.kind === "multiply") return `${targetLabel(m.target).toLowerCase()} ×${m.factor === 0.5 ? "½" : m.factor}`;

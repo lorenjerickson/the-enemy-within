@@ -2028,7 +2028,15 @@ addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
 addColumn("conditions", "apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"); // on a success: negates | halves (its rounds)
 
 export function listEffectDefs(): EffectDef[] {
-  return db.prepare<[], { id: number; name: string; description: string; modifiers: string }>("SELECT * FROM effects ORDER BY name").all().map((r) => ({ ...r, modifiers: JSON.parse(r.modifiers) }));
+  const raw = db.prepare<[], { id: number; name: string; description: string; modifiers: string }>("SELECT * FROM effects ORDER BY name").all().map((r) => ({ ...r, modifiers: JSON.parse(r.modifiers) as Modifier[] }));
+  if (!raw.some((e) => e.modifiers.some((m) => m.kind === "aura"))) return raw;
+  // An aura's condition, filled in (one level: auras within it aren't, so they can't loop).
+  const conditions = db.prepare<[], ConditionRow>("SELECT * FROM conditions").all();
+  const given = (id: number): Condition | undefined => {
+    const c = conditions.find((x) => x.id === id);
+    return c ? { ...c, effects: (JSON.parse(c.effects) as number[]).flatMap((e) => raw.find((x) => x.id === e) ?? []) } : undefined;
+  };
+  return raw.map((e) => ({ ...e, modifiers: e.modifiers.map((m) => (m.kind === "aura" ? { ...m, given: given(m.condition) } : m)) }));
 }
 
 export function getEffectDef(id: number): EffectDef | undefined {
@@ -2037,7 +2045,7 @@ export function getEffectDef(id: number): EffectDef | undefined {
 
 /** Inserts when id is null, otherwise updates; returns the id. */
 export function saveEffectDef(id: number | null, e: Omit<EffectDef, "id">): number {
-  const params = { name: e.name, description: e.description, modifiers: JSON.stringify(e.modifiers) };
+  const params = { name: e.name, description: e.description, modifiers: JSON.stringify(e.modifiers.map((m) => (m.kind === "aura" ? { ...m, given: undefined } : m))) }; // an aura's condition is filled in when read
   if (id === null) return Number(db.prepare("INSERT INTO effects (name, description, modifiers) VALUES (@name, @description, @modifiers)").run(params).lastInsertRowid);
   db.prepare("UPDATE effects SET name = @name, description = @description, modifiers = @modifiers WHERE id = @id").run({ ...params, id });
   return id;
@@ -2166,6 +2174,27 @@ db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (
 )`);
 
 addColumn("token_afflictions", "saved", "INTEGER NOT NULL DEFAULT 0"); // successful saves so far
+addColumn("token_afflictions", "aura", "INTEGER"); // given by this token's aura (while within it)
+
+// Creatures that passed the save against an aura's condition as they came within it: safe until they leave.
+db.exec(`CREATE TABLE IF NOT EXISTS aura_passes (
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  condition_id INTEGER NOT NULL,
+  PRIMARY KEY (level_id, token_id, condition_id)
+)`);
+
+/** A level's aura passes, as "token:condition". */
+export function listAuraPasses(levelId: number): Set<string> {
+  return new Set(db.prepare<[number], { token_id: number; condition_id: number }>("SELECT token_id, condition_id FROM aura_passes WHERE level_id = ?").all(levelId).map((r) => `${r.token_id}:${r.condition_id}`));
+}
+export function saveAuraPasses(levelId: number, passes: Set<string>): void {
+  db.transaction(() => {
+    db.prepare<[number]>("DELETE FROM aura_passes WHERE level_id = ?").run(levelId);
+    const insert = db.prepare("INSERT OR IGNORE INTO aura_passes (level_id, token_id, condition_id) VALUES (?, ?, ?)");
+    for (const k of passes) { const [t, c] = k.split(":").map(Number); insert.run(levelId, t, c); }
+  })();
+}
 
 /** A kept copy as a Condition (one kept by the first version is an old effect). */
 const keptCondition = (json: string): Condition => {
@@ -2176,8 +2205,8 @@ const keptCondition = (json: string): Condition => {
 /** The conditions on a level's tokens, by token id. */
 export function listAfflictions(levelId: number): Map<number, Affliction[]> {
   const out = new Map<number, Affliction[]>();
-  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null; saved: number }>("SELECT id, token_id, effect, rounds_left, by_token, saved FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
-    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token, saved: r.saved }]);
+  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null; saved: number; aura: number | null }>("SELECT id, token_id, effect, rounds_left, by_token, saved, aura FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
+    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token, saved: r.saved, ...(r.aura != null ? { aura: r.aura } : {}) }]);
   }
   return out;
 }
@@ -2186,8 +2215,8 @@ export function listAfflictions(levelId: number): Map<number, Affliction[]> {
 export function saveAfflictions(levelId: number, all: Map<number, Affliction[]>): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM token_afflictions WHERE level_id = ?").run(levelId);
-    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token, saved) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by, a.saved ?? 0);
+    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token, saved, aura) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by, a.saved ?? 0, a.aura ?? null);
   })();
 }
 
@@ -2201,8 +2230,11 @@ export function addAffliction(levelId: number, tokenId: number, condition: Condi
   return true;
 }
 
-export function removeAffliction(id: number): void {
+/** Takes a condition off; returns its level. */
+export function removeAffliction(id: number): number | undefined {
+  const levelId = db.prepare<[number], { level_id: number }>("SELECT level_id FROM token_afflictions WHERE id = ?").get(id)?.level_id;
   db.prepare<[number]>("DELETE FROM token_afflictions WHERE id = ?").run(id);
+  return levelId;
 }
 
 /** Levels with conditions on anyone (for time passing out of an encounter). */

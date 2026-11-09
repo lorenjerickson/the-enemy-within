@@ -15,8 +15,9 @@ const SET_PATTERN = `\\d+(\\s*\\+\\s*(${ATTRIBUTES.join("|")}))?`;
  * A catalog effect: a named set of modifiers (what changes while it's active). How long it lasts and what ends it
  * belong to the conditions that apply it.
  */
-export default function EffectForm({ initial }: { initial?: EffectDef }) {
+export default function EffectForm({ initial, conditions = [] }: { initial?: EffectDef; conditions?: { id: number; name: string }[] }) {
   const mods = initial?.modifiers ?? [];
+  const aura = mods.find((m) => m.kind === "aura");
   const speed = mods.find((m) => m.kind === "speed"), temphp = mods.find((m) => m.kind === "temphp"), maxhp = mods.find((m) => m.kind === "maxhp");
   const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
   return (
@@ -94,6 +95,24 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
               {cap(a)}
             </label>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-aura>
+          <span className="font-semibold">Aura</span>
+          <select name="aura_condition" defaultValue={aura?.kind === "aura" ? String(aura.condition) : ""} className="select select-sm w-auto">
+            <option value="">none</option>
+            {conditions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          on
+          <select name="aura_who" defaultValue={aura?.kind === "aura" ? aura.who : "enemy"} className="select select-sm w-auto">
+            <option value="enemy">enemies</option>
+            <option value="friendly">allies</option>
+            <option value="">everyone</option>
+          </select>
+          within
+          <input name="aura_radius" type="number" min="5" step="5" defaultValue={aura?.kind === "aura" ? aura.radius : 10} className="input input-sm w-20" />
+          ft
+          <label className="flex items-center gap-1"><input type="checkbox" name="aura_self" defaultChecked={aura?.kind === "aura" && aura.self} className="checkbox checkbox-xs" /> itself too</label>
+          <span className="text-xs opacity-60">while they&apos;re within it (a save as it lands is rolled on entering; passing keeps them safe until they leave)</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-semibold">Speed</span>

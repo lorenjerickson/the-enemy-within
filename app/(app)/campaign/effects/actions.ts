@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { getEffectDef, removeEffectDef, saveEffectDef } from "@/lib/db";
+import { getConditionDef, getEffectDef, removeEffectDef, saveEffectDef } from "@/lib/db";
 import { DAMAGE_TYPES, isRollKind, type DamageType } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
@@ -95,6 +95,13 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (!DAMAGE_TYPES.includes(damage_type) || !["resistant", "vulnerable", "immune"].includes(level)) throw new Error("Invalid resistance");
     modifiers.push({ kind: "resist", damage_type, level: level as "resistant" | "vulnerable" | "immune" });
   });
+  // An aura: a condition on those within so many feet (allies, enemies or anyone; maybe itself).
+  const auraCondition = Number(text("aura_condition")), radius = Math.round(Number(text("aura_radius")) || 0);
+  if (auraCondition && radius > 0) {
+    if (!getConditionDef(auraCondition)) throw new Error("Unknown condition for the aura");
+    const who = text("aura_who");
+    modifiers.push({ kind: "aura", condition: auraCondition, radius, who: who === "friendly" || who === "enemy" ? who : "", self: formData.get("aura_self") === "on" });
+  }
   const was = id === null ? undefined : getEffectDef(id);
   const saved = saveEffectDef(id, { name: text("name"), description: text("description"), modifiers: was?.builtin ? was.modifiers : modifiers }); // a built-in's rules stay
   revalidatePath("/campaign/effects");

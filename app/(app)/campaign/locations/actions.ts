@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { syncAurasOn } from "@/lib/auraSync";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
@@ -214,6 +215,7 @@ export async function moveTokenTo(locationId: number, id: number, col: number, r
   const levelId = getTokenLevel(id);
   if (levelId === undefined) return;
   moveToken(id, across(levelId, col), settle(levelId, across(levelId, col), row));
+  syncAurasOn(levelId); // moved into (or out of) an aura
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

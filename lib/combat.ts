@@ -10,7 +10,8 @@ import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 import { rollChanges, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
-import { effectiveMaxHp, extrasOn, professionStatuses, resistancesOf, restrictionsOn, standingStatuses } from "@/lib/creatureChanges";
+import { effectiveMaxHp, extrasOn, professionStatuses, resistancesOf, restrictionsOn, standingEffects, standingStatuses } from "@/lib/creatureChanges";
+import type { AuraModifier } from "@/lib/auras";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -30,6 +31,7 @@ export interface Fighter {
   resist?: Record<string, Resist[]>; // how they take each kind of damage (resistant / vulnerable / immune), by type
   extras?: { dealing: Extra[]; taking: Extra[] }; // extra damage on their hits, and on hits against them
   limits?: Restrictions; // what conditions stop them doing (and saves they fail)
+  auras?: AuraModifier[]; // auras they give off of their own (or from what they wear)
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -97,7 +99,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
     // So are what they have on: standing effects of their creature and their equipment, and how they take damage.
     if (!c || !h) continue;
     const maxHp = effectiveMaxHp(t.id, h.maximum); // professions' and conditions' changes to it
-    const f: Fighter = { ...fighterOf(c, Math.min(h.current, maxHp) + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId) };
+    const f: Fighter = { ...fighterOf(c, Math.min(h.current, maxHp) + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId), auras: standingEffects(t.id).flatMap((e) => e.modifiers).filter((m): m is AuraModifier => m.kind === "aura") };
     // Saves they fail outright (Stunned: Might and Agility), checked when rolled (a condition put on mid-round counts too).
     const roll = f.save;
     f.save = (attr) => (f.limits?.autofail.includes(attr) ? { total: -99, text: "fails automatically" } : roll(attr));
