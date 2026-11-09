@@ -16,7 +16,18 @@ export type Modifier =
   | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
   | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" } // at the end of each round
   | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" } // once, as the condition lands (a healing draught)
-  | { kind: "resist"; damage_type: DamageType; level: Resist }; // how they take a kind of damage
+  | { kind: "resist"; damage_type: DamageType; level: Resist } // how they take a kind of damage
+  | { kind: "extra"; value: string; damage_type: DamageType | ""; when: "dealing" | "taking" }; // extra dice on a hit: on their hits, or on hits against them (by whoever put it on them)
+
+/** Extra damage on hits, as a creature carries it: on its own hits, and on hits it takes (from `from`, or anyone). */
+export type Extra = { value: string; damage_type: string; name: string; from?: number | null };
+export function extrasOf(mods: Modifier[], name: string, from: number | null = null): { dealing: Extra[]; taking: Extra[] } {
+  const x = mods.filter((m) => m.kind === "extra") as Extract<Modifier, { kind: "extra" }>[];
+  return {
+    dealing: x.filter((m) => m.when === "dealing").map((m) => ({ value: m.value, damage_type: m.damage_type, name })),
+    taking: x.filter((m) => m.when === "taking").map((m) => ({ value: m.value, damage_type: m.damage_type, name, from })),
+  };
+}
 
 /** How a creature takes a kind of damage: half, double, or none. */
 export type Resist = "resistant" | "vulnerable" | "immune";
@@ -91,6 +102,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round`;
   if (m.kind === "instant") return m.heal ? `heals ${m.value}` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage at once`;
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
+  if (m.kind === "extra") return m.when === "dealing" ? `+${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage on their hits` : `takes +${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage when hit by its source`;
   if (m.kind === "resist") return `${m.level === "immune" ? "immune to" : m.level} ${m.level === "immune" ? "" : "to "}${m.damage_type}`.replace("  ", " ");
   return `${m.value} ${targetLabel(m.target).toLowerCase()}`;
 }

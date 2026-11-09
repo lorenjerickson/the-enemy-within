@@ -2,7 +2,7 @@ import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
 import { caughtBy, describeArea, placeArea, type AreaAt, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { describeStatus, type Status } from "@/lib/status";
-import { afterResist, combineResist, describeCondition, lingers, modifiersOf, resistsOf, rollChanges, type Affliction, type Condition, type Resist } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, resistsOf, rollChanges, type Affliction, type Condition, type Extra, type Resist } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
@@ -124,6 +124,7 @@ export interface Combatant {
   maxHp?: number; // for how bad a wound sounds in the players' story
   allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
   resist?: Record<string, Resist[]>; // how they take each kind of damage, by type (conditions put on mid-round add to it)
+  extras?: { dealing: Extra[]; taking: Extra[] }; // extra damage on their hits, and on hits against them
 }
 
 /**
@@ -156,6 +157,18 @@ export function resolveMovement(
     const r = type ? combineResist(fighters.get(id)?.resist?.[type]) : null;
     const n = afterResist(amount, r);
     return { n, r, note: r ? ` (${r === "immune" ? "immune" : `${r}: ${n} of ${amount}`})` : "" };
+  };
+  /** Extra damage a hit carries: the attacker's on-hit extras, and the target's (from this attacker, or anyone); each as the target takes it. */
+  const bonusOnHit = (attacker: number, target: number) => {
+    const x = [...(fighters.get(attacker)?.extras?.dealing ?? []), ...(fighters.get(target)?.extras?.taking ?? []).filter((e) => e.from == null || e.from === attacker)];
+    let n = 0;
+    const parts: string[] = [];
+    for (const e of x) {
+      const t = takenBy(target, Math.max(0, rollDice(e.value)), e.damage_type || undefined);
+      n += t.n;
+      parts.push(`+${t.n}${e.damage_type ? ` ${e.damage_type}` : ""} (${e.name})${t.note}`);
+    }
+    return { n, note: parts.length ? ` ${parts.join(" ")}` : "" };
   };
   const nameOf = (id: number) => order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
@@ -204,7 +217,11 @@ export function resolveMovement(
     }
     if (!lingers(c)) return; // nothing more to it
     const f = fighters.get(id);
-    if (f) f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
+    if (f) {
+      f.resist = resistsOf(modifiersOf(c), { ...(f.resist ?? {}) });
+      const x = extrasOf(modifiersOf(c), c.name, by);
+      f.extras = { dealing: [...(f.extras?.dealing ?? []), ...x.dealing], taking: [...(f.extras?.taking ?? []), ...x.taking] };
+    }
     afflicted.set(id, [...(afflicted.get(id) ?? []).filter((a) => a.condition.id !== c.id), { condition: c, left: rounds, by }]);
     const rolls = rollChanges(c);
     if (rolls.boosts.length || rolls.grants.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
@@ -589,7 +606,8 @@ export function resolveMovement(
             continue;
           }
           dmg ??= usingDice(step.dice?.damage, () => me.damage(use));
-          const t = takenBy(id, dmg.total, use.damageType);
+          const t0 = takenBy(id, dmg.total, use.damageType), x = bonusOnHit(m.tokenId, id);
+          const t = { ...t0, n: t0.n + x.n, note: t0.note + x.note };
           const left = Math.max(0, hp.get(id)! - t.n);
           hp.set(id, left);
           hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
@@ -680,7 +698,8 @@ export function resolveMovement(
         if (a.total < d.total) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
         else {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
-          const t = takenBy(target.id, dmg.total, step.use?.damageType);
+          const t0 = takenBy(target.id, dmg.total, step.use?.damageType), x = bonusOnHit(m.tokenId, target.id);
+          const t = { ...t0, n: t0.n + x.n, note: t0.note + x.note };
           const left = Math.max(0, hp.get(target.id)! - t.n);
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);

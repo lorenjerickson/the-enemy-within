@@ -30,6 +30,14 @@ export async function submitEffect(id: number | null, formData: FormData) {
     if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
     modifiers.push({ kind: "instant", value: instant, heal: text("instant_kind") !== "damage", damage_type });
   }
+  // Extra damage on a hit: on their hits, or on hits against them (by whoever put it on them).
+  const extra = text("extra_value").toLowerCase().replace(/\s/g, "");
+  if (extra) {
+    if (!isDiceFormula(extra)) throw new Error("Invalid extra damage dice");
+    const damage_type = text("extra_type") as DamageType | "";
+    if (damage_type && !DAMAGE_TYPES.includes(damage_type)) throw new Error("Invalid damage type");
+    modifiers.push({ kind: "extra", value: extra, damage_type, when: text("extra_when") === "taking" ? "taking" : "dealing" });
+  }
   // Boosts (or penalties): a number or dice on something.
   const values = formData.getAll("boost_value").map((v) => String(v).toLowerCase().replace(/\s/g, ""));
   formData.getAll("boost_target").forEach((t, i) => {

@@ -9,8 +9,8 @@ import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
 import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
-import { rollChanges, type Condition, type Resist } from "@/lib/conditions";
-import { professionStatuses, resistancesOf, standingStatuses } from "@/lib/creatureChanges";
+import { rollChanges, type Condition, type Extra, type Resist } from "@/lib/conditions";
+import { extrasOn, professionStatuses, resistancesOf, standingStatuses } from "@/lib/creatureChanges";
 
 /**
  * Default combat rules (a placeholder until Loren specifies the system's own; change freely):
@@ -28,6 +28,7 @@ export interface Fighter {
   maxHp?: number; // full health (for how bad a wound sounds)
   allegiance?: Allegiance; // whose side they're on (for actions aimed at friendlies or enemies)
   resist?: Record<string, Resist[]>; // how they take each kind of damage (resistant / vulnerable / immune), by type
+  extras?: { dealing: Extra[]; taking: Extra[] }; // extra damage on their hits, and on hits against them
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -91,7 +92,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
     const fromEffects = (afflictions.get(t.id) ?? []).map((a) => conditionStatus(a.condition));
     // Professions' modifiers are always on (attack, damage, defense, attributes).
     // So are what they have on: standing effects of their creature and their equipment, and how they take damage.
-    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp: h.maximum, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId) });
+    if (c && h) out.set(t.id, { ...fighterOf(c, h.current + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp: h.maximum, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId) });
   }
   return out;
 }

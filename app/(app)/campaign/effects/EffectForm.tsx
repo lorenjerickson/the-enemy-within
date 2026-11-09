@@ -13,7 +13,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
  */
 export default function EffectForm({ initial }: { initial?: EffectDef }) {
   const mods = initial?.modifiers ?? [];
-  const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant");
+  const periodic = mods.find((m) => m.kind === "periodic"), instant = mods.find((m) => m.kind === "instant"), extra = mods.find((m) => m.kind === "extra");
   return (
     <form action={submitEffect.bind(null, initial?.id ?? null)} className="max-w-2xl space-y-3" data-effect-form>
       <input name="name" placeholder="Effect name (e.g. Incapacitated, Venom)" required defaultValue={initial?.name} className="input w-full" />
@@ -45,6 +45,19 @@ export default function EffectForm({ initial }: { initial?: EffectDef }) {
             {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{cap(t)}</option>)}
           </select>
           <span className="text-xs opacity-60">once, as the condition lands (a healing draught)</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold">On a hit</span>
+          <input name="extra_value" pattern={DICE_PATTERN} placeholder="extra dice (e.g. 1d6)" defaultValue={extra?.kind === "extra" ? extra.value : ""} className="input input-sm w-32" />
+          <select name="extra_type" defaultValue={extra?.kind === "extra" ? extra.damage_type : ""} className="select select-sm w-auto">
+            <option value="">type…</option>
+            {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{cap(t)}</option>)}
+          </select>
+          <select name="extra_when" defaultValue={extra?.kind === "extra" ? extra.when : "dealing"} className="select select-sm w-auto">
+            <option value="dealing">on their hits</option>
+            <option value="taking">on hits against them (by its source)</option>
+          </select>
+          <span className="text-xs opacity-60">a flaming weapon; a hex</span>
         </div>
         <PairListInput title="Boosts (or penalties)" addLabel="+ Add boost" firstName="boost_target" firstPlaceholder="Changes…" groups={MODIFIER_TARGET_GROUPS} secondName="boost_value" secondPattern={MODIFIER_PATTERN} secondPlaceholder="+2 or -1d4" initial={mods.flatMap((m) => (m.kind === "boost" ? [[m.target, m.value] as [string, string]] : []))} />
         <PairListInput title="Resistances" addLabel="+ Add resistance" firstName="resist_type" firstPlaceholder="Damage type…" groups={[["Damage types", DAMAGE_TYPES.map((t) => [t, cap(t)] as [string, string])]]} secondName="resist_level" secondOptions={["resistant", "vulnerable", "immune"]} initial={mods.flatMap((m) => (m.kind === "resist" ? [[m.damage_type, m.level] as [string, string]] : []))} />

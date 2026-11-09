@@ -4,7 +4,7 @@
  * modifiers (always on).
  */
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
-import { combineResist, modifiersOf, resistsOf, rollChanges, type EffectDef, type Resist } from "@/lib/conditions";
+import { combineResist, extrasOf, modifiersOf, resistsOf, rollChanges, type EffectDef, type Extra, type Resist } from "@/lib/conditions";
 import { combineModes, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
 import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE, formatModifier, modifier, type Attribute, type Attributes } from "@/lib/attributes";
@@ -50,6 +50,15 @@ export function resistancesOf(tokenId: number, levelId: number, equipment?: Equi
   return out;
 }
 export const resistanceTo = (r: Record<string, Resist[]>, type: string) => combineResist(r[type]);
+
+/** Extra damage on hits a token carries now: from its standing effects (taking: from anyone) and conditions (taking: from whoever put it on them). */
+export function extrasOn(tokenId: number, levelId: number): { dealing: Extra[]; taking: Extra[] } {
+  const out = { dealing: [] as Extra[], taking: [] as Extra[] };
+  const add = (x: { dealing: Extra[]; taking: Extra[] }) => { out.dealing.push(...x.dealing); out.taking.push(...x.taking); };
+  for (const e of standingEffects(tokenId)) add(extrasOf(e.modifiers, e.name));
+  for (const a of listAfflictions(levelId).get(tokenId) ?? []) add(extrasOf(modifiersOf(a.condition), a.condition.name, a.by));
+  return out;
+}
 
 /** Every status-like change on a token now: statuses, conditions, standing effects, professions. */
 export function changesOn(tokenId: number): Status[] {
