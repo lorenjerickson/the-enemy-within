@@ -1,6 +1,9 @@
 /**
  * The effect sentence grammar (draft): an effect's rules written as a player's handbook would, in the second person
- * ("you" = whoever has the effect), built blank by blank, each choice deciding the blanks that follow. A rule with no
+ * ("you" = whoever has the effect), built blank by blank, each choice deciding the blanks that follow. Rules about the
+ * creature that applied the condition are written the other way round, as the handbook writes Hex: "you" = whoever
+ * applied it and "the target" = whoever has it ("When you hit the target, it takes an extra 1d6 necrotic damage.";
+ * "The target can't attack you."); the opening decides the voice, so no one picks it. A rule with no
  * "When …" / "At the start of …" opening holds while the condition lasts ("You can't take reactions."); one with an
  * opening happens then. How long anything lasts is the condition's, never a rule's. One tree drives the editor,
  * validation, the text and the modifiers the engine reads; what the engine can't do yet is noted, not dropped.
@@ -42,7 +45,6 @@ const WITH: Slot = { kind: "optional", id: "with", lead: "with", slots: [word("a
 /** "You can't [take reactions]." / "You can't see beyond [5] feet." */
 const YOU_CANT: Slot = { kind: "choice", id: "cant", label: "what", options: [
   { value: "actions", text: "take actions" }, { value: "bonus", text: "take bonus actions" }, { value: "reactions", text: "take reactions" }, { value: "movement", text: "move" },
-  { value: "attack-source", text: "attack the creature that applied this" },
   { value: "see", text: "see beyond", next: [num("feet", "feet", 0, 120), word("feet")] },
 ] };
 /** "You are [resistant] to [fire] damage." / "You are [invisible]." */
@@ -114,6 +116,8 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "autofail", text: "You automatically fail", next: [attrs("fail_attr"), word("saving throws")] },
     { value: "your", text: "Your", next: [YOUR_STAT] },
     { value: "nocrit", text: "Critical hits against you are normal hits" },
+    // In the applier's voice ("you" = whoever applied it, "the target" = whoever has it)
+    { value: "target_cant", text: "The target can't attack you" },
     { value: "aura", text: "Within", next: [num("radius", "feet", 5, 300), word("feet of you"), { kind: "choice", id: "who", label: "who", options: [{ value: "enemy", text: "enemies" }, { value: "friendly", text: "allies" }, { value: "", text: "creatures" }] }, { kind: "optional", id: "self", lead: "and", slots: [word("you")] }, word("gain the"), ...condition] },
     // Rolls
     { value: "roll", text: "When you make", next: [{ kind: "choice", id: "roll", label: "which roll", options: ROLLS }, ON_ROLL] },
@@ -124,7 +128,7 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "end", text: "At the end of each round", next: [outcome([youTake, yourHealth])] },
     { value: "hitting", text: "When you hit a creature", next: [WITH, outcome([itTakes(true), youTake, yourHealth, itGains, youGain])] },
     { value: "hit", text: "When a creature hits you", next: [WITH, outcome([itTakes(false), youTakeExtra, itGains, youGain])] },
-    { value: "hit_by_source", text: "When the creature that applied this hits you", next: [outcome([youTakeExtra])] },
+    { value: "hit_target", text: "When you hit the target", next: [outcome([{ value: "it_takes_extra", text: "it takes an extra", next: [dice, types, word("damage")] }])] }, // the applier's voice
     { value: "damaged", text: "When you take damage", next: [outcome([yourStatFor, yourHealth, youGain])] },
     { value: "moves", text: "When you move", next: [outcome([youTake, youGain])] },
   ],
@@ -178,6 +182,8 @@ export function compile(f: Filled, conditionId: (name: string) => number = () =>
       return one({ kind: "sense", sense: "seeinvisible" });
     case "autofail":
       return one({ kind: "autofail", save: f.fail_attr as Attribute });
+    case "target_cant":
+      return one({ kind: "forbid", what: "attack-source" });
     case "nocrit":
       return one({ kind: "nocrit" });
     case "aura":
@@ -224,9 +230,9 @@ export function compile(f: Filled, conditionId: (name: string) => number = () =>
       if (f.outcome === "it_takes" && !save && f.reach !== "melee") return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "dealing" });
       return triggerOutcome("hitting");
     case "hit":
-      if (f.outcome === "you_take_extra") return none("extra damage on hits against you from anyone isn't in the engine yet: only from the creature that applied this (that opening)");
+      if (f.outcome === "you_take_extra") return none(`extra damage on hits against you from anyone isn't in the engine yet: only from whoever applied the condition ("When you hit the target, it takes an extra …")`);
       return triggerOutcome("hit");
-    case "hit_by_source":
+    case "hit_target":
       return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "taking" });
     case "damaged":
       notes.push(`"when you take damage" isn't a trigger event in the engine yet`);
