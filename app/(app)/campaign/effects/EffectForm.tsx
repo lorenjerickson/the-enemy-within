@@ -1,4 +1,5 @@
-import { FORBIDS, SENSES, TRIGGER_EVENTS, describeModifier, type EffectDef } from "@/lib/conditions";
+import { FORBIDS, SENSES, TRIGGER_EVENTS, type EffectDef } from "@/lib/conditions";
+import { effectSentences } from "@/lib/effectGrammar";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, ROLL_KIND_GROUPS } from "@/lib/actions";
 import { MODIFIER_TARGET_GROUPS } from "@/lib/modifiers";
@@ -30,7 +31,7 @@ export default function EffectForm({ initial, conditions = [] }: { initial?: Eff
       {initial?.builtin ? (
         <fieldset className="space-y-1 rounded-box border border-base-300 p-2" data-builtin-modifiers>
           <legend className="px-1 text-sm font-semibold">Modifiers (built in: the rules can&apos;t be changed)</legend>
-          <ul className="list-inside list-disc text-sm">{mods.map((m, i) => <li key={i}>{describeModifier(m)}</li>)}</ul>
+          <ul className="list-inside list-disc text-sm">{effectSentences(mods).map((t, i) => <li key={i}>{t}</li>)}</ul>
         </fieldset>
       ) : (
       <fieldset className="space-y-2 rounded-box border border-base-300 p-2">

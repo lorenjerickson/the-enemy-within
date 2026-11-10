@@ -27,7 +27,7 @@ export type Option = { value: string; text: string; next?: Slot[] };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const an = (s: string) => `${/^[aeiou]/i.test(s) ? "an" : "a"} ${s}`;
 const attrs = (id: string): Slot => ({ kind: "choice", id, label: "attribute", options: ATTRIBUTES.map((a) => ({ value: a, text: cap(a) })) });
-const types: Slot = { kind: "choice", id: "type", label: "damage type", options: DAMAGE_TYPES.map((t) => ({ value: t, text: t })) };
+const types: Slot = { kind: "choice", id: "type", label: "damage type", options: [...DAMAGE_TYPES.map((t) => ({ value: t, text: t })), { value: "", text: "untyped" }] };
 const word = (text: string): Slot => ({ kind: "word", text });
 const num = (id: string, label: string, min = 0, max = 99): Slot => ({ kind: "number", id, label, min, max });
 const dice: Slot = { kind: "dice", id: "dice", label: "dice expression" };
@@ -59,6 +59,7 @@ const STATS: Option[] = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Rolls" && 
 /** How "Your [stat]" changes: by an amount, at least / at most a value, or multiplied. */
 const HOW: Slot = { kind: "choice", id: "how", label: "how", options: [
   { value: "plus", text: "increases by", next: [amountSlot] },
+  { value: "minus", text: "decreases by", next: [amountSlot] },
   { value: "min", text: "is raised to", next: [num("to", "value"), { kind: "optional", id: "plus", lead: "plus", slots: [word("your"), attrs("plus_attr"), word("modifier")] }] },
   { value: "max", text: "is reduced to", next: [num("to", "value")] },
   { value: "x2", text: "is doubled" }, { value: "x0.5", text: "is halved" }, { value: "x0", text: "drops to zero" },
@@ -194,8 +195,9 @@ export function compile(f: Filled, conditionId: (name: string) => number = () =>
       const target = f.stat as ModifierTarget;
       if (f.how === "min") return one({ kind: "set", target, value: Number(f.to), ...(f.plus_attr ? { plus: f.plus_attr as Attribute } : {}) });
       if (String(f.how).startsWith("x")) return one({ kind: "multiply", target, factor: Number(String(f.how).slice(1)) });
-      if (f.stat === "health") return /^[+-]?\d+$/.test(amount) ? one({ kind: "maxhp", value: Number(amount) }) : none("maximum health takes a plain number, not dice");
-      return one({ kind: "boost", target, value: signed(amount) });
+      const by = f.how === "minus" ? `-${amount.replace(/^[+-]/, "")}` : amount;
+      if (f.stat === "health") return /^[+-]?\d+$/.test(by) ? one({ kind: "maxhp", value: Number(by) }) : none("maximum health takes a plain number, not dice");
+      return one({ kind: "boost", target, value: signed(by) });
     }
     case "roll": {
       const kinds = rollKinds(String(f.roll));
@@ -242,3 +244,132 @@ export function compile(f: Filled, conditionId: (name: string) => number = () =>
   }
   return { modifiers: [], notes };
 }
+
+// ---------- Sentences from modifiers (to show and edit what an effect already has) ----------
+
+/** A blank's text in a sentence: a choice's words, a number, dice, "your Fortitude modifier", a condition's name. */
+function blankText(slot: Slot, v: string | number): string {
+  if (slot.kind === "amount" && typeof v === "string" && v.includes(":")) return `${v.split(":")[0]} ${cap(v.split(":")[1])} modifier`;
+  return String(v);
+}
+
+/** A complete sentence's words, from its filled blanks (punctuation as the handbook would). */
+export function render(f: Filled): string {
+  const out: string[] = [];
+  const walk = (slots: Slot[]) => {
+    for (const slot of slots) {
+      if (slot.kind === "word") { if (slot.text.startsWith("it rolls twice")) out[out.length - 1] += ","; out.push(slot.text); }
+      else if (slot.kind === "optional") {
+        if (f[slot.id] === undefined) continue;
+        const paren = slot.id === "save" || slot.id === "limit";
+        const at = out.length;
+        out.push(slot.lead);
+        walk(slot.slots);
+        if (paren) { out[at] = `(${out[at]}`; out[out.length - 1] += ")"; }
+      } else if (slot.kind === "choice") {
+        const o = slot.options.find((x) => x.value === f[slot.id]) ?? slot.options[0];
+        if ((slot.id === "outcome" || slot.id === "sign") && out.length) out[out.length - 1] += ","; // after the opening
+        if (o.text) out.push(o.text);
+        walk(o.next ?? []);
+      } else out.push(blankText(slot, f[slot.id] ?? "?"));
+    }
+  };
+  walk(EFFECT_SENTENCE);
+  const text = out.join(" ");
+  return `${text[0].toUpperCase()}${text.slice(1)}.`;
+}
+
+/**
+ * The sentences that say what a set of modifiers does (most modifiers are one; a group the builder says at once,
+ * such as a roll mode on every saving throw or a resistance to every damage type, is one too). The inverse of
+ * `compile`: compiling these gives back modifiers that do the same. `conditionName` names a catalog condition by id.
+ */
+export function sentencesOf(modifiers: Modifier[], conditionName: (id: number) => string = (id) => `#${id}`): Filled[] {
+  let left = [...modifiers];
+  const out: Filled[] = [];
+  /** Takes a group of modifiers out if every one is there; returns whether it did. */
+  const take = (group: Modifier[]): boolean => {
+    const keys = group.map((g) => JSON.stringify(g)), found = keys.map((k) => left.findIndex((m) => JSON.stringify(m) === k));
+    if (found.some((i) => i < 0)) return false;
+    left = left.filter((_, i) => !found.includes(i));
+    return true;
+  };
+  // Groups first: resistances to all damage; a roll mode, reroll or minimum on a whole group of rolls; dice on any d20 roll.
+  for (const level of ["resistant", "vulnerable", "immune"] as const)
+    if (take(DAMAGE_TYPES.map((damage_type): Modifier => ({ kind: "resist", damage_type, level })))) out.push({ when: "are", are: level, type: "all" });
+  for (const r of ["any", "save", "check"]) {
+    for (const mode of ["advantage", "disadvantage"] as const) if (take(rollKinds(r).map((roll): Modifier => ({ kind: "roll", roll, mode })))) out.push({ when: "roll", roll: r, sign: "twice", keep: mode });
+    for (const m of left.filter((x) => x.kind === "reroll" && x.roll === rollKinds(r)[0]) as Extract<Modifier, { kind: "reroll" }>[])
+      if (take(rollKinds(r).map((roll): Modifier => ({ kind: "reroll", roll, at: m.at })))) out.push({ when: "roll", roll: r, sign: "reroll", at: m.at });
+    for (const m of left.filter((x) => x.kind === "minroll" && x.roll === rollKinds(r)[0]) as Extract<Modifier, { kind: "minroll" }>[])
+      if (take(rollKinds(r).map((roll): Modifier => ({ kind: "minroll", roll, min: m.min })))) out.push({ when: "roll", roll: r, sign: "min", min: m.min });
+  }
+  for (const m of left.filter((x) => x.kind === "boost" && x.target === "attack") as Extract<Modifier, { kind: "boost" }>[])
+    if (take((["attack", "save", "check"] as const).map((target): Modifier => ({ kind: "boost", target, value: m.value })))) out.push({ when: "roll", roll: "any", sign: m.value.startsWith("-") ? "-" : "+", dice: m.value.replace(/^[+-]/, "") });
+  // Then one sentence per modifier.
+  for (const m of left) out.push(...sentenceOf(m, conditionName));
+  return out;
+}
+
+/** The sentence(s) for one modifier (a trigger with damage and a condition is two). */
+function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[] {
+  const sign = (v: string) => (v.startsWith("-") ? "-" : "+"), bare = (v: string) => v.replace(/^[+-]/, "");
+  switch (m.kind) {
+    case "boost":
+      if (m.target === "health") return [{ when: "applied", outcome: "your_health", amount: bare(m.value) }];
+      if (m.target === "attack" || m.target === "save" || m.target === "check" || m.target.startsWith("save:") || m.target.startsWith("skill:")) return [{ when: "roll", roll: m.target, sign: sign(m.value), dice: bare(m.value) }];
+      return [{ when: "your", stat: m.target, how: m.value.startsWith("-") ? "minus" : "plus", amount: bare(m.value) }];
+    case "roll":
+      return m.roll === "attacked" ? [{ when: "attacked", keep: m.mode }] : [{ when: "roll", roll: m.roll, sign: "twice", keep: m.mode }];
+    case "periodic":
+      return [m.heal ? { when: "end", outcome: "your_health", amount: m.value } : { when: "end", outcome: "you_take", dice: m.value, type: m.damage_type }];
+    case "instant":
+      return [m.heal ? { when: "applied", outcome: "your_health", amount: m.value } : { when: "applied", outcome: "you_take", dice: m.value, type: m.damage_type }];
+    case "resist":
+      return [{ when: "are", are: m.level, type: m.damage_type }];
+    case "extra":
+      return [m.when === "dealing" ? { when: "hitting", outcome: "add", dice: m.value, type: m.damage_type } : { when: "hit_by_source", outcome: "add", dice: m.value, type: m.damage_type }];
+    case "forbid":
+      return [{ when: "you", cant: m.what }];
+    case "autofail":
+      return [{ when: "autofail", fail_attr: m.save }];
+    case "speed":
+      return [{ when: "your", stat: "speed", how: `x${m.factor}` }];
+    case "set":
+      return [{ when: "your", stat: m.target, how: "min", to: m.value, ...(m.plus ? { plus: 1, plus_attr: m.plus } : {}) }];
+    case "multiply":
+      return [{ when: "your", stat: m.target, how: `x${m.factor}` }];
+    case "temphp":
+      return [{ when: "applied", outcome: "temp", dice: m.value }];
+    case "maxhp":
+      return [{ when: "your", stat: "health", how: m.value < 0 ? "minus" : "plus", amount: String(Math.abs(m.value)) }];
+    case "trigger": {
+      const own = m.on === "start" || m.on === "moves";
+      const save: Filled = m.save_attr ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {};
+      const reach: Filled = !own && m.reach === "melee" ? { with: 1, reach: "melee" } : {};
+      const out: Filled[] = [];
+      if (m.damage) out.push({ when: m.on, ...reach, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: m.damage, type: m.damage_type, ...save });
+      if (m.condition) out.push({ when: m.on, ...reach, outcome: own || m.condition_on === "self" ? "you_gain" : "it_gains", condition: m.given?.name ?? conditionName(m.condition) });
+      return out;
+    }
+    case "reroll":
+      return [{ when: "roll", roll: m.roll, sign: "reroll", at: m.at }];
+    case "minroll":
+      return [{ when: "roll", roll: m.roll, sign: "min", min: m.min }];
+    case "crit":
+      return [{ when: "your", stat: "crit", range: m.range }];
+    case "nocrit":
+      return [{ when: "nocrit" }];
+    case "strain":
+      return [m.points >= 0 ? { when: "applied", outcome: "strain", strain_attr: m.attribute, points: m.points } : { when: "applied", outcome: "relieve", strain_attr: m.attribute, points: -m.points }];
+    case "sense":
+      return [m.sense === "blind" ? { when: "you", cant: "see", feet: 5 } : m.sense === "invisible" ? { when: "are", are: "invisible" } : m.sense === "seeinvisible" ? { when: "can" } : { when: "your", stat: "darkvision", how: "min", to: m.range ?? 60 }];
+    case "aura":
+      return [{ when: "aura", radius: m.radius, who: m.who, ...(m.self ? { self: 1 } : {}), condition: m.given?.name ?? conditionName(m.condition) }];
+  }
+}
+
+/** An effect's rules as handbook sentences. */
+export const effectSentences = (modifiers: Modifier[], conditionName?: (id: number) => string) => sentencesOf(modifiers, conditionName).map(render);
+/** An effect's rules as one line of text (for lists). */
+export const effectText = (e: { modifiers: Modifier[] }, conditionName?: (id: number) => string) => effectSentences(e.modifiers, conditionName).join(" ");

@@ -1,6 +1,7 @@
+import { effectText } from "@/lib/effectGrammar";
 import Link from "next/link";
 import { ATTRIBUTES } from "@/lib/attributes";
-import { describeEffect, type ConditionDef, type EffectDef } from "@/lib/conditions";
+import { type ConditionDef, type EffectDef } from "@/lib/conditions";
 import { submitCondition } from "./actions";
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -20,7 +21,7 @@ export default function ConditionForm({ initial, effects }: { initial?: Conditio
           effects.map((e) => (
             <label key={e.id} className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="effect" value={e.id} defaultChecked={initial?.effects.includes(e.id)} disabled={!!initial?.builtin} className="checkbox checkbox-sm mt-0.5" />
-              <span><span className="font-medium">{e.name}</span> <span className="opacity-60">{describeEffect(e) || e.description}</span></span>
+              <span><span className="font-medium">{e.name}</span> <span className="opacity-60">{effectText(e) || e.description}</span></span>
             </label>
           ))
         ) : (

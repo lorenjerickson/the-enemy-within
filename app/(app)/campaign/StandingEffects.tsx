@@ -1,6 +1,6 @@
+import { effectText } from "@/lib/effectGrammar";
 import Link from "next/link";
 import { getStandingEffects, listEffectDefs } from "@/lib/db";
-import { describeEffect } from "@/lib/conditions";
 import { saveStandingEffects } from "./standingActions";
 
 /**
@@ -17,7 +17,7 @@ export default function StandingEffects({ owner }: { owner: { item_id: number } 
           effects.map((e) => (
             <label key={e.id} className="flex items-start gap-2 text-sm">
               <input type="checkbox" name="effect" value={e.id} defaultChecked={on.includes(e.id)} className="checkbox checkbox-sm mt-0.5" />
-              <span><span className="font-medium">{e.name}</span> <span className="opacity-60">{describeEffect(e) || e.description}</span></span>
+              <span><span className="font-medium">{e.name}</span> <span className="opacity-60">{effectText(e) || e.description}</span></span>
             </label>
           ))
         ) : (
