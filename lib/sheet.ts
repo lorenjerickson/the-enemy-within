@@ -1,5 +1,6 @@
 import { characterContainers, characterPlayers, db, getGameTime, getItem, getStrain, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
-import { describeCondition, describeEffect } from "@/lib/conditions";
+import { describeCondition } from "@/lib/conditions";
+import { effectText } from "@/lib/effectGrammar";
 import { effectiveMaxHp, standingEffects } from "@/lib/creatureChanges";
 import { tokenWho } from "@/lib/combat";
 import { tokenHealth } from "@/lib/health";
@@ -53,7 +54,7 @@ export function sheetFor(tokenId: number): Sheet | null {
       })(),
       // Strain on their attributes (outlasts what caused it; drains with rest).
       ...(Object.entries(getStrain(t.id)) as [string, number][]).map(([a, n]) => ({ source: "Strain", text: `${n} ${a} strain (−${n} ${a}, never below half)`, left: "until rested" })),
-      ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${describeEffect(e)} (from ${e.from})`, left: "always" })),
+      ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${effectText(e)} (from ${e.from})`, left: "always" })),
       ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => a.aura != null
         ? { source: a.condition.name, text: describeCondition(a.condition, false), left: `while within ${tokenLabels(t.level_id).get(a.aura) ?? "someone"}'s aura` } // ends as they leave it (nothing to remove)
         : { source: a.condition.name, text: describeCondition(a.condition, false), left: `${a.left} round${a.left === 1 ? "" : "s"}`, affliction: a.id }),

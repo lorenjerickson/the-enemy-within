@@ -133,6 +133,7 @@ export interface Combatant {
   auras?: AuraModifier[]; // auras they give off of their own (or from what they wear); those from conditions on them come with the conditions
   triggers?: { mod: Trigger; name: string }[]; // triggers of their own (or from what they wear), with the effect's name; those from conditions come with them
   senses?: Senses; // their own senses (and their gear's); conditions on them add to these as the round goes
+  attrMod?: (a: Attribute) => number; // an attribute's modifier now (for amounts like "your Fortitude modifier")
 }
 
 /**
@@ -234,7 +235,7 @@ export function resolveMovement(
         hp.set(id, after);
         log.push(`${sec} s: ${c.name} deals ${nameOf(id)} ${t.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${t.note}; ${after} left.`);
         story.push({ sec, k: "effect", who: id, name: c.name, much: t.n, heal: false, hurt: hurt(id, t.n) });
-        if (t.n > 0) wasHurt(id, sec, t.n, c.id);
+        if (t.n > 0) wasHurt(id, sec, t.n, c.id, by);
         if (after <= 0) {
           down.add(id);
           story.push({ sec, k: "down", who: id });
@@ -312,13 +313,14 @@ export function resolveMovement(
     if (s.ended) release(id, a, "save", sec);
   };
   /** Hurt: conditions that end when hurt end; those saved against when hurt get their save (not `except`, the one hurting them). */
-  const wasHurt = (id: number, sec: number, amount: number, except?: number) => {
+  const wasHurt = (id: number, sec: number, amount: number, except?: number, by: number | null = null) => {
     for (const a of [...(afflicted.get(id) ?? [])]) {
       if (a.condition.id === except || a.aura != null) continue;
       if (a.condition.ends_on_damage) release(id, a, "damage", sec);
       else if (a.condition.save_when === "damaged" && !down.has(id)) endSave(id, a, sec);
     }
     concentrationCheck(id, sec, amount);
+    onDamaged(id, sec, by); // "when you take damage" triggers
   };
   /** Everything a caster keeps up by concentrating (their concentration conditions on anyone). */
   const keptUpBy = (caster: number) => [...afflicted].flatMap(([id, list]) => list.filter((a) => a.by === caster && a.condition.concentration && a.aura == null).map((a) => ({ id, a })));
@@ -380,33 +382,53 @@ export function resolveMovement(
     });
   };
   /** A trigger fires: damage to the other creature (a save may halve or negate it), a condition on someone, and its condition may end. */
+  let inTrigger = false; // a trigger is firing: the damage it deals doesn't set off "when you take damage" ones (no loops)
   const fireTrigger = (t: { mod: Trigger; name: string; a?: Affliction; owner: number; other: number }, key: string, sec: number) => {
-    {
-      const m = t.mod;
-      if (m.damage && hp.has(t.other) && !down.has(t.other)) {
-        let n = Math.max(0, rollDice(m.damage));
+    const m = t.mod;
+    if (m.from === "source" && (t.a?.by == null || t.a.by !== t.other || t.other === t.owner)) return; // only the source's doing counts
+    const was = inTrigger;
+    inTrigger = true;
+    try {
+      // Who takes it: the other creature, or whoever has it (backwash; healing yourself). How much: dice, plus a modifier.
+      const whom = m.damage_to === "self" ? t.owner : t.other;
+      const roll = () => Math.max(0, (m.damage ? rollDice(m.damage) : 0) + (m.amount_mod ? (fighters.get(m.amount_mod.whose === "self" ? t.owner : t.other)?.attrMod?.(m.amount_mod.attr) ?? 0) : 0));
+      if ((m.damage || m.amount_mod) && m.heal && hp.has(whom) && !down.has(whom)) {
+        const before = hp.get(whom)!, after = Math.min(fighters.get(whom)?.maxHp ?? Infinity, before + roll());
+        hp.set(whom, after);
+        log.push(`${sec} s: ${t.name}${whom === t.owner ? "" : ` (${nameOf(t.owner)})`} heals ${nameOf(whom)} for ${after - before}; ${after} health.`);
+        story.push({ sec, k: "effect", who: whom, name: t.name, much: after - before, heal: true });
+      } else if ((m.damage || m.amount_mod) && !m.heal && hp.has(whom) && !down.has(whom)) {
+        const other = whom; // the creature taking the damage
+        let n = roll();
         let saved = "";
         if (m.save_attr) {
-          const total = saveAgainst(t.other, m.save_attr, m.save_dc, key, t.name, sec);
+          const total = saveAgainst(other, m.save_attr, m.save_dc, key, t.name, sec);
           if (total >= m.save_dc) {
             n = m.save_halves ? Math.floor(n / 2) : 0;
             saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc}: ${m.save_halves ? "halved" : "none"})`;
           } else saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc})`;
         }
-        const tk = takenBy(t.other, n, m.damage_type || undefined), before = hp.get(t.other)!, after = Math.max(0, before - tk.n);
-        hp.set(t.other, after);
-        log.push(`${sec} s: ${t.name}${t.other === t.owner ? "" : ` (${nameOf(t.owner)})`} deals ${nameOf(t.other)} ${tk.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${tk.note}; ${after} left.`);
-        story.push({ sec, k: "effect", who: t.other, name: t.name, much: tk.n, heal: false, hurt: hurt(t.other, tk.n), ...(t.other !== t.owner ? { from: t.owner } : t.a?.by != null && t.a.by !== t.owner ? { from: t.a.by } : {}) }); // from: whose it was (their own trigger, or whoever put the condition on)
-        if (tk.n > 0) wasHurt(t.other, sec, tk.n);
+        const tk = takenBy(other, n, m.damage_type || undefined), before = hp.get(other)!, after = Math.max(0, before - tk.n);
+        hp.set(other, after);
+        log.push(`${sec} s: ${t.name}${other === t.owner ? "" : ` (${nameOf(t.owner)})`} deals ${nameOf(other)} ${tk.n}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${tk.note}; ${after} left.`);
+        story.push({ sec, k: "effect", who: other, name: t.name, much: tk.n, heal: false, hurt: hurt(other, tk.n), ...(other !== t.owner ? { from: t.owner } : t.a?.by != null && t.a.by !== t.owner ? { from: t.a.by } : {}) }); // from: whose it was (their own trigger, or whoever put the condition on)
+        if (tk.n > 0) wasHurt(other, sec, tk.n, undefined, t.owner);
         if (after <= 0 && before > 0) {
-          down.add(t.other);
-          story.push({ sec, k: "down", who: t.other });
-          log.push(`${sec} s: ${nameOf(t.other)} is down.`);
+          down.add(other);
+          story.push({ sec, k: "down", who: other });
+          log.push(`${sec} s: ${nameOf(other)} is down.`);
         }
-      } else if (!m.damage && m.on !== "moves") log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
+      } else if (!m.damage && !m.amount_mod && m.on !== "moves") log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
       if (m.given) afflict(m.condition_on === "self" ? t.owner : t.other, m.given, t.owner, sec);
       if (t.a?.condition.ends_on_trigger && (afflicted.get(t.owner) ?? []).includes(t.a)) release(t.owner, t.a, "trigger", sec);
+    } finally {
+      inTrigger = was;
     }
+  };
+  /** They took damage (from `by`, if a creature dealt it): their "when you take damage" triggers fire, unless a trigger did it. */
+  const onDamaged = (id: number, sec: number, by: number | null) => {
+    if (inTrigger || down.has(id)) return;
+    triggersOf(id).filter((t) => t.mod.on === "damaged").forEach((t, i) => fireTrigger({ ...t, owner: id, other: by ?? id }, `tsave:${sec}:damaged:${id}:${i}`, sec));
   };
   /** Attacked someone: conditions that end when they attack end (invisibility). */
   const didAttack = (id: number, sec: number) => {
@@ -446,7 +468,7 @@ export function resolveMovement(
       const left = Math.max(0, hp.get(id)! - taken);
       if (taken > 0) {
         hp.set(id, left);
-        wasHurt(id, sec, taken);
+        wasHurt(id, sec, taken, undefined, except >= 0 ? except : null);
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
         if (except >= 0) lastHitBy.set(id, except);
       }
@@ -912,7 +934,7 @@ export function resolveMovement(
           lastHitBy.set(id, m.tokenId);
           say(`${use.name} ${critNote(a.crit, crit)}hits ${nameOf(id)}: ${a.total} vs defense ${d.total}, ${dmg.total} damage (${dmg.text})${t.note}; ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "hit", hurt: hurt(id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}) });
-          if (t.n > 0) wasHurt(id, sec, t.n);
+          if (t.n > 0) wasHurt(id, sec, t.n, undefined, m.tokenId);
           fx.push({ look, from: m.tokenId, to: id, outcome: left <= 0 ? "down" : "hit" });
           if (left <= 0) {
             down.add(id);
@@ -1012,7 +1034,7 @@ export function resolveMovement(
           lastHitBy.set(target.id, m.tokenId);
           say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: ${critNote(a.crit, crit)}hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
           story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}) });
-          if (t.n > 0) wasHurt(target.id, sec, t.n);
+          if (t.n > 0) wasHurt(target.id, sec, t.n, undefined, m.tokenId);
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {
             story.push({ sec, k: "down", who: target.id });
@@ -1060,7 +1082,7 @@ export function resolveMovement(
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
       const beforeTick = new Map(hp);
       tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt, roll: endRoll }); // players roll their own saves to end conditions
-      for (const [id, h] of hp) if (h < (beforeTick.get(id) ?? h)) concentrationCheck(id, sec, beforeTick.get(id)! - h); // hurt by damage over time
+      for (const [id, h] of hp) if (h < (beforeTick.get(id) ?? h)) { concentrationCheck(id, sec, beforeTick.get(id)! - h); onDamaged(id, sec, null); } // hurt by damage over time
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
   }

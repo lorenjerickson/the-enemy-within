@@ -38,6 +38,7 @@ export interface Fighter {
   auras?: AuraModifier[]; // auras they give off of their own (or from what they wear)
   triggers?: { mod: Trigger; name: string }[]; // triggers of their own (or from what they wear)
   senses?: Senses; // their own senses (and their gear's)
+  attrMod?: (a: Attribute) => number; // an attribute's modifier now (with boosts and settings)
 }
 
 const roll = (f: string | null | undefined) => (f && f.trim() ? rollDice(f.replace(/^\+/, "")) : 0);
@@ -76,6 +77,7 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
   const mod = (a: Attribute) => modifier(settled((who.attributes[a] ?? 10) + boosted(f.statuses, `attribute:${a}`), f.statuses, `attribute:${a}`).value);
   const f: Fighter = {
     hp,
+    attrMod: (a) => mod(a),
     statuses: [...statuses],
     wear,
     attack: (use, against, more = []) => {

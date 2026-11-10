@@ -131,7 +131,7 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "hitting", text: "When you hit a creature", next: [WITH, outcome([addDamage("add", true), youTake, yourHealth, itGains, youGain])] },
     { value: "hit", text: "When a creature hits you", next: [WITH, outcome([itTakes, addDamage("you_take_extra", false), itGains, youGain])] },
     { value: "hit_by_source", text: "When the source hits you", next: [outcome([addDamage("add", false)])] }, // the source: whoever applied the condition
-    { value: "damaged", text: "When you take damage", next: [outcome([yourStatFor, yourHealth, youGain])] },
+    { value: "damaged", text: "When you take damage", next: [{ kind: "optional", id: "from", lead: "from", slots: [word("the source")] }, outcome([yourStatFor, yourHealth, youGain])] },
     { value: "moves", text: "When you move", next: [outcome([youTake, youGain])] },
   ],
 }];
@@ -141,6 +141,8 @@ export type Filled = Record<string, string | number>;
 /** A condition a shortcut sentence makes for itself (a stacking bonus): its name, its one effect's modifiers and its lifecycle. */
 export type MadeCondition = { name: string; effect: Modifier[]; rounds: number; reapply: "stack"; stack_limit: number };
 export type Compiled = { modifiers: Modifier[]; notes: string[]; creates?: MadeCondition };
+/** Stands for the condition a shortcut sentence makes, until it's saved and has an id. */
+export const MADE_CONDITION = -2;
 
 const signed = (v: string) => (/^[+-]/.test(v) ? v : `+${v}`);
 /** The engine's roll kinds for a "which roll" choice (a group: one per attribute). */
@@ -157,19 +159,28 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
   const one = (m: Modifier): Compiled => ({ modifiers: [m], notes });
   const none = (note: string): Compiled => ({ modifiers: [], notes: [...notes, note] });
   const save = f.save_attr !== undefined, half = f.save_for !== "none";
-  if (typeof f.amount === "string" && f.amount.includes(":")) notes.push(`an amount from ${f.amount.split(":")[0]} ${f.amount.split(":")[1]} modifier isn't in the engine yet: amounts are dice or numbers`);
+  const triggered = ["start", "hitting", "hit", "damaged", "moves"].includes(String(f.when)) && f.outcome !== "your_stat";
+  if (typeof f.amount === "string" && f.amount.includes(":") && !triggered) notes.push(`an amount from ${f.amount.split(":")[0]} ${f.amount.split(":")[1]} modifier isn't in the engine yet here (only in rules that happen when something happens)`);
   const amount = String(f.dice ?? f.amount);
   const cond = f.condition !== undefined ? conditionId(String(f.condition)) : 0;
-  const trigger = (on: "hit" | "hitting" | "start" | "moves", extra: Partial<Extract<Modifier, { kind: "trigger" }>> = {}): Modifier => ({
+  const trigger = (on: "hit" | "hitting" | "start" | "moves" | "damaged", extra: Partial<Extract<Modifier, { kind: "trigger" }>> = {}): Modifier => ({
     kind: "trigger", on, reach: f.reach === "melee" ? "melee" : "any", damage: "", damage_type: "", save_attr: save ? (f.save_attr as Attribute) : "", save_dc: save ? Number(f.save_dc) : 12, save_halves: half, condition: 0, condition_on: "other", ...extra,
   });
-  const triggerOutcome = (on: "hit" | "hitting" | "start" | "moves"): Compiled => {
-    if (f.outcome === "it_takes") return one(trigger(on, { damage: amount, damage_type: f.type as never }));
-    if (f.outcome === "it_gains") return one(trigger(on, { condition: cond, condition_on: "other" }));
-    if (f.outcome === "you_gain") return one(trigger(on, { condition: cond, condition_on: "self" }));
-    if (f.outcome === "you_take" && (on === "start" || on === "moves")) return one(trigger(on, { damage: amount, damage_type: f.type as never }));
-    if (f.outcome === "you_take") return none("backwash (a trigger damaging whoever has the effect) isn't in the engine yet");
-    return none("healing from a trigger isn't in the engine yet");
+  /** An amount as a trigger has it: dice (or a number), or an attribute's modifier (yours, or the other creature's). */
+  const amountOf = (): Partial<Extract<Modifier, { kind: "trigger" }>> => {
+    const a = String(f.dice ?? f.amount);
+    if (!a.includes(":")) return { damage: a };
+    const [whose, attr] = a.split(":");
+    return { damage: "", amount_mod: { whose: whose === "its" ? "other" : "self", attr: attr as Attribute } };
+  };
+  const triggerOutcome = (on: "hit" | "hitting" | "start" | "moves" | "damaged"): Compiled => {
+    const from = f.from !== undefined ? { from: "source" as const } : {};
+    if (f.outcome === "it_takes") return one(trigger(on, { ...amountOf(), damage_type: f.type as never, ...from }));
+    if (f.outcome === "it_gains") return one(trigger(on, { condition: cond, condition_on: "other", ...from }));
+    if (f.outcome === "you_gain") return one(trigger(on, { condition: cond, condition_on: "self", ...from }));
+    if (f.outcome === "you_take" || f.outcome === "you_take_extra") return one(trigger(on, { ...amountOf(), damage_type: f.type as never, damage_to: on === "start" || on === "moves" ? undefined : "self", ...from })); // backwash; more damage on hits against you
+    if (f.outcome === "your_health") return one(trigger(on, { ...amountOf(), heal: true, damage_to: "self", ...from }));
+    return none("that outcome isn't in the engine yet");
   };
   switch (f.when) {
     case "you":
@@ -222,7 +233,6 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
       if (save) notes.push("damage as it's applied has no save in the engine (the condition's own save as it lands covers that)");
       return one({ kind: "instant", value: amount, heal: false, damage_type: f.type as never });
     case "start":
-      if (f.outcome === "your_health") return none("healing at the start of a round needs triggers that heal");
       return triggerOutcome("start");
     case "end":
       if (f.outcome === "your_health") return one({ kind: "periodic", value: amount, heal: true, damage_type: "" });
@@ -233,14 +243,13 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
       if (f.outcome === "add") return one(trigger("hitting", { damage: amount, damage_type: f.type as never })); // with a save, or melee only: a trigger
       return triggerOutcome("hitting");
     case "hit":
-      if (f.outcome === "you_take_extra") return none(`extra damage on hits against you from anyone isn't in the engine yet: only from the source ("When the source hits you, add …")`);
       return triggerOutcome("hit");
     case "hit_by_source":
       return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "taking" });
     case "damaged":
-      notes.push(`"when you take damage" isn't a trigger event in the engine yet`);
-      if (f.outcome === "your_stat") return { modifiers: [], notes, creates: { name: `${signed(amount)} ${f.stat}`, effect: [{ kind: "boost", target: f.stat as ModifierTarget, value: signed(amount) }], rounds: Number(f.rounds), reapply: "stack", stack_limit: Number(f.stack_limit ?? 0) } };
-      return { modifiers: [], notes };
+      // "Your [defense] increases by [1] for [3] rounds": a stacking condition made for it (its id once saved: MADE_CONDITION).
+      if (f.outcome === "your_stat") return { modifiers: [trigger("damaged", { condition: MADE_CONDITION, condition_on: "self", ...(f.from !== undefined ? { from: "source" as const } : {}) })], notes, creates: { name: `${signed(amount)} ${f.stat}`, effect: [{ kind: "boost", target: f.stat as ModifierTarget, value: signed(amount) }], rounds: Number(f.rounds), reapply: "stack", stack_limit: Number(f.stack_limit ?? 0) } };
+      return triggerOutcome("damaged");
     case "moves":
       return triggerOutcome("moves");
   }
@@ -347,11 +356,19 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
       return [{ when: "your", stat: "health", how: m.value < 0 ? "minus" : "plus", amount: String(Math.abs(m.value)) }];
     case "trigger": {
       const own = m.on === "start" || m.on === "moves";
+      const from: Filled = m.from === "source" ? { from: 1 } : {};
+      const amount = m.amount_mod ? `${m.amount_mod.whose === "other" ? "its" : "your"}:${m.amount_mod.attr}` : m.damage;
+      if (m.heal) return [{ when: m.on, ...from, outcome: "your_health", amount }];
+      // A stacking condition a shortcut made ("your defense increases by 1 for 3 rounds"): said the way it was written.
+      const g = m.given, b = g?.effects.length === 1 && g.effects[0].modifiers.length === 1 ? g.effects[0].modifiers[0] : undefined;
+      if (m.on === "damaged" && m.condition_on === "self" && g && g.reapply === "stack" && b?.kind === "boost" && g.name === `${b.value} ${b.target}`)
+        return [{ when: "damaged", ...from, outcome: "your_stat", stat: b.target, amount: b.value.replace(/^\+/, ""), rounds: g.rounds, ...(g.stack_limit ? { limit: 1, stack_limit: g.stack_limit } : {}) }];
+      if (m.damage_to === "self" && (m.damage || m.amount_mod) && !own) return [{ when: m.on, ...(m.reach === "melee" ? { with: 1, reach: "melee" } : {}), ...from, outcome: m.on === "hit" ? "you_take_extra" : "you_take", dice: amount, type: m.damage_type || "untyped", ...(m.save_attr && m.on === "hitting" ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {}) }];
       const save: Filled = m.save_attr ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {};
       const reach: Filled = !own && m.reach === "melee" ? { with: 1, reach: "melee" } : {};
       const out: Filled[] = [];
-      if (m.damage) out.push({ when: m.on, ...reach, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: m.damage, type: m.damage_type || "untyped", ...save });
-      if (m.condition) out.push({ when: m.on, ...reach, outcome: own || m.condition_on === "self" ? "you_gain" : "it_gains", condition: m.given?.name ?? conditionName(m.condition) });
+      if (m.damage || m.amount_mod) out.push({ when: m.on, ...reach, ...from, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: amount, type: m.damage_type || "untyped", ...save });
+      if (m.condition) out.push({ when: m.on, ...reach, ...from, outcome: own || m.on === "damaged" || m.condition_on === "self" ? "you_gain" : "it_gains", condition: m.given?.name ?? conditionName(m.condition) });
       return out;
     }
     case "reroll":
