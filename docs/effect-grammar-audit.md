@@ -5,10 +5,9 @@ current effect form. Each row is something the current form can make: the select
 means the same, and whether that sentence compiles to the same engine data the form saves. Generated from a test run
 on 2026-11-10; 65 of 65 come out the same in the engine (2 of them as equivalent, not identical, data).
 
-Blanks are in brackets; the words between them are fixed. "You" is whoever has the effect, except in rules about the
-creature that applied the condition, which are written the other way round, as the handbook writes Hex: there "you" is
-whoever applied it and "the target" is whoever has it ("When you hit the target, add 1d6 necrotic damage."; "The
-target can't attack you."). The opening decides the voice, so no one picks it. A rule with no "When …"
+Blanks are in brackets; the words between them are fixed. "You" is always whoever has the effect; the creature that
+applied the condition is "the source" ("When the source hits you, add 1d6 necrotic damage."; "You can't attack the
+source."). A rule with no "When …"
 or "At the start of …" opening holds while its condition lasts.
 
 **Branch**: *decided* = the sentence uses branches agreed in the grammar sessions; **new** = this audit added the
@@ -26,13 +25,13 @@ branch to cover something the current form can make.
 | Maximum health: `-3` | [Your] [maximum health] [increases by] [-3]. | ✓ same<br>reads badly: wants "decreases by [3]" | decided |
 | **Extra damage on a hit** | | | |
 | On a hit: `1d6` · fire · on their hits | [When you hit a creature], [add] [1d6] [fire] damage. | ✓ same | decided |
-| On a hit: `1d6` · necrotic · on hits against them (by its source) | [When you hit the target], [add] [1d6] [necrotic] damage. | ✓ same<br>the applier's voice: "you" = whoever applied the condition | **new** |
+| On a hit: `1d6` · necrotic · on hits against them (by its source) | [When the source hits you], [add] [1d6] [necrotic] damage. | ✓ same<br>the source: whoever applied the condition | **new** |
 | **Restrictions** | | | |
 | Can't: ☑ actions | [You can't] [take actions]. | ✓ same | decided |
 | Can't: ☑ bonus actions | [You can't] [take bonus actions]. | ✓ same | decided |
 | Can't: ☑ reactions | [You can't] [take reactions]. | ✓ same | decided |
 | Can't: ☑ moving | [You can't] [move]. | ✓ same | decided |
-| Can't: ☑ attacking whoever caused it | [The target can't attack you]. | ✓ same<br>the applier's voice: "you" = whoever applied the condition | **new** |
+| Can't: ☑ attacking whoever caused it | [You can't] [attack the source]. | ✓ same | decided |
 | Fails saves: ☑ Might ☑ Agility | [You automatically fail] [Might] saving throws.<br>[You automatically fail] [Agility] saving throws. | ✓ same<br>one sentence per attribute: the form's two ticks are two rules (the second: Agility) | **new** |
 | Speed: half speed | [Your] [speed] [is halved]. | ✓ same | **new** |
 | Speed: double speed | [Your] [speed] [is doubled]. | ✓ same | **new** |
@@ -96,7 +95,7 @@ branch to cover something the current form can make.
 
 ## Where the builder branches (added by this audit)
 
-The first blank now offers: "You can't", "You are", "You can see invisible creatures", "You automatically fail", "Your", "Critical hits against you are normal hits", "The target can't attack you", "Within", "When you make", "When a creature makes an attack roll against you", "When this is applied", "At the start of each round", "At the end of each round", "When you hit a creature", "When a creature hits you", "When you hit the target", "When you take damage", "When you move".
+The first blank now offers: "You can't", "You are", "You can see invisible creatures", "You automatically fail", "Your", "Critical hits against you are normal hits", "Within", "When you make", "When a creature makes an attack roll against you", "When this is applied", "At the start of each round", "At the end of each round", "When you hit a creature", "When a creature hits you", "When the source hits you", "When you take damage", "When you move".
 
 New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances, Becomes and multiplied, Advantage and disadvantage, Dice, Senses, Strain, Triggers, Auras.
 
@@ -110,15 +109,15 @@ New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances,
   a d20 roll of [N] or lower and use the new result" and "treat any d20 roll below [N] as that number".
 - **"When a creature makes an attack roll against you"** (advantage or disadvantage on attacks against you).
 - **Triggers** gained "you gain the [condition] condition" after hit, landing a hit, moving and the start of each round.
-- **The applier's voice**: "The target can't attack you" (Hypnotized) and "When you hit the target, add [dice] [type]
-  damage" (a Hex), for the two things the form can say about the creature that applied the condition.
+- **"The source"** (whoever applied the condition): "You can't attack the source" (Hypnotized) and "When the source
+  hits you, add [dice] [type] damage" (a Hex).
 - **"When this is applied"** gained "strain your [attribute] by [N]" and "relieve [N] strain from your [attribute]".
 
 ## Findings
 
-- Two openings now differ only by voice: "When you hit a creature" (you have the effect: a poisoned blade) and "When
-  you hit the target" (you applied it: a Hex). The editor should make the voice visible, by grouping the applier's
-  openings under their own heading ("About the creature that applied this"), so the two aren't confused.
+- One voice throughout: "you" is whoever has the effect. Written from the source's side instead ("When you hit the
+  target …") a Hex reads like the published spell, but two meanings of "you" side by side confused more than it
+  helped. Worth revisiting if effects are ever authored from the caster's point of view (a spell's own description).
 - Some single form rows become several engine modifiers, and some sets of form rows become one sentence: "any d20 roll",
   "a saving throw" and "an ability check" stand for one modifier per attribute, and "all damage" for 13 resistances.
   The builder should show such a group as one sentence when it loads an effect.
