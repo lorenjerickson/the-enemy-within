@@ -10,7 +10,7 @@
  */
 import { DAMAGE_TYPES, type RollKind } from "@/lib/actions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
-import type { Modifier } from "@/lib/conditions";
+import type { ConditionDef, Modifier } from "@/lib/conditions";
 import { MODIFIER_TARGET_GROUPS, SKILLS, type ModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula } from "@/lib/itemTypes";
 
@@ -256,14 +256,14 @@ function blankText(slot: Slot, v: string | number): string {
 }
 
 /** A complete sentence's words, from its filled blanks (punctuation as the handbook would). */
-export function render(f: Filled): string {
+export function render(f: Filled, root: Slot[] = EFFECT_SENTENCE): string {
   const out: string[] = [];
   const walk = (slots: Slot[]) => {
     for (const slot of slots) {
       if (slot.kind === "word") { if (slot.text.startsWith("it rolls twice")) out[out.length - 1] += ","; out.push(slot.text); }
       else if (slot.kind === "optional") {
         if (f[slot.id] === undefined) continue;
-        const paren = slot.id === "save" || slot.id === "limit";
+        const paren = slot.id === "save" || slot.id === "limit" || slot.id === "needed";
         const at = out.length;
         out.push(slot.lead);
         walk(slot.slots);
@@ -276,8 +276,8 @@ export function render(f: Filled): string {
       } else out.push(blankText(slot, f[slot.id] ?? "?"));
     }
   };
-  walk(EFFECT_SENTENCE);
-  const text = out.join(" ");
+  walk(root);
+  const text = out.join(" ").replace(/\b1 (rounds|copies|successes|times)\b/g, (_, w: string) => `1 ${w === "copies" ? "copy" : w.slice(0, -1)}`);
   return `${text[0].toUpperCase()}${text.slice(1)}.`;
 }
 
@@ -372,7 +372,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
 }
 
 /** An effect's rules as handbook sentences. */
-export const effectSentences = (modifiers: Modifier[], conditionName?: (id: number) => string) => sentencesOf(modifiers, conditionName).map(render);
+export const effectSentences = (modifiers: Modifier[], conditionName?: (id: number) => string) => sentencesOf(modifiers, conditionName).map((f) => render(f));
 /** An effect's rules as one line of text (for lists). */
 export const effectText = (e: { modifiers: Modifier[] }, conditionName?: (id: number) => string) => effectSentences(e.modifiers, conditionName).join(" ");
 
@@ -381,7 +381,7 @@ export const effectText = (e: { modifiers: Modifier[] }, conditionName?: (id: nu
 const isAmountText = (v: string) => isDiceFormula(v.replace(/^[+-]/, "")) || /^[+-]?\d+$/.test(v);
 
 /** Whether a rule's blanks are all filled and valid along the path its choices take; the first problem if not. */
-export function checkRule(f: Filled): string | null {
+export function checkRule(f: Filled, root: Slot[] = EFFECT_SENTENCE): string | null {
   const walk = (slots: Slot[]): string | null => {
     for (const s of slots) {
       if (s.kind === "word") continue;
@@ -399,7 +399,7 @@ export function checkRule(f: Filled): string | null {
     }
     return null;
   };
-  return walk(EFFECT_SENTENCE);
+  return walk(root);
 }
 
 /** The ids of every blank under a choice's options (cleared when the choice changes, so nothing stale is kept). */
@@ -417,12 +417,13 @@ export type Next = { text: string; hint?: boolean };
  * Reads one rule's text against the grammar (punctuation ignored, case too). Returns the blanks it filled, whether it's a
  * whole rule, a problem if the text goes wrong, and, where it stops, what could come next and the partly typed word.
  */
-export function readRule(text: string, conditions: string[] = []): { filled: Filled; complete: boolean; error?: string; next: Next[]; partial: string } {
+export function readRule(text: string, conditions: string[] = [], root: Slot[] = EFFECT_SENTENCE): { filled: Filled; complete: boolean; error?: string; next: Next[]; partial: string } {
   let rest = text.replace(/[.,()]/g, " ").replace(/\s+/g, " ").trimStart();
   const filled: Filled = {};
   const lower = (s: string) => s.toLowerCase();
   /** Takes `w` off the front (whole words only). */
-  const eat = (w: string) => {
+  const eat = (words: string) => {
+    const w = words.replace(/[.,()]/g, " ").replace(/\s+/g, " ").trim(); // fixed words may carry punctuation; the text's is dropped
     if (!w || !lower(rest).startsWith(lower(w)) || (rest.length > w.length && rest[w.length] !== " ")) return false;
     rest = rest.slice(w.length).trimStart();
     return true;
@@ -432,7 +433,7 @@ export function readRule(text: string, conditions: string[] = []): { filled: Fil
   /** What a slot offers next (an optional part: its lead, or whatever follows it). */
   const offers = (s: Slot, after: Slot[]): Next[] => {
     if (s.kind === "word") return [{ text: s.text }];
-    if (s.kind === "optional") return [{ text: s.lead }, ...(after.length ? offers(after[0], after.slice(1)) : [{ text: "." }])];
+    if (s.kind === "optional") return [{ text: s.slots[0]?.kind === "word" ? `${s.lead} ${s.slots[0].text}` : s.lead }, ...(after.length ? offers(after[0], after.slice(1)) : [{ text: "." }])]; // "up to", "or by using your action"
     if (s.kind === "choice") return s.options.filter((o) => o.text).map((o) => ({ text: o.text }));
     if (s.kind === "condition") return conditions.map((c) => ({ text: `${c} condition` }));
     if (s.kind === "amount") return [{ text: "1d6", hint: true }, { text: "your" }, { text: "its" }];
@@ -446,7 +447,7 @@ export function readRule(text: string, conditions: string[] = []): { filled: Fil
         if ([s, ...after].every((x) => x.kind === "optional")) { trailing = offers(s, after).filter((n) => n.text !== "."); return null; } // whole; optional parts could still follow
         return { next: offers(s, after) };
       }
-      if (s.kind === "word") { if (!eat(s.text)) return { next: offers(s, after), error: `expected "${s.text}"` }; continue; }
+      if (s.kind === "word") { if (!eat(s.text) && !(/s$/.test(s.text) && eat(s.text.slice(0, -1)))) return { next: offers(s, after), error: `expected "${s.text}"` }; continue; } // "1 round" as well as "6 rounds"
       if (s.kind === "optional") { if (eat(s.lead)) { filled[s.id] = 1; const e = walk(s.slots); if (e) return e; } continue; }
       if (s.kind === "choice") {
         const typing = !rest.includes(" ") || s.options.some((x) => x.text && lower(x.text).startsWith(lower(rest)) && lower(x.text) !== lower(rest));
@@ -481,11 +482,62 @@ export function readRule(text: string, conditions: string[] = []): { filled: Fil
     }
     return null;
   };
-  const stop = walk(EFFECT_SENTENCE);
+  const stop = walk(root);
   if (!stop) return rest ? { filled, complete: false, error: `extra words: "${rest}"`, next: [], partial: "" } : { filled, complete: true, next: trailing, partial: "" };
   // Stopped: if the text left is the start of something that could come next, it's still being typed.
   const partial = stop.error ? rest : "";
   const fits = stop.next.filter((n) => !n.hint && lower(n.text).startsWith(lower(partial)));
   if (stop.error && partial && (fits.length || stop.next.some((n) => n.hint && !partial.includes(" ")))) return { filled, complete: false, next: fits.length ? fits : stop.next, partial };
   return { filled, complete: false, error: stop.error, next: stop.next, partial: stop.error ? "" : "" };
+}
+
+// ---------- A condition's lifecycle as sentences (how long it lasts, its saves, what ends it, stacking) ----------
+
+/** A lifecycle sentence ("you" = whoever has the condition; "the source" = whoever applied it). */
+export const CONDITION_SENTENCE: Slot[] = [{
+  kind: "choice", id: "rule", label: "select", options: [
+    { value: "lasts", text: "It lasts", next: [num("rounds", "rounds", 1, 600), word("rounds")] },
+    { value: "apply_save", text: "When it's applied, a DC", next: [num("dc", "DC", 1, 40), attrs("attr"), word("save"), { kind: "choice", id: "outcome_save", label: "what a success does", options: [{ value: "negates", text: "avoids it" }, { value: "halves", text: "halves how long it lasts" }] }] },
+    { value: "end_save", text: "You can end it with a DC", next: [
+      num("dc", "DC", 1, 40), attrs("attr"), word("save"),
+      { kind: "choice", id: "when", label: "when", options: [{ value: "end", text: "at the end of each round" }, { value: "start", text: "at the start of each round" }, { value: "damaged", text: "when you take damage" }] },
+      { kind: "optional", id: "action", lead: "or", slots: [word("by using your action")] },
+      { kind: "optional", id: "needed", lead: "needing", slots: [num("saves", "successes", 2, 10), word("successes")] },
+    ] },
+    { value: "ends", text: "It ends when", next: [{ kind: "choice", id: "ends", label: "what", options: [{ value: "damage", text: "you take damage" }, { value: "attack", text: "you attack" }, { value: "trigger", text: "one of its triggers fires" }, { value: "concentration", text: "the source stops concentrating on it" }] }] },
+    { value: "again", text: "If it's applied again,", next: [{ kind: "choice", id: "again", label: "what happens", options: [
+      { value: "refresh", text: "it starts over" },
+      { value: "stack", text: "another copy runs alongside", next: [{ kind: "optional", id: "limit", lead: "up", slots: [word("to"), num("stack_limit", "copies at most", 2, 99), word("copies")] }] },
+      { value: "ignore", text: "nothing happens" },
+    ] }] },
+  ],
+}];
+
+type Lifecycle = Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "ends_on_trigger" | "concentration" | "reapply" | "stack_limit">;
+
+/** A condition's lifecycle from its sentences; a problem if one's missing or said twice. */
+export function compileLifecycle(rules: Filled[]): { lifecycle?: Lifecycle; problem?: string } {
+  const count = (v: string) => rules.filter((r) => r.rule === v).length;
+  if (count("lasts") !== 1) return { problem: count("lasts") ? `say how long it lasts once, not ${count("lasts")} times` : "say how long it lasts (It lasts … rounds)" };
+  for (const v of ["apply_save", "end_save", "again"]) if (count(v) > 1) return { problem: `"${CONDITION_SENTENCE[0].kind === "choice" ? CONDITION_SENTENCE[0].options.find((o) => o.value === v)!.text : v}…" is said twice` };
+  const one = (v: string) => rules.find((r) => r.rule === v), ends = new Set(rules.filter((r) => r.rule === "ends").map((r) => r.ends));
+  const lasts = one("lasts")!, apply = one("apply_save"), end = one("end_save"), again = one("again");
+  return { lifecycle: {
+    rounds: Number(lasts.rounds),
+    apply_save_attr: apply ? (apply.attr as Attribute) : "", apply_save_dc: apply ? Number(apply.dc) : 12, apply_save_outcome: apply?.outcome_save === "halves" ? "halves" : "negates",
+    save_attr: end ? (end.attr as Attribute) : "", save_dc: end ? Number(end.dc) : 12, save_when: (end?.when as "end" | "start" | "damaged") ?? "end",
+    save_action: end?.action !== undefined ? 1 : 0, saves_needed: end?.needed !== undefined ? Number(end.saves) : 1,
+    ends_on_damage: ends.has("damage") ? 1 : 0, ends_on_attack: ends.has("attack") ? 1 : 0, ends_on_trigger: ends.has("trigger") ? 1 : 0, concentration: ends.has("concentration") ? 1 : 0,
+    reapply: (again?.again as "refresh" | "stack" | "ignore") ?? "refresh", stack_limit: again?.limit !== undefined ? Number(again.stack_limit) : 0,
+  } };
+}
+
+/** A condition's lifecycle as sentences (what the builder loads). */
+export function lifecycleSentences(c: Partial<Lifecycle>): Filled[] {
+  const out: Filled[] = [{ rule: "lasts", rounds: c.rounds ?? 1 }];
+  if (c.apply_save_attr) out.push({ rule: "apply_save", dc: c.apply_save_dc ?? 12, attr: c.apply_save_attr, outcome_save: c.apply_save_outcome ?? "negates" });
+  if (c.save_attr) out.push({ rule: "end_save", dc: c.save_dc ?? 12, attr: c.save_attr, when: c.save_when ?? "end", ...(c.save_action ? { action: 1 } : {}), ...((c.saves_needed ?? 1) > 1 ? { needed: 1, saves: c.saves_needed! } : {}) });
+  for (const [flag, v] of [[c.ends_on_damage, "damage"], [c.ends_on_attack, "attack"], [c.ends_on_trigger, "trigger"], [c.concentration, "concentration"]] as const) if (flag) out.push({ rule: "ends", ends: v });
+  if (c.reapply && c.reapply !== "refresh") out.push({ rule: "again", again: c.reapply, ...(c.reapply === "stack" && c.stack_limit ? { limit: 1, stack_limit: c.stack_limit } : {}) });
+  return out;
 }

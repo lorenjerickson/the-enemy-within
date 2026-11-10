@@ -2,7 +2,7 @@
 
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ATTRIBUTES } from "@/lib/attributes";
-import { EFFECT_SENTENCE, checkRule, compile, idsUnder, readRule, render, type Filled, type Next, type Option, type Slot } from "@/lib/effectGrammar";
+import { CONDITION_SENTENCE, EFFECT_SENTENCE, checkRule, compile, compileLifecycle, idsUnder, readRule, render, type Filled, type Next, type Option, type Slot } from "@/lib/effectGrammar";
 
 /** First-blank choices, grouped as the editor shows them. */
 const GROUPS: [string, string[]][] = [
@@ -18,7 +18,8 @@ const OPTIONAL_HINTS: Record<string, string> = { save: "a save", with: "melee on
  * An effect's rules as handbook sentences built blank by blank: each choice decides the blanks that follow, and a
  * sentence shows only as far as its first empty blank. Saved as the rules' blanks (JSON); the server compiles them.
  */
-export default function EffectBuilder({ initial, conditions }: { initial: Filled[]; conditions: { id: number; name: string }[] }) {
+export default function EffectBuilder({ initial, conditions = [], grammar = "effect" }: { initial: Filled[]; conditions?: { id: number; name: string }[]; grammar?: "effect" | "condition" }) {
+  const root = grammar === "condition" ? CONDITION_SENTENCE : EFFECT_SENTENCE;
   const [rules, setRules] = useState<Filled[]>(initial.length ? initial : [{}]);
   const [view, setView] = useState<"sentences" | "text">("sentences");
   const [text, setText] = useState("");
@@ -26,32 +27,32 @@ export default function EffectBuilder({ initial, conditions }: { initial: Filled
   const conditionId = (name: string) => conditions.find((c) => c.name === name)?.id ?? -1;
   const names = conditions.map((c) => c.name);
   /** The rules a text says, a line each (a line that isn't a whole rule yet keeps what it has, so saving says what's missing). */
-  const fromText = (t: string) => t.split("\n").filter((l) => l.trim()).map((l) => readRule(l, names).filled);
+  const fromText = (t: string) => t.split("\n").filter((l) => l.trim()).map((l) => readRule(l, names, root).filled);
   const switchTo = (v: "sentences" | "text") => {
     if (v === view) return;
-    if (v === "text") setText(rules.filter((r) => Object.keys(r).length && !checkRule(r)).map(render).join("\n")); // an unfinished sentence doesn't carry over
+    if (v === "text") setText(rules.filter((r) => Object.keys(r).length && !checkRule(r, root)).map((f) => render(f, root)).join("\n")); // an unfinished sentence doesn't carry over
     else { const rs = fromText(text); setRules(rs.length ? rs : [{}]); }
     setView(v);
   };
   const saved = view === "text" ? fromText(text) : rules.filter((r) => Object.keys(r).length);
   return (
     <fieldset className="space-y-2 rounded-box border border-base-300 p-2" data-effect-builder>
-      <legend className="px-1 text-sm font-semibold">Rules</legend>
-      <input type="hidden" name="rules" value={JSON.stringify(saved)} />
+      <legend className="px-1 text-sm font-semibold">{grammar === "condition" ? "How it works" : "Rules"}</legend>
+      <input type="hidden" name={grammar === "condition" ? "lifecycle" : "rules"} value={JSON.stringify(saved)} />
       <div className="join" data-view-toggle>
         {(["sentences", "text"] as const).map((v) => (
           <button key={v} type="button" className={`btn join-item btn-xs ${view === v ? "btn-active" : ""}`} data-view={v} onClick={() => switchTo(v)}>{v === "sentences" ? "Sentences" : "Text"}</button>
         ))}
       </div>
-      {view === "text" ? <TextView text={text} setText={setText} conditions={names} conditionId={conditionId} /> : rules.map((rule, i) => {
-        const problem = Object.keys(rule).length ? checkRule(rule) : null;
-        const notes = Object.keys(rule).length && !problem ? compile(rule, conditionId) : null;
+      {view === "text" ? <TextView text={text} setText={setText} conditions={names} conditionId={conditionId} root={root} /> : rules.map((rule, i) => {
+        const problem = Object.keys(rule).length ? checkRule(rule, root) : null;
+        const notes = grammar === "effect" && Object.keys(rule).length && !problem ? compile(rule, conditionId) : null;
         const nothing = notes && !notes.modifiers.length && !notes.creates;
         return (
           <div key={i} className="rounded-box bg-base-200 p-2" data-rule={i}>
             <div className="flex items-start gap-2">
               <div className="flex flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-8">
-                <Blanks slots={EFFECT_SENTENCE} rule={rule} set={(r) => update(i, r)} conditions={conditions} />
+                <Blanks slots={root} rule={rule} set={(r) => update(i, r)} conditions={conditions} />
               </div>
               <button type="button" className="btn btn-ghost btn-xs" aria-label="Remove rule" data-remove-rule onClick={() => setRules((rs) => rs.filter((_, j) => j !== i))}>✕</button>
             </div>
@@ -61,6 +62,7 @@ export default function EffectBuilder({ initial, conditions }: { initial: Filled
         );
       })}
       {view === "sentences" && <button type="button" className="btn btn-ghost btn-sm" data-add-rule onClick={() => setRules((rs) => [...rs, {}])}>+ Add rule</button>}
+      {grammar === "condition" && (() => { const p = compileLifecycle(saved.filter((r) => !checkRule(r, root))).problem; return p ? <p className="text-xs text-warning" data-lifecycle-problem>{p[0].toUpperCase() + p.slice(1)}.</p> : null; })()}
     </fieldset>
   );
 }
@@ -162,7 +164,7 @@ function ChoiceBlank({ slot, value, first, onPick }: { slot: Extract<Slot, { kin
  * The rules as text, a line each, with autocomplete: where the line the cursor is on stops, what could come next
  * (Tab or Enter takes the highlighted one, arrows move, Escape closes). Each line is read against the same grammar.
  */
-function TextView({ text, setText, conditions, conditionId }: { text: string; setText: (t: string) => void; conditions: string[]; conditionId: (n: string) => number }) {
+function TextView({ text, setText, conditions, conditionId, root }: { text: string; setText: (t: string) => void; conditions: string[]; conditionId: (n: string) => number; root: Slot[] }) {
   const area = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState(text.length);
   const [pick, setPick] = useState(0);
@@ -174,14 +176,14 @@ function TextView({ text, setText, conditions, conditionId }: { text: string; se
     caret.current = null;
   }, [text]);
   /** The line the caret is on, up to the caret, read against the grammar. */
-  const at = (pos: number) => { const start = text.lastIndexOf("\n", pos - 1) + 1; return { start, read: readRule(text.slice(start, pos), conditions) }; };
+  const at = (pos: number) => { const start = text.lastIndexOf("\n", pos - 1) + 1; return { start, read: readRule(text.slice(start, pos), conditions, root) }; };
   const { read } = at(cursor);
   const offers: Next[] = closed ? [] : read.next.filter((n) => !n.hint).slice(0, 12);
   const hints = read.next.filter((n) => n.hint).map((n) => n.text);
   const take = (n: Next) => {
     const pos = area.current?.selectionStart ?? cursor, here = at(pos);
     const cut = pos - here.read.partial.length, lead = cut > here.start && !/[\s(]$/.test(text.slice(0, cut)) ? " " : "";
-    const word = n.text === "." ? "." : n.text === "DC" ? "(DC" : n.text === "up" ? "(up" : n.text;
+    const word = /^(DC|up to|needing)$/.test(n.text) ? `(${n.text}` : n.text; // the parts written in brackets
     const add = `${n.text === "." ? "" : lead}${word}${n.text === "." ? "" : " "}`;
     const next = text.slice(0, cut) + add + text.slice(pos);
     caret.current = cut + add.length;
@@ -214,7 +216,7 @@ function TextView({ text, setText, conditions, conditionId }: { text: string; se
       <ul className="space-y-0.5 text-xs" data-line-status>
         {lines.map((l, i) => {
           if (!l.trim()) return null;
-          const r = readRule(l, conditions), out = r.complete ? compile(r.filled, conditionId) : null;
+          const r = readRule(l, conditions, root), out = r.complete ? (root === EFFECT_SENTENCE ? compile(r.filled, conditionId) : { modifiers: [1], notes: [] as string[], creates: undefined }) : null;
           const bad = !r.complete ? (r.error ?? "unfinished") : !out!.modifiers.length && !out!.creates ? `can't be saved yet: ${out!.notes.join("; ")}` : "";
           return <li key={i} className={bad ? "text-error" : out!.notes.length ? "text-warning" : "opacity-60"}>Line {i + 1}: {bad || (out!.notes.length ? `note: ${out!.notes.join("; ")}` : "✓")}</li>;
         })}
