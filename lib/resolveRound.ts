@@ -185,6 +185,7 @@ export function resolveMovement(
   // Effects on everyone (Poisoned…), as the round goes: put on (again: its rounds start over), ticked at the end.
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
   const temps = new Map<number, number>(); // temporary health granted this round (given after it, the highest)
+  const strains: { tokenId: number; attribute: Attribute; points: number }[] = []; // strain put on (or taken off) this round, kept after it
   /** A save against something landing on them: a player rolls their own (the round waits for it), the server rolls for the GM's creatures. */
   const asked = new Map<string, number>(); // how many times each save key has come up this round (the same save twice gets "#2"…)
   const saveRoll = (id: number, attr: Attribute, dc: number, base: string, what: string, sec: number): { total: number; text: string } => {
@@ -240,6 +241,13 @@ export function resolveMovement(
           log.push(`${sec} s: ${nameOf(id)} is down.`);
         }
       }
+    }
+    // Strain as it lands: points on an attribute that outlast the condition (kept after the round; they count from now on).
+    for (const m of modifiersOf(c)) if (m.kind === "strain" && m.points) {
+      strains.push({ tokenId: id, attribute: m.attribute, points: m.points });
+      if (m.points > 0) fighters.get(id)?.statuses?.push({ source: `${c.name} (strain)`, boosts: [{ target: `attribute:${m.attribute}`, value: `-${m.points}` }], grants: [] });
+      log.push(`${sec} s: ${nameOf(id)} ${m.points > 0 ? `takes ${m.points}` : `is relieved of ${-m.points}`} ${m.attribute} strain (${c.name}).`);
+      story.push({ sec, k: "strain", who: id, attribute: m.attribute, points: m.points, source: c.name });
     }
     // Temporary health as it lands (kept after the round: the highest counts).
     for (const m of modifiersOf(c)) if (m.kind === "temphp" && hp.has(id)) {
@@ -1068,7 +1076,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

@@ -29,6 +29,7 @@ export type Modifier =
   | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
   | Trigger
   | RollTweak // reroll / minroll / crit / nocrit: what happens to the dice
+  | { kind: "strain"; attribute: Attribute; points: number } // strain points on an attribute as it lands (each −1; negative: treatment takes them off); they outlast the condition and drain with rest
   | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft)
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
@@ -193,7 +194,7 @@ export function reapplied(list: Affliction[], c: Condition, rounds: number, by: 
 }
 
 /** Whether a condition stays on once it has landed (an instant heal and nothing else doesn't). */
-export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp");
+export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp" && m.kind !== "strain");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
 export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[]; tweaks: RollTweak[] } {
@@ -215,6 +216,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
+  if (m.kind === "strain") return m.points >= 0 ? `${m.points} ${m.attribute} strain` : `relieves ${-m.points} ${m.attribute} strain`;
   if (m.kind === "sense") return m.sense === "blind" ? "blind: sees only within 5 ft" : m.sense === "invisible" ? "invisible" : m.sense === "darkvision" ? `darkvision ${m.range ?? 60} ft` : "sees invisible things";
   if (m.kind === "reroll") return `rerolls ${m.at === 1 ? "a 1" : `${m.at} or less`} on ${rollKindLabel(m.roll).toLowerCase()} (keeps the new roll)`;
   if (m.kind === "minroll") return `a d20 below ${m.min} counts as ${m.min} on ${rollKindLabel(m.roll).toLowerCase()}`;

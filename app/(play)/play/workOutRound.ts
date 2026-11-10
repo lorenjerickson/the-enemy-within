@@ -17,7 +17,7 @@ import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
-import { addAffliction, recordSightingAt } from "@/lib/db";
+import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest } from "@/lib/db";
 
 /**
@@ -101,6 +101,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
+  for (const s of result.strains) addStrain(s.tokenId, s.attribute, s.points); // strain outlasts the round (and the condition)
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {
     const h = tokenHealth(id);
@@ -215,6 +216,7 @@ export function applyConditionNow(levelId: number, tokenId: number, c: Condition
         if (m.heal) { const max = effectiveMaxHp(tokenId, h.maximum); const to = Math.min(max, next.current + n); out.push(`healed for ${to - next.current}`); next.current = to; }
         else { const fromTemp = Math.min(next.temporary, n); next = { ...next, temporary: next.temporary - fromTemp, current: Math.max(0, next.current - (n - fromTemp)) }; out.push(`${n} damage`); }
       }
+      if (m.kind === "strain" && m.points) { const now = addStrain(tokenId, m.attribute, m.points); out.push(`${m.points > 0 ? `${m.points}` : `${-m.points} less`} ${m.attribute} strain (${now} now)`); }
       if (m.kind === "temphp") { const n = Math.max(0, rollDice(m.value)); if (n > next.temporary) next.temporary = n; out.push(`${n} temporary health`); }
     }
     if (next.current !== h.current || next.temporary !== h.temporary) saveTokenHealth(tokenId, next);

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { requireGm, setActingAs } from "@/lib/auth";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
+import { logSessionEvent, restStrain } from "@/lib/db";
 import { beginGameSession, getOpenGameSession, setSessionMember, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
@@ -26,6 +27,18 @@ export async function advanceTime(minutes: number) {
   setGameTime(getGameTime() + step);
   passTimeForEffects(step); // effects (Poisoned…) tick a round per 6 s out of an encounter
   fireTriggers(); // e.g. ON timer.expired
+  revalidatePath("/", "layout");
+}
+
+/** A rest for everyone: an hour (short) or eight (long) passes, and strain drains (short: 1 point per attribute; long: all but 1). */
+export async function takeRest(kind: "short" | "long") {
+  await requireGm();
+  const minutes = kind === "short" ? 60 : 480;
+  setGameTime(getGameTime() + minutes);
+  passTimeForEffects(minutes);
+  restStrain(kind === "short" ? "short" : "long");
+  logSessionEvent(`The party takes a ${kind} rest (${kind === "short" ? "1 hour" : "8 hours"}): strain eases.`);
+  fireTriggers();
   revalidatePath("/", "layout");
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { advanceTime } from "./actions";
+import { advanceTime, takeRest } from "./actions";
 import { formatGameTime, formatSpan } from "@/lib/calendar";
 
 export { formatGameTime };
@@ -27,6 +27,8 @@ export function CalendarPanel({ now, timers }: { now: number; timers: { name: st
             {s.label}
           </button>
         ))}
+        <button type="button" className="btn btn-xs btn-outline" disabled={pending} title="1 hour; strain eases by 1 point per attribute" data-short-rest onClick={() => startTransition(() => takeRest("short"))}>Short rest</button>
+        <button type="button" className="btn btn-xs btn-outline" disabled={pending} title="8 hours; strain eases to at most 1 point per attribute" data-long-rest onClick={() => startTransition(() => takeRest("long"))}>Long rest</button>
       </div>
       {timers.length > 0 && (
         <ul className="text-sm">

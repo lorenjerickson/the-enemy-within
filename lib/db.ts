@@ -2165,6 +2165,38 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
   })();
 }
 
+// Strain: points on a creature's attributes (each −1 to it, never below half), left by conditions; they outlast them
+// and drain with rest. A character's follow them from map to map ("c:<character id>"); a creature's stay with its
+// token ("t:<token id>").
+db.exec(`CREATE TABLE IF NOT EXISTS strain (
+  owner TEXT NOT NULL,
+  attribute TEXT NOT NULL,
+  points INTEGER NOT NULL,
+  PRIMARY KEY (owner, attribute)
+)`);
+const strainOwner = (tokenId: number) => {
+  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  return t?.character_id ? `c:${t.character_id}` : `t:${tokenId}`;
+};
+/** A token's strain points, by attribute. */
+export function getStrain(tokenId: number): Partial<Record<Attribute, number>> {
+  return Object.fromEntries(db.prepare<[string], { attribute: Attribute; points: number }>("SELECT attribute, points FROM strain WHERE owner = ?").all(strainOwner(tokenId)).map((r) => [r.attribute, r.points]));
+}
+/** Adds strain points to one of a token's attributes (negative: takes them off, not below none); returns the points now. */
+export function addStrain(tokenId: number, attribute: Attribute, points: number): number {
+  const owner = strainOwner(tokenId), now = Math.max(0, (getStrain(tokenId)[attribute] ?? 0) + points);
+  if (now) db.prepare("INSERT INTO strain (owner, attribute, points) VALUES (?, ?, ?) ON CONFLICT (owner, attribute) DO UPDATE SET points = excluded.points").run(owner, attribute, now);
+  else db.prepare("DELETE FROM strain WHERE owner = ? AND attribute = ?").run(owner, attribute);
+  return now;
+}
+/** Rest drains everyone's strain: a short rest 1 point per attribute, a long rest all but 1. */
+export function restStrain(kind: "short" | "long"): void {
+  db.transaction(() => {
+    db.prepare(kind === "short" ? "UPDATE strain SET points = points - 1" : "UPDATE strain SET points = MIN(points, 1)").run();
+    db.prepare("DELETE FROM strain WHERE points <= 0").run();
+  })();
+}
+
 // Conditions on creatures right now: a copy of the condition (and its effects) as it was put on, the rounds it has
 // left, and who put it there.
 db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (

@@ -24,6 +24,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "late"; who: number; action: string; heldBy?: number | null; target?: number | null }
   | { k: "afflicted"; who: number; name: string; by: number | null; aura?: boolean } // an effect (Poisoned…) put on them (aura: by `by`'s aura, while within it)
   | { k: "stopped"; who: number; action: string; target: number | null; why: string } // a condition stopped it (why: its name, or "spare": they can't attack whoever hypnotized them)
+  | { k: "strain"; who: number; attribute: string; points: number; source: string } // strain points on an attribute (negative: relieved)
   | { k: "effect"; who: number; name: string; much: number; heal: boolean; hurt?: number; from?: number } // an effect's round of damage or healing (from: whose trigger it was)
   | { k: "temphp"; who: number; source: string; much: number } // temporary health granted
   | { k: "effectEnds"; who: number; name: string; why: "save" | "time" | "resisted" | "damage" | "attack" | "concentration" | "left" | "trigger" } // trigger: spent once its trigger fired; resisted: it never took hold; left: out of the aura giving it
@@ -137,6 +138,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         else add(e.sec, `You leave ${name(e.who)} ${e.name.toLowerCase()}.`);
         break;
       case "temphp": add(e.sec, `${e.source} steels you (+${e.much} temporary health).`); break;
+      case "strain": add(e.sec, e.points > 0 ? `${e.source} strains your ${e.attribute} (-${e.points}, until you rest).` : `${e.source} eases the strain on your ${e.attribute}.`); break;
       case "effect": add(e.sec, !mine ? `Your ${e.name} deals ${name(e.who)} ${e.much} damage.` : e.heal ? `${e.name} restores you (+${e.much}).` : `${e.name} hurts you (-${e.much}).`); break;
       case "effectEnds": add(e.sec, e.why === "concentration" ? `You're no longer ${e.name.toLowerCase()}: whoever held you lost their grip on it.` : e.why === "damage" ? `The pain shakes you out of being ${e.name.toLowerCase()}.` : e.why === "attack" ? `Attacking ends your being ${e.name.toLowerCase()}.` : e.why === "left" ? `Out of the aura, you're no longer ${e.name.toLowerCase()}.` : e.why === "trigger" ? `Your ${e.name.toLowerCase()} is spent.` : e.why === "resisted" ? `You resist being ${e.name.toLowerCase()}.` : e.why === "save" ? `You shake off ${e.name.toLowerCase()}.` : `You're no longer ${e.name.toLowerCase()}.`); break;
       case "late": add(e.sec, `${e.heldBy ? `Held up by ${name(e.heldBy)}, you` : "You"} run out of time to ${deed(e.action)}${e.target ? `${e.action.startsWith("use ") ? " on" : ""} ${e.target === me ? "yourself" : name(e.target)}` : ""}.`); break;
@@ -195,6 +197,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "stopped": add(e.sec, e.why === "spare" ? `${who} can't bring themselves to ${does(e.action)} ${n(e.target)}.` : `${who} is ${e.why.toLowerCase()} and can't ${does(e.action)}.`); break;
       case "afflicted": add(e.sec, `${who} is ${e.name.toLowerCase()}${e.by !== null && e.by !== e.who ? ` by ${n(e.by)}${e.aura ? "'s aura" : ""}` : ""}.`); break;
       case "temphp": add(e.sec, `${who} gains ${e.much} temporary health (${e.source}).`); break;
+      case "strain": add(e.sec, e.points > 0 ? `${who} takes ${e.points} ${e.attribute} strain (${e.source}).` : `${who} is relieved of ${-e.points} ${e.attribute} strain (${e.source}).`); break;
       case "effect": add(e.sec, e.heal ? `${e.name} heals ${who} for ${e.much}.` : `${e.name} deals ${who} ${e.much} damage.`); break;
       case "effectEnds": add(e.sec, e.why === "concentration" ? `${who} is no longer ${e.name.toLowerCase()} (concentration broken).` : e.why === "damage" || e.why === "attack" ? `${who} is no longer ${e.name.toLowerCase()} (${e.why === "damage" ? "hurt" : "attacked"}).` : e.why === "left" ? `${who} is out of the aura: no longer ${e.name.toLowerCase()}.` : e.why === "trigger" ? `${who}'s ${e.name.toLowerCase()} is spent.` : e.why === "resisted" ? `${who} resists being ${e.name.toLowerCase()}.` : e.why === "save" ? `${who} shakes off ${e.name.toLowerCase()}.` : `${who}'s ${e.name.toLowerCase()} wears off.`); break;
       case "late": add(e.sec, `${who}${e.heldBy ? `, held up by ${n(e.heldBy)},` : ""} runs out of time to ${does(e.action)}${e.target ? ` ${e.target === e.who ? "themselves" : n(e.target)}` : ""}.`); break;

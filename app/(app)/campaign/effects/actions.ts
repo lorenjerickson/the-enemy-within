@@ -105,6 +105,14 @@ export async function submitEffect(id: number | null, formData: FormData) {
     const who = text("aura_who");
     modifiers.push({ kind: "aura", condition: auraCondition, radius, who: who === "friendly" || who === "enemy" ? who : "", self: formData.get("aura_self") === "on" });
   }
+  // Strain: points on an attribute as it lands (negative: treatment takes them off).
+  const strainPoints = formData.getAll("strain_points").map((v) => Math.round(Number(v)));
+  formData.getAll("strain_attr").forEach((a, i) => {
+    const attribute = String(a), points = strainPoints[i];
+    if (!attribute || !points) return;
+    if (!(ATTRIBUTES as readonly string[]).includes(attribute) || Math.abs(points) > 20) throw new Error("Invalid strain");
+    modifiers.push({ kind: "strain", attribute: attribute as Attribute, points });
+  });
   // Dice: a wider critical range, criticals against them as normal hits, rerolls and a minimum d20.
   const range = Number(text("crit_range"));
   if (range === 18 || range === 19) modifiers.push({ kind: "crit", range });

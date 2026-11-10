@@ -12,6 +12,7 @@ import type { GearAction, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 import { rollChanges, sensesFrom, type Senses, type Trigger, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
+import { strainStatus } from "@/lib/creatureChanges";
 import { effectiveMaxHp, extrasOn, professionStatuses, resistancesOf, restrictionsOn, standingEffects, standingStatuses } from "@/lib/creatureChanges";
 import type { AuraModifier } from "@/lib/auras";
 import { areaFires } from "@/lib/aoe";
@@ -119,7 +120,7 @@ export function fightersOn(levelId: number): Map<number, Fighter> {
     // So are what they have on: standing effects of their creature and their equipment, and how they take damage.
     if (!c || !h) continue;
     const maxHp = effectiveMaxHp(t.id, h.maximum); // professions' and conditions' changes to it
-    const f: Fighter = { ...fighterOf(c, Math.min(h.current, maxHp) + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id)]), maxHp, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId), auras: standingEffects(t.id).flatMap((e) => e.modifiers).filter((m): m is AuraModifier => m.kind === "aura"), triggers: standingEffects(t.id).flatMap((e) => e.modifiers.flatMap((mod) => (mod.kind === "trigger" ? [{ mod, name: e.name }] : []))), senses: sensesFrom(standingEffects(t.id).flatMap((e) => e.modifiers)) };
+    const f: Fighter = { ...fighterOf(c, Math.min(h.current, maxHp) + h.temporary, [...(statuses.get(t.id) ?? []), ...fromEffects, ...standingStatuses(t.id), ...professionStatuses(t.character_id), ...[strainStatus(t.id)].filter((s): s is Status => !!s)]), maxHp, allegiance: allegianceOf(t), resist: resistancesOf(t.id, levelId), extras: extrasOn(t.id, levelId), limits: restrictionsOn(t.id, levelId), auras: standingEffects(t.id).flatMap((e) => e.modifiers).filter((m): m is AuraModifier => m.kind === "aura"), triggers: standingEffects(t.id).flatMap((e) => e.modifiers.flatMap((mod) => (mod.kind === "trigger" ? [{ mod, name: e.name }] : []))), senses: sensesFrom(standingEffects(t.id).flatMap((e) => e.modifiers)) };
     // Saves they fail outright (Stunned: Might and Agility), checked when rolled (a condition put on mid-round counts too).
     const roll = f.save;
     f.save = (attr) => (f.limits?.autofail.includes(attr) ? { total: -99, text: "fails automatically" } : roll(attr));

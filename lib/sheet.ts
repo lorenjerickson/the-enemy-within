@@ -1,4 +1,4 @@
-import { characterContainers, characterPlayers, db, getGameTime, getItem, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
+import { characterContainers, characterPlayers, db, getGameTime, getItem, getStrain, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
 import { describeCondition, describeEffect } from "@/lib/conditions";
 import { effectiveMaxHp, standingEffects } from "@/lib/creatureChanges";
 import { tokenWho } from "@/lib/combat";
@@ -51,6 +51,8 @@ export function sheetFor(tokenId: number): Sheet | null {
         const names = tokenLabels(t.level_id);
         return [...new Set(kept.map((k) => k.a.condition.name))].map((name) => ({ source: "Concentrating", text: `${name} on ${kept.filter((k) => k.a.condition.name === name).map((k) => names.get(k.id) ?? "someone").join(", ")}`, left: `${Math.max(...kept.filter((k) => k.a.condition.name === name).map((k) => k.a.left))} rounds` }));
       })(),
+      // Strain on their attributes (outlasts what caused it; drains with rest).
+      ...(Object.entries(getStrain(t.id)) as [string, number][]).map(([a, n]) => ({ source: "Strain", text: `${n} ${a} strain (−${n} ${a}, never below half)`, left: "until rested" })),
       ...standingEffects(t.id).filter((e) => e.modifiers.length).map((e) => ({ source: e.name, text: `${describeEffect(e)} (from ${e.from})`, left: "always" })),
       ...(listAfflictions(t.level_id).get(t.id) ?? []).map((a) => a.aura != null
         ? { source: a.condition.name, text: describeCondition(a.condition, false), left: `while within ${tokenLabels(t.level_id).get(a.aura) ?? "someone"}'s aura` } // ends as they leave it (nothing to remove)

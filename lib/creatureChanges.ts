@@ -3,6 +3,7 @@
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
  * modifiers (always on).
  */
+import { getStrain } from "@/lib/db";
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
 import { sensesFrom, type Senses } from "@/lib/conditions";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
@@ -94,6 +95,25 @@ export function extrasOn(tokenId: number, levelId: number): { dealing: Extra[]; 
 }
 
 /** Every status-like change on a token now: statuses, conditions, standing effects, professions. */
+/** A token's base attribute scores (its character's or creature's). */
+function baseAttributes(tokenId: number): Partial<Attributes> {
+  const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
+  const row = t?.character_id
+    ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM characters WHERE id = ?").get(t.character_id)
+    : t?.creature_id ? db.prepare<[number], { attributes: string }>("SELECT attributes FROM creatures WHERE id = ?").get(t.creature_id) : undefined;
+  return JSON.parse(row?.attributes ?? "{}");
+}
+
+/** Strain on an attribute as a penalty: −1 a point, but never taking the score below half (rounded up). */
+export const strainPenalty = (score: number, points: number) => Math.min(points, score - Math.ceil(score / 2));
+
+/** A token's strain as a status (attribute penalties), or none. */
+export function strainStatus(tokenId: number): Status | undefined {
+  const strain = getStrain(tokenId), attrs = baseAttributes(tokenId);
+  const boosts = (Object.entries(strain) as [Attribute, number][]).flatMap(([a, n]) => { const p = strainPenalty(attrs[a] ?? 10, n); return p > 0 ? [{ target: `attribute:${a}` as ModifierTarget, value: `-${p}` }] : []; });
+  return boosts.length ? { source: "Strain", boosts, grants: [] } : undefined;
+}
+
 export function changesOn(tokenId: number): Status[] {
   const t = db.prepare<[number], { level_id: number; character_id: number | null }>("SELECT level_id, character_id FROM map_tokens WHERE id = ?").get(tokenId);
   if (!t) return [];
@@ -102,6 +122,7 @@ export function changesOn(tokenId: number): Status[] {
     ...(listAfflictions(t.level_id).get(tokenId) ?? []).map((a) => ({ source: a.condition.name, ...rollChanges(a.condition) })),
     ...standingStatuses(tokenId),
     ...professionStatuses(t.character_id),
+    ...(strainStatus(tokenId) ? [strainStatus(tokenId)!] : []),
   ];
 }
 
