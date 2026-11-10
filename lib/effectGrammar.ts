@@ -407,3 +407,85 @@ export function idsUnder(slot: Slot): string[] {
   const under = (slots: Slot[]): string[] => slots.flatMap((s) => (s.kind === "word" ? [] : s.kind === "optional" ? [s.id, ...under(s.slots)] : s.kind === "choice" ? [s.id, ...s.options.flatMap((o) => under(o.next ?? []))] : [s.id]));
   return slot.kind === "choice" ? slot.options.flatMap((o) => under(o.next ?? [])) : [];
 }
+
+// ---------- Reading a rule's text (the text view): what it says, or how far it got and what could come next ----------
+
+/** What could come next where a text stops: words to type (a choice's options, fixed words) or a hint (dice, a number…). */
+export type Next = { text: string; hint?: boolean };
+
+/**
+ * Reads one rule's text against the grammar (punctuation ignored, case too). Returns the blanks it filled, whether it's a
+ * whole rule, a problem if the text goes wrong, and, where it stops, what could come next and the partly typed word.
+ */
+export function readRule(text: string, conditions: string[] = []): { filled: Filled; complete: boolean; error?: string; next: Next[]; partial: string } {
+  let rest = text.replace(/[.,()]/g, " ").replace(/\s+/g, " ").trimStart();
+  const filled: Filled = {};
+  const lower = (s: string) => s.toLowerCase();
+  /** Takes `w` off the front (whole words only). */
+  const eat = (w: string) => {
+    if (!w || !lower(rest).startsWith(lower(w)) || (rest.length > w.length && rest[w.length] !== " ")) return false;
+    rest = rest.slice(w.length).trimStart();
+    return true;
+  };
+  type Stop = { next: Next[]; error?: string };
+  let trailing: Next[] = [];
+  /** What a slot offers next (an optional part: its lead, or whatever follows it). */
+  const offers = (s: Slot, after: Slot[]): Next[] => {
+    if (s.kind === "word") return [{ text: s.text }];
+    if (s.kind === "optional") return [{ text: s.lead }, ...(after.length ? offers(after[0], after.slice(1)) : [{ text: "." }])];
+    if (s.kind === "choice") return s.options.filter((o) => o.text).map((o) => ({ text: o.text }));
+    if (s.kind === "condition") return conditions.map((c) => ({ text: `${c} condition` }));
+    if (s.kind === "amount") return [{ text: "1d6", hint: true }, { text: "your" }, { text: "its" }];
+    if (s.kind === "dice") return [{ text: "2d6", hint: true }];
+    return [{ text: s.label, hint: true }];
+  };
+  const walk = (slots: Slot[]): Stop | null => {
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i], after = slots.slice(i + 1);
+      if (!rest) {
+        if ([s, ...after].every((x) => x.kind === "optional")) { trailing = offers(s, after).filter((n) => n.text !== "."); return null; } // whole; optional parts could still follow
+        return { next: offers(s, after) };
+      }
+      if (s.kind === "word") { if (!eat(s.text)) return { next: offers(s, after), error: `expected "${s.text}"` }; continue; }
+      if (s.kind === "optional") { if (eat(s.lead)) { filled[s.id] = 1; const e = walk(s.slots); if (e) return e; } continue; }
+      if (s.kind === "choice") {
+        const typing = !rest.includes(" ") || s.options.some((x) => x.text && lower(x.text).startsWith(lower(rest)) && lower(x.text) !== lower(rest));
+        const o = [...s.options].filter((x) => x.text).sort((a, b) => b.text.length - a.text.length).find((x) => eat(x.text))
+          ?? (typing && s.options.some((x) => x.text && lower(x.text).startsWith(lower(rest))) ? undefined : s.options.find((x) => !x.text)); // a choice with no words (untyped) when nothing's being typed
+        if (!o) return { next: offers(s, after), error: `not one of the choices for "${s.label}"` };
+        filled[s.id] = o.value;
+        const e = walk([...(o.next ?? []), ...after]);
+        return e;
+      }
+      if (s.kind === "condition") {
+        const name = [...conditions].sort((a, b) => b.length - a.length).find((c) => lower(rest).startsWith(lower(`${c} condition`)));
+        if (!name) return { next: offers(s, after), error: "not a condition in the catalog" };
+        rest = rest.slice(name.length).trimStart();
+        filled[s.id] = name;
+        continue;
+      }
+      const tok = rest.split(" ")[0];
+      if (s.kind === "amount" && /^(your|its)$/i.test(tok)) {
+        const [, attr, word] = rest.split(" ");
+        if (!attr) { rest = rest.slice(tok.length).trimStart(); return { next: ATTRIBUTES.map((a) => ({ text: `${cap(a)} modifier` })) }; }
+        if (!ATTRIBUTES.includes(lower(attr) as Attribute)) { rest = rest.slice(tok.length).trimStart(); return { next: ATTRIBUTES.map((a) => ({ text: `${cap(a)} modifier` })), error: `"${attr}" isn't an attribute` }; }
+        if (lower(word ?? "") !== "modifier") { rest = rest.split(" ").slice(2).join(" "); return { next: [{ text: "modifier" }] }; }
+        rest = rest.split(" ").slice(3).join(" ");
+        filled[s.id] = `${lower(tok)}:${lower(attr)}`;
+        continue;
+      }
+      const isNum = s.kind === "number" ? /^-?\d+$/.test(tok) : isAmountText(tok);
+      if (!isNum) return { next: offers(s, after), error: s.kind === "number" ? `expected ${s.label}` : "expected dice or a number" };
+      filled[s.id] = s.kind === "number" ? Number(tok) : tok;
+      rest = rest.slice(tok.length).trimStart();
+    }
+    return null;
+  };
+  const stop = walk(EFFECT_SENTENCE);
+  if (!stop) return rest ? { filled, complete: false, error: `extra words: "${rest}"`, next: [], partial: "" } : { filled, complete: true, next: trailing, partial: "" };
+  // Stopped: if the text left is the start of something that could come next, it's still being typed.
+  const partial = stop.error ? rest : "";
+  const fits = stop.next.filter((n) => !n.hint && lower(n.text).startsWith(lower(partial)));
+  if (stop.error && partial && (fits.length || stop.next.some((n) => n.hint && !partial.includes(" ")))) return { filled, complete: false, next: fits.length ? fits : stop.next, partial };
+  return { filled, complete: false, error: stop.error, next: stop.next, partial: stop.error ? "" : "" };
+}
