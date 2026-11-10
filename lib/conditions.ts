@@ -30,7 +30,8 @@ export type Modifier =
   | Trigger
   | RollTweak // reroll / minroll / crit / nocrit: what happens to the dice
   | { kind: "strain"; attribute: Attribute; points: number } // strain points on an attribute as it lands (each −1; negative: treatment takes them off); they outlast the condition and drain with rest
-  | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft)
+  | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft; blind: how far they still perceive, ft, default 5)
+  | { kind: "cap"; target: ModifierTarget | "darkvision"; value: number } // at most this ("reduced to"); the lowest cap wins, over boosts and "becomes"
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /**
@@ -61,15 +62,20 @@ export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're h
 /** Senses: blind (sees only within 5 ft), invisible (unseen by those who can't see invisible), sees invisible. */
 export type Sense = "blind" | "invisible" | "seeinvisible" | "darkvision";
 export const SENSES: [Sense, string][] = [["blind", "blind (sees only within 5 ft)"], ["invisible", "invisible"], ["seeinvisible", "sees invisible things"]];
-export type Senses = { blind: boolean; invisible: boolean; seeInvisible: boolean; darkvision: number }; // darkvision: ft (0 = none)
+export type Senses = { blind: boolean; invisible: boolean; seeInvisible: boolean; darkvision: number; blindRange: number }; // darkvision: ft (0 = none); blindRange: how far a blind creature perceives (grid units)
 /** Senses from a set of modifiers. */
 export function sensesFrom(mods: Modifier[]): Senses {
   const has = (s: Sense) => mods.some((m) => m.kind === "sense" && m.sense === s);
-  const dark = mods.reduce((r, m) => (m.kind === "sense" && m.sense === "darkvision" ? Math.max(r, m.range ?? 60) : r), 0);
-  return { blind: has("blind"), invisible: has("invisible"), seeInvisible: has("seeinvisible"), darkvision: dark };
+  // Darkvision: the best one counts, then any cap ("reduced to") holds it down. Blindness: the shortest range counts.
+  const best = mods.reduce((r, m) => (m.kind === "sense" && m.sense === "darkvision" ? Math.max(r, m.range ?? 60) : r), 0);
+  const cap = mods.reduce((r, m) => (m.kind === "cap" && m.target === "darkvision" ? Math.min(r, m.value) : r), Infinity);
+  const blindFt = mods.reduce((r, m) => (m.kind === "sense" && m.sense === "blind" ? Math.min(r, m.range ?? 5) : r), Infinity);
+  return { blind: has("blind"), invisible: has("invisible"), seeInvisible: has("seeinvisible"), darkvision: Math.min(best, cap), blindRange: blindRangeOf(blindFt) };
 }
 /** How far a blind creature perceives (grid units: the squares around them, diagonals too). */
 export const BLIND_RANGE = 1.5;
+/** A blind creature's reach in grid units, for so many feet (5 ft: the squares around them). */
+export const blindRangeOf = (ft: number) => (Number.isFinite(ft) ? ft / 5 + 0.5 : BLIND_RANGE);
 /** Whether someone with these senses can see someone with those (range aside: blindness limits how far). */
 export const seesThem = (viewer: Senses, target: Senses) => !target.invisible || viewer.seeInvisible;
 /** Advantage / disadvantage from not being seen: attacking someone you can't see (disadvantage), attacking unseen (advantage). */
@@ -201,7 +207,7 @@ export function reapplied(list: Affliction[], c: Condition, rounds: number, by: 
 export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "instant" && m.kind !== "temphp" && m.kind !== "strain");
 
 /** What a condition's modifiers do to rolls, as a status's boosts and roll grants. */
-export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[]; tweaks: RollTweak[] } {
+export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[]; tweaks: RollTweak[]; caps: { target: ModifierTarget; value: number }[] } {
   const mods = c.effects.flatMap((e) => e.modifiers);
   return {
     boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
@@ -209,6 +215,7 @@ export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts
     sets: mods.flatMap((m) => (m.kind === "set" ? [{ target: m.target, value: m.value, ...(m.plus ? { plus: m.plus } : {}) }] : [])),
     factors: mods.flatMap((m) => (m.kind === "multiply" ? [{ target: m.target, factor: m.factor }] : [])),
     tweaks: mods.filter((m): m is RollTweak => m.kind === "reroll" || m.kind === "minroll" || m.kind === "crit" || m.kind === "nocrit"),
+    caps: mods.flatMap((m) => (m.kind === "cap" && m.target !== "darkvision" ? [{ target: m.target, value: m.value }] : [])),
   };
 }
 
@@ -221,7 +228,8 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "autofail") return `fails ${m.save} saves`;
   if (m.kind === "temphp") return `${m.value} temporary health`;
   if (m.kind === "strain") return m.points >= 0 ? `${m.points} ${m.attribute} strain` : `relieves ${-m.points} ${m.attribute} strain`;
-  if (m.kind === "sense") return m.sense === "blind" ? "blind: sees only within 5 ft" : m.sense === "invisible" ? "invisible" : m.sense === "darkvision" ? `darkvision ${m.range ?? 60} ft` : "sees invisible things";
+  if (m.kind === "cap") return `${m.target === "darkvision" ? "darkvision" : targetLabel(m.target).toLowerCase()} at most ${m.value}${m.target === "darkvision" ? " ft" : ""}`;
+  if (m.kind === "sense") return m.sense === "blind" ? `blind: sees only within ${m.range ?? 5} ft` : m.sense === "invisible" ? "invisible" : m.sense === "darkvision" ? `darkvision ${m.range ?? 60} ft` : "sees invisible things";
   if (m.kind === "reroll") return `rerolls ${m.at === 1 ? "a 1" : `${m.at} or less`} on ${rollKindLabel(m.roll).toLowerCase()} (keeps the new roll)`;
   if (m.kind === "minroll") return `a d20 below ${m.min} counts as ${m.min} on ${rollKindLabel(m.roll).toLowerCase()}`;
   if (m.kind === "crit") return `critical hits on ${m.range}–20`;

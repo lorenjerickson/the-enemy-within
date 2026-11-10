@@ -184,10 +184,7 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
   };
   switch (f.when) {
     case "you":
-      if (f.cant === "see") {
-        if (Number(f.feet) !== 5) notes.push(`the engine's blindness is fixed at 5 feet, not ${f.feet}`);
-        return one({ kind: "sense", sense: "blind" });
-      }
+      if (f.cant === "see") return one({ kind: "sense", sense: "blind", ...(Number(f.feet) !== 5 ? { range: Number(f.feet) } : {}) });
       return one({ kind: "forbid", what: f.cant as never });
     case "are":
       if (f.are === "invisible") return one({ kind: "sense", sense: "invisible" });
@@ -203,7 +200,7 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
     case "your": {
       if (f.stat === "crit") return one({ kind: "crit", range: Number(f.range) });
       if (f.stat === "speed") return one({ kind: "speed", factor: Number(String(f.how).slice(1)) });
-      if (f.how === "max") return none(`"is reduced to" needs caps in the engine (today the best of several sources counts, so nothing lowers it)`);
+      if (f.how === "max") return f.stat === "health" ? none("maximum health can't be capped yet") : one({ kind: "cap", target: f.stat as ModifierTarget | "darkvision", value: Number(f.to) });
       if (f.stat === "darkvision") return one({ kind: "sense", sense: "darkvision", range: Number(f.to) });
       const target = f.stat as ModifierTarget;
       if (f.how === "min") return one({ kind: "set", target, value: Number(f.to), ...(f.plus_attr ? { plus: f.plus_attr as Attribute } : {}) });
@@ -381,8 +378,10 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
       return [{ when: "nocrit" }];
     case "strain":
       return [m.points >= 0 ? { when: "applied", outcome: "strain", strain_attr: m.attribute, points: m.points } : { when: "applied", outcome: "relieve", strain_attr: m.attribute, points: -m.points }];
+    case "cap":
+      return [{ when: "your", stat: m.target, how: "max", to: m.value }];
     case "sense":
-      return [m.sense === "blind" ? { when: "you", cant: "see", feet: 5 } : m.sense === "invisible" ? { when: "are", are: "invisible" } : m.sense === "seeinvisible" ? { when: "can" } : { when: "your", stat: "darkvision", how: "min", to: m.range ?? 60 }];
+      return [m.sense === "blind" ? { when: "you", cant: "see", feet: m.range ?? 5 } : m.sense === "invisible" ? { when: "are", are: "invisible" } : m.sense === "seeinvisible" ? { when: "can" } : { when: "your", stat: "darkvision", how: "min", to: m.range ?? 60 }];
     case "aura":
       return [{ when: "aura", radius: m.radius, who: m.who, ...(m.self ? { self: 1 } : {}), condition: m.given?.name ?? conditionName(m.condition) }];
   }

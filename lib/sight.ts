@@ -1,6 +1,6 @@
 import { getIllumination, listLights, listStructures, listTokens } from "@/lib/db";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
-import { BLIND_RANGE, seesThem } from "@/lib/conditions";
+import { seesThem } from "@/lib/conditions";
 import { sensesOf } from "@/lib/creatureChanges";
 import { brightEnough, litAt } from "@/lib/light";
 
@@ -22,7 +22,7 @@ export function litOn(levelId: number): (p: { col: number; row: number }) => boo
 export function seenFrom(levelId: number, at: { col: number; row: number }, self?: number, opts: { unseenToo?: boolean } = {}): Set<number> {
   const me = self !== undefined ? sensesOf(self, levelId) : undefined;
   const walls = blockingSegments(listStructures(levelId)), from = { x: at.col + 0.5, y: at.row + 0.5 };
-  const seen = visibilityPolygon(from, me?.blind ? BLIND_RANGE : SIGHT, walls);
+  const seen = visibilityPolygon(from, me?.blind ? me.blindRange : SIGHT, walls);
   const illumination = getIllumination(levelId), lights = listLights(levelId);
   return new Set(
     listTokens(levelId)

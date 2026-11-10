@@ -15,6 +15,7 @@ export interface Status {
   conditions?: Condition[]; // catalog conditions it puts on them (Poisoned…): these run on by rounds, apart from the status
   sets?: { target: ModifierTarget; value: number; plus?: Attribute }[]; // "becomes" (at least): Strength 19, defense 13 + Agility
   factors?: { target: ModifierTarget; factor: number }[]; // multiplied: damage ×2, defense ×½
+  caps?: { target: ModifierTarget; value: number }[]; // at most: "Might is reduced to 8" (the lowest wins, after "becomes")
   tweaks?: RollTweak[]; // what happens to the dice: rerolls, a minimum, a wider critical range, no criticals against them
 }
 
@@ -63,6 +64,10 @@ export function settled(base: number, statuses: Status[], target: ModifierTarget
   const best = sets.reduce<{ v: number; src: string } | null>((b, x) => (!b || x.v > b.v ? x : b), null);
   let value = best && best.v > base ? best.v : base;
   const notes: string[] = best && best.v > base ? [`becomes ${best.v} (${best.src})`] : [];
+  // Caps: at most the lowest of them, whatever boosts and settings made it.
+  const caps = statuses.flatMap((s) => (s.caps ?? []).filter((x) => x.target === target).map((x) => ({ v: x.value, src: s.source })));
+  const low = caps.reduce<{ v: number; src: string } | null>((b, x) => (!b || x.v < b.v ? x : b), null);
+  if (low && low.v < value) { value = low.v; notes.push(`at most ${low.v} (${low.src})`); }
   for (const s of statuses) for (const f of s.factors ?? []) if (f.target === target) {
     value = Math.floor(value * f.factor);
     notes.push(`×${f.factor === 0.5 ? "½" : f.factor} (${s.source})`);

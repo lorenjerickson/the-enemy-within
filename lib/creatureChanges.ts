@@ -43,7 +43,7 @@ export function standingEffects(tokenId: number, equipment?: Equipment): (Effect
 
 /** Standing effects as statuses (their boosts and roll effects). */
 export const standingStatuses = (tokenId: number, equipment?: Equipment): Status[] =>
-  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length || s.sets.length || s.factors.length || s.tweaks.length);
+  standingEffects(tokenId, equipment).map((e) => ({ source: `${e.name} (${e.from})`, ...rollChanges({ effects: [e] }) })).filter((s) => s.boosts.length || s.grants.length || s.sets.length || s.factors.length || s.tweaks.length || s.caps.length);
 
 /** How a token takes each kind of damage now: its standing effects and the conditions on it. */
 export function resistancesOf(tokenId: number, levelId: number, equipment?: Equipment): Record<string, Resist[]> {

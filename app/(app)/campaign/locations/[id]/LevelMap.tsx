@@ -5,7 +5,6 @@ import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlaye
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
 import { sensesOf } from "@/lib/creatureChanges";
-import { BLIND_RANGE } from "@/lib/conditions";
 import type { Contest } from "@/lib/resolveRound";
 import type { DockTool } from "../../../../(play)/play/PlayDock";
 
@@ -53,7 +52,7 @@ export default function LevelMap({
   const all = listTokens(level.id);
   const seeInvisible = !gm && mine.some((id) => sensesOf(id, level.id).seeInvisible);
   const tokens = gm || seeInvisible ? all : all.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
-  const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null && sensesOf(t.id, level.id).blind).map((t) => [t.character_id!, BLIND_RANGE]));
+  const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null && sensesOf(t.id, level.id).blind).map((t) => [t.character_id!, sensesOf(t.id, level.id).blindRange]));
   const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.character_id!, dv]] : []; }));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();

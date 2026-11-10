@@ -134,8 +134,8 @@ New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances,
 ## Engine gaps found while designing the grammar
 
 1. ~~Backwash: a trigger damaging whoever has the effect~~ done ("When you hit a creature, you take [1d4] [fire] damage").
-2. Blindness at a range other than 5 feet.
-3. Caps ("is reduced to"), starting with darkvision.
+2. ~~Blindness at a range other than 5 feet~~ done ("You can't see beyond [15] feet").
+3. ~~Caps ("is reduced to")~~ done for attributes, defense, damage, speeds and darkvision (not maximum health).
 4. ~~A "when you take damage" trigger event~~ done (with the stacking shortcut).
 5. ~~Triggers that know who caused the event~~ done ("When you take damage from the source, …").
 6. ~~Triggers that heal~~ done.

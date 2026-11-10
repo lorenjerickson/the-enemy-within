@@ -4,7 +4,7 @@ import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
@@ -133,6 +133,7 @@ export interface Combatant {
   auras?: AuraModifier[]; // auras they give off of their own (or from what they wear); those from conditions on them come with the conditions
   triggers?: { mod: Trigger; name: string }[]; // triggers of their own (or from what they wear), with the effect's name; those from conditions come with them
   senses?: Senses; // their own senses (and their gear's); conditions on them add to these as the round goes
+  senseMods?: Modifier[]; // the modifiers behind `senses` (so caps and ranges combine with conditions' as the round goes)
   attrMod?: (a: Attribute) => number; // an attribute's modifier now (for amounts like "your Fortitude modifier")
 }
 
@@ -284,7 +285,7 @@ export function resolveMovement(
       afflicted.set(id, r.list);
     }
     const rolls = rollChanges(c);
-    if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length || rolls.tweaks.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
+    if (rolls.boosts.length || rolls.grants.length || rolls.sets.length || rolls.factors.length || rolls.tweaks.length || rolls.caps.length) fighters.get(id)?.statuses?.push({ source: c.name, ...rolls });
     story.push({ sec, k: "afflicted", who: id, name: c.name, by, ...(aura != null ? { aura: true } : {}) });
     log.push(aura != null ? `${sec} s: ${nameOf(id)} comes within ${nameOf(aura)}'s aura: ${c.name} (${describeCondition(c, false)}) while there.` : `${sec} s: ${nameOf(id)} is affected by ${c.name} (${describeCondition(c)}).`);
     return true;
@@ -341,17 +342,15 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
   };
   /** What someone can see and whether they can be seen, now: their own senses and the conditions on them as they stand this second. */
-  const sensesNow = (id: number): Senses => {
-    const own = fighters.get(id)?.senses, c = sensesFrom((afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition)));
-    return { blind: !!own?.blind || c.blind, invisible: !!own?.invisible || c.invisible, seeInvisible: !!own?.seeInvisible || c.seeInvisible, darkvision: Math.max(own?.darkvision ?? 0, c.darkvision) };
-  };
+  const sensesNow = (id: number): Senses => sensesFrom([...(fighters.get(id)?.senseMods ?? []), ...(afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition))]); // every source at once (best darkvision, then caps; shortest blindness)
+
   /** Whether `viewer` can see `target` now: not invisible to them, within 5 ft if they're blind, and lit or within their darkvision. */
   const sightOf = (viewer: number, target: number) => {
     const sv = sensesNow(viewer), st = sensesNow(target), pv = where(viewer), pt = where(target);
     if (!seesThem(sv, st)) return false;
     if (!pv || !pt) return true;
     const d = Math.hypot(pv.col - pt.col, pv.row - pt.row);
-    if (sv.blind) return d <= BLIND_RANGE;
+    if (sv.blind) return d <= sv.blindRange;
     return lit(pt) || d * FEET_PER_SQUARE <= sv.darkvision + 1e-6;
   };
   /** Advantage / disadvantage from not being seen: attacking someone you can't see, attacking someone who can't see you. */
