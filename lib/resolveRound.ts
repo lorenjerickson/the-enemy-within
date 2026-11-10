@@ -186,14 +186,21 @@ export function resolveMovement(
   const afflicted = new Map([...afflictions].map(([id, list]) => [id, list.map((a) => ({ ...a }))]));
   const temps = new Map<number, number>(); // temporary health granted this round (given after it, the highest)
   /** A save against something landing on them: a player rolls their own (the round waits for it), the server rolls for the GM's creatures. */
-  const saveAgainst = (id: number, attr: Attribute, dc: number, key: string, what: string, sec: number): number => {
-    if (fighters.get(id)?.limits?.autofail.includes(attr)) return -99; // fails outright: nothing to roll
+  const asked = new Map<string, number>(); // how many times each save key has come up this round (the same save twice gets "#2"…)
+  const saveRoll = (id: number, attr: Attribute, dc: number, base: string, what: string, sec: number): { total: number; text: string } => {
+    if (fighters.get(id)?.limits?.autofail.includes(attr)) return { total: -99, text: "fails automatically" }; // nothing to roll
     if (rollers.has(id)) {
+      const n = (asked.get(base) ?? 0) + 1;
+      asked.set(base, n);
+      const key = n === 1 ? base : `${base}#${n}`;
       if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: what, attr, dc });
-      return decisions[key];
+      return { total: decisions[key], text: "their roll" };
     }
-    return fighters.get(id)?.save?.(attr).total ?? 0;
+    return fighters.get(id)?.save?.(attr) ?? { total: 0, text: "no save" };
   };
+  const saveAgainst = (id: number, attr: Attribute, dc: number, key: string, what: string, sec: number): number => saveRoll(id, attr, dc, key, what, sec).total;
+  /** A save to end a condition, rolled by its player (the round waits) or the server. */
+  const endRoll: SaveRoll = (id, attr, dc, what, sec) => saveRoll(id, attr, dc, `end:${sec}:${what}:${id}`, `${what} (to shake it off)`, sec);
   /** Puts a condition on someone mid-round (`aura`: from that creature's aura, while they're within it); false if they resist it or nothing changes. */
   const afflict = (id: number, c: Condition, by: number | null, sec: number, aura?: number): boolean => {
     // A save as it lands: a player rolls their own (the round waits for it), the server rolls for the GM's creatures.
@@ -292,7 +299,7 @@ export function resolveMovement(
   };
   /** A save to end a condition, now (start of the round, when hurt, or spending an action on it). */
   const endSave = (id: number, a: Affliction, sec: number) => {
-    const s = saveToEnd(a, fighters.get(id), nameOf(id));
+    const s = saveToEnd(a, fighters.get(id), nameOf(id), (attr, dc) => endRoll(id, attr, dc, a.condition.name, sec));
     if (s.line) log.push(`${sec} s: ${s.line}`);
     if (s.ended) release(id, a, "save", sec);
   };
@@ -318,7 +325,8 @@ export function resolveMovement(
   const concentrationCheck = (caster: number, sec: number, amount: number) => {
     if (!keptUpBy(caster).length) return;
     if ((hp.get(caster) ?? 1) <= 0) return breakConcentration(caster, sec, "down");
-    const dc = Math.max(10, Math.floor(amount / 2)), s = fighters.get(caster)?.save?.("fortitude");
+    const dc = Math.max(10, Math.floor(amount / 2)), kept = [...new Set(keptUpBy(caster).map((k) => k.a.condition.name))].join(", ");
+    const s = fighters.get(caster)?.save ? saveRoll(caster, "fortitude", dc, `conc:${sec}:${caster}`, `losing concentration on ${kept}`, sec) : undefined;
     if (!s || s.total < dc) return breakConcentration(caster, sec, `Fortitude ${s?.total ?? "-"} vs DC ${dc}`);
     log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
   };
@@ -423,7 +431,7 @@ export function resolveMovement(
       const p = where(id);
       if (id === except || down.has(id) || !p || !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls) || (only && !only(id))) continue;
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
-      const s = f.save ? f.save(spec.save) : { total: 0, text: "no save" };
+      const s = f.save ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" };
       const saved = s.total >= spec.dc;
       const t = takenBy(id, saved ? (spec.half ? Math.floor(total / 2) : 0) : total, type);
       const taken = t.n;
@@ -1043,7 +1051,7 @@ export function resolveMovement(
       for (const l of lasting) areaCatch(l, sec, "end", fx);
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
       const beforeTick = new Map(hp);
-      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt });
+      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt, roll: endRoll }); // players roll their own saves to end conditions
       for (const [id, h] of hp) if (h < (beforeTick.get(id) ?? h)) concentrationCheck(id, sec, beforeTick.get(id)! - h); // hurt by damage over time
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
@@ -1063,14 +1071,17 @@ export function resolveMovement(
   return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes };
 }
 
+/** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */
+export type SaveRoll = (id: number, attr: Attribute, dc: number, what: string, sec: number) => { total: number; text: string };
+
 /**
  * A creature's save to end a condition: a success counts towards the saves it takes (one, unless it says more);
- * returns whether that ended it, and a line for the log.
+ * returns whether that ended it, and a line for the log. `roll`: who rolls it (default: the server).
  */
-export function saveToEnd(a: Affliction, f: Combatant | undefined, who: string): { ended: boolean; line: string } {
+export function saveToEnd(a: Affliction, f: Combatant | undefined, who: string, roll?: (attr: Attribute, dc: number) => { total: number; text: string }): { ended: boolean; line: string } {
   const c = a.condition;
   if (!c.save_attr || !f?.save) return { ended: false, line: "" };
-  const s = f.save(c.save_attr), need = Math.max(1, c.saves_needed ?? 1);
+  const s = roll ? roll(c.save_attr, c.save_dc) : f.save(c.save_attr), need = Math.max(1, c.saves_needed ?? 1);
   if (s.total < c.save_dc) return { ended: false, line: `${who} fails to shake off ${c.name} (${s.total} vs DC ${c.save_dc}).` };
   a.saved = (a.saved ?? 0) + 1;
   if (a.saved >= need) return { ended: true, line: `${who} shakes off ${c.name} (${s.total}: ${s.text} vs DC ${c.save_dc}).` };
@@ -1083,7 +1094,7 @@ export function saveToEnd(a: Affliction, f: Combatant | undefined, who: string):
  */
 export function tickAfflictions(
   afflicted: Map<number, Affliction[]>,
-  { hp, fighters, down, nameOf, log, story, sec, hurt }: { hp: Map<number, number>; fighters: Map<number, Combatant>; down: Set<number>; nameOf: (id: number) => string; log: string[]; story?: StoryEvent[]; sec: number; hurt: (id: number, dmg: number) => number },
+  { hp, fighters, down, nameOf, log, story, sec, hurt, roll }: { hp: Map<number, number>; fighters: Map<number, Combatant>; down: Set<number>; nameOf: (id: number) => string; log: string[]; story?: StoryEvent[]; sec: number; hurt: (id: number, dmg: number) => number; roll?: SaveRoll },
 ) {
   const at = (line: string) => log.push(story ? `${sec} s: ${line}` : line);
   for (const [id, list] of afflicted) {
@@ -1130,7 +1141,7 @@ export function tickAfflictions(
         continue;
       }
       if ((c.save_when ?? "end") === "end" && c.save_attr && f?.save && !down.has(id)) {
-        const s = saveToEnd(a, f, nameOf(id));
+        const s = saveToEnd(a, f, nameOf(id), roll && ((attr, dc) => roll(id, attr, dc, c.name, sec)));
         at(s.line + (s.ended ? "" : ` ${left} round${left === 1 ? "" : "s"} left.`));
         if (s.ended) {
           story?.push({ sec, k: "effectEnds", who: id, name: c.name, why: "save" });
@@ -1148,7 +1159,7 @@ export function tickAfflictions(
         return false;
       }
       if (a.condition.save_when === "damaged" && !down.has(id)) {
-        const s = saveToEnd(a, f, nameOf(id));
+        const s = saveToEnd(a, f, nameOf(id), roll && ((attr, dc) => roll(id, attr, dc, a.condition.name, sec)));
         at(s.line);
         if (s.ended) story?.push({ sec, k: "effectEnds", who: id, name: a.condition.name, why: "save" });
         return !s.ended;
