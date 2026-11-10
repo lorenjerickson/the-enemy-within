@@ -7,8 +7,8 @@ on 2026-11-10; 65 of 65 come out the same in the engine (2 of them as equivalent
 
 Blanks are in brackets; the words between them are fixed. "You" is whoever has the effect, except in rules about the
 creature that applied the condition, which are written the other way round, as the handbook writes Hex: there "you" is
-whoever applied it and "the target" is whoever has it ("When you hit the target, it takes an extra 1d6 necrotic
-damage."; "The target can't attack you."). The opening decides the voice, so no one picks it. A rule with no "When …"
+whoever applied it and "the target" is whoever has it ("When you hit the target, add 1d6 necrotic damage."; "The
+target can't attack you."). The opening decides the voice, so no one picks it. A rule with no "When …"
 or "At the start of …" opening holds while its condition lasts.
 
 **Branch**: *decided* = the sentence uses branches agreed in the grammar sessions; **new** = this audit added the
@@ -25,8 +25,8 @@ branch to cover something the current form can make.
 | Maximum health: `5` | [Your] [maximum health] [increases by] [5]. | ✓ same | decided |
 | Maximum health: `-3` | [Your] [maximum health] [increases by] [-3]. | ✓ same<br>reads badly: wants "decreases by [3]" | decided |
 | **Extra damage on a hit** | | | |
-| On a hit: `1d6` · fire · on their hits | [When you hit a creature], [it takes an extra] [1d6] [fire] damage. | ✓ same | decided |
-| On a hit: `1d6` · necrotic · on hits against them (by its source) | [When you hit the target], [it takes an extra] [1d6] [necrotic] damage. | ✓ same<br>the applier's voice: "you" = whoever applied the condition | **new** |
+| On a hit: `1d6` · fire · on their hits | [When you hit a creature], [add] [1d6] [fire] damage. | ✓ same | decided |
+| On a hit: `1d6` · necrotic · on hits against them (by its source) | [When you hit the target], [add] [1d6] [necrotic] damage. | ✓ same<br>the applier's voice: "you" = whoever applied the condition | **new** |
 | **Restrictions** | | | |
 | Can't: ☑ actions | [You can't] [take actions]. | ✓ same | decided |
 | Can't: ☑ bonus actions | [You can't] [take bonus actions]. | ✓ same | decided |
@@ -82,10 +82,10 @@ branch to cover something the current form can make.
 | Trigger: when they're hit · in melee · deals `2d8` fire · Agility save DC 13 halves it | [When a creature hits you] with a [melee] attack, [it takes] [2d8] [fire] damage (DC [13] [Agility] save for [half]). | ✓ same | decided |
 | Trigger: when they're hit · by any attack · puts Poisoned on the other creature | [When a creature hits you], [it gains the] [Poisoned] condition. | ✓ same | decided |
 | Trigger: when they're hit · by any attack · puts Frightened on themselves | [When a creature hits you], [you gain the] [Frightened] condition. | ✓ same | **new** |
-| Trigger: when they hit someone · by any attack · deals `1d6` cold · Fortitude save DC 12 negates it | [When you hit a creature], [it takes an extra] [1d6] [cold] damage (DC [12] [Fortitude] save for [none]). | ✓ same | decided |
+| Trigger: when they hit someone · by any attack · deals `1d6` cold · Fortitude save DC 12 negates it | [When you hit a creature], [add] [1d6] [cold] damage (DC [12] [Fortitude] save for [none]). | ✓ same | decided |
 | Trigger: when they hit someone · in melee · puts Prone on the other creature | [When you hit a creature] with a [melee] attack, [it gains the] [Prone] condition. | ✓ same | decided |
 | Trigger: when they hit someone · puts Frightened on themselves | [When you hit a creature], [you gain the] [Frightened] condition. | ✓ same | **new** |
-| Trigger: when they hit someone · deals `1d6` poison AND puts Poisoned on the other creature (one trigger) | [When you hit a creature], [it takes an extra] [1d6] [poison] damage.<br>[When you hit a creature], [it gains the] [Poisoned] condition. | ≈ equivalent: the form packs two outcomes in one trigger; the builder writes two sentences, saved as extra poison damage on the hit plus a trigger putting on Poisoned | decided |
+| Trigger: when they hit someone · deals `1d6` poison AND puts Poisoned on the other creature (one trigger) | [When you hit a creature], [add] [1d6] [poison] damage.<br>[When you hit a creature], [it gains the] [Poisoned] condition. | ≈ equivalent: the form packs two outcomes in one trigger; the builder writes two sentences, saved as extra poison damage on the hit plus a trigger putting on Poisoned | decided |
 | Trigger: when they move · deals `2d8` thunder | [When you move], [you take] [2d8] [thunder] damage. | ✓ same | decided |
 | Trigger: when they move · puts Prone on them | [When you move], [you gain the] [Prone] condition. | ✓ same<br>the form saves this as "on the other creature" (they're the same creature for moving); the builder says "you" | **new** |
 | Trigger: at the start of each round · deals `1d6` fire · Fortitude save DC 12 halves it | [At the start of each round], [you take] [1d6] [fire] damage (DC [12] [Fortitude] save for [half]). | ✓ same | decided |
@@ -110,8 +110,8 @@ New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances,
   a d20 roll of [N] or lower and use the new result" and "treat any d20 roll below [N] as that number".
 - **"When a creature makes an attack roll against you"** (advantage or disadvantage on attacks against you).
 - **Triggers** gained "you gain the [condition] condition" after hit, landing a hit, moving and the start of each round.
-- **The applier's voice**: "The target can't attack you" (Hypnotized) and "When you hit the target, it takes an extra
-  [dice] [type] damage" (a Hex), for the two things the form can say about the creature that applied the condition.
+- **The applier's voice**: "The target can't attack you" (Hypnotized) and "When you hit the target, add [dice] [type]
+  damage" (a Hex), for the two things the form can say about the creature that applied the condition.
 - **"When this is applied"** gained "strain your [attribute] by [N]" and "relieve [N] strain from your [attribute]".
 
 ## Findings

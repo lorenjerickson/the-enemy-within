@@ -2,7 +2,7 @@
  * The effect sentence grammar (draft): an effect's rules written as a player's handbook would, in the second person
  * ("you" = whoever has the effect), built blank by blank, each choice deciding the blanks that follow. Rules about the
  * creature that applied the condition are written the other way round, as the handbook writes Hex: "you" = whoever
- * applied it and "the target" = whoever has it ("When you hit the target, it takes an extra 1d6 necrotic damage.";
+ * applied it and "the target" = whoever has it ("When you hit the target, add 1d6 necrotic damage.";
  * "The target can't attack you."); the opening decides the voice, so no one picks it. A rule with no
  * "When …" / "At the start of …" opening holds while the condition lasts ("You can't take reactions."); one with an
  * opening happens then. How long anything lasts is the condition's, never a rule's. One tree drives the editor,
@@ -91,8 +91,10 @@ const ON_ROLL: Slot = { kind: "choice", id: "sign", label: "what happens", optio
 
 // ---------- Outcomes of a timed or triggered rule (their words depend on who "it" is, and when) ----------
 const youTake: Option = { value: "you_take", text: "you take", next: [dice, types, word("damage"), SAVE] };
-const itTakes = (extra: boolean): Option => ({ value: "it_takes", text: extra ? "it takes an extra" : "it takes", next: [dice, types, word("damage"), SAVE] });
-const youTakeExtra: Option = { value: "you_take_extra", text: "you take an extra", next: [dice, types, word("damage")] };
+/** "it takes [2d8] [fire] damage": separate damage to the other creature (Fire Shield). */
+const itTakes: Option = { value: "it_takes", text: "it takes", next: [dice, types, word("damage"), SAVE] };
+/** "add [1d6] [lightning] damage": more damage on the hit itself (a flaming blade; a Hex). */
+const addDamage = (value: string, withSave: boolean): Option => ({ value, text: "add", next: [dice, types, word("damage"), ...(withSave ? [SAVE] : [])] });
 const yourHealth: Option = { value: "your_health", text: "your health increases by", next: [amountSlot] };
 const tempHealth: Option = { value: "temp", text: "you gain", next: [dice, word("temporary health")] };
 const youGain: Option = { value: "you_gain", text: "you gain the", next: condition };
@@ -126,9 +128,9 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "applied", text: "When this is applied", next: [outcome([tempHealth, yourHealth, youTake, strainYour, relieve])] },
     { value: "start", text: "At the start of each round", next: [outcome([youTake, yourHealth, youGain])] },
     { value: "end", text: "At the end of each round", next: [outcome([youTake, yourHealth])] },
-    { value: "hitting", text: "When you hit a creature", next: [WITH, outcome([itTakes(true), youTake, yourHealth, itGains, youGain])] },
-    { value: "hit", text: "When a creature hits you", next: [WITH, outcome([itTakes(false), youTakeExtra, itGains, youGain])] },
-    { value: "hit_target", text: "When you hit the target", next: [outcome([{ value: "it_takes_extra", text: "it takes an extra", next: [dice, types, word("damage")] }])] }, // the applier's voice
+    { value: "hitting", text: "When you hit a creature", next: [WITH, outcome([addDamage("add", true), youTake, yourHealth, itGains, youGain])] },
+    { value: "hit", text: "When a creature hits you", next: [WITH, outcome([itTakes, addDamage("you_take_extra", false), itGains, youGain])] },
+    { value: "hit_target", text: "When you hit the target", next: [outcome([addDamage("add", false)])] }, // the applier's voice
     { value: "damaged", text: "When you take damage", next: [outcome([yourStatFor, yourHealth, youGain])] },
     { value: "moves", text: "When you move", next: [outcome([youTake, youGain])] },
   ],
@@ -227,10 +229,11 @@ export function compile(f: Filled, conditionId: (name: string) => number = () =>
       if (save) notes.push("damage at the end of a round has no save in the engine yet (the start-of-round kind does)");
       return one({ kind: "periodic", value: amount, heal: false, damage_type: f.type as never });
     case "hitting":
-      if (f.outcome === "it_takes" && !save && f.reach !== "melee") return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "dealing" });
+      if (f.outcome === "add" && !save && f.reach !== "melee") return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "dealing" });
+      if (f.outcome === "add") return one(trigger("hitting", { damage: amount, damage_type: f.type as never })); // with a save, or melee only: a trigger
       return triggerOutcome("hitting");
     case "hit":
-      if (f.outcome === "you_take_extra") return none(`extra damage on hits against you from anyone isn't in the engine yet: only from whoever applied the condition ("When you hit the target, it takes an extra …")`);
+      if (f.outcome === "you_take_extra") return none(`extra damage on hits against you from anyone isn't in the engine yet: only from whoever applied the condition ("When you hit the target, add …")`);
       return triggerOutcome("hit");
     case "hit_target":
       return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "taking" });
