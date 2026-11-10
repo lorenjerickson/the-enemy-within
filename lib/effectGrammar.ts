@@ -12,6 +12,7 @@ import { DAMAGE_TYPES, type RollKind } from "@/lib/actions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import type { Modifier } from "@/lib/conditions";
 import { MODIFIER_TARGET_GROUPS, SKILLS, type ModifierTarget } from "@/lib/modifiers";
+import { isDiceFormula } from "@/lib/itemTypes";
 
 /** A blank (or fixed words) in a sentence. */
 export type Slot =
@@ -27,7 +28,7 @@ export type Option = { value: string; text: string; next?: Slot[] };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 const an = (s: string) => `${/^[aeiou]/i.test(s) ? "an" : "a"} ${s}`;
 const attrs = (id: string): Slot => ({ kind: "choice", id, label: "attribute", options: ATTRIBUTES.map((a) => ({ value: a, text: cap(a) })) });
-const types: Slot = { kind: "choice", id: "type", label: "damage type", options: [...DAMAGE_TYPES.map((t) => ({ value: t, text: t })), { value: "", text: "untyped" }] };
+const types: Slot = { kind: "choice", id: "type", label: "damage type", options: [...DAMAGE_TYPES.map((t) => ({ value: t, text: t })), { value: "untyped", text: "" }] };
 const word = (text: string): Slot => ({ kind: "word", text });
 const num = (id: string, label: string, min = 0, max = 99): Slot => ({ kind: "number", id, label, min, max });
 const dice: Slot = { kind: "dice", id: "dice", label: "dice expression" };
@@ -150,7 +151,8 @@ const rollKinds = (r: string): RollKind[] =>
  * Turns a complete sentence into the modifiers the engine reads (most rules are one; "any d20 roll" and the like are
  * several), with notes on anything it can't do yet. `conditionId` looks a catalog condition up by name.
  */
-export function compile(f: Filled, conditionId: (name: string) => number = () => -1): Compiled {
+export function compile(rule: Filled, conditionId: (name: string) => number = () => -1): Compiled {
+  const f: Filled = rule.type === "untyped" ? { ...rule, type: "" } : rule; // untyped damage
   const notes: string[] = [];
   const one = (m: Modifier): Compiled => ({ modifiers: [m], notes });
   const none = (note: string): Compiled => ({ modifiers: [], notes: [...notes, note] });
@@ -322,13 +324,13 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "roll":
       return m.roll === "attacked" ? [{ when: "attacked", keep: m.mode }] : [{ when: "roll", roll: m.roll, sign: "twice", keep: m.mode }];
     case "periodic":
-      return [m.heal ? { when: "end", outcome: "your_health", amount: m.value } : { when: "end", outcome: "you_take", dice: m.value, type: m.damage_type }];
+      return [m.heal ? { when: "end", outcome: "your_health", amount: m.value } : { when: "end", outcome: "you_take", dice: m.value, type: m.damage_type || "untyped" }];
     case "instant":
-      return [m.heal ? { when: "applied", outcome: "your_health", amount: m.value } : { when: "applied", outcome: "you_take", dice: m.value, type: m.damage_type }];
+      return [m.heal ? { when: "applied", outcome: "your_health", amount: m.value } : { when: "applied", outcome: "you_take", dice: m.value, type: m.damage_type || "untyped" }];
     case "resist":
       return [{ when: "are", are: m.level, type: m.damage_type }];
     case "extra":
-      return [m.when === "dealing" ? { when: "hitting", outcome: "add", dice: m.value, type: m.damage_type } : { when: "hit_by_source", outcome: "add", dice: m.value, type: m.damage_type }];
+      return [m.when === "dealing" ? { when: "hitting", outcome: "add", dice: m.value, type: m.damage_type || "untyped" } : { when: "hit_by_source", outcome: "add", dice: m.value, type: m.damage_type || "untyped" }];
     case "forbid":
       return [{ when: "you", cant: m.what }];
     case "autofail":
@@ -348,7 +350,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
       const save: Filled = m.save_attr ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {};
       const reach: Filled = !own && m.reach === "melee" ? { with: 1, reach: "melee" } : {};
       const out: Filled[] = [];
-      if (m.damage) out.push({ when: m.on, ...reach, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: m.damage, type: m.damage_type, ...save });
+      if (m.damage) out.push({ when: m.on, ...reach, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: m.damage, type: m.damage_type || "untyped", ...save });
       if (m.condition) out.push({ when: m.on, ...reach, outcome: own || m.condition_on === "self" ? "you_gain" : "it_gains", condition: m.given?.name ?? conditionName(m.condition) });
       return out;
     }
@@ -373,3 +375,35 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
 export const effectSentences = (modifiers: Modifier[], conditionName?: (id: number) => string) => sentencesOf(modifiers, conditionName).map(render);
 /** An effect's rules as one line of text (for lists). */
 export const effectText = (e: { modifiers: Modifier[] }, conditionName?: (id: number) => string) => effectSentences(e.modifiers, conditionName).join(" ");
+
+// ---------- Checking a rule (the builder and the server agree on what's complete) ----------
+
+const isAmountText = (v: string) => isDiceFormula(v.replace(/^[+-]/, "")) || /^[+-]?\d+$/.test(v);
+
+/** Whether a rule's blanks are all filled and valid along the path its choices take; the first problem if not. */
+export function checkRule(f: Filled): string | null {
+  const walk = (slots: Slot[]): string | null => {
+    for (const s of slots) {
+      if (s.kind === "word") continue;
+      if (s.kind === "optional") { if (f[s.id] !== undefined) { const e = walk(s.slots); if (e) return e; } continue; }
+      const v = f[s.id];
+      if (v === undefined || v === "") return `fill in "${s.label}"`;
+      if (s.kind === "choice") {
+        const o = s.options.find((x) => x.value === v);
+        if (!o) return `"${v}" isn't a choice for "${s.label}"`;
+        const e = walk(o.next ?? []);
+        if (e) return e;
+      } else if (s.kind === "dice") { if (!isAmountText(String(v))) return `"${v}" isn't dice or a number`; }
+      else if (s.kind === "amount") { if (!isAmountText(String(v)) && !/^(your|its):[a-z]+$/.test(String(v))) return `"${v}" isn't an amount`; }
+      else if (s.kind === "number") { const n = Number(v); if (!Number.isFinite(n) || n < (s.min ?? -Infinity) || n > (s.max ?? Infinity)) return `"${s.label}" must be ${s.min}–${s.max}`; }
+    }
+    return null;
+  };
+  return walk(EFFECT_SENTENCE);
+}
+
+/** The ids of every blank under a choice's options (cleared when the choice changes, so nothing stale is kept). */
+export function idsUnder(slot: Slot): string[] {
+  const under = (slots: Slot[]): string[] => slots.flatMap((s) => (s.kind === "word" ? [] : s.kind === "optional" ? [s.id, ...under(s.slots)] : s.kind === "choice" ? [s.id, ...s.options.flatMap((o) => under(o.next ?? []))] : [s.id]));
+  return slot.kind === "choice" ? slot.options.flatMap((o) => under(o.next ?? [])) : [];
+}
