@@ -29,7 +29,8 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (p.rolled) return "The dice are rolled: the plan is set";
   if (p.ready) return "Ready already; undo that to change the plan";
   // A condition stopping that kind of step (Stunned: anything; Restrained: moving).
-  const kind = step.kind === "move" ? "movement" : step.use !== undefined ? "action" : actionKind(step.action);
+  const gearKind = step.kind === "action" && step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use))?.kind : undefined; // a gear reaction counts as the reaction
+  const kind = step.kind === "move" ? "movement" : step.use !== undefined ? (gearKind === "reaction" ? "reaction" : "action") : actionKind(step.action);
   const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (stopped) return stopped;
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";

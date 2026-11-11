@@ -9,7 +9,7 @@ import { afterResist, combineResist, describeCondition, extrasOf, lingers, modif
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
-import { ACTION_RANGE, CHASE_ACTIONS, REACTIONS } from "@/lib/playerActions";
+import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
 import { DODGE_DC, ROUND_SECONDS, stepKind, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
@@ -381,6 +381,22 @@ export function resolveMovement(
     if (!down.has(target)) triggersOf(target).filter((t) => t.mod.on === "attacked").forEach((t, i) => { if (t.mod.reach !== "melee" || melee) fireTrigger({ ...t, owner: target, other: attacker }, `tsave:${sec}:attacked:${attacker}:${target}:${i}`, sec); });
     return !down.has(attacker); // still up to make the attack
   };
+  /**
+   * An attack roll against someone would hit: their "when an attack would hit you" triggers fire first (Shield: a
+   * condition raising their defense; Silvery Barbs: the attacker rerolls and uses the lower result). Returns the roll
+   * that stands; the caller checks it against their defense as it is now.
+   */
+  let rerollAsked = false;
+  const wouldHit = <R extends { total: number; text: string; crit?: boolean; fumble?: boolean }>(attacker: number, target: number, melee: boolean, sec: number, roll: R, defense: () => number, reroll: () => R): R => {
+    if (down.has(target) || roll.fumble || (!roll.crit && roll.total < defense())) return roll;
+    rerollAsked = false;
+    triggersOf(target).filter((t) => t.mod.on === "would_hit").forEach((t, i) => { if (t.mod.reach !== "melee" || melee) fireTrigger({ ...t, owner: target, other: attacker }, `tsave:${sec}:wouldhit:${attacker}:${target}:${i}`, sec); });
+    if (!rerollAsked) return roll;
+    rerollAsked = false;
+    const again = reroll(), kept = again.total < roll.total ? again : roll;
+    log.push(`${sec} s: ${nameOf(attacker)} rerolls the attack: ${again.total} (${again.text}) against ${roll.total}; the lower stands.`);
+    return kept;
+  };
   /** Whether someone can react now: up, reactions not stopped, not spent this round (a planned reaction, like Dodge, spends it). */
   const reacted = new Map<number, string>(); // who has reacted this round, and to what (one reaction can do several things)
   const canReact = (id: number, what: string, sec: number, occasion: string) => {
@@ -391,7 +407,7 @@ export function resolveMovement(
       return false;
     }
     if (reacted.has(id)) return reacted.get(id) === occasion;
-    if (acts.get(id)?.some((a) => REACTIONS.includes(a.step.action))) return false;
+    if (acts.get(id)?.some((a) => stepKind(a.step) === "reaction")) return false; // a planned reaction (Dodge, Shield) spends it
     reacted.set(id, occasion);
     log.push(`${sec} s: ${nameOf(id)} uses their reaction: ${what}.`);
     return true;
@@ -442,8 +458,12 @@ export function resolveMovement(
           story.push({ sec, k: "down", who: other });
           log.push(`${sec} s: ${nameOf(other)} is down.`);
         }
-      } else if (!m.damage && !m.amount_mod && m.on !== "moves" && !m.reaction) log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
+      } else if (!m.damage && !m.amount_mod && m.on !== "moves" && !m.reaction && !m.reroll) log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) fires.`);
       if (m.given) afflict(m.condition_on === "self" ? t.owner : t.other, m.given, t.owner, sec);
+      if (m.reroll) {
+        rerollAsked = true;
+        if (!m.reaction) log.push(`${sec} s: ${t.name} (${nameOf(t.owner)}) makes ${nameOf(t.other)} reroll.`);
+      }
       if (t.a?.condition.ends_on_trigger && (afflicted.get(t.owner) ?? []).includes(t.a)) release(t.owner, t.a, "trigger", sec);
     } finally {
       inTrigger = was;
@@ -834,12 +854,19 @@ export function resolveMovement(
     for (const m of order) {
       if (down.has(m.tokenId)) continue;
       for (const a of acts.get(m.tokenId)!) {
-        if (!REACTIONS.includes(a.step.action) || readied.has(a) || a.start > sec - 1 - lag.get(m.tokenId)! + 1e-9) continue;
+        if (stepKind(a.step) !== "reaction" || readied.has(a) || a.start > sec - 1 - lag.get(m.tokenId)! + 1e-9) continue;
         readied.add(a);
         const noReact = fighters.get(m.tokenId)?.limits?.forbid.reaction;
         if (noReact) {
-          log.push(`${sec} s: ${m.name} can't ${a.step.action} (${noReact}).`);
-          story.push({ sec, k: "stopped", who: m.tokenId, action: a.step.action, target: null, why: noReact });
+          log.push(`${sec} s: ${m.name} can't ${a.step.use?.name ?? a.step.action} (${noReact}).`);
+          story.push({ sec, k: "stopped", who: m.tokenId, action: a.step.use?.name ?? a.step.action, target: null, why: noReact });
+          continue;
+        }
+        // A reaction from their gear or abilities (Shield): what it gives them is ready now; its triggers do the reacting.
+        if (a.step.use) {
+          log.push(`${sec} s: ${m.name} readies ${a.step.use.name}.`);
+          story.push({ sec, k: "ability", who: m.tokenId, name: a.step.use.name, target: m.tokenId });
+          leave(m.tokenId, a.step.use.statuses?.self, a.step.use.statuses?.minutes ?? 0, sec, m.tokenId);
           continue;
         }
         // d20 + agility (their own dice, if they rolled with the plan) against DODGE_DC.
@@ -865,6 +892,7 @@ export function resolveMovement(
       const start = act.start + lag.get(m.tokenId)!; // when it really started
       const say = (text: string) => log.push(`${sec} s: ${text}`);
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
+      if (stepKind(step) === "reaction") continue; // reactions: readied above (and stopped there, if they're stopped)
       // A condition stopping that kind of step (Stunned, Incapacitated): it doesn't happen.
       const stopped = fighters.get(m.tokenId)?.limits?.forbid[stepKind(step)];
       if (stopped) {
@@ -890,7 +918,7 @@ export function resolveMovement(
         story.push({ sec, k: "interrupted", who: m.tokenId, action: step.use ? `use ${step.use.name}` : step.action, by: lastHitBy.get(m.tokenId) ?? null });
         continue;
       }
-      if (CHASE_ACTIONS.includes(step.action) || REACTIONS.includes(step.action)) continue; // movement / reactions: handled above
+      if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
       // An ability used on themselves (Case the Scene): its effects on them.
       if (step.action === "use" && step.use) {
         say(`${m.name} uses ${step.use.name}.`);
@@ -919,7 +947,7 @@ export function resolveMovement(
           : step.picks!.map((x) => x.id);
         const me = fighters.get(m.tokenId);
         say(`${m.name} uses ${use.name} on ${list.length ? list.map(nameOf).join(", ") : "no one"}.`);
-        let a: ReturnType<Combatant["attack"]> | null = null, dmg: { total: number; text: string } | null = null;
+        let a: ReturnType<Combatant["attack"]> | null = null, rolled: ReturnType<Combatant["attack"]> | null = null, dmg: { total: number; text: string } | null = null;
         for (const id of list) {
           const them = fighters.get(id), at = where(id);
           if (!me || !them || !at || down.has(id)) continue;
@@ -938,8 +966,9 @@ export function resolveMovement(
             leave(id, use.statuses?.target, use.statuses?.minutes ?? 0, sec, m.tokenId);
             continue;
           }
-          if (!a && !onAttacked(m.tokenId, id, (rangeOf(step, m) ?? 1) <= 1, sec)) break; // before the roll (a reaction may drop them)
-          a ??= usingDice(step.dice?.hit, () => me.attack(use, them, unseen(m.tokenId, id)));
+          if (!rolled && !onAttacked(m.tokenId, id, (rangeOf(step, m) ?? 1) <= 1, sec)) break; // before the roll (a reaction may drop them)
+          rolled ??= usingDice(step.dice?.hit, () => me.attack(use, them, unseen(m.tokenId, id))); // one roll for all of them
+          a = wouldHit(m.tokenId, id, (rangeOf(step, m) ?? 1) <= 1, sec, rolled, () => them.defense().total, () => me.attack(use, them, unseen(m.tokenId, id))); // reactions to it (this target only)
           const d = them.defense();
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
           // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
@@ -1043,7 +1072,8 @@ export function resolveMovement(
       } else if (!onAttacked(m.tokenId, target.id, (rangeOf(step, m) ?? 1) <= 1, sec)) { // before the roll: reactions to being attacked
         say(`${m.name} goes down before the attack lands.`);
       } else {
-        const a = usingDice(step.dice?.hit, () => me.attack(step.use, them, unseen(m.tokenId, target.id))), d = them.defense(); // unseen: advantage / disadvantage
+        const melee = (rangeOf(step, m) ?? 1) <= 1;
+        const a = wouldHit(m.tokenId, target.id, melee, sec, usingDice(step.dice?.hit, () => me.attack(step.use, them, unseen(m.tokenId, target.id))), () => them.defense().total, () => me.attack(step.use, them, unseen(m.tokenId, target.id))), d = them.defense(); // unseen: advantage / disadvantage; reactions to a would-be hit first
         const how = step.use ? ` (${step.use.name})` : "";
         const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash"; // reach beyond the next square: a projectile
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });

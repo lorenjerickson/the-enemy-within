@@ -30,6 +30,7 @@ export interface GearAction {
   targeting?: Targeting; // friendlies / enemies; one, exactly N, up to N or all (in range, or in its area)
   description?: string; // what it is, in the GM's words
   damageType?: string; // acid, fire…
+  kind?: "action" | "reaction"; // a reaction: planned as the round's reaction, on themselves (it readies conditions whose triggers react)
 }
 
 /** A gear action that does damage (an attack roll and a damage roll); one that doesn't just takes effect. */
@@ -96,7 +97,7 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 /** A step's kind: movement, action (gear actions too), bonus action or reaction. */
-export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? "action" : actionKind(s.action));
+export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? (s.use.kind === "reaction" ? "reaction" : "action") : actionKind(s.action));
 
 /**
  * Why something of this kind, taking these seconds, can't be added to the plan now (for greying out its button), or

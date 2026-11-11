@@ -132,6 +132,7 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "end", text: "At the end of each round", next: [outcome([youTake, yourHealth])] },
     { value: "hitting", text: "When you hit a creature", next: [WITH, outcome([addDamage("add", true), youTake, yourHealth, itGains, youGain])] },
     { value: "attacks_you", text: "When a creature attacks you", next: [WITH, REACT, outcome([itTakes, itGains, youGain])] }, // before the roll
+    { value: "would_hit", text: "When a creature's attack would hit you", next: [WITH, REACT, outcome([{ value: "it_rerolls", text: "it rerolls the attack and uses the lower result" }, youGain, itGains])] }, // after the roll, before it counts (Shield, Silvery Barbs)
     { value: "hit", text: "When a creature hits you", next: [WITH, REACT, outcome([itTakes, addDamage("you_take_extra", false), itGains, youGain])] },
     { value: "hit_by_source", text: "When the source hits you", next: [outcome([addDamage("add", false)])] }, // the source: whoever applied the condition
     { value: "damaged", text: "When you take damage", next: [{ kind: "optional", id: "from", lead: "from", slots: [word("the source")] }, REACT, outcome([yourStatFor, yourHealth, youGain])] },
@@ -163,11 +164,11 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
   const none = (note: string): Compiled => ({ modifiers: [], notes: [...notes, note] });
   const save = f.save_attr !== undefined, half = f.save_for !== "none";
   const pct: { save_pct?: number } = save && f.save_for === "pct" ? { save_pct: Number(f.save_pct) } : {}; // "save for 25 percent"
-  const triggered = ["start", "hitting", "hit", "damaged", "moves", "attacks_you"].includes(String(f.when)) && f.outcome !== "your_stat";
+  const triggered = ["start", "hitting", "hit", "damaged", "moves", "attacks_you", "would_hit"].includes(String(f.when)) && f.outcome !== "your_stat";
   if (typeof f.amount === "string" && f.amount.includes(":") && !triggered) notes.push(`an amount from ${f.amount.split(":")[0]} ${f.amount.split(":")[1]} modifier isn't in the engine yet here (only in rules that happen when something happens)`);
   const amount = String(f.dice ?? f.amount);
   const cond = f.condition !== undefined ? conditionId(String(f.condition)) : 0;
-  const trigger = (on: "hit" | "hitting" | "start" | "moves" | "damaged" | "attacked", extra: Partial<Extract<Modifier, { kind: "trigger" }>> = {}): Modifier => ({
+  const trigger = (on: "hit" | "hitting" | "start" | "moves" | "damaged" | "attacked" | "would_hit", extra: Partial<Extract<Modifier, { kind: "trigger" }>> = {}): Modifier => ({
     kind: "trigger", on, reach: f.reach === "melee" ? "melee" : "any", damage: "", damage_type: "", save_attr: save ? (f.save_attr as Attribute) : "", save_dc: save ? Number(f.save_dc) : 12, save_halves: half, ...pct, condition: 0, condition_on: "other", ...(f.reaction !== undefined ? { reaction: true } : {}), ...extra,
   });
   /** An amount as a trigger has it: dice (or a number), or an attribute's modifier (yours, or the other creature's). */
@@ -177,7 +178,7 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
     const [whose, attr] = a.split(":");
     return { damage: "", amount_mod: { whose: whose === "its" ? "other" : "self", attr: attr as Attribute } };
   };
-  const triggerOutcome = (on: "hit" | "hitting" | "start" | "moves" | "damaged" | "attacked"): Compiled => {
+  const triggerOutcome = (on: "hit" | "hitting" | "start" | "moves" | "damaged" | "attacked" | "would_hit"): Compiled => {
     const from = f.from !== undefined ? { from: "source" as const } : {};
     if (f.outcome === "it_takes") return one(trigger(on, { ...amountOf(), damage_type: f.type as never, ...from }));
     if (f.outcome === "it_gains") return one(trigger(on, { condition: cond, condition_on: "other", ...from }));
@@ -246,6 +247,8 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
       return triggerOutcome("hit");
     case "attacks_you":
       return triggerOutcome("attacked");
+    case "would_hit":
+      return f.outcome === "it_rerolls" ? one(trigger("would_hit", { reroll: true })) : triggerOutcome("would_hit");
     case "hit_by_source":
       return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "taking" });
     case "damaged":
@@ -377,6 +380,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
       const reach: Filled = !own && m.reach === "melee" ? { with: 1, reach: "melee" } : {};
       const out: Filled[] = [];
       if (m.damage || m.amount_mod) out.push({ when, ...reach, ...from, outcome: m.on === "hitting" ? "add" : m.on === "hit" || m.on === "attacked" ? "it_takes" : "you_take", dice: amount, type: m.damage_type || "untyped", ...save });
+      if (m.reroll) out.push({ when, ...reach, ...from, outcome: "it_rerolls" });
       if (m.condition) out.push({ when, ...reach, ...from, outcome: own || m.on === "damaged" || m.condition_on === "self" ? "you_gain" : "it_gains", condition: m.given?.name ?? conditionName(m.condition) });
       return out;
     }

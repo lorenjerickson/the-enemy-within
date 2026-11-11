@@ -337,6 +337,7 @@ addColumn("actions", "targets", "TEXT NOT NULL DEFAULT ''");
 addColumn("actions", "target_who", "TEXT NOT NULL DEFAULT ''"); // TargetWho: '' anyone, friendly, enemy
 addColumn("actions", "target_count", "TEXT NOT NULL DEFAULT 'one'"); // TargetCount: one, exactly, upto, all
 addColumn("actions", "target_n", "INTEGER NOT NULL DEFAULT 1"); // N for exactly / up to N
+addColumn("actions", "kind", "TEXT NOT NULL DEFAULT 'action'"); // ActionKindOf: an action, or a reaction (planned as the round's reaction; only on themselves)
 addColumn("actions", "effects", "TEXT NOT NULL DEFAULT '[]'"); // the first version's catalog effects (now conditions: see the migration below)
 addColumn("actions", "conditions", "TEXT NOT NULL DEFAULT '[]'"); // JSON [{ id, on }]: catalog conditions it puts on its user / target
 addColumn("map_tokens", "allegiance", "TEXT"); // Allegiance (party, hostile, neutral); null = by kind (characters party, creatures hostile) // ActionTargets: who it can be used on; '' = worked out from what it does
@@ -811,6 +812,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   target_n: number;
   targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
   conditions: { id: number; on: "self" | "target" }[]; // catalog conditions it puts on its user / its target (on a hit, or a failed save)
+  kind?: "action" | "reaction"; // a reaction is planned as the round's reaction and only affects its user: it readies conditions whose triggers do the reacting
 }
 
 /** Who an action can be used on: only its user, anyone but its user, or either; '' = worked out from what it does. */
@@ -821,7 +823,7 @@ type ActionFields = Omit<Action, "id" | ActionOwnerColumn>;
 type ActionRow = Omit<Action, "boosts" | "roll_grants" | "conditions"> & { boosts: string; roll_grants: string; conditions: string };
 
 const ACTION_COLUMNS =
-  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions";
+  "id, profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split, boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions, kind";
 
 export function listActions(owner: ActionOwner): Action[] {
   const [column, id] = ownerOf(owner);
@@ -833,13 +835,13 @@ export function listActions(owner: ActionOwner): Action[] {
 
 /** Inserts when id is null, otherwise updates. */
 export function saveAction(id: number | null, owner: ActionOwner, a: ActionFields): void {
-  const params = { ...a, area_fires: a.area_fires ?? "end", boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants), conditions: JSON.stringify(a.conditions) };
+  const params = { ...a, kind: a.kind ?? "action", area_fires: a.area_fires ?? "end", boosts: JSON.stringify(a.boosts), roll_grants: JSON.stringify(a.roll_grants), conditions: JSON.stringify(a.conditions) };
   if (id === null) {
     db.prepare<Omit<ActionRow, "id">>(
       `INSERT INTO actions (profession_id, item_id, creature_id, name, description, roll, attack, damage, damage_type, radius, split,
-         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions)
+         boosts, roll_grants, duration_amount, duration_unit, seconds, range_ft, area_shape, area_ft, save_dc, save_attr, save_half, area_lasts, area_fires, targets, target_who, target_count, target_n, conditions, kind)
        VALUES (@profession_id, @item_id, @creature_id, @name, @description, @roll, @attack, @damage, @damage_type, @radius, @split,
-         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @area_fires, @targets, @target_who, @target_count, @target_n, @conditions)`
+         @boosts, @roll_grants, @duration_amount, @duration_unit, @seconds, @range_ft, @area_shape, @area_ft, @save_dc, @save_attr, @save_half, @area_lasts, @area_fires, @targets, @target_who, @target_count, @target_n, @conditions, @kind)`
     ).run({ profession_id: null, item_id: null, creature_id: null, ...owner, ...params });
   } else {
     db.prepare<Omit<ActionRow, ActionOwnerColumn>>(
@@ -847,7 +849,7 @@ export function saveAction(id: number | null, owner: ActionOwner, a: ActionField
          damage = @damage, damage_type = @damage_type, radius = @radius, split = @split,
          boosts = @boosts, roll_grants = @roll_grants, duration_amount = @duration_amount, duration_unit = @duration_unit,
          seconds = @seconds, range_ft = @range_ft, area_shape = @area_shape, area_ft = @area_ft, save_dc = @save_dc,
-         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, area_fires = @area_fires, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n, conditions = @conditions WHERE id = @id`
+         save_attr = @save_attr, save_half = @save_half, area_lasts = @area_lasts, area_fires = @area_fires, targets = @targets, target_who = @target_who, target_count = @target_count, target_n = @target_n, conditions = @conditions, kind = @kind WHERE id = @id`
     ).run({ ...params, id });
   }
 }

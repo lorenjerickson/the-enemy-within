@@ -39,7 +39,7 @@ export type Modifier =
  * other: whoever they hit), in melee or by any attack. It can damage the other creature (a save may halve or negate it)
  * and put a condition on the other creature or on themselves. Their condition can end as it fires (its lifecycle says).
  */
-export type TriggerEvent = "hit" | "hitting" | "moves" | "start" | "damaged" | "attacked"; // attacked: a creature attacks them, before the roll (the other: the attacker) // damaged: any damage they take (the other: whoever dealt it, if anyone) // moves / start: no one else in it (they take its damage; "the other" is themselves)
+export type TriggerEvent = "hit" | "hitting" | "moves" | "start" | "damaged" | "attacked" | "would_hit"; // would_hit: an attack roll against them would hit, before it counts (the other: the attacker) // attacked: a creature attacks them, before the roll (the other: the attacker) // damaged: any damage they take (the other: whoever dealt it, if anyone) // moves / start: no one else in it (they take its damage; "the other" is themselves)
 export type Trigger = {
   kind: "trigger";
   on: TriggerEvent;
@@ -57,6 +57,7 @@ export type Trigger = {
   amount_mod?: { whose: "self" | "other"; attr: Attribute }; // adds an attribute's modifier (whoever has it, or the other creature) to the amount
   from?: "anyone" | "source"; // only when the other creature is the one that applied the condition
   save_pct?: number; // what a successful save leaves of the damage, % (else save_halves: 50 or 0)
+  reroll?: boolean; // the other creature rerolls the attack and uses the lower result (would_hit)
   reaction?: boolean; // uses their reaction: fires only if it's unspent this round (and reactions aren't stopped), then it's spent
 };
 /** What a successful save leaves of some damage, %: set, or half / none. */
@@ -239,13 +240,14 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "crit") return `critical hits on ${m.range}–20`;
   if (m.kind === "nocrit") return "critical hits against them are normal hits";
   if (m.kind === "trigger") {
-    const other = m.damage_to === "self" ? "them" : m.on === "hit" || m.on === "attacked" ? "the attacker" : m.on === "hitting" ? "whoever they hit" : m.on === "damaged" ? "whoever hurt them" : "them";
+    const other = m.damage_to === "self" ? "them" : m.on === "hit" || m.on === "attacked" || m.on === "would_hit" ? "the attacker" : m.on === "hitting" ? "whoever they hit" : m.on === "damaged" ? "whoever hurt them" : "them";
     const what = [
       (m.damage || m.amount_mod) && `${[m.damage, m.amount_mod && `${m.amount_mod.whose === "self" ? "their" : "the other's"} ${m.amount_mod.attr} modifier`].filter(Boolean).join(" + ")}${m.heal ? " healing" : `${m.damage_type ? ` ${m.damage_type}` : ""} damage`} to ${other}${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc}: ${savePct(m)}% on a save)` : ""}`,
       m.condition && `${m.given?.name ?? "a condition"} on ${m.condition_on === "self" ? "themselves" : other}`,
+      m.reroll && "the attacker rerolls and uses the lower result",
     ].filter(Boolean).join(" and ");
     const own = m.on === "moves" || m.on === "start";
-    return `${m.on === "attacked" ? "when attacked" : m.on === "hit" ? "when hit" : m.on === "hitting" ? "when they hit" : m.on === "moves" ? "when they move" : m.on === "damaged" ? "when they take damage" : "at the start of each round"}${m.from === "source" ? " (by the source)" : ""}${!own && m.reach === "melee" ? " in melee" : ""}${m.reaction ? " (reaction)" : ""}: ${what.replace(" on themselves", " on them") || "nothing"}`;
+    return `${m.on === "would_hit" ? "when an attack would hit them" : m.on === "attacked" ? "when attacked" : m.on === "hit" ? "when hit" : m.on === "hitting" ? "when they hit" : m.on === "moves" ? "when they move" : m.on === "damaged" ? "when they take damage" : "at the start of each round"}${m.from === "source" ? " (by the source)" : ""}${!own && m.reach === "melee" ? " in melee" : ""}${m.reaction ? " (reaction)" : ""}: ${what.replace(" on themselves", " on them") || "nothing"}`;
   }
   if (m.kind === "aura") return `aura ${m.radius} ft: ${m.given?.name ?? "a condition"} on ${m.who === "friendly" ? "allies" : m.who === "enemy" ? "enemies" : "everyone"}${m.self ? " (itself too)" : ""} within it`;
   if (m.kind === "maxhp") return `${m.value >= 0 ? "+" : ""}${m.value} maximum health`;

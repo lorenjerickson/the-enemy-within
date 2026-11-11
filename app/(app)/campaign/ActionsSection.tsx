@@ -82,6 +82,13 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
         <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), it catches whoever comes into it, starts a round in it or ends one in it (as ticked; at most once a round each): they roll the save again, and a failed save puts its conditions on them too.</span>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
+        Planned as
+        <select name="kind" defaultValue={initial?.kind ?? "action"} className="select select-sm w-auto" data-action-kind>
+          <option value="action">the round's action</option>
+          <option value="reaction">the round's reaction (on themselves: the conditions it gives them do the reacting)</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-sm">
         Takes
         <input name="seconds" type="number" min="0.5" max="6" step="0.5" defaultValue={initial?.seconds ?? 2} className="input input-sm w-20" />
         seconds of a round

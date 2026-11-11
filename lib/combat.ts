@@ -255,7 +255,7 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
   owned.push(...carried.filter((x) => !owned.some((o) => o.a.id === x.a.id)));
   // An item's action with no range of its own (0) reaches as far as the item does.
   return owned.map(({ a, source, itemRange }) => ({
-    id: a.id, name: a.name, description: a.description, damageType: a.damage_type || undefined, source, seconds: a.seconds, range: Math.max(1, Math.round((a.range_ft || itemRange) / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
+    id: a.id, name: a.name, description: a.description, damageType: a.damage_type || undefined, ...(a.kind === "reaction" ? { kind: "reaction" as const } : {}), source, seconds: a.seconds, range: Math.max(1, Math.round((a.range_ft || itemRange) / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
     ...(a.area_shape && a.area_ft > 0
       ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type), fires: areaFires(a.area_fires) } }
       : {}),
@@ -263,7 +263,7 @@ export function gearActions(tokenId: number, equipment?: Equipment): (GearAction
     ...((): { targets: "self" | "others" | "anyone"; self?: true } => {
       // Who it can be used on: as the GM set it, else others if it does damage or affects a target, else themselves.
       const auto = !a.damage && !a.boosts.some((b) => b.on === "target") && !a.roll_grants.some((g) => g.on === "target") && !a.conditions.some((c) => c.on === "target") ? "self" : "others";
-      const targets = a.area_shape ? "others" : a.targets || auto;
+      const targets = a.kind === "reaction" ? "self" : a.area_shape ? "others" : a.targets || auto; // a reaction readies something on its user
       return targets === "self" ? { targets, self: true } : { targets };
     })(),
     targeting: { who: a.target_who, count: a.target_count, n: a.target_n },

@@ -8,7 +8,7 @@ import { CONDITION_SENTENCE, EFFECT_SENTENCE, checkRule, compile, compileLifecyc
 const GROUPS: [string, string[]][] = [
   ["While it lasts", ["you", "are", "can", "autofail", "your", "nocrit", "aura"]],
   ["Rolls", ["roll", "attacked"]],
-  ["When something happens", ["applied", "start", "end", "hitting", "attacks_you", "hit", "hit_by_source", "damaged", "moves"]],
+  ["When something happens", ["applied", "start", "end", "hitting", "attacks_you", "would_hit", "hit", "hit_by_source", "damaged", "moves"]],
 ];
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 /** What an optional part adds, on its button. */

@@ -90,7 +90,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
           {/* The same actions players have, grouped by kind: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           {ACTION_GROUPS.map(([kind, title]) => {
             const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
-            if (!group.length && !(kind === "action" && current.gear.length)) return null;
+            if (!group.length && !current.gear.some((g) => (g.kind ?? "action") === kind)) return null;
             return (
               <section key={kind} className="space-y-1" data-action-group={kind}>
                 <div className="text-xs font-semibold opacity-80">{title}</div>
@@ -119,7 +119,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {kind === "action" && <GearActions gear={current.gear} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, "action", g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
+                {(kind === "action" || kind === "reaction") && <GearActions gear={current.gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

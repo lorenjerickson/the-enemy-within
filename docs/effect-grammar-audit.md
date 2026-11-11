@@ -95,7 +95,7 @@ branch to cover something the current form can make.
 
 ## Where the builder branches (added by this audit)
 
-The first blank now offers: "You can't", "You are", "You can see invisible creatures", "You automatically fail", "Your", "Critical hits against you are normal hits", "Within", "When you make", "When a creature makes an attack roll against you", "When this is applied", "At the start of each round", "At the end of each round", "When you hit a creature", "When a creature attacks you", "When a creature hits you", "When the source hits you", "When you take damage", "When you move".
+The first blank now offers: "You can't", "You are", "You can see invisible creatures", "You automatically fail", "Your", "Critical hits against you are normal hits", "Within", "When you make", "When a creature makes an attack roll against you", "When this is applied", "At the start of each round", "At the end of each round", "When you hit a creature", "When a creature attacks you", "When a creature's attack would hit you", "When a creature hits you", "When the source hits you", "When you take damage", "When you move".
 
 New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances, Becomes and multiplied, Advantage and disadvantage, Dice, Senses, Strain, Triggers, Auras.
 
@@ -141,5 +141,5 @@ New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances,
 6. ~~Triggers that heal~~ done.
 7. Amounts from an attribute modifier ("your [Fortitude] modifier"): done for rules that happen when something happens; not yet for ongoing ones ("Your Might increases by your Fortitude modifier").
 8. ~~Reactions aimed at one attacker, spent once~~ done ("When a creature attacks you (using your reaction), it gains the [Forced Reroll] condition"; fires before the roll, once a round, not when reactions are stopped or a reaction like Dodge is planned; "(using your reaction)" also works on "When a creature hits you" and "When you take damage").
-9. Interactive reactions: the round pauses for a player to decide after seeing a roll (Silvery Barbs, Shield).
+9. ~~Planned reactions~~ done (no pausing: reactions are chosen when planning). An ability or item action can be "planned as the round's reaction"; from the second it's planned for, it puts its conditions on its user, and their triggers do the reacting, the first time they fire ("It ends when one of its triggers fires"). New timing: "When a creature's attack would hit you" fires after the roll, before the hit counts: "you gain the [Shielded] condition" (+5 defense, then the hit is checked again) or "it rerolls the attack and uses the lower result" (Silvery Barbs).
 10. ~~A save against damage at the end of a round, and save results other than half or none~~ done ("(DC 12 Fortitude save for half)", "… save for 25 percent").

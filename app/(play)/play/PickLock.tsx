@@ -152,7 +152,7 @@ export default function PickLock({
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
       {ACTION_GROUPS.map(([kind, title]) => {
         const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
-        if (!group.length && !(kind === "action" && gear.length)) return null;
+        if (!group.length && !gear.some((g) => (g.kind ?? "action") === kind)) return null;
         return (
           <section key={kind} className="space-y-1" data-action-group={kind}>
             <div className="text-xs font-semibold opacity-80">{title}</div>
@@ -183,7 +183,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {kind === "action" && <GearActions gear={gear} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, "action", g.seconds, forbidden) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
+            {(kind === "action" || kind === "reaction") && <GearActions gear={gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
           </section>
         );
       })}
