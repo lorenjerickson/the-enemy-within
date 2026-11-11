@@ -967,20 +967,25 @@ export default function MapView({
     () => (exploredKey ? (JSON.parse(exploredKey) as Point[]).map((p) => visibilityPolygon(p, SIGHT, fogWalls)) : []),
     [exploredKey, fogWalls]
   );
+  // Whose eyes the fog is seen through, and from where: what they see now is worked out again only when one of
+  // them moves (or the walls, their sight or the planned spot change), not on every frame of a replay or effect.
+  const fogCentre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
+  const fogOwn = !fogOn ? [] : planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
+  const fogPlanEnd = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
+  const fogEyes = fogOwn.map((t) => ({ at: fogCentre(fogPlanEnd ?? t), range: (t.character_id !== null && fog?.sight?.[t.character_id]) || SIGHT })); // blind: only what's around them
+  const eyesKey = JSON.stringify(fogEyes);
+  const fogVisible = useMemo(() => fogEyes.map((e) => visibilityPolygon(e.at, e.range, fogWalls)), [eyesKey, fogWalls]); // eslint-disable-line react-hooks/exhaustive-deps
   const fogged = useMemo(() => {
     if (!fogOn) return null;
-    const centre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
-    const own = planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
-    const planEndAt = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
+    const centre = fogCentre, own = fogOwn, planEndAt = fogPlanEnd, visible = fogVisible;
     const blindOf = (t: MapToken) => t.character_id !== null && !!fog?.sight?.[t.character_id];
-    const visible = own.map((t) => visibilityPolygon(centre(planEndAt ?? t), (t.character_id !== null && fog?.sight?.[t.character_id]) || SIGHT, fogWalls)); // blind: only what's around them
     // In the dark (overall light below DARK_BELOW), they see only what's lit or within their darkvision.
     const dark = shownIllumination < DARK_BELOW && planningAs === null;
     const viewers = own.map((t) => ({ at: centre(planEndAt ?? t), dv: (t.character_id !== null && fog?.darkvision?.[t.character_id]) || 0, blind: blindOf(t) }));
     // Only tokens they can see are shown (and their own, always).
     const tokens = drawnTokens.filter((t) => own.includes(t) || viewers.some((v, i) => insidePolygon(centre(t), visible[i]) && (!dark || v.blind || brightEnough(v.at, centre(t), v.dv, shownIllumination, optimisticLights, fogWalls))));
     return { visible, explored, tokens, dark, viewers };
-  }, [fogOn, fog?.viewers.join(), JSON.stringify(fog?.sight ?? {}), JSON.stringify(fog?.darkvision ?? {}), shownIllumination, optimisticLights, fogWalls, explored, drawnTokens, planningAs, gmPlans]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fogOn, fogVisible, JSON.stringify(fog?.darkvision ?? {}), shownIllumination, optimisticLights, fogWalls, explored, JSON.stringify(drawnTokens)]); // eslint-disable-line react-hooks/exhaustive-deps -- tokens by content (a new array every frame otherwise)
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
   // The GM planning a creature's round: its reach from where its plan leaves it.

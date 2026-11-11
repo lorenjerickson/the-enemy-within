@@ -4,7 +4,7 @@ From the code review on 2026-11-06. Roughly in the order to tackle them.
 
 ## Now (cheap, real payoff)
 
-1. **Player fog recomputes every frame.** `MapView`'s `fogged` memo depends on `drawnTokens` (a new array each render), so during replays/effects (~30 fps) it redoes one visibility polygon per sighting (43 on level 14 already; free move adds one per step). Memoize the explored polygons on sightings + structures only. `freeMove` (server) has the same growing cost per click.
+1. ~~**Player fog recomputes every frame.**~~ Done 2026-11-10: explored polygons keyed on sightings + walls, current sight on where the viewers stand (not every frame); `freeMove` works out views lazily, nearest first. `MapView`'s `fogged` memo depends on `drawnTokens` (a new array each render), so during replays/effects (~30 fps) it redoes one visibility polygon per sighting (43 on level 14 already; free move adds one per step). Memoize the explored polygons on sightings + structures only. `freeMove` (server) has the same growing cost per click.
 2. **Dead / duplicate code.** Unused: `setTokenHp`, `getSecretLevel`, `audible`. `MapView` has its own `insidePolygon` (use `lib/visibility`'s) and a `segmentDistance` duplicating `lib/movement`'s point-to-segment distance.
 3. **Health written twice.** `saveGame` writes `hp` via `saveCharacterState` and again via `saveCharacterHealth`; drop `hp` from `saveCharacterState`, and the `hp` argument of `addCreatureToken`.
 4. **Health form duplicated.** Health dock tool and character page each have their own fields and number parsing: one `HealthFields` component and one `parseHealthForm` in `lib/health`.
