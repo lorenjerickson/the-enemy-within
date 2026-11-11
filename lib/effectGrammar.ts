@@ -37,7 +37,7 @@ const condition: Slot[] = [{ kind: "condition", id: "condition", label: "conditi
 const keep: Slot = { kind: "choice", id: "keep", label: "which", options: [{ value: "disadvantage", text: "lower" }, { value: "advantage", text: "higher" }] };
 
 /** "(DC [12] [Agility] save for [half])": a save against the damage. */
-const SAVE: Slot = { kind: "optional", id: "save", lead: "DC", slots: [num("save_dc", "DC", 1, 40), attrs("save_attr"), word("save for"), { kind: "choice", id: "save_for", label: "on a success", options: [{ value: "half", text: "half" }, { value: "none", text: "none" }] }] };
+const SAVE: Slot = { kind: "optional", id: "save", lead: "DC", slots: [num("save_dc", "DC", 1, 40), attrs("save_attr"), word("save for"), { kind: "choice", id: "save_for", label: "on a success", options: [{ value: "half", text: "half" }, { value: "none", text: "none" }, { value: "pct", text: "", next: [num("save_pct", "percent", 1, 99), word("percent")] }] }] };
 /** "with a [melee] attack": which attacks a hit rule counts (left off: any). */
 const WITH: Slot = { kind: "optional", id: "with", lead: "with", slots: [word("a"), { kind: "choice", id: "reach", label: "which attacks", options: [{ value: "melee", text: "melee" }] }, word("attack")] };
 
@@ -159,12 +159,13 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
   const one = (m: Modifier): Compiled => ({ modifiers: [m], notes });
   const none = (note: string): Compiled => ({ modifiers: [], notes: [...notes, note] });
   const save = f.save_attr !== undefined, half = f.save_for !== "none";
+  const pct: { save_pct?: number } = save && f.save_for === "pct" ? { save_pct: Number(f.save_pct) } : {}; // "save for 25 percent"
   const triggered = ["start", "hitting", "hit", "damaged", "moves"].includes(String(f.when)) && f.outcome !== "your_stat";
   if (typeof f.amount === "string" && f.amount.includes(":") && !triggered) notes.push(`an amount from ${f.amount.split(":")[0]} ${f.amount.split(":")[1]} modifier isn't in the engine yet here (only in rules that happen when something happens)`);
   const amount = String(f.dice ?? f.amount);
   const cond = f.condition !== undefined ? conditionId(String(f.condition)) : 0;
   const trigger = (on: "hit" | "hitting" | "start" | "moves" | "damaged", extra: Partial<Extract<Modifier, { kind: "trigger" }>> = {}): Modifier => ({
-    kind: "trigger", on, reach: f.reach === "melee" ? "melee" : "any", damage: "", damage_type: "", save_attr: save ? (f.save_attr as Attribute) : "", save_dc: save ? Number(f.save_dc) : 12, save_halves: half, condition: 0, condition_on: "other", ...extra,
+    kind: "trigger", on, reach: f.reach === "melee" ? "melee" : "any", damage: "", damage_type: "", save_attr: save ? (f.save_attr as Attribute) : "", save_dc: save ? Number(f.save_dc) : 12, save_halves: half, ...pct, condition: 0, condition_on: "other", ...extra,
   });
   /** An amount as a trigger has it: dice (or a number), or an attribute's modifier (yours, or the other creature's). */
   const amountOf = (): Partial<Extract<Modifier, { kind: "trigger" }>> => {
@@ -233,8 +234,7 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
       return triggerOutcome("start");
     case "end":
       if (f.outcome === "your_health") return one({ kind: "periodic", value: amount, heal: true, damage_type: "" });
-      if (save) notes.push("damage at the end of a round has no save in the engine yet (the start-of-round kind does)");
-      return one({ kind: "periodic", value: amount, heal: false, damage_type: f.type as never });
+      return one({ kind: "periodic", value: amount, heal: false, damage_type: f.type as never, ...(save ? { save_attr: f.save_attr as Attribute, save_dc: Number(f.save_dc), save_pct: f.save_for === "pct" ? Number(f.save_pct) : half ? 50 : 0 } : {}) });
     case "hitting":
       if (f.outcome === "add" && !save && f.reach !== "melee") return one({ kind: "extra", value: amount, damage_type: f.type as never, when: "dealing" });
       if (f.outcome === "add") return one(trigger("hitting", { damage: amount, damage_type: f.type as never })); // with a save, or melee only: a trigger
@@ -319,6 +319,12 @@ export function sentencesOf(modifiers: Modifier[], conditionName: (id: number) =
   return out;
 }
 
+/** A save's blanks from a modifier's save ("save for half", "none", or "25 percent"). */
+function saveFilled(m: { save_attr?: string; save_dc?: number; save_pct?: number; save_halves?: boolean }): Filled {
+  const pct = m.save_pct ?? (m.save_halves === false ? 0 : 50);
+  return { save: 1, save_dc: m.save_dc ?? 12, save_attr: m.save_attr!, ...(pct === 50 ? { save_for: "half" } : pct === 0 ? { save_for: "none" } : { save_for: "pct", save_pct: pct }) };
+}
+
 /** The sentence(s) for one modifier (a trigger with damage and a condition is two). */
 function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[] {
   const sign = (v: string) => (v.startsWith("-") ? "-" : "+"), bare = (v: string) => v.replace(/^[+-]/, "");
@@ -330,7 +336,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "roll":
       return m.roll === "attacked" ? [{ when: "attacked", keep: m.mode }] : [{ when: "roll", roll: m.roll, sign: "twice", keep: m.mode }];
     case "periodic":
-      return [m.heal ? { when: "end", outcome: "your_health", amount: m.value } : { when: "end", outcome: "you_take", dice: m.value, type: m.damage_type || "untyped" }];
+      return [m.heal ? { when: "end", outcome: "your_health", amount: m.value } : { when: "end", outcome: "you_take", dice: m.value, type: m.damage_type || "untyped", ...(m.save_attr ? saveFilled(m) : {}) }];
     case "instant":
       return [m.heal ? { when: "applied", outcome: "your_health", amount: m.value } : { when: "applied", outcome: "you_take", dice: m.value, type: m.damage_type || "untyped" }];
     case "resist":
@@ -360,8 +366,8 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
       const g = m.given, b = g?.effects.length === 1 && g.effects[0].modifiers.length === 1 ? g.effects[0].modifiers[0] : undefined;
       if (m.on === "damaged" && m.condition_on === "self" && g && g.reapply === "stack" && b?.kind === "boost" && g.name === `${b.value} ${b.target}`)
         return [{ when: "damaged", ...from, outcome: "your_stat", stat: b.target, amount: b.value.replace(/^\+/, ""), rounds: g.rounds, ...(g.stack_limit ? { limit: 1, stack_limit: g.stack_limit } : {}) }];
-      if (m.damage_to === "self" && (m.damage || m.amount_mod) && !own) return [{ when: m.on, ...(m.reach === "melee" ? { with: 1, reach: "melee" } : {}), ...from, outcome: m.on === "hit" ? "you_take_extra" : "you_take", dice: amount, type: m.damage_type || "untyped", ...(m.save_attr && m.on === "hitting" ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {}) }];
-      const save: Filled = m.save_attr ? { save: 1, save_dc: m.save_dc, save_attr: m.save_attr, save_for: m.save_halves ? "half" : "none" } : {};
+      if (m.damage_to === "self" && (m.damage || m.amount_mod) && !own) return [{ when: m.on, ...(m.reach === "melee" ? { with: 1, reach: "melee" } : {}), ...from, outcome: m.on === "hit" ? "you_take_extra" : "you_take", dice: amount, type: m.damage_type || "untyped", ...(m.save_attr && m.on === "hitting" ? saveFilled(m) : {}) }];
+      const save: Filled = m.save_attr ? saveFilled(m) : {};
       const reach: Filled = !own && m.reach === "melee" ? { with: 1, reach: "melee" } : {};
       const out: Filled[] = [];
       if (m.damage || m.amount_mod) out.push({ when: m.on, ...reach, ...from, outcome: m.on === "hitting" ? "add" : m.on === "hit" ? "it_takes" : "you_take", dice: amount, type: m.damage_type || "untyped", ...save });

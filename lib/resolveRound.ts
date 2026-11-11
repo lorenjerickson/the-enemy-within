@@ -4,6 +4,7 @@ import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
+import { savePct } from "@/lib/conditions";
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
@@ -401,10 +402,10 @@ export function resolveMovement(
         let n = roll();
         let saved = "";
         if (m.save_attr) {
-          const total = saveAgainst(other, m.save_attr, m.save_dc, key, t.name, sec);
+          const total = saveAgainst(other, m.save_attr, m.save_dc, key, t.name, sec), pct = savePct(m);
           if (total >= m.save_dc) {
-            n = m.save_halves ? Math.floor(n / 2) : 0;
-            saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc}: ${m.save_halves ? "halved" : "none"})`;
+            n = Math.floor((n * pct) / 100);
+            saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc}: ${pct === 50 ? "halved" : pct === 0 ? "none" : `${pct}%`})`;
           } else saved = ` (${m.save_attr} ${total} vs DC ${m.save_dc})`;
         }
         const tk = takenBy(other, n, m.damage_type || undefined), before = hp.get(other)!, after = Math.max(0, before - tk.n);
@@ -1080,7 +1081,7 @@ export function resolveMovement(
       for (const l of lasting) areaCatch(l, sec, "end", fx);
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
       const beforeTick = new Map(hp);
-      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt, roll: endRoll }); // players roll their own saves to end conditions
+      tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt, roll: endRoll, damageRoll: (id, attr, dc, what, s) => saveRoll(id, attr, dc, `dmg:${s}:${what}:${id}`, `${what} damage`, s) }); // players roll their own saves (to end conditions, against their damage)
       for (const [id, h] of hp) if (h < (beforeTick.get(id) ?? h)) { concentrationCheck(id, sec, beforeTick.get(id)! - h); onDamaged(id, sec, null); } // hurt by damage over time
     }
     frames.push({ sec, pos: Object.fromEntries([...pos].map(([id, p]) => [id, p])), down: [...down], lines: log.slice(logFrom).map((l) => l.replace(/^\d+ s: /, "")), ...(fx.length ? { fx } : {}) });
@@ -1123,7 +1124,7 @@ export function saveToEnd(a: Affliction, f: Combatant | undefined, who: string, 
  */
 export function tickAfflictions(
   afflicted: Map<number, Affliction[]>,
-  { hp, fighters, down, nameOf, log, story, sec, hurt, roll }: { hp: Map<number, number>; fighters: Map<number, Combatant>; down: Set<number>; nameOf: (id: number) => string; log: string[]; story?: StoryEvent[]; sec: number; hurt: (id: number, dmg: number) => number; roll?: SaveRoll },
+  { hp, fighters, down, nameOf, log, story, sec, hurt, roll, damageRoll }: { hp: Map<number, number>; fighters: Map<number, Combatant>; down: Set<number>; nameOf: (id: number) => string; log: string[]; story?: StoryEvent[]; sec: number; hurt: (id: number, dmg: number) => number; roll?: SaveRoll; damageRoll?: SaveRoll },
 ) {
   const at = (line: string) => log.push(story ? `${sec} s: ${line}` : line);
   for (const [id, list] of afflicted) {
@@ -1144,10 +1145,17 @@ export function tickAfflictions(
             story?.push({ sec, k: "effect", who: id, name: c.name, much: after - before, heal: true });
           }
         } else if (n > 0) {
-          const r = m.damage_type ? combineResist(f?.resist?.[m.damage_type]) : null, took = afterResist(n, r);
+          // A save against it (end of round: a player rolls their own in a round), leaving its share of the damage.
+          let rolled = n, saved = "";
+          if (m.save_attr && !down.has(id)) {
+            const dc = m.save_dc ?? 12, s = damageRoll ? damageRoll(id, m.save_attr, dc, c.name, sec) : f?.save ? f.save(m.save_attr) : { total: -99, text: "" }, pct = savePct(m);
+            if (s.total >= dc) { rolled = Math.floor((n * pct) / 100); saved = ` (${m.save_attr} ${s.total} vs DC ${dc}: ${pct === 50 ? "halved" : pct === 0 ? "none" : `${pct}%`})`; }
+            else saved = ` (${m.save_attr} ${s.total} vs DC ${dc})`;
+          }
+          const r = m.damage_type ? combineResist(f?.resist?.[m.damage_type]) : null, took = afterResist(rolled, r);
           const after = Math.max(0, before - took);
           hp.set(id, after);
-          at(`${c.name} deals ${nameOf(id)} ${took}${m.damage_type ? ` ${m.damage_type}` : ""} damage${r ? ` (${r === "immune" ? "immune" : `${r}: ${took} of ${n}`})` : ""}; ${after} left.`);
+          at(`${c.name} deals ${nameOf(id)} ${took}${m.damage_type ? ` ${m.damage_type}` : ""} damage${saved}${r ? ` (${r === "immune" ? "immune" : `${r}: ${took} of ${rolled}`})` : ""}; ${after} left.`);
           if (took > 0) {
             story?.push({ sec, k: "effect", who: id, name: c.name, much: took, heal: false, hurt: hurt(id, took) });
             hurtBy.add(c.id);

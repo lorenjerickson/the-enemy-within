@@ -3,7 +3,7 @@
 Audit of the handbook-style effect grammar (`lib/effectGrammar.ts`, a draft not yet used by the app) against the
 current effect form. Each row is something the current form can make: the selections on the form, the sentence that
 means the same, and whether that sentence compiles to the same engine data the form saves. Generated from a test run
-on 2026-11-10; 65 of 65 come out the same in the engine (2 of them as equivalent, not identical, data).
+on 2026-11-11; 65 of 65 come out the same in the engine (2 of them as equivalent, not identical, data).
 
 Blanks are in brackets; the words between them are fixed. "You" is always whoever has the effect; the creature that
 applied the condition is "the source" ("When the source hits you, add 1d6 necrotic damage."; "You can't attack the
@@ -142,4 +142,4 @@ New branches, by area: Extra damage on a hit, Restrictions, Boosts, Resistances,
 7. Amounts from an attribute modifier ("your [Fortitude] modifier"): done for rules that happen when something happens; not yet for ongoing ones ("Your Might increases by your Fortitude modifier").
 8. Reactions aimed at one attacker, spent once ("when a creature attacks you, before the roll").
 9. Interactive reactions: the round pauses for a player to decide after seeing a roll (Silvery Barbs, Shield).
-10. A save against damage at the end of a round (the start-of-round kind has one), and save results other than half or none.
+10. ~~A save against damage at the end of a round, and save results other than half or none~~ done ("(DC 12 Fortitude save for half)", "… save for 25 percent").

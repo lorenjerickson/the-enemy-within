@@ -16,7 +16,7 @@ import type { RollTweak } from "@/lib/status";
 export type Modifier =
   | { kind: "boost"; target: ModifierTarget; value: string } // add a number or dice (+2, -1d4)
   | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
-  | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | "" } // at the end of each round
+  | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | ""; save_attr?: Attribute | ""; save_dc?: number; save_pct?: number } // at the end of each round (a save leaves save_pct % of the damage)
   | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" } // once, as the condition lands (a healing draught)
   | { kind: "resist"; damage_type: DamageType; level: Resist } // how they take a kind of damage
   | { kind: "extra"; value: string; damage_type: DamageType | ""; when: "dealing" | "taking" } // extra dice on a hit: on their hits, or on hits against them (by whoever put it on them)
@@ -56,7 +56,10 @@ export type Trigger = {
   heal?: boolean; // heals instead of damaging
   amount_mod?: { whose: "self" | "other"; attr: Attribute }; // adds an attribute's modifier (whoever has it, or the other creature) to the amount
   from?: "anyone" | "source"; // only when the other creature is the one that applied the condition
+  save_pct?: number; // what a successful save leaves of the damage, % (else save_halves: 50 or 0)
 };
+/** What a successful save leaves of some damage, %: set, or half / none. */
+export const savePct = (m: { save_pct?: number; save_halves?: boolean }) => m.save_pct ?? (m.save_halves === false ? 0 : 50);
 export const TRIGGER_EVENTS: [TriggerEvent, string][] = [["hit", "when they're hit"], ["hitting", "when they hit someone"], ["moves", "when they move (first time each round)"], ["start", "at the start of each round"]];
 
 /** Senses: blind (sees only within 5 ft), invisible (unseen by those who can't see invisible), sees invisible. */
@@ -221,7 +224,7 @@ export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts
 
 /** "1d2 poison damage a round", "disadvantage on their attack rolls", "+2 defense". */
 export function describeModifier(m: Modifier): string {
-  if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round`;
+  if (m.kind === "periodic") return m.heal ? `heals ${m.value} a round` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage a round${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc ?? 12}: ${savePct(m)}% on a save)` : ""}`;
   if (m.kind === "instant") return m.heal ? `heals ${m.value}` : `${m.value}${m.damage_type ? ` ${m.damage_type}` : ""} damage at once`;
   if (m.kind === "roll") return `${m.mode} on ${rollKindLabel(m.roll).toLowerCase()}`;
   if (m.kind === "forbid") return `can't ${m.what === "actions" ? "take actions" : m.what === "bonus" ? "take bonus actions" : m.what === "reactions" ? "react" : m.what === "movement" ? "move" : "attack whoever caused it"}`;
@@ -237,7 +240,7 @@ export function describeModifier(m: Modifier): string {
   if (m.kind === "trigger") {
     const other = m.damage_to === "self" ? "them" : m.on === "hit" ? "the attacker" : m.on === "hitting" ? "whoever they hit" : m.on === "damaged" ? "whoever hurt them" : "them";
     const what = [
-      (m.damage || m.amount_mod) && `${[m.damage, m.amount_mod && `${m.amount_mod.whose === "self" ? "their" : "the other's"} ${m.amount_mod.attr} modifier`].filter(Boolean).join(" + ")}${m.heal ? " healing" : `${m.damage_type ? ` ${m.damage_type}` : ""} damage`} to ${other}${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc} ${m.save_halves ? "halves" : "negates"})` : ""}`,
+      (m.damage || m.amount_mod) && `${[m.damage, m.amount_mod && `${m.amount_mod.whose === "self" ? "their" : "the other's"} ${m.amount_mod.attr} modifier`].filter(Boolean).join(" + ")}${m.heal ? " healing" : `${m.damage_type ? ` ${m.damage_type}` : ""} damage`} to ${other}${m.save_attr ? ` (${m.save_attr} DC ${m.save_dc}: ${savePct(m)}% on a save)` : ""}`,
       m.condition && `${m.given?.name ?? "a condition"} on ${m.condition_on === "self" ? "themselves" : other}`,
     ].filter(Boolean).join(" and ");
     const own = m.on === "moves" || m.on === "start";
