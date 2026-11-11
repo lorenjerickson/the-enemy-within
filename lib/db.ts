@@ -778,6 +778,63 @@ export function listPrerequisites(professionId: number): Profession[] {
     .all(professionId);
 }
 
+/** The ranks a rank leads to, at any depth (not itself). */
+export function laterRanks(rankId: number): number[] {
+  const out: number[] = [], todo = [rankId];
+  while (todo.length) {
+    const at = todo.pop()!;
+    for (const { to_id } of db.prepare<[number], { to_id: number }>("SELECT to_id FROM profession_advancements WHERE from_id = ?").all(at))
+      if (to_id !== rankId && !out.includes(to_id)) { out.push(to_id); todo.push(to_id); }
+  }
+  return out;
+}
+
+/** Characters at a rank. */
+export const charactersAtRank = (rankId: number) => db.prepare<[number], { id: number; name: string }>("SELECT id, name FROM characters WHERE rank_id = ? ORDER BY name").all(rankId);
+
+/**
+ * Moves a rank (and the ranks it leads to) to come after `parentId`, or to be a starting rank of profession
+ * `groupId`. Moved to another profession, the ranks it leads to go with it (and lose links from ranks left behind).
+ */
+export function moveRank(rankId: number, parentId: number | null, groupId: number): void {
+  db.transaction(() => {
+    const moving = [rankId, ...laterRanks(rankId)];
+    if (parentId !== null && moving.includes(parentId)) throw new Error("A rank can't come after itself or a rank it leads to");
+    db.prepare("DELETE FROM profession_advancements WHERE to_id = ?").run(rankId);
+    if (getProfession(rankId)?.group_id !== groupId) {
+      const marks = moving.map(() => "?").join(", ");
+      db.prepare(`DELETE FROM profession_advancements WHERE to_id IN (${marks}) AND from_id NOT IN (${marks})`).run(...moving, ...moving);
+      db.prepare(`UPDATE professions SET group_id = ? WHERE id IN (${marks})`).run(groupId, ...moving);
+    }
+    if (parentId !== null) linkAdvancement(parentId, rankId);
+  })();
+}
+
+/**
+ * Removes a rank: the ranks it led to come after the rank before it instead (or become starting ranks), characters
+ * at it drop back to the rank before it (or have no profession), and what it gave (modifiers, items, actions) goes.
+ */
+export function deleteRank(rankId: number): void {
+  db.transaction(() => {
+    const chain = rankChain(rankId), parent = chain.length > 1 ? chain[chain.length - 2] : null;
+    const next = db.prepare<[number], { to_id: number }>("SELECT to_id FROM profession_advancements WHERE from_id = ?").all(rankId).map((r) => r.to_id);
+    db.prepare("DELETE FROM profession_advancements WHERE from_id = ? OR to_id = ?").run(rankId, rankId);
+    if (parent !== null) for (const n of next) linkAdvancement(parent, n);
+    db.prepare("UPDATE characters SET rank_id = ? WHERE rank_id = ?").run(parent, rankId);
+    db.prepare("DELETE FROM profession_modifiers WHERE profession_id = ?").run(rankId);
+    db.prepare("DELETE FROM profession_items WHERE profession_id = ?").run(rankId);
+    db.prepare("DELETE FROM actions WHERE profession_id = ?").run(rankId);
+    db.prepare("DELETE FROM character_professions WHERE profession_id = ?").run(rankId); // the old ticked professions (before ranks)
+    db.prepare("DELETE FROM professions WHERE id = ?").run(rankId);
+  })();
+}
+
+/** Removes a profession with no ranks left. */
+export function deleteProfessionGroup(groupId: number): void {
+  if (listRanks(groupId).length) throw new Error("Remove its ranks first");
+  db.prepare("DELETE FROM profession_groups WHERE id = ?").run(groupId);
+}
+
 export function linkAdvancement(fromId: number, toId: number): void {
   if (fromId === toId) return;
   db.prepare<[number, number]>("INSERT OR IGNORE INTO profession_advancements (from_id, to_id) VALUES (?, ?)").run(fromId, toId);

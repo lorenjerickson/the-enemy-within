@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import {
-  getProfession, getProfessionGroup, listActions, listAdvancements, listItems, listPrerequisites, listProfessionItems,
+  charactersAtRank, getProfession, getProfessionGroup, laterRanks, listActions, listProfessionGroups, listAdvancements, listItems, listPrerequisites, listProfessionItems,
   listProfessionModifiers, listRanks, rankChain, type Profession,
 } from "@/lib/db";
 import { MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
-import { addAdvancement, addGrantedItem, addModifier, deleteModifier, removeAdvancement, removeGrantedItem } from "../../actions";
+import { addAdvancement, addGrantedItem, addModifier, deleteModifier, moveRankTo, removeAdvancement, removeGrantedItem, removeRank } from "../../actions";
+import RemoveButton from "../../RemoveButton";
 import ActionsSection from "../../../ActionsSection";
 import RankFields from "../../RankFields";
 
@@ -44,6 +45,11 @@ export default async function EditRank({ params }: { params: Promise<{ id: strin
   const linked = new Set([...chain, ...advancements.map((a) => a.id)]);
   const candidates = (profession.group_id !== null ? listRanks(profession.group_id) : []).filter((p) => !linked.has(p.id)); // ranks of the same profession (no loops)
   const otherRoutes = listPrerequisites(profession.id).filter((p) => p.id !== parent?.id);
+  // Where it can move: after any rank but itself and those it leads to, or to the start of any profession.
+  const later = new Set([profession.id, ...laterRanks(profession.id)]);
+  const groups = listProfessionGroups(), here = parent ? `r:${parent.id}` : `start:${profession.group_id}`;
+  const held = charactersAtRank(profession.id), nextCount = advancements.length;
+  const warning = `Remove ${profession.name} for good? ${nextCount ? `Its next rank${nextCount === 1 ? "" : "s"} (${advancements.map((a) => a.name).join(", ")}) will ${parent ? `come after ${parent.name}` : "become starting ranks"}. ` : ""}${held.length ? `${held.map((c) => c.name).join(", ")} will ${parent ? `drop back to ${parent.name}` : "have no profession"}. ` : ""}Its modifiers, granted items and actions go too.`;
   const modifiers = listProfessionModifiers(profession.id);
   const grantedItems = listProfessionItems(profession.id);
   const grantedIds = new Set(grantedItems.map((i) => i.id));
@@ -130,6 +136,22 @@ export default async function EditRank({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
+      <div className="space-y-2" data-move-rank>
+        <h3 className="font-semibold">Move</h3>
+        <p className="text-xs opacity-60">Put this rank after another one, or make it a starting rank. The ranks it leads to move with it.</p>
+        <form action={moveRankTo.bind(null, profession.id)} className="flex flex-wrap items-center gap-2">
+          <select name="to" defaultValue={here} className="select select-sm w-auto">
+            {groups.map((g) => (
+              <optgroup key={g.id} label={g.name}>
+                <option value={`start:${g.id}`}>A starting rank of {g.name}</option>
+                {listRanks(g.id).filter((r) => !later.has(r.id)).map((r) => <option key={r.id} value={`r:${r.id}`}>After {r.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <button className="btn btn-primary btn-sm">Move</button>
+        </form>
+      </div>
+
       <div className="space-y-2" data-next-ranks>
         <h3 className="font-semibold">Next ranks</h3>
         {advancements.length > 1 && <p className="text-xs opacity-60">Choose one of:</p>}
@@ -146,6 +168,7 @@ export default async function EditRank({ params }: { params: Promise<{ id: strin
           <button className="btn btn-primary btn-sm">Add next rank</button>
         </form>
       </div>
+      <RemoveButton label="Remove rank" warning={warning} onConfirm={removeRank.bind(null, profession.id)} />
     </section>
   );
 }

@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { getProfessionGroup, listRanks, startingRanks } from "@/lib/db";
-import { addStartingRank } from "../actions";
+import { addStartingRank, removeProfessionGroup } from "../actions";
+import RemoveButton from "../RemoveButton";
 import ProfessionFields from "../ProfessionFields";
 
 /** A profession: its name and description, and its starting rank(s), each leading on to the next ranks. */
@@ -39,6 +40,8 @@ export default async function EditProfession({ params }: { params: Promise<{ id:
           <button className="btn btn-primary btn-sm">Add starting rank</button>
         </form>
       </div>
+      {total === 0 && <RemoveButton label="Remove profession" warning={`Remove ${group.name} for good?`} onConfirm={removeProfessionGroup.bind(null, group.id)} />}
+      {total > 0 && <p className="text-xs opacity-60">To remove this profession, remove its ranks first.</p>}
     </section>
   );
 }

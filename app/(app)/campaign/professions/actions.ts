@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
-  addProfessionModifier, getProfession, grantItem, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement,
+  addProfessionModifier, deleteProfessionGroup, deleteRank, getProfession, moveRank, grantItem, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement,
 } from "@/lib/db";
 import { isModifierFormula } from "@/lib/itemTypes";
 import { isModifierTarget } from "@/lib/modifiers";
@@ -84,4 +84,39 @@ export async function removeGrantedItem(professionId: number, itemId: number) {
   await requireGm();
   revokeItem(professionId, itemId);
   revalidatePath(rankPage(professionId));
+}
+
+/** Moves a rank: after another rank ("r:ID") or as a starting rank of a profession ("start:ID"). */
+export async function moveRankTo(rankId: number, formData: FormData) {
+  await requireGm();
+  const rank = getProfession(rankId);
+  if (!rank) throw new Error("Unknown rank");
+  const [kind, raw] = String(formData.get("to") ?? "").split(":"), id = Number(raw);
+  if (kind === "start") moveRank(rankId, null, id);
+  else {
+    const parent = getProfession(id);
+    if (!parent?.group_id) throw new Error("Unknown rank");
+    moveRank(rankId, parent.id, parent.group_id);
+  }
+  revalidatePath("/campaign/professions", "layout");
+  redirect(rankPage(rankId));
+}
+
+/** Removes a rank, then goes to the rank before it (or its profession). */
+export async function removeRank(rankId: number) {
+  await requireGm();
+  const rank = getProfession(rankId);
+  if (!rank) throw new Error("Unknown rank");
+  const chain = rankChain(rankId), parent = chain.length > 1 ? chain[chain.length - 2] : null;
+  deleteRank(rankId);
+  revalidatePath("/campaign/professions", "layout");
+  redirect(parent !== null ? rankPage(parent) : `/campaign/professions/${rank.group_id}`);
+}
+
+/** Removes a profession with no ranks. */
+export async function removeProfessionGroup(groupId: number) {
+  await requireGm();
+  deleteProfessionGroup(groupId);
+  revalidatePath("/campaign/professions");
+  redirect("/campaign/professions");
 }
