@@ -160,9 +160,21 @@ function gridOrigin(state: MapState, w: number, h: number) {
   return { x0: first(r.x, offsetX), y0: first(r.y, offsetY), size };
 }
 
-/** Walls and closed doors as segments in scene space (they block light and sound). */
-const blockersInScene = (state: MapState, x0: number, y0: number, size: number): Segment[] =>
-  blockingSegments(state.structures).map(({ a, b }) => ({ a: { x: x0 + a.x * size, y: y0 + a.y * size }, b: { x: x0 + b.x * size, y: y0 + b.y * size } }));
+/**
+ * What a spot sees past walls and closed doors within `radius` cells, in grid units: worked out once per spot, reach
+ * and set of walls (a new walls array means they changed), not on every frame while lights flicker or effects play.
+ */
+const viewCache = new WeakMap<MapStructure[], Map<string, Point[]>>();
+function viewPast(structures: MapStructure[], at: Point, radius: number): Point[] {
+  let views = viewCache.get(structures);
+  if (!views) viewCache.set(structures, (views = new Map()));
+  const key = `${at.x},${at.y},${radius}`;
+  let v = views.get(key);
+  if (!v) views.set(key, (v = visibilityPolygon(at, radius, blockingSegments(structures))));
+  return v;
+}
+/** A view (grid units) in scene pixels. */
+const inScene = (poly: Point[], x0: number, y0: number, size: number) => poly.map((p) => ({ x: x0 + p.x * size, y: y0 + p.y * size }));
 
 /** How many grid cells tall a side-on token stands: the level's figure height for 1.8 m, scaled by the creature's height. */
 const figureCells = (figureHeight: number, t: { height: number }) => (figureHeight * (t.height || 1.8)) / 1.8;
@@ -334,7 +346,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
     // Lasting areas left by actions (a fire wall), kept out from behind walls.
     const toPx = (p: Point) => ({ x: x0 + p.x * size, y: y0 + p.y * size });
     for (const l of state.lasting) {
-      const clip = visibilityPolygon(toPx(l.area.origin), l.area.size * size + 2, blockersInScene(state, x0, y0, size));
+      const clip = inScene(viewPast(state.structures, l.area.origin, l.area.size * 1.05), x0, y0, size); // a little beyond its edge
       drawLasting(ctx, l, toPx, size, state.time, clip);
     }
   },
@@ -408,8 +420,6 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   lighting: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     const darkness = 1 - state.illumination;
-    // Walls and closed doors block light.
-    const blockers = blockersInScene(state, x0, y0, size);
     // Flicker: each frame a flickering light gets one random draw that moves its range and its strength
     // together (a flare reaches further and burns brighter), shared by the darkness cut-out and the warm overlay.
     const flicker = new Map(
@@ -423,7 +433,7 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       const { range, strength } = flicker.get(l)!;
       const r = l.radius * size * range;
       const half = (l.spread * Math.PI) / 360, dir = (l.angle * Math.PI) / 180;
-      const seen = visibilityPolygon({ x: cx, y: cy }, r, blockers);
+      const seen = inScene(viewPast(state.structures, { x: l.x, y: l.y }, l.radius * 1.05), x0, y0, size); // walls and closed doors block light; at its furthest flicker (the arc below trims it)
       return {
         cx, cy, r, strength,
         // The light's shape (circle or cone), clipped to what it can see past walls.
@@ -498,11 +508,9 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   // Positional sounds: a speaker icon with a faint circle showing the effective range.
   sounds: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
-    // Like light, a positional sound's range is cut off by walls and closed doors.
-    const blockers = blockersInScene(state, x0, y0, size);
     for (const p of state.positional) {
       const cx = x0 + p.x * size, cy = y0 + p.y * size;
-      const heard = visibilityPolygon({ x: cx, y: cy }, p.radius * size, blockers);
+      const heard = inScene(viewPast(state.structures, { x: p.x, y: p.y }, p.radius), x0, y0, size); // like light, cut off by walls and closed doors
       ctx.save();
       ctx.beginPath();
       heard.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
@@ -1813,7 +1821,7 @@ export default function MapView({
           mc.fillStyle = "#fff";
           for (const l of state.lights) {
             if (!l.enabled) continue;
-            const seen = visibilityPolygon({ x: l.x, y: l.y }, l.radius, fogWalls);
+            const seen = viewPast(state.structures, { x: l.x, y: l.y }, l.radius * 1.05); // the arc below trims it
             mc.save();
             mc.clip(shapes([seen]));
             mc.beginPath();
@@ -1863,8 +1871,7 @@ export default function MapView({
             // Players see an area that touches anyone they can see, or that starts where they can see.
             const shown = !readOnly || [f.from, ...f.hits.map((h) => h.id)].some((id) => at(id)?.seen) || !!fogged?.visible.some((poly) => insidePolygon(f.area.origin, poly));
             if (!shown) continue;
-            const o = toPx(f.area.origin);
-            const clip = visibilityPolygon(o, f.area.size * size + 2, blockersInScene(state, x0, y0, size));
+            const clip = inScene(viewPast(state.structures, f.area.origin, f.area.size * 1.05), x0, y0, size);
             drawAreaFx(ctx, f, k, toPx, size, (id) => at(id), clip);
             continue;
           }
