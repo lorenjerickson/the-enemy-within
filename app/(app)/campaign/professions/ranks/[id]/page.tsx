@@ -13,7 +13,7 @@ import RemoveButton from "../../RemoveButton";
 import ActionsSection from "../../../ActionsSection";
 import RankFields from "../../RankFields";
 
-function ProfessionLinks({ professions, onRemove }: { professions: Profession[]; onRemove?: (p: Profession) => () => Promise<void> }) {
+function ProfessionLinks({ professions, onRemove }: { professions: Profession[]; onRemove?: (p: Profession) => (() => Promise<void>) | null }) {
   if (professions.length === 0) return <p className="text-sm opacity-60">None</p>;
   return (
     <ul className="space-y-1">
@@ -21,9 +21,9 @@ function ProfessionLinks({ professions, onRemove }: { professions: Profession[];
         <li key={p.id} className="flex items-center gap-2">
           <Link href={`/campaign/professions/ranks/${p.id}`} className="link link-hover font-medium">{p.name}</Link>
           <span className="text-sm opacity-70">{p.description}</span>
-          {onRemove && (
-            <form action={onRemove(p)}>
-              <button className="btn btn-ghost btn-xs">Remove</button>
+          {onRemove?.(p) && (
+            <form action={onRemove(p)!}>
+              <button className="btn btn-ghost btn-xs" title="Also reached from another rank: stop it following this one">Unlink</button>
             </form>
           )}
         </li>
@@ -155,7 +155,7 @@ export default async function EditRank({ params }: { params: Promise<{ id: strin
       <div className="space-y-2" data-next-ranks>
         <h3 className="font-semibold">Next ranks</h3>
         {advancements.length > 1 && <p className="text-xs opacity-60">Choose one of:</p>}
-        <ProfessionLinks professions={advancements} onRemove={(p) => removeAdvancement.bind(null, profession.id, p.id)} />
+        <ProfessionLinks professions={advancements} onRemove={(p) => (listPrerequisites(p.id).length > 1 ? removeAdvancement.bind(null, profession.id, p.id) : null)} />
         <form key={advancements.length} action={addAdvancement.bind(null, profession.id)} className="flex flex-wrap items-center gap-2 pt-2">
           <select name="to_id" defaultValue="" className="select select-sm">
             <option value="">Link another {group?.name ?? ""} rank…</option>

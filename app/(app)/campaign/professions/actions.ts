@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
-  addProfessionModifier, deleteProfessionGroup, deleteRank, getProfession, moveRank, grantItem, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement,
+  addProfessionModifier, deleteProfessionGroup, deleteRank, getProfession, moveRank, grantItem, listPrerequisites, listRanks, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement,
 } from "@/lib/db";
 import { isModifierFormula } from "@/lib/itemTypes";
 import { isModifierTarget } from "@/lib/modifiers";
@@ -25,7 +25,7 @@ export async function submitProfessionGroup(id: number | null, formData: FormDat
 export async function addStartingRank(groupId: number, formData: FormData) {
   await requireGm();
   const name = text(formData, "name");
-  if (name) saveProfession(null, { name, description: "", group_id: groupId });
+  if (name && !listRanks(groupId).some((r) => r.name.toLowerCase() === name.toLowerCase())) saveProfession(null, { name, description: "", group_id: groupId }); // not twice
   revalidatePath(`/campaign/professions/${groupId}`);
 }
 
@@ -44,14 +44,18 @@ export async function addAdvancement(fromId: number, formData: FormData) {
   const from = getProfession(fromId);
   if (!from) throw new Error("Unknown rank");
   const newName = text(formData, "new_name");
-  const toId = newName ? saveProfession(null, { name: newName, description: "", group_id: from.group_id }) : Number(formData.get("to_id"));
+  // A name the profession already has links that rank (no duplicates from adding it twice).
+  const same = newName && from.group_id !== null ? listRanks(from.group_id).find((r) => r.name.toLowerCase() === newName.toLowerCase()) : undefined;
+  const toId = same ? same.id : newName ? saveProfession(null, { name: newName, description: "", group_id: from.group_id }) : Number(formData.get("to_id"));
   const to = toId ? getProfession(toId) : undefined;
   if (to && to.group_id === from.group_id && !rankChain(fromId).includes(to.id)) linkAdvancement(fromId, to.id); // within its profession, and no loops
   revalidatePath(rankPage(fromId));
 }
 
+/** Unlinks a next rank that's also reached from another rank (an only route stays: move or remove the rank instead). */
 export async function removeAdvancement(fromId: number, toId: number) {
   await requireGm();
+  if (listPrerequisites(toId).length < 2) throw new Error("That's the only way to reach it: move or remove the rank on its own page");
   unlinkAdvancement(fromId, toId);
   revalidatePath(rankPage(fromId));
 }
