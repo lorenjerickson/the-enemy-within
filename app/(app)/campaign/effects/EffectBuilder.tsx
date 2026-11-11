@@ -8,11 +8,11 @@ import { CONDITION_SENTENCE, EFFECT_SENTENCE, checkRule, compile, compileLifecyc
 const GROUPS: [string, string[]][] = [
   ["While it lasts", ["you", "are", "can", "autofail", "your", "nocrit", "aura"]],
   ["Rolls", ["roll", "attacked"]],
-  ["When something happens", ["applied", "start", "end", "hitting", "hit", "hit_by_source", "damaged", "moves"]],
+  ["When something happens", ["applied", "start", "end", "hitting", "attacks_you", "hit", "hit_by_source", "damaged", "moves"]],
 ];
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 /** What an optional part adds, on its button. */
-const OPTIONAL_HINTS: Record<string, string> = { save: "a save", with: "melee only", limit: "a limit", plus: "plus a modifier", self: "and you" };
+const OPTIONAL_HINTS: Record<string, string> = { save: "a save", with: "melee only", limit: "a limit", plus: "plus a modifier", self: "and you", reaction: "as a reaction" };
 
 /**
  * An effect's rules as handbook sentences built blank by blank: each choice decides the blanks that follow, and a
@@ -183,7 +183,7 @@ function TextView({ text, setText, conditions, conditionId, root }: { text: stri
   const take = (n: Next) => {
     const pos = area.current?.selectionStart ?? cursor, here = at(pos);
     const cut = pos - here.read.partial.length, lead = cut > here.start && !/[\s(]$/.test(text.slice(0, cut)) ? " " : "";
-    const word = /^(DC|up to|needing)$/.test(n.text) ? `(${n.text}` : n.text; // the parts written in brackets
+    const word = /^(DC|up to|needing|using(?: your(?: reaction)?)?)$/.test(n.text) ? `(${n.text}` : n.text; // the parts written in brackets
     const add = `${n.text === "." ? "" : lead}${word}${n.text === "." ? "" : " "}`;
     const next = text.slice(0, cut) + add + text.slice(pos);
     caret.current = cut + add.length;
