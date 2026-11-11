@@ -52,7 +52,7 @@ export async function generateArtwork(
 
 /** Page that shows an owner's actions, refreshed after changes. */
 const OWNER_PAGES: Record<ActionOwnerColumn, string> = {
-  profession_id: "/campaign/professions",
+  profession_id: "/campaign/professions/ranks",
   item_id: "/campaign/items",
   creature_id: "/campaign/creatures",
 };

@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { getCharacterPlayer, saveCharacter, setCharacterPlayer, setCharacterProfessions, setInParty } from "@/lib/db";
+import { getCharacterPlayer, saveCharacter, setCharacterPlayer, setCharacterRank, setInParty } from "@/lib/db";
 import { parseCreatureForm } from "@/lib/creatureForm";
 import { getJournalEntry, saveJournalNotes, syncObjectiveJournals } from "@/lib/story";
-import { chosenProfessions } from "../campaign/characters/formOptions";
+import { chosenRank, professionOptions } from "../campaign/characters/formOptions";
 import { findHuman } from "./human";
 
 /** A player's own notes on a journal entry (the GM may edit them too). */
@@ -27,7 +27,10 @@ export async function createPlayerCharacter(formData: FormData) {
   const human = findHuman();
   if (!human) throw new Error("There's no Human creature to base a character on yet");
   const saved = saveCharacter(null, human.id, await parseCreatureForm(formData));
-  setCharacterProfessions(saved, chosenProfessions(formData));
+  // A player starts at a profession's starting rank.
+  const rank = chosenRank(formData);
+  if (rank !== null && !professionOptions().some((g) => g.ranks[0]?.id === rank)) throw new Error("Pick a profession's starting rank");
+  setCharacterRank(saved, rank);
   setInParty(saved, true);
   setCharacterPlayer(saved, user.id);
   syncObjectiveJournals(); // the party's known objectives go into the new character's journal

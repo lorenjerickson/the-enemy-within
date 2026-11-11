@@ -3,8 +3,8 @@ import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { listPlayerCharacters } from "@/lib/db";
 import CreatureForm from "../../campaign/creatures/new/CreatureForm";
-import { equippableItems, professionNodes } from "../../campaign/characters/formOptions";
-import ProfessionsInput from "../../campaign/characters/ProfessionsInput";
+import { equippableItems, professionOptions } from "../../campaign/characters/formOptions";
+import RankInput from "../../campaign/characters/RankInput";
 import Heartbeat from "../../Heartbeat";
 import { checkIn } from "../../lobby/actions";
 import { createPlayerCharacter } from "../actions";
@@ -31,7 +31,7 @@ export default async function NewPlayerCharacter() {
         action={createPlayerCharacter}
         title="Your character"
         submitLabel="Create character"
-        extra={<ProfessionsInput professions={professionNodes()} />}
+        extra={<RankInput professions={professionOptions()} startingOnly />}
       />
     </>
   );

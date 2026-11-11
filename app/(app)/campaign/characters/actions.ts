@@ -4,18 +4,18 @@ import { characterHealth, parseHealthForm, saveCharacterHealth } from "@/lib/hea
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { addToContainer, deleteCharacter, listPlayers, takeFromStack, saveCharacter, setCharacterPlayer, setCharacterProfessions, setInParty } from "@/lib/db";
+import { addToContainer, deleteCharacter, listPlayers, takeFromStack, saveCharacter, setCharacterPlayer, setCharacterRank, setInParty } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { syncObjectiveJournals } from "@/lib/story";
 import { parseCreatureForm } from "@/lib/creatureForm";
-import { chosenProfessions } from "./formOptions";
+import { chosenRank } from "./formOptions";
 
 /** Creates the character from creatureId's template when id is null, otherwise updates it. */
 export async function submitCharacter(id: number | null, creatureId: number | null, formData: FormData) {
   await requireGm();
-  const chosen = chosenProfessions(formData);
+  const chosen = chosenRank(formData);
   const saved = saveCharacter(id, creatureId, await parseCreatureForm(formData));
-  setCharacterProfessions(saved, chosen);
+  setCharacterRank(saved, chosen);
   setInParty(saved, formData.get("in_party") === "on");
   const player = Number(formData.get("player_id")) || null;
   setCharacterPlayer(saved, player && listPlayers().some((p) => p.id === player) ? player : null);

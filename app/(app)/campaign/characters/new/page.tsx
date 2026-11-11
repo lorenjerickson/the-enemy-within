@@ -4,8 +4,8 @@ import { requireGm } from "@/lib/auth";
 import { getCreature, listCreatures, listPlayers } from "@/lib/db";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { submitCharacter } from "../actions";
-import { equippableItems, professionNodes } from "../formOptions";
-import ProfessionsInput from "../ProfessionsInput";
+import { equippableItems, professionOptions } from "../formOptions";
+import RankInput from "../RankInput";
 import InPartyInput from "../InPartyInput";
 
 /** Step 1: pick a creature template. Step 2 (?template=id): the creature form, preloaded from it. */
@@ -49,7 +49,7 @@ export default async function NewCharacter({ searchParams }: { searchParams: Pro
       extra={
         <>
           <InPartyInput players={listPlayers()} />
-          <ProfessionsInput professions={professionNodes()} />
+          <RankInput professions={professionOptions()} />
         </>
       }
     />

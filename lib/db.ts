@@ -670,41 +670,91 @@ export function saveCharacter(id: number | null, creatureId: number | null, c: O
   }
 }
 
+/** A character's rank (a row of `professions`), or null. */
+export function getCharacterRank(characterId: number): number | null {
+  return db.prepare<[number], { rank_id: number | null }>("SELECT rank_id FROM characters WHERE id = ?").get(characterId)?.rank_id ?? null;
+}
+
+/**
+ * The ranks a character holds: their rank and every rank before it in its profession (progression is cumulative:
+ * a Private Eye keeps what Beat Cop and Detective gave them), first rank first.
+ */
 export function listCharacterProfessionIds(characterId: number): number[] {
-  return db
-    .prepare<[number], { profession_id: number }>("SELECT profession_id FROM character_professions WHERE character_id = ?")
-    .all(characterId)
-    .map((r) => r.profession_id);
+  const rank = getCharacterRank(characterId);
+  return rank === null ? [] : rankChain(rank);
 }
 
-export function setCharacterProfessions(characterId: number, professionIds: number[]): void {
-  db.transaction(() => {
-    db.prepare<[number]>("DELETE FROM character_professions WHERE character_id = ?").run(characterId);
-    const insert = db.prepare<[number, number]>("INSERT INTO character_professions (character_id, profession_id) VALUES (?, ?)");
-    for (const pid of professionIds) insert.run(characterId, pid);
-  })();
+export function setCharacterRank(characterId: number, rankId: number | null): void {
+  db.prepare<[number | null, number]>("UPDATE characters SET rank_id = ? WHERE id = ?").run(rankId, characterId);
 }
 
-export interface Profession {
+/** A rank and the ranks before it (following the first rank that advances to each), first rank first. */
+export function rankChain(rankId: number): number[] {
+  const chain: number[] = [];
+  for (let at: number | undefined = rankId; at !== undefined && !chain.includes(at); ) {
+    chain.unshift(at);
+    at = db.prepare<[number], { from_id: number }>("SELECT from_id FROM profession_advancements WHERE to_id = ? ORDER BY from_id LIMIT 1").get(at)?.from_id;
+  }
+  return chain;
+}
+
+/**
+ * A profession (Law Enforcement, Military): a progression of ranks. Its ranks are the rows of `professions` (Beat
+ * Cop → Detective → Private Eye); `Profession` below is one rank.
+ */
+export interface ProfessionGroup {
   id: number;
   name: string;
   description: string;
 }
 
-export function listProfessions(): Profession[] {
-  return db.prepare<[], Profession>("SELECT id, name, description FROM professions ORDER BY name").all();
+export function listProfessionGroups(): ProfessionGroup[] {
+  return db.prepare<[], ProfessionGroup>("SELECT id, name, description FROM profession_groups ORDER BY name").all();
 }
 
-export function getProfession(id: number): Profession | undefined {
-  return db.prepare<[number], Profession>("SELECT id, name, description FROM professions WHERE id = ?").get(id);
+export function getProfessionGroup(id: number): ProfessionGroup | undefined {
+  return db.prepare<[number], ProfessionGroup>("SELECT id, name, description FROM profession_groups WHERE id = ?").get(id);
 }
 
 /** Inserts when id is null, otherwise updates. Returns the id. */
+export function saveProfessionGroup(id: number | null, g: Omit<ProfessionGroup, "id">): number {
+  if (id === null) return Number(db.prepare<Omit<ProfessionGroup, "id">>("INSERT INTO profession_groups (name, description) VALUES (@name, @description)").run(g).lastInsertRowid);
+  db.prepare<ProfessionGroup>("UPDATE profession_groups SET name = @name, description = @description WHERE id = @id").run({ ...g, id });
+  return id;
+}
+
+/** A rank within a profession. */
+export interface Profession {
+  id: number;
+  name: string;
+  description: string;
+  group_id: number | null; // its profession (ProfessionGroup)
+}
+
+export function listProfessions(): Profession[] {
+  return db.prepare<[], Profession>("SELECT id, name, description, group_id FROM professions ORDER BY name").all();
+}
+
+/** A profession's ranks. */
+export function listRanks(groupId: number): Profession[] {
+  return db.prepare<[number], Profession>("SELECT id, name, description, group_id FROM professions WHERE group_id = ? ORDER BY name").all(groupId);
+}
+
+/** A profession's first ranks: those no other rank advances to (usually one: the starting rank). */
+export function startingRanks(groupId: number): Profession[] {
+  return listRanks(groupId).filter((r) => !db.prepare<[number], { n: number }>("SELECT 1 AS n FROM profession_advancements WHERE to_id = ?").get(r.id));
+}
+
+export function getProfession(id: number): Profession | undefined {
+  return db.prepare<[number], Profession>("SELECT id, name, description, group_id FROM professions WHERE id = ?").get(id);
+}
+
+/** Inserts when id is null, otherwise updates (its profession stays). Returns the id. */
 export function saveProfession(id: number | null, p: Omit<Profession, "id">): number {
   if (id === null) {
-    return Number(db.prepare<Omit<Profession, "id">>("INSERT INTO professions (name, description) VALUES (@name, @description)").run(p).lastInsertRowid);
+    return Number(db.prepare<Omit<Profession, "id">>("INSERT INTO professions (name, description, group_id) VALUES (@name, @description, @group_id)").run(p).lastInsertRowid);
   }
-  db.prepare<Profession>("UPDATE professions SET name = @name, description = @description WHERE id = @id").run({ ...p, id });
+  db.prepare<Omit<Profession, "group_id">>("UPDATE professions SET name = @name, description = @description WHERE id = @id").run({ name: p.name, description: p.description, id });
   return id;
 }
 
@@ -712,7 +762,7 @@ export function saveProfession(id: number | null, p: Omit<Profession, "id">): nu
 export function listAdvancements(professionId: number): Profession[] {
   return db
     .prepare<[number], Profession>(
-      `SELECT p.id, p.name, p.description FROM profession_advancements a
+      `SELECT p.id, p.name, p.description, p.group_id FROM profession_advancements a
        JOIN professions p ON p.id = a.to_id WHERE a.from_id = ? ORDER BY p.name`
     )
     .all(professionId);
@@ -722,7 +772,7 @@ export function listAdvancements(professionId: number): Profession[] {
 export function listPrerequisites(professionId: number): Profession[] {
   return db
     .prepare<[number], Profession>(
-      `SELECT p.id, p.name, p.description FROM profession_advancements a
+      `SELECT p.id, p.name, p.description, p.group_id FROM profession_advancements a
        JOIN professions p ON p.id = a.from_id WHERE a.to_id = ? ORDER BY p.name`
     )
     .all(professionId);
@@ -858,13 +908,38 @@ export function removeAction(id: number): void {
   db.prepare<[number]>("DELETE FROM actions WHERE id = ?").run(id);
 }
 
-/** Every profession with the ids of the professions that advance to it. */
-export function listProfessionGraph(): (Profession & { prerequisites: number[] })[] {
-  const links = db.prepare<[], { from_id: number; to_id: number }>("SELECT from_id, to_id FROM profession_advancements").all();
-  return listProfessions().map((p) => ({
-    ...p,
-    prerequisites: links.filter((l) => l.to_id === p.id).map((l) => l.from_id),
-  }));
+// Professions are progressions of ranks: each rank (a `professions` row) belongs to a profession (`profession_groups`),
+// and a character has one rank (`characters.rank_id`), holding every rank before it too.
+db.exec("CREATE TABLE IF NOT EXISTS profession_groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '')");
+addColumn("professions", "group_id", "INTEGER"); // its profession (profession_groups)
+addColumn("characters", "rank_id", "INTEGER"); // their rank (professions)
+// One-time migration: each first rank (no rank advances to it) becomes a profession, with every rank it leads to;
+// a character's ticked professions become their furthest rank.
+if (db.prepare("SELECT 1 FROM professions WHERE group_id IS NULL").get()) {
+  db.transaction(() => {
+    db.prepare("UPDATE professions SET name = 'Infantryman' WHERE name = 'Infrantryman'").run();
+    const NAMES: Record<string, string> = { Infantryman: "Military", "Beat Cop": "Law Enforcement", "Fortune Teller": "Mysticism", Nurse: "Medicine", "Lab Technician": "Science", Tinkerer: "Engineering", "School Teacher": "Education", "Street Rat": "Underworld" };
+    const links = db.prepare<[], { from_id: number; to_id: number }>("SELECT from_id, to_id FROM profession_advancements").all();
+    const firsts = listProfessions().filter((p) => p.group_id === null && !links.some((l) => l.to_id === p.id));
+    for (const first of firsts) {
+      const group = saveProfessionGroup(null, { name: NAMES[first.name] ?? first.name, description: "" });
+      const todo = [first.id], seen = new Set<number>();
+      while (todo.length) {
+        const id = todo.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        db.prepare("UPDATE professions SET group_id = ? WHERE id = ? AND group_id IS NULL").run(group, id);
+        todo.push(...links.filter((l) => l.from_id === id).map((l) => l.to_id));
+      }
+    }
+    // Anything left (a loop with no first rank): a profession of its own.
+    for (const p of listProfessions().filter((x) => x.group_id === null)) db.prepare("UPDATE professions SET group_id = ? WHERE id = ?").run(saveProfessionGroup(null, { name: p.name, description: "" }), p.id);
+    const held = db.prepare<[], { character_id: number; profession_id: number }>("SELECT character_id, profession_id FROM character_professions").all();
+    for (const c of new Set(held.map((h) => h.character_id))) {
+      const furthest = held.filter((h) => h.character_id === c).map((h) => h.profession_id).sort((a, b) => rankChain(b).length - rankChain(a).length)[0];
+      setCharacterRank(c, furthest);
+    }
+  })();
 }
 
 export interface Location {
@@ -2424,12 +2499,10 @@ export function closeRollRequest(id: number, playerId: number): void {
 
 /** A character's profession modifiers to one target, e.g. "skill:sleight of hand". */
 export function characterModifiers(characterId: number, target: string): { profession: string; value: string }[] {
-  return db
-    .prepare<[number, string], { profession: string; value: string }>(
-      `SELECT p.name AS profession, m.value FROM character_professions cp JOIN professions p ON p.id = cp.profession_id
-       JOIN profession_modifiers m ON m.profession_id = p.id WHERE cp.character_id = ? AND m.target = ? ORDER BY p.name`
-    )
-    .all(characterId, target);
+  const q = db.prepare<[number, string], { profession: string; value: string }>(
+    "SELECT p.name AS profession, m.value FROM professions p JOIN profession_modifiers m ON m.profession_id = p.id WHERE p.id = ? AND m.target = ?",
+  );
+  return listCharacterProfessionIds(characterId).flatMap((pid) => q.all(pid, target)); // every rank held (cumulative)
 }
 
 // ---------- Secrets ----------

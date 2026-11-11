@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { characterPlayers, getCharacter, getCharacterPlayer, isInParty, listCharacterProfessionIds, listPlayers } from "@/lib/db";
+import { characterPlayers, getCharacter, getCharacterPlayer, isInParty, getCharacterRank, listPlayers } from "@/lib/db";
 import DeleteCharacter from "../DeleteCharacter";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { setCharacterHealth, submitCharacter } from "../actions";
 import { characterHealth } from "@/lib/health";
 import HealthFields from "../../../HealthFields";
-import { equippableItems, professionNodes } from "../formOptions";
-import ProfessionsInput from "../ProfessionsInput";
+import { equippableItems, professionOptions } from "../formOptions";
+import RankInput from "../RankInput";
 import InPartyInput from "../InPartyInput";
 import Journal from "../../../character/Journal";
 import Containers from "../Containers";
@@ -43,7 +43,7 @@ export default async function EditCharacter({ params }: { params: Promise<{ id: 
         extra={
           <>
             <InPartyInput initial={isInParty(character.id)} players={listPlayers()} player={getCharacterPlayer(character.id)} />
-            <ProfessionsInput professions={professionNodes()} initial={listCharacterProfessionIds(character.id)} />
+            <RankInput professions={professionOptions()} initial={getCharacterRank(character.id)} />
           </>
         }
       />
