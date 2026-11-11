@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local database
 /data/
+
+# Claude's scratch outputs (screenshots, notes)
+/Claude outputs/
