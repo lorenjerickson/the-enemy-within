@@ -7,6 +7,7 @@ import { drawLasting } from "@/lib/vfx";
 import { type LastingArea } from "@/lib/aoe";
 import { drawTrap } from "./trapDraw";
 import type { Trap } from "@/lib/traps";
+import type { MapTrigger } from "@/lib/triggers";
 import { drawEffect } from "@/lib/effects";
 
 export const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -47,6 +48,7 @@ export interface MapState {
   notes: MapNote[];
   secrets: MapSecret[];
   traps: Trap[]; // the GM's; a player's map gets only found ones
+  triggers: MapTrigger[]; // GM only
   effects: MapEffect[];
   lasting: LastingArea[]; // areas actions left on the map for a while
   time: number; // seconds, drives animated effects
@@ -205,7 +207,7 @@ export const FX_MS = 1000; // how long a script's effect plays
 export const SIGHT = 500;
 
 /** Layers only the GM ever sees. */
-export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
+export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "triggers"];
 
 export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -322,6 +324,10 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
     }
   },
   // Traps: dashed while hidden from players, solid once found.
+  triggers: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const t of state.triggers) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { trigger: true, label: t.name });
+  },
   traps: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const t of state.traps) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { found: !!t.found, label: t.name });

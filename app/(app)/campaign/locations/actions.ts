@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
 import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
+import { addMapTrigger, deleteMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
@@ -597,5 +597,26 @@ export async function rearmTrap(locationId: number, id: number) {
 export async function revealTrap(locationId: number, id: number, found: boolean) {
   await requireGm();
   setTrapFound(Number(id), !!found);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** Cleans a drawn zone (a trap's or a trigger's) from the client. */
+function cleanArea(area: TrapArea): TrapArea {
+  const n = (v: unknown) => { const x = Number(v); if (!Number.isFinite(x)) throw new Error("Invalid area"); return x; };
+  return area.shape === "circle" ? { shape: "circle", x: n(area.x), y: n(area.y), r: Math.max(0.25, n(area.r)) }
+    : area.shape === "rect" ? { shape: "rect", x: n(area.x), y: n(area.y), w: Math.max(0.25, n(area.w)), h: Math.max(0.25, n(area.h)) }
+    : { shape: "line", x1: n(area.x1), y1: n(area.y1), x2: n(area.x2), y2: n(area.y2) };
+}
+
+/** GM places a map trigger (what it does is set on it afterwards). */
+export async function placeTrigger(locationId: number, levelId: number, area: TrapArea) {
+  await requireGm();
+  addMapTrigger(Number(levelId), cleanArea(area));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeTrigger(locationId: number, id: number) {
+  await requireGm();
+  deleteMapTrigger(Number(id));
   revalidatePath(`/campaign/locations/${locationId}`);
 }

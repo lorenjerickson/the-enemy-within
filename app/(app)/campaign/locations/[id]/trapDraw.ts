@@ -16,7 +16,8 @@ export function trapFromDrag(shape: TrapShape, d: Drag): TrapArea | null {
 }
 
 /** Draws a trap's area (canvas in scene units; `toPx` maps grid units). Found ones solid, hidden ones dashed; `draft` while drawing. */
-export function drawTrap(ctx: CanvasRenderingContext2D, a: TrapArea, toPx: (x: number, y: number) => { x: number; y: number }, size: number, o: { found?: boolean; draft?: boolean; label?: string } = {}) {
+export function drawTrap(ctx: CanvasRenderingContext2D, a: TrapArea, toPx: (x: number, y: number) => { x: number; y: number }, size: number, o: { found?: boolean; draft?: boolean; label?: string; trigger?: boolean } = {}) {
+  if (o.trigger) return drawZone(ctx, a, toPx, size, o.label, o.draft);
   ctx.save();
   ctx.lineWidth = Math.max(1, size * (a.shape === "line" ? 0.08 : 0.05));
   ctx.strokeStyle = o.draft ? "rgb(248,113,113)" : o.found ? "rgb(239,68,68)" : "rgba(248,113,113,0.85)";
@@ -51,6 +52,33 @@ export function drawTrap(ctx: CanvasRenderingContext2D, a: TrapArea, toPx: (x: n
     ctx.strokeText(o.label, labelAt.x, labelAt.y);
     ctx.fillStyle = "#fecaca";
     ctx.fillText(o.label, labelAt.x, labelAt.y);
+  }
+  ctx.restore();
+}
+
+/** A map trigger's zone: dotted teal (players never see these). */
+function drawZone(ctx: CanvasRenderingContext2D, a: TrapArea, toPx: (x: number, y: number) => { x: number; y: number }, size: number, label?: string, draft?: boolean) {
+  ctx.save();
+  ctx.lineWidth = Math.max(1, size * (a.shape === "line" ? 0.07 : 0.04));
+  ctx.strokeStyle = draft ? "rgb(94,234,212)" : "rgba(45,212,191,0.9)";
+  ctx.fillStyle = "rgba(45,212,191,0.12)";
+  ctx.setLineDash([size * 0.04, size * 0.08]);
+  ctx.beginPath();
+  let at: { x: number; y: number };
+  if (a.shape === "circle") { const c = toPx(a.x, a.y); ctx.arc(c.x, c.y, a.r * size, 0, Math.PI * 2); ctx.fill(); at = c; }
+  else if (a.shape === "rect") { const p = toPx(a.x, a.y); ctx.rect(p.x, p.y, a.w * size, a.h * size); ctx.fill(); at = toPx(a.x + a.w / 2, a.y + a.h / 2); }
+  else { const p = toPx(a.x1, a.y1), q = toPx(a.x2, a.y2); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); at = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; }
+  ctx.stroke();
+  if (label) {
+    ctx.setLineDash([]);
+    ctx.font = `bold ${size * 0.18}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = size * 0.04;
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
+    ctx.strokeText(`⚡ ${label}`, at.x, at.y);
+    ctx.fillStyle = "#ccfbf1";
+    ctx.fillText(`⚡ ${label}`, at.x, at.y);
   }
   ctx.restore();
 }

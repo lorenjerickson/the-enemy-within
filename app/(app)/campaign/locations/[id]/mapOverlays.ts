@@ -53,6 +53,7 @@ export interface EditorAids {
   line?: { start: { x: number; y: number }; end: { x: number; y: number }; kind: keyof typeof STRUCTURE_STYLES } | null; // a wall, door… being drawn
   piece?: MapStructure;
   trap?: TrapArea | null; // a trap being dragged out
+  trigger?: TrapArea | null; // a map trigger being dragged out
   effectArea?: Area | null; // an effect's area being dragged out
   startArea?: Area | null; // the party's start area (shown, or being dragged out)
   placing?: CellRect | null; // the cells a tile being placed will cover
@@ -164,6 +165,10 @@ export function drawEditorAids(ctx: CanvasRenderingContext2D, state: MapState, k
   if (a.trap) {
     const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
     drawTrap(ctx, a.trap, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { draft: true });
+  }
+  if (a.trigger) {
+    const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+    drawTrap(ctx, a.trigger, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { draft: true, trigger: true });
   }
   // Effect area being dragged out.
   if (a.effectArea) {
