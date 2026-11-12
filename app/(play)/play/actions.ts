@@ -19,6 +19,7 @@ import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, 
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { trapsOnStep, trapsWhereStopped } from "./traps";
+import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
 import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
 import type { Attributes } from "@/lib/attributes";
@@ -233,12 +234,19 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
     const sprung = trapsOnStep(me.level_id, me.token_id, from, step);
     told.push(...sprung.map((t) => t.player));
     if (sprung.some((t) => t.stops)) { stopped = true; break; }
+    const fired = triggersOnStep(me.level_id, me.token_id, from, step); // map triggers: the player learns only what they do to them
+    for (const f of fired) told.push(...(f.told.get(me.token_id) ?? []));
+    if (fired.some((f) => f.stops)) { stopped = true; break; }
     if (fireTriggers().length) {
       stopped = true; // the player isn't told which trigger (that's the GM's script)
       break;
     }
   }
-  if (!stopped && walked.length > 1) told.push(...trapsWhereStopped(me.level_id, me.token_id, walked[walked.length - 1]).map((t) => t.player)); // ending a move in one
+  if (!stopped && walked.length > 1) {
+    const end = walked[walked.length - 1];
+    told.push(...trapsWhereStopped(me.level_id, me.token_id, end).map((t) => t.player)); // ending a move in one
+    for (const f of triggersWhereStopped(me.level_id, me.token_id, end)) told.push(...(f.told.get(me.token_id) ?? []));
+  }
   syncAurasOn(me.level_id); // walked into (or out of) an aura
   revalidatePath("/play");
   return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}) };

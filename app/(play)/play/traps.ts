@@ -10,12 +10,13 @@ import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { severity } from "@/lib/roundStory";
 import { allegianceOf } from "@/lib/sides";
-import { sprungByStep, sprungWhereStanding, type Trap } from "@/lib/traps";
+import { canSpring, inTrap, sprungByStep, sprungWhereStanding, type Trap } from "@/lib/traps";
 import type { Point } from "@/lib/visibility";
 import { applyConditionNow } from "./workOutRound";
 
 export interface Sprung {
   trap: Trap;
+  tokenId: number; // whom it sprang on
   stops: boolean;
   gm: string; // for the GM's log, with the numbers
   player: string; // for whoever set it off: how bad, and their own damage
@@ -52,7 +53,7 @@ export function springTrap(levelId: number, trap: Trap, tokenId: number): Sprung
   }
   if (trap.stops) you.push("you stop where you are");
   logSessionEvent(`${name} sets off ${trap.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
-  return { trap, stops: !!trap.stops, gm: `${name} sets off ${trap.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`, player: `You set off a trap (${trap.name})! ${you.join(", ").replace(/^./, (c) => c.toUpperCase()) || "Nothing seems to happen"}.` };
+  return { trap, tokenId, stops: !!trap.stops, gm: `${name} sets off ${trap.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`, player: `You set off a trap (${trap.name})! ${you.join(", ").replace(/^./, (c) => c.toUpperCase()) || "Nothing seems to happen"}.` };
 }
 
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
@@ -69,4 +70,21 @@ export function trapsWhereStopped(levelId: number, tokenId: number, at: Point): 
   const token = listTokens(levelId).find((t) => t.id === tokenId);
   if (!token) return [];
   return sprungWhereStanding(listTraps(levelId), tokenId, allegianceOf(token), centre(at), "end").map((t) => springTrap(levelId, t, tokenId));
+}
+
+/**
+ * A trigger sets a trap off (whatever its own "when"): it springs on everyone in it it's for (and isn't spent for), and
+ * it's found. With no one in it, it still goes off (spent, if it's a once-only trap).
+ */
+export function setOffTrap(levelId: number, trapId: number): Sprung[] {
+  const trap = listTraps(levelId).find((t) => t.id === trapId);
+  if (!trap) return [];
+  const caught = listTokens(levelId).filter((t) => canSpring(trap, t.id, allegianceOf(t)) && inTrap(trap.area, centre({ x: t.col, y: t.row })));
+  setTrapFound(trap.id, true);
+  if (!caught.length) {
+    markTrapSprung(trap.id, 0); // gone off, on no one
+    logSessionEvent(`${trap.name} goes off, catching no one.`);
+    return [];
+  }
+  return caught.map((t) => springTrap(levelId, { ...trap, sprung: [] }, t.id));
 }
