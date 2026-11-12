@@ -7,12 +7,13 @@ import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
 import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { addMapTrigger, deleteMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
+import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { isDiceFormula } from "@/lib/itemTypes";
 import { TRAP_OFTEN, TRAP_WHO, type TrapArea } from "@/lib/traps";
+import type { TriggerOutcome } from "@/lib/triggers";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
 import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
@@ -618,5 +619,54 @@ export async function placeTrigger(locationId: number, levelId: number, area: Tr
 export async function removeTrigger(locationId: number, id: number) {
   await requireGm();
   deleteMapTrigger(Number(id));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** An outcome as sent by the trigger form, checked (or null if it isn't one). */
+function cleanOutcome(v: unknown): TriggerOutcome | null {
+  const o = v as Record<string, unknown>, id = (k: string) => Number.isInteger(Number(o[k])) && Number(o[k]) > 0 ? Number(o[k]) : null;
+  switch (o?.kind) {
+    case "door": return id("door") && ["open", "close", "lock", "unlock"].includes(String(o.to)) ? { kind: "door", door: id("door")!, to: o.to as "open" } : null;
+    case "light": return id("light") ? { kind: "light", light: id("light")!, on: !!o.on } : null;
+    case "effect": return id("effect") ? { kind: "effect", effect: id("effect")!, on: !!o.on } : null;
+    case "secret": return id("secret") ? { kind: "secret", secret: id("secret")! } : null;
+    case "discovery": return id("discovery") ? { kind: "discovery", discovery: id("discovery")! } : null;
+    case "trap": return id("trap") ? { kind: "trap", trap: id("trap")! } : null;
+    case "stop": return { kind: "stop" };
+    case "script": {
+      const script = String(o.script ?? "").trim();
+      if (!script) return null;
+      const problem = checkScript(script);
+      if (problem) throw new Error(`The trigger's script doesn't parse: ${problem}`);
+      return { kind: "script", script };
+    }
+  }
+  return null;
+}
+
+/** GM saves what a map trigger does: when it fires, for whom, how often, and its outcomes. */
+export async function saveTriggerSettings(locationId: number, id: number, formData: FormData) {
+  await requireGm();
+  const t = getMapTrigger(Number(id));
+  if (!t) throw new Error("No such trigger");
+  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  let raw: unknown = [];
+  try { raw = JSON.parse(text("outcomes") || "[]"); } catch { throw new Error("The outcomes couldn't be read"); }
+  const outcomes = (Array.isArray(raw) ? raw : []).map(cleanOutcome).filter((o): o is TriggerOutcome => !!o);
+  const springs = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`springs_${k}`));
+  saveMapTrigger(t.id, {
+    name: text("name") || "Trigger",
+    springs: springs.length ? springs : ["enter"],
+    who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
+    often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
+    outcomes,
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM re-arms a map trigger: it forgets whom it has fired for. */
+export async function rearmTrigger(locationId: number, id: number) {
+  await requireGm();
+  resetMapTrigger(Number(id));
   revalidatePath(`/campaign/locations/${locationId}`);
 }

@@ -1388,6 +1388,15 @@ export default function MapView({
               <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} names={scriptNames} />
             ) : selected === "triggers" ? (
               <TriggersEditor
+                locationId={locationId}
+                things={{
+                  door: optimisticStructures.filter((x) => x.kind === "door").map((x) => ({ id: x.id, name: x.name || `Door ${x.id}` })),
+                  light: optimisticLights.map((x) => ({ id: x.id, name: x.name })),
+                  effect: optimisticEffects.map((x) => ({ id: x.id, name: x.name })),
+                  secret: optimisticSecrets.map((x) => ({ id: x.id, name: x.name })),
+                  trap: optimisticTraps.map((x) => ({ id: x.id, name: x.name })),
+                  discovery: discoveries.map((x) => ({ id: x.id, name: x.title })),
+                }}
                 shape={trapShape}
                 onShape={setTrapShape}
                 triggers={optimisticTriggers}
