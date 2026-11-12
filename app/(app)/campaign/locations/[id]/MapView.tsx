@@ -663,6 +663,7 @@ export default function MapView({
   gmPlans,
   secrets,
   traps = [],
+  trapEffects = [],
   discoveries = [],
   fog,
   hideWalls,
@@ -705,6 +706,7 @@ export default function MapView({
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   traps?: Trap[]; // the GM's traps (players get none for now)
+  trapEffects?: { id: number; name: string }[]; // catalog effects lasting rounds, for what traps put on
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
   fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
@@ -2612,6 +2614,8 @@ export default function MapView({
               <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} names={scriptNames} />
             ) : selected === "traps" ? (
               <TrapsEditor
+                locationId={locationId}
+                effects={trapEffects}
                 shape={trapShape}
                 onShape={setTrapShape}
                 traps={optimisticTraps}

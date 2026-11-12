@@ -7,8 +7,12 @@ import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
 import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { addTrap, deleteTrap } from "@/lib/db";
-import type { TrapArea } from "@/lib/traps";
+import { addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap } from "@/lib/db";
+import { AREA_FIRES } from "@/lib/aoe";
+import { ATTRIBUTES } from "@/lib/attributes";
+import { DAMAGE_TYPES } from "@/lib/actions";
+import { isDiceFormula } from "@/lib/itemTypes";
+import { TRAP_OFTEN, TRAP_WHO, type TrapArea } from "@/lib/traps";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
 import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
@@ -551,5 +555,40 @@ export async function placeTrap(locationId: number, levelId: number, area: TrapA
 export async function removeTrap(locationId: number, id: number) {
   await requireGm();
   deleteTrap(Number(id));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM saves what a trap does: when it springs, on whom, how often, its save and damage, the effects it puts on, whether it stops the mover, how hard it is to find. */
+export async function saveTrapSettings(locationId: number, id: number, formData: FormData) {
+  await requireGm();
+  const t = getTrap(Number(id));
+  if (!t) throw new Error("No such trap");
+  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  const int = (k: string, lo: number, hi: number, d: number) => { const n = Math.round(Number(formData.get(k))); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+  const damage = text("damage").toLowerCase().replace(/\s/g, "");
+  if (damage && !isDiceFormula(damage) && !/^\d+$/.test(damage)) throw new Error("Damage must be dice (2d6) or a number");
+  const springs = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`springs_${k}`));
+  const known = new Set(listEffectDefs().map((e) => e.id));
+  saveTrap(t.id, {
+    name: text("name") || "Trap",
+    springs: springs.length ? springs : ["enter"],
+    who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
+    often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
+    damage: damage || null,
+    damage_type: (DAMAGE_TYPES as readonly string[]).includes(text("damage_type")) ? text("damage_type") : "",
+    save_attr: (ATTRIBUTES as readonly string[]).includes(text("save_attr")) ? text("save_attr") : "",
+    save_dc: int("save_dc", 1, 40, 12),
+    save_half: formData.get("save_half") ? 1 : 0,
+    effects: [...new Set(formData.getAll("effect").map(Number))].filter((e) => known.has(e)),
+    stops: formData.get("stops") ? 1 : 0,
+    find_dc: int("find_dc", 1, 40, 14),
+  });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM re-arms a trap: it forgets whom it has sprung on. */
+export async function rearmTrap(locationId: number, id: number) {
+  await requireGm();
+  resetTrap(Number(id));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
