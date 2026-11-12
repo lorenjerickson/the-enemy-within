@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --experimental-transform-types --no-warnings --import ./tests/register.mjs --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@3d-dice/dice-box": "^1.1.4",
