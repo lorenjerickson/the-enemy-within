@@ -6,3 +6,4 @@ data
 Claude outputs
 *.tsbuildinfo
 .env*
+tests
