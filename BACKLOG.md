@@ -2,6 +2,10 @@
 
 From the code review on 2026-11-06. Roughly in the order to tackle them.
 
+## Next
+
+0. **Collapse conditions and effects into one thing: effects, granted by various means.** Conditions and effects read as the same thing to the GM (every custom condition has at most one effect, named after its action: Mesmerize → Mesmerized), so keep only effects. An effect has a name, its rule sentences and its lifecycle (duration, saves, what ends it, stacking). Actions grant effects directly (on the user and/or the target); so do items, creatures and professions. Duration "while equipped" is only offered for effects granted by an equippable item (replaces standing effects on items). Migrate the catalogue (each condition merges into its effect, keeping the effect's name and taking the condition's lifecycle; built-ins become single effects with all their rules; look at Hold, Pummel and Bear Hug, which have no effects), effects on tokens (`afflictions`) and the campaign export/import. Round resolution only reads rules, so it changes little; the round tests cover it. Later slice: fold actions' own boosts and advantage/disadvantage ("statuses") into effects too.
+
 ## Now (cheap, real payoff)
 
 1. ~~**Player fog recomputes every frame.**~~ Done 2026-11-10: explored polygons keyed on sightings + walls, current sight on where the viewers stand (not every frame); `freeMove` works out views lazily, nearest first. `MapView`'s `fogged` memo depends on `drawnTokens` (a new array each render), so during replays/effects (~30 fps) it redoes one visibility polygon per sighting (43 on level 14 already; free move adds one per step). Memoize the explored polygons on sightings + structures only. `freeMove` (server) has the same growing cost per click.
