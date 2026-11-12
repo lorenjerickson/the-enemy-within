@@ -12,7 +12,8 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
-import type { AreaShape, LastingArea } from "@/lib/aoe";
+import { areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
+import type { Trap, TrapArea } from "@/lib/traps";
 import {
   DEFAULT_BACKGROUND, DEFAULT_GRID, DEFAULT_MAP_IMAGE, DEFAULT_TEMPLATE_COLORS,
   type ClipMode, type ControlEdge, type LightKind, type MapBackground, type MapGrid, type MapImage, type MapLayer, type StructureKind, type TemplateColors,
@@ -2988,6 +2989,78 @@ export function takeCarried(characterId: number, itemId: number): number | null 
 /** The GM sets a token's side (null: back to its kind's default). */
 export function setTokenAllegiance(tokenId: number, allegiance: string | null): void {
   db.prepare("UPDATE map_tokens SET allegiance = ? WHERE id = ?").run(allegiance, tokenId);
+}
+
+// ---------- Traps (lib/traps.ts) ----------
+
+// Hazards the GM places on a level, hidden from players until found; `sprung`: the tokens each has sprung on.
+db.exec(`CREATE TABLE IF NOT EXISTS map_traps (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  name TEXT NOT NULL DEFAULT 'Trap',
+  area TEXT NOT NULL, -- JSON TrapArea
+  springs TEXT NOT NULL DEFAULT 'enter', -- enter,start,end
+  who TEXT NOT NULL DEFAULT '', -- '' | party | hostile
+  often TEXT NOT NULL DEFAULT 'once', -- once | each | always
+  damage TEXT,
+  damage_type TEXT NOT NULL DEFAULT '',
+  save_attr TEXT NOT NULL DEFAULT 'agility',
+  save_dc INTEGER NOT NULL DEFAULT 12,
+  save_half INTEGER NOT NULL DEFAULT 1,
+  effects TEXT NOT NULL DEFAULT '[]', -- JSON catalog effect ids
+  stops INTEGER NOT NULL DEFAULT 1,
+  find_dc INTEGER NOT NULL DEFAULT 14,
+  found INTEGER NOT NULL DEFAULT 0,
+  sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
+)`);
+
+type TrapRow = Omit<Trap, "area" | "springs" | "effects" | "sprung"> & { area: string; springs: string; effects: string; sprung: string };
+const parseTrap = (r: TrapRow): Trap => ({ ...r, area: JSON.parse(r.area), springs: areaFires(r.springs), effects: JSON.parse(r.effects), sprung: JSON.parse(r.sprung) });
+
+/** A level's traps. */
+export function listTraps(levelId: number): Trap[] {
+  return db.prepare<[number], TrapRow>("SELECT * FROM map_traps WHERE level_id = ? ORDER BY id").all(levelId).map(parseTrap);
+}
+
+export function getTrap(id: number): (Trap & { level_id: number }) | undefined {
+  const r = db.prepare<[number], TrapRow & { level_id: number }>("SELECT * FROM map_traps WHERE id = ?").get(id);
+  return r ? { ...parseTrap(r), level_id: r.level_id } : undefined;
+}
+
+/** Places a trap (the rest as the defaults: springs on entering, once, Agility DC 12 for half, stops the mover, DC 14 to find); returns its id. */
+export function addTrap(levelId: number, area: TrapArea, name = "Trap"): number {
+  return Number(db.prepare("INSERT INTO map_traps (level_id, name, area) VALUES (?, ?, ?)").run(levelId, name, JSON.stringify(area)).lastInsertRowid);
+}
+
+/** Saves what a trap does (not where it is, whether it's found, or whom it has sprung on). */
+export function saveTrap(id: number, t: Omit<Trap, "id" | "area" | "found" | "sprung">): void {
+  db.prepare(`UPDATE map_traps SET name = @name, springs = @springs, who = @who, often = @often, damage = @damage, damage_type = @damage_type,
+    save_attr = @save_attr, save_dc = @save_dc, save_half = @save_half, effects = @effects, stops = @stops, find_dc = @find_dc WHERE id = @id`)
+    .run({ ...t, springs: t.springs.join(","), effects: JSON.stringify(t.effects), damage: t.damage || null, id });
+}
+
+export function moveTrap(id: number, area: TrapArea): void {
+  db.prepare("UPDATE map_traps SET area = ? WHERE id = ?").run(JSON.stringify(area), id);
+}
+
+export function deleteTrap(id: number): void {
+  db.prepare("DELETE FROM map_traps WHERE id = ?").run(id);
+}
+
+/** Found (by a Search) or revealed by the GM: players see it; hidden again (false). */
+export function setTrapFound(id: number, found: boolean): void {
+  db.prepare("UPDATE map_traps SET found = ? WHERE id = ?").run(found ? 1 : 0, id);
+}
+
+/** Records that a trap sprang on a token (spending it, or spending it for them). */
+export function markTrapSprung(id: number, tokenId: number): void {
+  const t = getTrap(id);
+  if (t && !t.sprung.includes(tokenId)) db.prepare("UPDATE map_traps SET sprung = ? WHERE id = ?").run(JSON.stringify([...t.sprung, tokenId]), id);
+}
+
+/** Re-arms a trap (whom it has sprung on is forgotten). */
+export function resetTrap(id: number): void {
+  db.prepare("UPDATE map_traps SET sprung = '[]' WHERE id = ?").run(id);
 }
 
 // Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
