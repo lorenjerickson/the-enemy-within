@@ -65,3 +65,21 @@ test("a trap's damage can put someone down", () => {
   assert.match(r.text, /T1 is down/);
   assert.deepEqual(r.final.get(1), { col: 2, row: 0 }, "the down stop where they fall");
 });
+
+test("a trap that stops the mover ends their movement for the round; their actions still happen", () => {
+  const r = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20 }) }, { traps: [pit({ stops: 1 })] });
+  assert.deepEqual(r.final.get(1), { col: 2, row: 0 });
+  assert.match(r.at(2), /stopped where they are/);
+  const free = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20 }) }, { traps: [pit({ stops: 0 })] });
+  assert.deepEqual(free.final.get(1), { col: 5, row: 0 });
+});
+
+test("round stories: whoever set it off learns how bad (and their own damage); the GM gets it all", async () => {
+  const { storyFor, gmStory } = await import("@/lib/roundStory");
+  const r = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20 }) }, { traps: [pit({ stops: 1 })] });
+  const mine = [...storyFor(r.story, 1, () => "Ann").values()].flat();
+  assert.deepEqual(mine, ["You set off a trap (Spike pit): moderate (-6), and it stops you in your tracks."]);
+  assert.deepEqual(gmStory(r.story, () => "Ann").flatMap((x) => x.lines), ["Ann sets off Spike pit: moderate damage (6); it stops them."]);
+  const saved = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", save_half: 0, stops: 0 })] });
+  assert.deepEqual([...storyFor(saved.story, 1, () => "Ann").values()].flat(), ["You set off a trap (Spike pit): you get clear."]);
+});

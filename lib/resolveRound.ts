@@ -555,6 +555,7 @@ export function resolveMovement(
   };
   // Traps: whom each has sprung on (this round too), and what springing one does.
   const trapSprung = new Map(traps.map((t) => [t.id, [...t.sprung]]));
+  const trapped = new Set<number>(); // stopped by a trap: no more moving this round
   const sprungNow: { trapId: number; tokenId: number }[] = []; // to keep after the round (spent, found)
   const springTrap = (t: RoundTrap, id: number, sec: number) => {
     trapSprung.set(t.id, [...trapSprung.get(t.id)!, id]);
@@ -562,15 +563,19 @@ export function resolveMovement(
     const s = t.save_attr ? saveRoll(id, t.save_attr as Attribute, t.save_dc, `trap:${sec}:${t.id}:${id}`, t.name, sec) : null;
     const saved = !!s && s.total >= t.save_dc;
     const parts: string[] = s ? [`${t.save_attr} ${s.total} vs DC ${t.save_dc}${saved ? ", saved" : ""}`] : [];
+    let dmg = 0;
     if (t.damage && hp.has(id)) {
       const rolled = Math.max(0, rollDice(t.damage)), tk = takenBy(id, saved ? (t.save_half ? Math.floor(rolled / 2) : 0) : rolled, t.damage_type || undefined);
       const before = hp.get(id)!, after = Math.max(0, before - tk.n);
       hp.set(id, after);
       parts.push(`${tk.n}${t.damage_type ? ` ${t.damage_type}` : ""} damage${tk.note}; ${after} left`);
+      dmg = tk.n;
       if (tk.n > 0) { hitAt.set(id, [...(hitAt.get(id) ?? []), sec]); wasHurt(id, sec, tk.n); }
       if (after <= 0 && before > 0) { down.add(id); story.push({ sec, k: "down", who: id }); }
     }
+    if (t.stops && !down.has(id)) { trapped.add(id); parts.push("stopped where they are"); }
     log.push(`${sec} s: ${nameOf(id)} sets off ${t.name}${parts.length ? ` (${parts.join("; ")})` : ""}.`);
+    story.splice(story.length - (down.has(id) && dmg ? 1 : 0), 0, { sec, k: "trap", who: id, name: t.name, outcome: !s ? "hit" : saved ? (dmg ? "half" : "save") : "hit", hurt: hurt(id, dmg), ...(dmg ? { dmg } : {}), ...(t.stops ? { stops: true } : {}) }); // before their "down"
     if (down.has(id)) log.push(`${sec} s: ${nameOf(id)} is down.`);
     if (!saved) for (const c of t.given) afflict(id, c, null, sec);
   };
@@ -744,6 +749,7 @@ export function resolveMovement(
       order.map((m) => {
         const here = pos.get(m.tokenId)!;
         if (down.has(m.tokenId)) return [m.tokenId, here];
+        if (trapped.has(m.tokenId)) return [m.tokenId, here]; // a trap stopped them
         const held = fighters.get(m.tokenId)?.limits?.forbid.movement;
         if (held) {
           if (!frozen.has(m.tokenId)) { frozen.add(m.tokenId); log.push(`${sec} s: ${m.name} can't move (${held}).`); }

@@ -18,6 +18,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "ability"; who: number; name: string; target: number | null } // an ability that does no damage (on themselves, or on someone)
   | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number }
   | { k: "down"; who: number }
+  | { k: "trap"; who: number; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number; stops?: boolean } // they set off a trap (outcome: their save against it)
   | { k: "chase"; who: number; target: number; action: string; why: "range" | "close" | "down" | "time"; next?: number } // next: who they turned on
   | { k: "status"; who: number; source: string }
   | { k: "healed"; who: number; source: string; much: number }
@@ -104,6 +105,11 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
       case "area": add(e.sec, `You use ${e.name}.`); break;
       case "ability": add(e.sec, mine ? (e.target === null ? `You use ${e.name}.` : e.target === me ? `You use ${e.name} on yourself.` : `You use ${e.name} on ${name(e.target)}.`) : `${subj} uses ${e.name} on you.`); break;
       case "healed": add(e.sec, e.much > 0 ? `You feel better (+${e.much}, ${e.source}).` : `${e.source} does you no more good: you're already well.`); break;
+      case "trap": {
+        const how = e.outcome === "save" ? (e.dmg ? `you partly get clear: ${taken(e.hurt, e.dmg)}` : "you get clear") : e.dmg ? `${e.outcome === "half" ? "you partly get clear: " : ""}${taken(e.hurt, e.dmg)}` : "";
+        add(e.sec, mine ? `You set off a trap (${e.name})${how ? `: ${how}` : ""}${e.stops ? ", and it stops you in your tracks" : ""}.` : `${subj} sets off a trap (${e.name}).`);
+        break;
+      }
       case "caught": {
         if (e.who === me) {
           const from = e.by === null ? e.name : `${name(e.by)}'s ${e.name}`;
@@ -185,6 +191,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       }
       case "area": add(e.sec, `${who} uses ${e.name}.`); break;
       case "ability": add(e.sec, `${who} uses ${e.name}${e.target === null ? "" : e.target === e.who ? " on themselves" : ` on ${n(e.target)}`}.`); break;
+      case "trap": add(e.sec, `${who} sets off ${e.name}: ${e.outcome === "save" && !e.dmg ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}${e.stops ? "; it stops them" : ""}.`); break;
       case "caught": add(e.sec, `${e.by === null ? e.name : `${n(e.by)}'s ${e.name}`} catches ${who}: ${e.outcome === "save" ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}.`); break;
       case "down": add(e.sec, `${who} goes down.`); break;
       case "chase": {
