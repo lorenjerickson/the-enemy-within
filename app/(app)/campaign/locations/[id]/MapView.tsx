@@ -27,6 +27,9 @@ import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../
 import { FEET_PER_SQUARE, crosses, pointToSegment, reachAreas, reachableSquares, routeTo, squareKey } from "@/lib/movement";
 import type { Contest, Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
+import TrapsEditor from "./TrapsEditor";
+import { drawTrap, trapFromDrag, type TrapShape } from "./trapDraw";
+import type { Trap } from "@/lib/traps";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import { drawEffect } from "@/lib/effects";
 import type { ScriptNames } from "@/lib/scriptSchema";
@@ -37,7 +40,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -76,6 +79,7 @@ interface MapState {
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
   secrets: MapSecret[];
+  traps: Trap[]; // GM only (players see found ones once Search finds them)
   effects: MapEffect[];
   lasting: LastingArea[]; // areas actions left on the map for a while
   time: number; // seconds, drives animated effects
@@ -234,7 +238,7 @@ const FX_MS = 1000; // how long a script's effect plays
 const SIGHT = 500;
 
 /** Layers only the GM ever sees. */
-const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
+const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "traps"];
 
 const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -349,6 +353,11 @@ const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
       const clip = inScene(viewPast(state.structures, l.area.origin, l.area.size * 1.05), x0, y0, size); // a little beyond its edge
       drawLasting(ctx, l, toPx, size, state.time, clip);
     }
+  },
+  // Traps: dashed while hidden from players, solid once found.
+  traps: (state) => (ctx, w, h) => {
+    const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const t of state.traps) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { found: !!t.found, label: t.name });
   },
   // Secrets: the GM sees every one (a dashed ring with "?", solid with "!" once revealed); players get only revealed ones.
   secrets: (state) => (ctx, w, h) => {
@@ -653,6 +662,7 @@ export default function MapView({
   lasting = [],
   gmPlans,
   secrets,
+  traps = [],
   discoveries = [],
   fog,
   hideWalls,
@@ -694,6 +704,7 @@ export default function MapView({
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
+  traps?: Trap[]; // the GM's traps (players get none for now)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
   fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
@@ -942,6 +953,12 @@ export default function MapView({
     "add" in c ? [...ss, c.add] : "remove" in c ? ss.filter((s) => s.id !== c.remove) : ss.map((s) => (s.id === c.reveal.id ? { ...s, revealed: c.reveal.revealed ? (1 as const) : (0 as const) } : s))
   );
 
+  // Traps: pick a shape, then drag it out on the map; shown straight away (optimistic).
+  const [trapShape, setTrapShape] = useState<TrapShape>("rect");
+  const [trapDrag, setTrapDrag] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
+  type TrapChange = { add: Trap } | { remove: number };
+  const [optimisticTraps, changeTraps] = useOptimistic(traps, (ts: Trap[], c: TrapChange) => ("add" in c ? [...ts, c.add] : ts.filter((t) => t.id !== c.remove)));
+
   // Note placement: write the note, then click the map; the note's corner goes where you click.
   const [noteDraft, setNoteDraft] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
@@ -1112,7 +1129,7 @@ export default function MapView({
       const at = walkAt(walking);
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, traps: readOnly ? [] : optimisticTraps,
     effects: drawnEffects, lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
@@ -1351,6 +1368,13 @@ export default function MapView({
       });
       return;
     }
+    if (e.button === 0 && selected === "traps") {
+      const { gx, gy } = gridAt(e);
+      const at = { x: quarter(gx), y: quarter(gy) };
+      setTrapDrag({ start: at, end: at });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button === 0 && selected === "secrets") {
       const d = secretDraft;
       if (!d.name.trim()) return;
@@ -1553,6 +1577,12 @@ export default function MapView({
       if (end.x !== startDrag.end.x || end.y !== startDrag.end.y) setStartDrag({ ...startDrag, end });
       return;
     }
+    if (trapDrag) {
+      const { gx, gy } = gridAt(e);
+      const end = { x: quarter(gx), y: quarter(gy) };
+      if (end.x !== trapDrag.end.x || end.y !== trapDrag.end.y) setTrapDrag({ ...trapDrag, end });
+      return;
+    }
     if (effectDrag) {
       const { gx, gy } = gridAt(e);
       const end = { x: quarter(gx), y: quarter(gy) };
@@ -1663,6 +1693,16 @@ export default function MapView({
       startTransition(async () => {
         setStartLocally(area);
         await setPartyStart(locationId, levelId, area);
+      });
+      return;
+    }
+    if (trapDrag) {
+      const area = trapFromDrag(trapShape, trapDrag);
+      setTrapDrag(null);
+      if (!area) return; // a click without a drag places nothing
+      startTransition(async () => {
+        changeTraps({ add: { id: -Date.now(), name: "Trap", area, springs: ["enter"], who: "", often: "once", damage: null, damage_type: "", save_attr: "agility", save_dc: 12, save_half: 1, effects: [], stops: 1, find_dc: 14, found: 0, sprung: [] } });
+        await placeTrap(locationId, levelId, area);
       });
       return;
     }
@@ -2386,6 +2426,12 @@ export default function MapView({
         ctx.strokeRect(x0 + ax * size - pad, y0 + ay * size - pad, (bx - ax + extra) * size + 2 * pad, (by - ay + extra) * size + 2 * pad);
         ctx.restore();
       }
+      // Trap being dragged out.
+      if (trapDrag) {
+        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+        const a = trapFromDrag(trapShape, trapDrag);
+        if (a) drawTrap(ctx, a, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { draft: true });
+      }
       // Effect area being dragged out.
       if (effectDrag) {
         const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
@@ -2564,6 +2610,18 @@ export default function MapView({
               <BackgroundEditor key={JSON.stringify(background)} locationId={locationId} levelId={levelId} background={background} />
             ) : selected === "controls" ? (
               <ControlsEditor locationId={locationId} levelId={levelId} controls={controls} names={scriptNames} />
+            ) : selected === "traps" ? (
+              <TrapsEditor
+                shape={trapShape}
+                onShape={setTrapShape}
+                traps={optimisticTraps}
+                onRemove={(id) =>
+                  startTransition(async () => {
+                    changeTraps({ remove: id });
+                    await removeTrap(locationId, id);
+                  })
+                }
+              />
             ) : selected === "secrets" ? (
               <SecretsEditor
                 draft={secretDraft}

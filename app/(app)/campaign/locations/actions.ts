@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
 import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
+import { addTrap, deleteTrap } from "@/lib/db";
+import type { TrapArea } from "@/lib/traps";
 import { CLIP_MODES, CONTROL_EDGES, type ControlEdge, type ClipMode, LIGHT_KINDS, type LightKind, EDGES, MAP_LAYERS, PERSPECTIVES, STRUCTURE_KINDS, TEMPLATE_KINDS, type StructureKind, type MapLayer, type Padding, type Perspective, type TemplateColors } from "@/lib/maps";
 import { checkScript } from "@/lib/script";
 import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
@@ -532,5 +534,22 @@ export async function revealSecret(locationId: number, id: number, revealed: boo
   await requireGm();
   setSecretRevealed(Number(id), !!revealed);
   if (revealed && discoveryId) revealDiscovery(Number(discoveryId));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM places a trap (what it does is set on it afterwards). */
+export async function placeTrap(locationId: number, levelId: number, area: TrapArea) {
+  await requireGm();
+  const n = (v: unknown) => { const x = Number(v); if (!Number.isFinite(x)) throw new Error("Invalid trap"); return x; };
+  const clean: TrapArea = area.shape === "circle" ? { shape: "circle", x: n(area.x), y: n(area.y), r: Math.max(0.25, n(area.r)) }
+    : area.shape === "rect" ? { shape: "rect", x: n(area.x), y: n(area.y), w: Math.max(0.25, n(area.w)), h: Math.max(0.25, n(area.h)) }
+    : { shape: "line", x1: n(area.x1), y1: n(area.y1), x2: n(area.x2), y2: n(area.y2) };
+  addTrap(Number(levelId), clean);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+export async function removeTrap(locationId: number, id: number) {
+  await requireGm();
+  deleteTrap(Number(id));
   revalidatePath(`/campaign/locations/${locationId}`);
 }
