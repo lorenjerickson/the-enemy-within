@@ -21,6 +21,10 @@ import type { EquipSlot } from "@/lib/itemTypes";
 import type { Intent, StoryEvent } from "@/lib/roundStory";
 import { fits, relation, type Allegiance } from "@/lib/sides";
 import { auraAffliction, auraWants, syncAuras, type AuraModifier } from "@/lib/auras";
+import { canSpring, entersTrap, inTrap, type Trap } from "@/lib/traps";
+
+/** A trap as a round needs it: the effects it puts on, filled in from the catalog. */
+export type RoundTrap = Trap & { given: Condition[] };
 
 type Pos = { col: number; row: number };
 
@@ -159,6 +163,7 @@ export function resolveMovement(
   rollers: Set<number> = new Set(), // players' characters: they roll their own saves (kept in `decisions` as "save:…")
   auraPasses: Set<string> = new Set(), // who passed the save against an aura's condition ("token:condition"): safe until they leave it
   lit: (p: Pos) => boolean = () => true, // whether a spot is lit (light sources, the level's overall light): in the dark, only darkvision sees
+  traps: RoundTrap[] = [], // the GM's traps on the level: they spring on whoever comes into one (each second), starts the round in one, or ends it in one
 ) {
   const passes = new Set(auraPasses);
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
@@ -548,6 +553,39 @@ export function resolveMovement(
     }
     fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
   };
+  // Traps: whom each has sprung on (this round too), and what springing one does.
+  const trapSprung = new Map(traps.map((t) => [t.id, [...t.sprung]]));
+  const sprungNow: { trapId: number; tokenId: number }[] = []; // to keep after the round (spent, found)
+  const springTrap = (t: RoundTrap, id: number, sec: number) => {
+    trapSprung.set(t.id, [...trapSprung.get(t.id)!, id]);
+    sprungNow.push({ trapId: t.id, tokenId: id });
+    const s = t.save_attr ? saveRoll(id, t.save_attr as Attribute, t.save_dc, `trap:${sec}:${t.id}:${id}`, t.name, sec) : null;
+    const saved = !!s && s.total >= t.save_dc;
+    const parts: string[] = s ? [`${t.save_attr} ${s.total} vs DC ${t.save_dc}${saved ? ", saved" : ""}`] : [];
+    if (t.damage && hp.has(id)) {
+      const rolled = Math.max(0, rollDice(t.damage)), tk = takenBy(id, saved ? (t.save_half ? Math.floor(rolled / 2) : 0) : rolled, t.damage_type || undefined);
+      const before = hp.get(id)!, after = Math.max(0, before - tk.n);
+      hp.set(id, after);
+      parts.push(`${tk.n}${t.damage_type ? ` ${t.damage_type}` : ""} damage${tk.note}; ${after} left`);
+      if (tk.n > 0) { hitAt.set(id, [...(hitAt.get(id) ?? []), sec]); wasHurt(id, sec, tk.n); }
+      if (after <= 0 && before > 0) { down.add(id); story.push({ sec, k: "down", who: id }); }
+    }
+    log.push(`${sec} s: ${nameOf(id)} sets off ${t.name}${parts.length ? ` (${parts.join("; ")})` : ""}.`);
+    if (down.has(id)) log.push(`${sec} s: ${nameOf(id)} is down.`);
+    if (!saved) for (const c of t.given) afflict(id, c, null, sec);
+  };
+  /** Traps springing on whoever (not down, of the side it's for, not spent for them) `catches` says, at `sec`. */
+  const trapsFor = (when: "enter" | "start" | "end", sec: number, catches: (t: RoundTrap, id: number) => boolean) => {
+    for (const t of traps) {
+      if (!t.springs.includes(when)) continue;
+      for (const id of [...fighters.keys()]) {
+        if (down.has(id) || !where(id)) continue;
+        if (!canSpring({ ...t, sprung: trapSprung.get(t.id)! }, id, fighters.get(id)?.allegiance ?? "hostile") || !catches(t, id)) continue;
+        springTrap(t, id, sec);
+      }
+    }
+  };
+  const centreOf = (p: Pos) => ({ x: p.col + 0.5, y: p.row + 0.5 });
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
   const lag = new Map(order.map((m) => [m.tokenId, 0])); // seconds each has been held back
@@ -698,6 +736,7 @@ export function resolveMovement(
     const fx: Fx[] = [];
     // The start of the round: lasting areas that catch whoever starts a round in them (Spirit Guardians).
     if (sec === 1) for (const l of lasting) areaCatch(l, sec, "start", fx);
+    if (sec === 1) trapsFor("start", sec, (t, id) => inTrap(t.area, centreOf(where(id)!))); // traps that catch whoever starts the round in them
     const lagBefore = new Map(lag);
     const autoPursue = new Set<number>(); // closing in on an out-of-reach target this second (their plan waits)
     // Evaluation: where each would like to be at the end of this second (Evade / Pursue decided afresh from where their target is now).
@@ -846,6 +885,8 @@ export function resolveMovement(
       if (entering.size) areaCatch(l, sec, "enter", fx, entering);
       wasIn.set(l.id, now);
     }
+    // Traps that spring on whoever comes into one this second (stepping onto it, through it, across a tripwire).
+    trapsFor("enter", sec, (t, id) => { const from = before.get(id), to = pos.get(id); return !!from && !!to && !unmoved(from, to) && entersTrap(t.area, centreOf(from), centreOf(to)); });
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
     syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,
       (target, c, source) => afflict(target, c, source, sec, source), (target, a) => release(target, a, "left", sec));
@@ -1136,6 +1177,7 @@ export function resolveMovement(
     // The end of the round: whoever is in a lasting area rolls its save (its damage dice rolled once for everyone).
     if (sec === ROUND_SECONDS) {
       for (const l of lasting) areaCatch(l, sec, "end", fx);
+      trapsFor("end", sec, (t, id) => inTrap(t.area, centreOf(where(id)!))); // traps that catch whoever ends the round in them
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
       const beforeTick = new Map(hp);
       tickAfflictions(afflicted, { hp, fighters, down, nameOf, log, story, sec, hurt, roll: endRoll, damageRoll: (id, attr, dc, what, s) => saveRoll(id, attr, dc, `dmg:${s}:${what}:${id}`, `${what} damage`, s) }); // players roll their own saves (to end conditions, against their damage)
@@ -1155,7 +1197,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

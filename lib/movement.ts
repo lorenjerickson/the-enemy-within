@@ -17,24 +17,26 @@ export function crosses(p: Point, q: Point, s: Segment): boolean {
  * A step goes to any of the 8 neighbours and costs one square (diagonals too, as in D&D 5e);
  * walls and closed doors block a step whose centre-to-centre line touches them.
  */
-export type Reach = Map<string, { col: number; row: number; steps: number; prev: string | null }>;
+export type Reach = Map<string, { col: number; row: number; steps: number; prev: string | null; len?: number }>; // len: the route's length in a straight-line sense (diagonals √2), to pick the straightest of equally short routes
 export const squareKey = (c: number, r: number) => `${c},${r}`;
 
 export function reachableSquares(start: { col: number; row: number }, squares: number, walls: Segment[]): Reach {
   const key = squareKey;
-  const seen: Reach = new Map([[key(start.col, start.row), { col: start.col, row: start.row, steps: 0, prev: null }]]);
+  const seen: Reach = new Map([[key(start.col, start.row), { col: start.col, row: start.row, steps: 0, prev: null, len: 0 }]]);
   let frontier = [{ col: start.col, row: start.row }];
   for (let step = 1; step <= Math.floor(squares); step++) {
     const next: typeof frontier = [];
     for (const f of frontier) {
+      const fl = seen.get(key(f.col, f.row))!.len ?? 0;
       for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
         if (!dc && !dr) continue;
-        const c = f.col + dc, r = f.row + dr;
-        if (seen.has(key(c, r))) continue;
+        const c = f.col + dc, r = f.row + dr, len = fl + (dc && dr ? Math.SQRT2 : 1), had = seen.get(key(c, r));
+        // Reached already: only a route as short in steps but straighter replaces it (so open ground walks a straight line).
+        if (had && (had.steps < step || (had.len ?? 0) <= len + 1e-9)) continue;
         const from = { x: f.col + 0.5, y: f.row + 0.5 }, to = { x: c + 0.5, y: r + 0.5 };
         if (walls.some((w) => crosses(from, to, w))) continue;
-        seen.set(key(c, r), { col: c, row: r, steps: step, prev: key(f.col, f.row) });
-        next.push({ col: c, row: r });
+        seen.set(key(c, r), { col: c, row: r, steps: step, prev: key(f.col, f.row), len });
+        if (!had) next.push({ col: c, row: r });
       }
     }
     frontier = next;
@@ -89,28 +91,32 @@ export function squareRoute(
   allowed: (col: number, row: number) => boolean,
   maxSquares = 40000,
 ): { col: number; row: number }[] | null {
+  // Breadth first, a step at a time; of equally short routes to a square, the straightest (diagonals √2) wins.
   const prev = new Map<string, string | null>([[squareKey(start.col, start.row), null]]);
+  const info = new Map<string, { step: number; len: number }>([[squareKey(start.col, start.row), { step: 0, len: 0 }]]);
   let frontier = [start];
   const goalKey = squareKey(goal.col, goal.row);
-  while (frontier.length && prev.size < maxSquares) {
+  for (let step = 1; frontier.length && prev.size < maxSquares; step++) {
     const next: typeof frontier = [];
     for (const f of frontier) {
+      const fl = info.get(squareKey(f.col, f.row))!.len;
       for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
         if (!dc && !dr) continue;
-        const c = f.col + dc, r = f.row + dr, k = squareKey(c, r);
-        if (prev.has(k) || !allowed(c, r)) continue;
+        const c = f.col + dc, r = f.row + dr, k = squareKey(c, r), len = fl + (dc && dr ? Math.SQRT2 : 1), had = info.get(k);
+        if ((had && (had.step < step || had.len <= len + 1e-9)) || !allowed(c, r)) continue;
         if (walls.some((w) => crosses({ x: f.col + 0.5, y: f.row + 0.5 }, { x: c + 0.5, y: r + 0.5 }, w))) continue;
         prev.set(k, squareKey(f.col, f.row));
-        if (k === goalKey) {
-          const route: { col: number; row: number }[] = [];
-          for (let at: string | null = k; at; at = prev.get(at) ?? null) {
-            const [cc, rr] = at.split(",").map(Number);
-            route.unshift({ col: cc, row: rr });
-          }
-          return route;
-        }
-        next.push({ col: c, row: r });
+        info.set(k, { step, len });
+        if (!had) next.push({ col: c, row: r });
       }
+    }
+    if (prev.has(goalKey)) {
+      const route: { col: number; row: number }[] = [];
+      for (let at: string | null = goalKey; at; at = prev.get(at) ?? null) {
+        const [cc, rr] = at.split(",").map(Number);
+        route.unshift({ col: cc, row: rr });
+      }
+      return route;
     }
     frontier = next;
   }

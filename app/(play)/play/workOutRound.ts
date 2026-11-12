@@ -18,7 +18,11 @@ import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
-import { openConditionSaveRequest } from "@/lib/db";
+import { openConditionSaveRequest, getCondition, listTraps, markTrapSprung, setTrapFound } from "@/lib/db";
+import type { RoundTrap } from "@/lib/resolveRound";
+
+/** A level's traps for a round, with the effects they put on filled in. */
+const roundTraps = (levelId: number): RoundTrap[] => listTraps(levelId).map((t) => ({ ...t, given: t.effects.flatMap((id) => getCondition(id) ?? []) }));
 
 /**
  * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
@@ -74,7 +78,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.
@@ -102,6 +106,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
   for (const s of result.strains) addStrain(s.tokenId, s.attribute, s.points); // strain outlasts the round (and the condition)
+  for (const t of result.trapsSprung) { markTrapSprung(t.trapId, t.tokenId); setTrapFound(t.trapId, true); } // spent (for them), and no secret any more
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {
     const h = tokenHealth(id);

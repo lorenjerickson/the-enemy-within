@@ -8,11 +8,10 @@ test("a planned move walks its route a square a second at 30 ft", () => {
   const cols = r.frames.map((f) => f.pos[1].col);
   assert.deepEqual(cols, [1, 2, 3, 3, 3, 3], "one square a second, there at 3 s");
   assert.deepEqual(r.frames[2].pos[1], { col: 3, row: 0 });
-  // (Open ground: the route may step a row off the straight line and back; same number of squares.)
   assert.match(r.text, /T1 ends at 3, 0/);
 });
 
-test("a straight walk across open ground stays on the straight line", { todo: "routes arc off the line: reachableSquares keeps the first-found of several equally short predecessors (3,5 → 7,5 goes via 5,3)" }, () => {
+test("a straight walk across open ground stays on the straight line", () => {
   const r = resolve([mover(1, { col: 3, row: 5 }, [move(7, 5, 20)])], {});
   assert.deepEqual(r.frames.slice(0, 4).map((f) => f.pos[1]), [{ col: 4, row: 5 }, { col: 5, row: 5 }, { col: 6, row: 5 }, { col: 7, row: 5 }]);
 });
