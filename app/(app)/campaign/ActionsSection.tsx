@@ -1,8 +1,8 @@
 import { AREA_FIRES, AREA_SHAPES, areaFires, describeArea } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, formatDuration } from "@/lib/actions";
-import { getCondition, listConditionDefs, type Action, type ActionOwner } from "@/lib/db";
-import { describeCondition, type Condition } from "@/lib/conditions";
+import { listEffectDefs, type Action, type ActionOwner } from "@/lib/db";
+import { describeCondition, asCondition, type Effect } from "@/lib/conditions";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
 
@@ -17,7 +17,7 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
     a.damage && `${a.damage} ${a.damage_type}`.trim(),
     a.area_shape && `${describeArea({ shape: a.area_shape, ft: a.area_ft })}, ${a.save_attr} save DC ${a.save_dc}${a.save_half ? " (half on a save)" : ""}`,
     a.area_shape && a.area_lasts ? `stays, catching whoever ${areaFires(a.area_fires).map((f) => AREA_FIRES.find(([k]) => k === f)![1]).join(" or ")}` : "",
-    ...a.conditions.map((c) => `${c.on === "target" ? "target: " : ""}${conditionNames.get(c.id) ?? "a condition"}`),
+    ...a.conditions.map((c) => `${c.on === "target" ? "target: " : ""}${conditionNames.get(c.id) ?? "an effect"}`),
     a.area_shape && a.area_lasts && a.duration_unit && formatDuration(a.duration_amount, a.duration_unit),
     `${a.seconds} s`,
     a.range_ft > 5 ? `range ${a.range_ft} ft` : a.range_ft === 0 && fromItem ? "weapon's range" : "reach",
@@ -26,7 +26,9 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
     .join(" · ");
 }
 
-function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initial?: Action; conditions: Condition[] }) {
+function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?: Action; effects: Effect[] }) {
+  // Effects that last a number of rounds (and any it already grants).
+  const conditions = effects.filter((e) => e.duration === "rounds" || (initial?.conditions ?? []).some((x) => x.id === e.id));
   return (
     <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
       <input name="name" placeholder="Action name (e.g. Circle of Flames)" required defaultValue={initial?.name} className="input input-sm col-span-2 w-full" />
@@ -79,13 +81,13 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
           ))}
           <span className="text-xs opacity-60">(once a round each, at most)</span>
         </span>
-        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), it catches whoever comes into it, starts a round in it or ends one in it (as ticked; at most once a round each): they roll the save again, and a failed save puts its conditions on them too.</span>
+        <span className="w-full text-xs opacity-60">Everyone caught (allies too) rolls the save; the damage dice are rolled once for all. A circle is aimed at a spot within range; a cone or line goes from the actor towards where it's aimed. If it stays on the map (for the duration below), it catches whoever comes into it, starts a round in it or ends one in it (as ticked; at most once a round each): they roll the save again, and a failed save puts its effects on them too.</span>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
         Planned as
         <select name="kind" defaultValue={initial?.kind ?? "action"} className="select select-sm w-auto" data-action-kind>
           <option value="action">the round's action</option>
-          <option value="reaction">the round's reaction (on themselves: the conditions it gives them do the reacting)</option>
+          <option value="reaction">the round's reaction (on themselves: the effects it gives them do the reacting)</option>
         </select>
       </label>
       <label className="flex items-center gap-2 text-sm">
@@ -130,18 +132,18 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
           <fieldset key={on} className="col-span-2 space-y-2 rounded-box border border-base-300 p-2" data-effects-on={on}>
             <legend className="px-1 text-sm font-semibold">{on === "self" ? "Puts on whoever uses it" : "Puts on the target (on a hit, or a failed save)"}</legend>
             <div className="space-y-1" data-action-conditions={on}>
-              <div className="text-xs font-semibold opacity-80">Conditions (from the catalog)</div>
+              <div className="text-xs font-semibold opacity-80">Effects (from the catalog)</div>
               {conditions.length ? (
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {conditions.map((c) => (
-                    <label key={c.id} className="flex items-center gap-1 text-sm" title={describeCondition(c)}>
+                    <label key={c.id} className="flex items-center gap-1 text-sm" title={describeCondition(asCondition(c))}>
                       <input type="checkbox" name={`condition_${on}`} value={c.id} defaultChecked={(initial?.conditions ?? []).some((x) => x.id === c.id && x.on === on)} className="checkbox checkbox-xs" />
                       {c.name}
                     </label>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs opacity-60">None in the catalog yet (Campaign › Conditions).</p>
+                <p className="text-xs opacity-60">None in the catalog yet (Campaign › Effects).</p>
               )}
             </div>
           </fieldset>
@@ -155,7 +157,7 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
             <option key={u} value={u}>{u ? `${u}(s)` : "Instant"}</option>
           ))}
         </select>
-        <span className="text-xs opacity-60">how long an area that stays on the map lasts (conditions have their own rounds)</span>
+        <span className="text-xs opacity-60">how long an area that stays on the map lasts (effects have their own rounds)</span>
       </div>
       <div className="col-span-2">
         <button className="btn btn-primary btn-sm">Save action</button>
@@ -166,7 +168,7 @@ function ActionForm({ owner, initial, conditions }: { owner: ActionOwner; initia
 
 /** Lists, adds and edits the actions an owner (profession, item or creature) grants. */
 export default function ActionsSection({ owner, actions }: { owner: ActionOwner; actions: Action[] }) {
-  const conditions = listConditionDefs().flatMap((d) => getCondition(d.id) ?? []);
+  const effects = listEffectDefs();
   return (
     <div className="space-y-2">
       <h3 className="font-semibold">Actions</h3>
@@ -176,10 +178,10 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
           <details className="flex-1">
             <summary className="link link-hover list-none">
               <span className="font-medium">{a.name}</span>{" "}
-              <span className="text-sm opacity-70">{summary(a, new Map(conditions.map((c) => [c.id, c.name])))}</span>
+              <span className="text-sm opacity-70">{summary(a, new Map(effects.map((c) => [c.id, c.name])))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionForm owner={owner} initial={a} conditions={conditions} />
+            <ActionForm owner={owner} initial={a} effects={effects} />
           </details>
           <form action={deleteAction.bind(null, owner, a.id)}>
             <button className="btn btn-ghost btn-xs">Remove</button>
@@ -188,7 +190,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionForm owner={owner} conditions={conditions} />
+        <ActionForm owner={owner} effects={effects} />
       </details>
     </div>
   );

@@ -26,7 +26,7 @@ export function useGmSheet(id: number | null) {
   return [sheet, setSheet, () => setTick((n) => n + 1)] as const; // the last reloads it now (after a change)
 }
 
-/** Conditions on them (Poisoned…): the GM can put one from the catalog on them, or take one off. */
+/** Effects on them (Poisoned…): the GM can put one from the catalog on them, or take one off. */
 function GmConditions({ sheet, reload }: { sheet: Sheet; reload?: () => void }) {
   const [catalog, setCatalog] = useState<{ id: number; name: string; text: string }[]>([]);
   const [pick, setPick] = useState("");
@@ -35,7 +35,7 @@ function GmConditions({ sheet, reload }: { sheet: Sheet; reload?: () => void }) 
   const on = sheet.effects.filter((e) => e.affliction !== undefined);
   return (
     <section className="mt-3 space-y-1 text-xs" data-gm-conditions>
-      <div className="font-semibold opacity-80">Conditions</div>
+      <div className="font-semibold opacity-80">Effects</div>
       {on.map((e) => (
         <div key={e.affliction} className="flex items-center gap-2">
           <span className="badge badge-warning badge-sm">{e.source}</span>
@@ -46,13 +46,13 @@ function GmConditions({ sheet, reload }: { sheet: Sheet; reload?: () => void }) 
       {catalog.length ? (
         <div className="flex items-center gap-2">
           <select className="select select-xs flex-1" value={pick} onChange={(ev) => setPick(ev.target.value)} data-condition-pick>
-            <option value="">Put a condition on them…</option>
+            <option value="">Put an effect on them…</option>
             {catalog.map((c) => <option key={c.id} value={c.id} title={c.text}>{c.name}</option>)}
           </select>
           <button type="button" className="btn btn-xs" disabled={!pick || busy} data-apply-condition onClick={() => start(async () => { await gmApplyCondition(sheet.tokenId, Number(pick)); setPick(""); reload?.(); })}>Apply</button>
         </div>
       ) : (
-        <p className="opacity-60">No conditions in the catalog yet (Campaign › Conditions).</p>
+        <p className="opacity-60">No effects that last rounds in the catalog yet (Campaign › Effects).</p>
       )}
     </section>
   );

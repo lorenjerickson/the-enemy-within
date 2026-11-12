@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, item, level } from "./seed";
-import { addAffliction, addCreatureToken, addProfessionModifier, getCondition, placeCharacterToken, saveConditionDef, saveEffectDef, saveProfession, saveProfessionGroup, setCharacterRank, setStandingEffects } from "@/lib/db";
+import { addAffliction, addCreatureToken, addProfessionModifier, getCondition, placeCharacterToken, saveEffectDef, saveProfession, saveProfessionGroup, setCharacterRank, setStandingEffects } from "@/lib/db";
 import { fightersOn } from "@/lib/combat";
 import { withSeed } from "@/lib/dice";
 
@@ -56,9 +56,8 @@ test("a creature's standing effects: resistances and restrictions", () => {
   assert.deepEqual(fightersOn(lv).get(ratTok)!.resist, { slashing: ["resistant"] });
 });
 
-test("conditions on a token count for its rolls and limits", () => {
-  const stun = saveEffectDef(null, { name: "Reeling", description: "", modifiers: [{ kind: "forbid", what: "actions" }, { kind: "autofail", save: "agility" }, { kind: "boost", target: "defense", value: "-2" }] });
-  const cid = saveConditionDef(null, { name: "Dazed", description: "", effects: [stun], rounds: 2, save_attr: "", save_dc: 12 });
+test("effects on a token count for its rolls and limits", () => {
+  const cid = saveEffectDef(null, { name: "Dazed", description: "", modifiers: [{ kind: "forbid", what: "actions" }, { kind: "autofail", save: "agility" }, { kind: "boost", target: "defense", value: "-2" }], rounds: 2 });
   assert.equal(addAffliction(lv, heroTok, getCondition(cid)!, null), true);
   const f = fightersOn(lv).get(heroTok)!;
   assert.equal(f.limits?.forbid.action, "Dazed");

@@ -8,7 +8,6 @@ const CAMPAIGN_NAV = [
   { href: "/campaign/items", label: "Items" },
   { href: "/campaign/creatures", label: "Creatures" },
   { href: "/campaign/professions", label: "Professions" },
-  { href: "/campaign/conditions", label: "Conditions" },
   { href: "/campaign/effects", label: "Effects" },
   { href: "/campaign/characters", label: "Characters" },
   { href: "/campaign/locations", label: "Locations" },

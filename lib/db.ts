@@ -1,6 +1,6 @@
-import type { Affliction, Condition, ConditionDef, EffectDef, Modifier } from "@/lib/conditions";
-import { BUILTIN_CONDITIONS, BUILTIN_EFFECTS } from "@/lib/builtinConditions";
-import { reapplied } from "@/lib/conditions";
+import type { Affliction, Condition, Duration, Effect, Lifecycle, Modifier } from "@/lib/conditions";
+import { BUILTIN_CONDITIONS, BUILTIN_EFFECTS, BUILTIN_PIECES } from "@/lib/builtinConditions";
+import { DEFAULT_LIFECYCLE, asCondition, reapplied } from "@/lib/conditions";
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
@@ -918,7 +918,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   target_count: TargetCount; // one, exactly N, up to N, or all
   target_n: number;
   targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
-  conditions: { id: number; on: "self" | "target" }[]; // catalog conditions it puts on its user / its target (on a hit, or a failed save)
+  conditions: { id: number; on: "self" | "target" }[]; // catalog effects it puts on its user / its target (on a hit, or a failed save); the column kept its old name
   kind?: "action" | "reaction"; // a reaction is planned as the round's reaction and only affects its user: it readies conditions whose triggers do the reacting
 }
 
@@ -2132,14 +2132,38 @@ export function setStandingEffects(owner: { item_id: number } | { creature_id: n
   db.prepare<[string, number]>(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(effects), id);
 }
 
-// The catalog: effects (named sets of modifiers) and conditions (what actions put on creatures: the effects they
-// apply, plus how long they last and the save that ends them). See lib/conditions.ts.
+// The catalog: effects. An effect is a name, its rules (modifiers) and how long it lasts: so many rounds (with its
+// saves and what ends it), while equipped, or always. Actions, the GM, items, creatures and professions grant them.
+// See lib/conditions.ts.
 db.exec(`CREATE TABLE IF NOT EXISTS effects (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   modifiers TEXT NOT NULL DEFAULT '[]'
 )`);
+addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in effect's key (lib/builtinConditions.ts): its rules follow the code
+const LIFECYCLE_COLUMNS: [keyof Lifecycle | "duration", string][] = [
+  ["duration", "TEXT NOT NULL DEFAULT 'rounds'"], // rounds | equipped | always
+  ["rounds", "INTEGER NOT NULL DEFAULT 1"],
+  ["save_attr", "TEXT NOT NULL DEFAULT ''"], // the save that ends it ('' = none)
+  ["save_dc", "INTEGER NOT NULL DEFAULT 12"],
+  ["apply_save_attr", "TEXT NOT NULL DEFAULT ''"], // a save as it lands ('' = none)
+  ["apply_save_dc", "INTEGER NOT NULL DEFAULT 12"],
+  ["apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"], // on a success: negates | halves (its rounds)
+  ["save_when", "TEXT NOT NULL DEFAULT 'end'"], // when the save to end it is rolled: end | start | damaged
+  ["save_action", "INTEGER NOT NULL DEFAULT 0"], // 1: Shake off (an action) rolls it too
+  ["saves_needed", "INTEGER NOT NULL DEFAULT 1"], // successful saves to end it
+  ["ends_on_damage", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when hurt
+  ["ends_on_attack", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when they attack
+  ["ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"], // 1: ends once its trigger fires
+  ["concentration", "INTEGER NOT NULL DEFAULT 0"], // 1: needs whoever put it on to keep concentrating
+  ["reapply", "TEXT NOT NULL DEFAULT 'refresh'"], // put on again: refresh | stack | ignore
+  ["stack_limit", "INTEGER NOT NULL DEFAULT 0"], // stacking: at most this many (0 = no limit)
+];
+for (const [column, definition] of LIFECYCLE_COLUMNS) addColumn("effects", column, definition);
+
+// Retired 2026-11-13: conditions (an effect's lifecycle lived here, applying effects by id). Kept, empty, so an older
+// campaign export can still be imported: its rows become effects (migrateConditions, below).
 db.exec(`CREATE TABLE IF NOT EXISTS conditions (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -2149,81 +2173,57 @@ db.exec(`CREATE TABLE IF NOT EXISTS conditions (
   save_attr TEXT NOT NULL DEFAULT '',
   save_dc INTEGER NOT NULL DEFAULT 12
 )`);
-addColumn("conditions", "apply_save_attr", "TEXT NOT NULL DEFAULT ''"); // a save as it lands ('' = none)
-addColumn("conditions", "save_when", "TEXT NOT NULL DEFAULT 'end'"); // when the save to end it is rolled: end | start | damaged
-addColumn("conditions", "save_action", "INTEGER NOT NULL DEFAULT 0"); // 1: Shake off (an action) rolls it too
-addColumn("conditions", "saves_needed", "INTEGER NOT NULL DEFAULT 1"); // successful saves to end it
-addColumn("conditions", "ends_on_damage", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when hurt
-addColumn("conditions", "ends_on_attack", "INTEGER NOT NULL DEFAULT 0"); // 1: ends when they attack
-addColumn("conditions", "ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"); // 1: ends once its trigger fires
-addColumn("conditions", "concentration", "INTEGER NOT NULL DEFAULT 0"); // 1: needs whoever put it on to keep concentrating
-addColumn("conditions", "reapply", "TEXT NOT NULL DEFAULT 'refresh'"); // put on again: refresh | stack | ignore
-addColumn("conditions", "stack_limit", "INTEGER NOT NULL DEFAULT 0"); // stacking: at most this many (0 = no limit)
-addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in effect's key (lib/builtinConditions.ts): its modifiers are fixed
-addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''"); // a built-in condition's key: the effects it applies are fixed
-addColumn("conditions", "apply_save_dc", "INTEGER NOT NULL DEFAULT 12");
-addColumn("conditions", "apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"); // on a success: negates | halves (its rounds)
+for (const [column, definition] of LIFECYCLE_COLUMNS) if (column !== "duration") addColumn("conditions", column, definition);
+addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''");
 
-export function listEffectDefs(): EffectDef[] {
-  const raw = db.prepare<[], { id: number; name: string; description: string; modifiers: string }>("SELECT * FROM effects ORDER BY name").all().map((r) => ({ ...r, modifiers: JSON.parse(r.modifiers) as Modifier[] }));
+type EffectRow = Omit<Effect, "modifiers"> & { modifiers: string };
+const parseEffect = (r: EffectRow): Effect => ({ ...r, modifiers: JSON.parse(r.modifiers) as Modifier[] });
+
+/** Every catalog effect; an aura's (or trigger's) effect filled in as `given` (one level, so they can't loop). */
+export function listEffectDefs(): Effect[] {
+  const raw = db.prepare<[], EffectRow>("SELECT * FROM effects ORDER BY name").all().map(parseEffect);
   const gives = (m: Modifier) => m.kind === "aura" || (m.kind === "trigger" && !!m.condition);
   if (!raw.some((e) => e.modifiers.some(gives))) return raw;
-  // An aura's (or trigger's) condition, filled in (one level: auras within it aren't, so they can't loop).
-  const conditions = db.prepare<[], ConditionRow>("SELECT * FROM conditions").all();
-  const given = (id: number): Condition | undefined => {
-    const c = conditions.find((x) => x.id === id);
-    return c ? { ...c, effects: (JSON.parse(c.effects) as number[]).flatMap((e) => raw.find((x) => x.id === e) ?? []) } : undefined;
-  };
+  const given = (id: number) => { const e = raw.find((x) => x.id === id); return e ? asCondition(e) : undefined; };
   return raw.map((e) => ({ ...e, modifiers: e.modifiers.map((m) => (gives(m) ? { ...m, given: given((m as { condition: number }).condition) } : m)) }));
 }
 
-export function getEffectDef(id: number): EffectDef | undefined {
+export function getEffectDef(id: number): Effect | undefined {
   return listEffectDefs().find((e) => e.id === id);
 }
 
-/** Inserts when id is null, otherwise updates; returns the id. */
-export function saveEffectDef(id: number | null, e: Omit<EffectDef, "id">): number {
-  const params = { name: e.name, description: e.description, modifiers: JSON.stringify(e.modifiers.map((m) => (m.kind === "aura" || m.kind === "trigger" ? { ...m, given: undefined } : m))) }; // an aura's condition is filled in when read
-  if (id === null) return Number(db.prepare("INSERT INTO effects (name, description, modifiers) VALUES (@name, @description, @modifiers)").run(params).lastInsertRowid);
-  db.prepare("UPDATE effects SET name = @name, description = @description, modifiers = @modifiers WHERE id = @id").run({ ...params, id });
+/** A catalog effect as it's put on a creature (what the round engine and afflictions keep). */
+export function getCondition(effectId: number): Condition | undefined {
+  const e = getEffectDef(effectId);
+  return e ? asCondition(e) : undefined;
+}
+
+/**
+ * Inserts when id is null, otherwise updates; returns the id. Lifecycle fields left out keep what the effect had (a
+ * new one: the defaults, lasting 1 round).
+ */
+export function saveEffectDef(id: number | null, e: Pick<Effect, "name" | "description" | "modifiers"> & Partial<Lifecycle & { duration: Duration; builtin: string }>): number {
+  const was = id === null ? undefined : db.prepare<[number], EffectRow>("SELECT * FROM effects WHERE id = ?").get(id);
+  const life = Object.fromEntries(LIFECYCLE_COLUMNS.map(([k]) => [k, (e as Record<string, unknown>)[k] ?? (was as Record<string, unknown> | undefined)?.[k] ?? (k === "duration" ? "rounds" : DEFAULT_LIFECYCLE[k])]));
+  const params = { ...life, name: e.name, description: e.description, builtin: e.builtin ?? was?.builtin ?? "", modifiers: JSON.stringify(e.modifiers.map((m) => (m.kind === "aura" || m.kind === "trigger" ? { ...m, given: undefined } : m))) };
+  const cols = ["name", "description", "modifiers", "builtin", ...LIFECYCLE_COLUMNS.map(([k]) => k)];
+  if (id === null) return Number(db.prepare(`INSERT INTO effects (${cols.join(", ")}) VALUES (${cols.map((c) => `@${c}`).join(", ")})`).run(params).lastInsertRowid);
+  db.prepare(`UPDATE effects SET ${cols.map((c) => `${c} = @${c}`).join(", ")} WHERE id = @id`).run({ ...params, id });
   return id;
 }
 
-/** Removes an effect (and takes it out of every condition that applies it). */
+/** Removes an effect, and takes it off the actions that grant it and the items and creatures that have it. */
 export function removeEffectDef(id: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM effects WHERE id = ?").run(id);
-    for (const c of listConditionDefs()) if (c.effects.includes(id)) saveConditionDef(c.id, { ...c, effects: c.effects.filter((x) => x !== id) });
+    for (const a of db.prepare<[], { id: number; conditions: string }>("SELECT id, conditions FROM actions WHERE conditions != '[]'").all()) {
+      const list = (JSON.parse(a.conditions) as { id: number; on: string }[]).filter((c) => c.id !== id);
+      db.prepare("UPDATE actions SET conditions = ? WHERE id = ?").run(JSON.stringify(list), a.id);
+    }
+    for (const table of ["items", "creatures"]) for (const r of db.prepare<[], { id: number; effects: string }>(`SELECT id, effects FROM ${table} WHERE effects != '[]'`).all()) {
+      db.prepare(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify((JSON.parse(r.effects) as number[]).filter((x) => x !== id)), r.id);
+    }
   })();
-}
-
-type ConditionRow = Omit<ConditionDef, "effects"> & { effects: string };
-export function listConditionDefs(): ConditionDef[] {
-  return db.prepare<[], ConditionRow>("SELECT * FROM conditions ORDER BY name").all().map((r) => ({ ...r, effects: JSON.parse(r.effects) }));
-}
-
-export function getConditionDef(id: number): ConditionDef | undefined {
-  return listConditionDefs().find((c) => c.id === id);
-}
-
-/** A catalog condition with its effects filled in, as it stands now (what gets put on a creature). */
-export function getCondition(id: number): Condition | undefined {
-  const c = getConditionDef(id);
-  if (!c) return undefined;
-  const effects = listEffectDefs();
-  return { ...c, effects: c.effects.flatMap((e) => effects.find((x) => x.id === e) ?? []) };
-}
-
-/** Inserts when id is null, otherwise updates; returns the id. */
-export function saveConditionDef(id: number | null, c: Omit<ConditionDef, "id">): number {
-  const params = { name: c.name, description: c.description, effects: JSON.stringify(c.effects), rounds: c.rounds, save_attr: c.save_attr, save_dc: c.save_dc, apply_save_attr: c.apply_save_attr ?? "", apply_save_dc: c.apply_save_dc ?? 12, apply_save_outcome: c.apply_save_outcome ?? "negates", save_when: c.save_when ?? "end", save_action: c.save_action ?? 0, saves_needed: c.saves_needed ?? 1, ends_on_damage: c.ends_on_damage ?? 0, ends_on_attack: c.ends_on_attack ?? 0, ends_on_trigger: c.ends_on_trigger ?? 0, concentration: c.concentration ?? 0, reapply: c.reapply ?? "refresh", stack_limit: c.stack_limit ?? 0 };
-  if (id === null) return Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, apply_save_attr, apply_save_dc, apply_save_outcome, save_when, save_action, saves_needed, ends_on_damage, ends_on_attack, ends_on_trigger, concentration, reapply, stack_limit) VALUES (@name, @description, @effects, @rounds, @save_attr, @save_dc, @apply_save_attr, @apply_save_dc, @apply_save_outcome, @save_when, @save_action, @saves_needed, @ends_on_damage, @ends_on_attack, @ends_on_trigger, @concentration, @reapply, @stack_limit)").run(params).lastInsertRowid);
-  db.prepare("UPDATE conditions SET name = @name, description = @description, effects = @effects, rounds = @rounds, save_attr = @save_attr, save_dc = @save_dc, apply_save_attr = @apply_save_attr, apply_save_dc = @apply_save_dc, apply_save_outcome = @apply_save_outcome, save_when = @save_when, save_action = @save_action, saves_needed = @saves_needed, ends_on_damage = @ends_on_damage, ends_on_attack = @ends_on_attack, ends_on_trigger = @ends_on_trigger, concentration = @concentration, reapply = @reapply, stack_limit = @stack_limit WHERE id = @id").run({ ...params, id });
-  return id;
-}
-
-export function removeConditionDef(id: number): void {
-  db.prepare<[number]>("DELETE FROM conditions WHERE id = ?").run(id);
 }
 
 /** An effect as the first version kept it (effect_defs: one row per condition, modifiers inline). */
@@ -2238,6 +2238,7 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
 
 // Once: the first version's effects (effect_defs) become conditions, each applying an effect of the same name (same
 // ids, so actions and effects already on creatures still point at them); actions' "effects" become "conditions".
+// (Then migrateConditions turns those into effects.)
 {
   const hasOld = db.prepare<[], { n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'effect_defs'").get()!.n > 0;
   if (hasOld) {
@@ -2254,16 +2255,16 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
   }
 }
 
-// Once per action: its own boosts and roll effects become a catalog condition (named after it) applying an effect of
-// the same name, on whoever it was for; health boosts become an instant heal. Its lists are then emptied, so this runs
-// only for actions saved before conditions existed.
+// Once per action: its own boosts and roll effects become a condition (named after it) applying an effect of the
+// same name, on whoever it was for; health boosts become an instant heal. Its lists are then emptied, so this runs
+// only for actions saved before conditions existed. (Then migrateConditions turns those into effects.)
 {
   type Row = { id: number; name: string; boosts: string; roll_grants: string; duration_amount: number; duration_unit: string; conditions: string };
   const per: Record<string, number> = { round: 1, turn: 1, minute: 10, hour: 600, day: 14400, "short rest": 600, "long rest": 4800 };
   const rows = db.prepare<[], Row>("SELECT id, name, boosts, roll_grants, duration_amount, duration_unit, conditions FROM actions WHERE boosts != '[]' OR roll_grants != '[]'").all();
   if (rows.length) db.transaction(() => {
     for (const r of rows) {
-      const boosts: Boost[] = JSON.parse(r.boosts), grants: RollGrant[] = JSON.parse(r.roll_grants), conditions: { id: number; on: "self" | "target" }[] = JSON.parse(r.conditions);
+      const boosts: Boost[] = JSON.parse(r.boosts), grants: RollGrant[] = JSON.parse(r.roll_grants), granted: { id: number; on: "self" | "target" }[] = JSON.parse(r.conditions);
       const sides = (["target", "self"] as const).filter((on) => boosts.some((b) => (b.on ?? "self") === on) || grants.some((g) => (g.on ?? "self") === on));
       for (const on of sides) {
         const modifiers: Modifier[] = [
@@ -2271,32 +2272,102 @@ const oldToCondition = (o: OldEffectDef): Condition => ({ id: o.id, name: o.name
           ...grants.filter((g) => (g.on ?? "self") === on).map((g): Modifier => ({ kind: "roll", roll: g.roll, mode: g.mode })),
         ];
         const name = sides.length > 1 && on === "self" ? `${r.name} (self)` : r.name;
-        const effect = saveEffectDef(null, { name, description: `From ${r.name}.`, modifiers });
         const rounds = Math.max(1, (per[r.duration_unit] ?? 1) * Math.max(1, r.duration_amount));
-        conditions.push({ id: saveConditionDef(null, { name, description: `From ${r.name}.`, effects: [effect], rounds, save_attr: "", save_dc: 12 }), on });
+        const effect = saveEffectDef(null, { name, description: `From ${r.name}.`, modifiers });
+        granted.push({ id: Number(db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc) VALUES (?, ?, ?, ?, '', 12)").run(name, `From ${r.name}.`, JSON.stringify([effect]), rounds).lastInsertRowid), on });
       }
-      db.prepare("UPDATE actions SET boosts = '[]', roll_grants = '[]', conditions = ? WHERE id = ?").run(JSON.stringify(conditions), r.id);
+      db.prepare("UPDATE actions SET boosts = '[]', roll_grants = '[]', conditions = ? WHERE id = ?").run(JSON.stringify(granted), r.id);
     }
   })();
 }
 
-// The built-in conditions and their effects, each seeded once (by key). A built-in that shares its name with a
-// condition the GM already made (their own Poisoned) is left out, so the catalog doesn't hold two of the same name.
-{
-  const effectId = new Map(db.prepare<[], { id: number; builtin: string }>("SELECT id, builtin FROM effects WHERE builtin != ''").all().map((r) => [r.builtin, r.id]));
-  const haveCondition = new Set(db.prepare<[], { builtin: string }>("SELECT builtin FROM conditions WHERE builtin != ''").all().map((r) => r.builtin));
-  const names = new Set(db.prepare<[], { name: string }>("SELECT name FROM conditions WHERE builtin = ''").all().map((r) => r.name.toLowerCase()));
+/**
+ * Turns the retired conditions into effects (once at start-up, and after importing an older campaign export). Each
+ * condition becomes an effect with its lifecycle: a custom condition with one effect of its own merges into that
+ * effect (which keeps its name: Mesmerize → Mesmerized); any other (several effects, shared ones, none) becomes a new
+ * effect named after it, with all their rules. Everything that pointed at a condition then points at its effect:
+ * actions, triggers and auras in effects' rules, effects on tokens now, aura passes. The building blocks the old
+ * built-ins were made of go, unless something has one or no built-in effect has its rules. Returns how many conditions it turned into effects.
+ */
+export function migrateConditions(): number {
+  type CondRow = Lifecycle & { id: number; name: string; description: string; effects: string; builtin: string };
+  const conds = db.prepare<[], CondRow>("SELECT * FROM conditions ORDER BY id").all();
+  if (!conds.length) return 0;
+  db.transaction(() => {
+    const pieceKeys = new Set(BUILTIN_PIECES.map((p) => p.key));
+    const effects = db.prepare<[], EffectRow>("SELECT * FROM effects").all().map(parseEffect);
+    const pieces = new Set(effects.filter((e) => e.builtin && pieceKeys.has(e.builtin)).map((e) => e.id));
+    db.prepare(`UPDATE effects SET builtin = '' WHERE builtin IN (${[...pieceKeys].map(() => "?").join(", ")})`).run(...pieceKeys); // their keys now name the merged built-ins
+    const lists = new Map(conds.map((c) => [c.id, (JSON.parse(c.effects) as number[]).filter((id) => effects.some((e) => e.id === id))]));
+    const usedBy = (effectId: number) => conds.filter((c) => lists.get(c.id)!.includes(effectId)).length;
+    const lifecycle = (c: CondRow) => Object.fromEntries(LIFECYCLE_COLUMNS.flatMap(([k]) => (k === "duration" ? [] : [[k, c[k] ?? DEFAULT_LIFECYCLE[k]]]))) as unknown as Lifecycle;
+    const map = new Map<number, number>(), merged = new Set<number>();
+    for (const c of conds) {
+      const list = lists.get(c.id)!, only = list.length === 1 ? effects.find((e) => e.id === list[0]) : undefined;
+      if (only && !pieces.has(only.id) && usedBy(only.id) === 1 && !merged.has(only.id)) {
+        saveEffectDef(only.id, { name: only.name, description: only.description || c.description, modifiers: only.modifiers, ...lifecycle(c), duration: "rounds", builtin: c.builtin });
+        merged.add(only.id);
+        map.set(c.id, only.id);
+      } else {
+        const modifiers = list.flatMap((id) => effects.find((e) => e.id === id)!.modifiers);
+        map.set(c.id, saveEffectDef(null, { name: c.name, description: c.description, modifiers, ...lifecycle(c), duration: "rounds", builtin: c.builtin }));
+      }
+    }
+    const to = (id: number) => map.get(id);
+    // Actions grant the effects.
+    for (const a of db.prepare<[], { id: number; conditions: string }>("SELECT id, conditions FROM actions WHERE conditions != '[]'").all()) {
+      const list = (JSON.parse(a.conditions) as { id: number; on: string }[]).flatMap((x) => (to(x.id) ? [{ ...x, id: to(x.id)! }] : []));
+      db.prepare("UPDATE actions SET conditions = ? WHERE id = ?").run(JSON.stringify(list), a.id);
+    }
+    // Rules that give an effect (a trigger's, an aura's) name the effect.
+    for (const e of db.prepare<[], { id: number; modifiers: string }>("SELECT id, modifiers FROM effects").all()) {
+      const mods = JSON.parse(e.modifiers) as Modifier[];
+      if (!mods.some((m) => (m.kind === "trigger" && m.condition) || m.kind === "aura")) continue;
+      const next = mods.map((m) => (m.kind === "trigger" && m.condition ? { ...m, condition: to(m.condition) ?? 0 } : m.kind === "aura" ? { ...m, condition: to(m.condition) ?? m.condition } : m));
+      db.prepare("UPDATE effects SET modifiers = ? WHERE id = ?").run(JSON.stringify(next), e.id);
+    }
+    // Effects on tokens now (their kept copies stay as they were; only what they're known by changes), and aura passes.
+    for (const t of db.prepare<[], { id: number; effect_id: number; effect: string }>("SELECT id, effect_id, effect FROM token_afflictions").all()) {
+      const id = to(t.effect_id);
+      if (id) db.prepare("UPDATE token_afflictions SET effect_id = ?, effect = ? WHERE id = ?").run(id, JSON.stringify({ ...JSON.parse(t.effect), id }), t.id);
+    }
+    for (const p of db.prepare<[], { level_id: number; token_id: number; condition_id: number }>("SELECT * FROM aura_passes").all()) {
+      db.prepare("DELETE FROM aura_passes WHERE level_id = ? AND token_id = ? AND condition_id = ?").run(p.level_id, p.token_id, p.condition_id);
+      const id = to(p.condition_id);
+      if (id) db.prepare("INSERT OR IGNORE INTO aura_passes (level_id, token_id, condition_id) VALUES (?, ?, ?)").run(p.level_id, p.token_id, id);
+    }
+    // What's left that only conditions used: effects merged into nothing are given a duration from what has them now.
+    const standing = (table: string) => new Set(db.prepare<[], { effects: string }>(`SELECT effects FROM ${table}`).all().flatMap((r) => JSON.parse(r.effects) as number[]));
+    const onItems = standing("items"), onCreatures = standing("creatures");
+    const givenByRules = new Set(db.prepare<[], { modifiers: string }>("SELECT modifiers FROM effects").all().flatMap((r) => (JSON.parse(r.modifiers) as Modifier[]).flatMap((m) => (m.kind === "trigger" || m.kind === "aura" ? [m.condition] : []))));
+    for (const e of effects) {
+      if (merged.has(e.id)) continue;
+      const covered = BUILTIN_CONDITIONS.some((c) => c.effects.includes(e.builtin ?? "")); // a built-in effect has its rules now (See invisible isn't in any)
+      if (pieces.has(e.id) && covered && !onItems.has(e.id) && !onCreatures.has(e.id) && !givenByRules.has(e.id)) { db.prepare("DELETE FROM effects WHERE id = ?").run(e.id); continue; }
+      const duration: Duration = onItems.has(e.id) ? "equipped" : onCreatures.has(e.id) ? "always" : "rounds";
+      db.prepare("UPDATE effects SET duration = ? WHERE id = ?").run(duration, e.id);
+    }
+    db.prepare("DELETE FROM conditions").run();
+  })();
+  return conds.length;
+}
+
+/** The built-in effects, each seeded once (by key); one sharing its name with an effect the GM made is left out. Their rules follow the code. */
+function seedBuiltinEffects(): void {
+  const have = new Set(db.prepare<[], { builtin: string }>("SELECT builtin FROM effects WHERE builtin != ''").all().map((r) => r.builtin));
+  const names = new Set(db.prepare<[], { name: string }>("SELECT name FROM effects WHERE builtin = ''").all().map((r) => r.name.toLowerCase()));
   db.transaction(() => {
     for (const e of BUILTIN_EFFECTS) {
-      if (!effectId.has(e.key)) effectId.set(e.key, Number(db.prepare("INSERT INTO effects (name, description, modifiers, builtin) VALUES (?, ?, ?, ?)").run(e.name, e.description, JSON.stringify(e.modifiers), e.key).lastInsertRowid));
-      else db.prepare("UPDATE effects SET modifiers = ? WHERE builtin = ?").run(JSON.stringify(e.modifiers), e.key); // the rules follow the code (names stay the GM's)
-    }
-    for (const c of BUILTIN_CONDITIONS) {
-      const effects = JSON.stringify(c.effects.map((k) => effectId.get(k)!));
-      if (haveCondition.has(c.key)) db.prepare("UPDATE conditions SET effects = ? WHERE builtin = ?").run(effects, c.key);
-      else if (!names.has(c.name.toLowerCase())) db.prepare("INSERT INTO conditions (name, description, effects, rounds, save_attr, save_dc, builtin) VALUES (?, ?, ?, 1, '', 12, ?)").run(c.name, c.description, effects, c.key);
+      if (have.has(e.key)) db.prepare("UPDATE effects SET modifiers = ? WHERE builtin = ?").run(JSON.stringify(e.modifiers), e.key); // names, rounds and saves stay the GM's
+      else if (!names.has(e.name.toLowerCase())) saveEffectDef(null, { name: e.name, description: e.description, modifiers: e.modifiers, builtin: e.key });
     }
   })();
+}
+
+/** Conditions to effects, then the built-ins: at start-up, and after a campaign import. */
+export function settleEffects(): void {
+  migrateConditions();
+  seedBuiltinEffects();
 }
 
 // Strain: points on a creature's attributes (each −1 to it, never below half), left by conditions; they outlast them
@@ -2918,3 +2989,6 @@ export function takeCarried(characterId: number, itemId: number): number | null 
 export function setTokenAllegiance(tokenId: number, allegiance: string | null): void {
   db.prepare("UPDATE map_tokens SET allegiance = ? WHERE id = ?").run(allegiance, tokenId);
 }
+
+// Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
+settleEffects();

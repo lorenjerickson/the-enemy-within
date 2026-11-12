@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import EffectForm from "../EffectForm";
-import { listConditionDefs } from "@/lib/db";
+import { listEffectDefs } from "@/lib/db";
 
 export default async function NewEffect() {
   await connection();
@@ -9,7 +9,7 @@ export default async function NewEffect() {
   return (
     <section className="space-y-3">
       <h2 className="text-xl font-semibold">New effect</h2>
-      <EffectForm conditions={listConditionDefs()} />
+      <EffectForm effects={listEffectDefs()} />
     </section>
   );
 }

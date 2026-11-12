@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Unzip, UnzipInflate, zipSync, strToU8 } from "fflate";
-import { db } from "@/lib/db";
+import { db, settleEffects } from "@/lib/db";
 import { IMAGE_DIR } from "@/lib/images";
 
 export const ARCHIVE_FORMAT = "the-enemy-within/campaign/1";
@@ -74,7 +74,9 @@ export async function importCampaignFile(zipPath: string): Promise<{ tables: num
   if (failed) throw failed;
   if (!jsonParts.length) throw new Error("Not a campaign export: campaign.json is missing");
   const json = JSON.parse(Buffer.concat(jsonParts).toString("utf8")) as CampaignJson;
-  return { ...replaceTables(json), files };
+  const counts = replaceTables(json);
+  settleEffects(); // an older export's conditions become effects
+  return { ...counts, files };
 }
 
 /** Empties every campaign table and refills it from an export (and logs everyone out). */

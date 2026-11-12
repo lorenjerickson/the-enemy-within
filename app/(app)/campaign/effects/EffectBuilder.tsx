@@ -37,7 +37,7 @@ export default function EffectBuilder({ initial, conditions = [], grammar = "eff
   const saved = view === "text" ? fromText(text) : rules.filter((r) => Object.keys(r).length);
   return (
     <fieldset className="space-y-2 rounded-box border border-base-300 p-2" data-effect-builder>
-      <legend className="px-1 text-sm font-semibold">{grammar === "condition" ? "How it works" : "Rules"}</legend>
+      <legend className="px-1 text-sm font-semibold">{grammar === "condition" ? "How long it lasts" : "Rules"}</legend>
       <input type="hidden" name={grammar === "condition" ? "lifecycle" : "rules"} value={JSON.stringify(saved)} />
       <div className="join" data-view-toggle>
         {(["sentences", "text"] as const).map((v) => (

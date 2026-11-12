@@ -4,13 +4,13 @@
  * creature that applied the condition is "the source" ("When the source hits you, add 1d6 necrotic damage."; "You
  * can't attack the source."). A rule with no
  * "When …" / "At the start of …" opening holds while the condition lasts ("You can't take reactions."); one with an
- * opening happens then. How long anything lasts is the condition's, never a rule's. One tree drives the editor,
+ * opening happens then. How long anything lasts is the effect's lifecycle, never a rule's. One tree drives the editor,
  * validation, the text and the modifiers the engine reads; what the engine can't do yet is noted, not dropped.
  * Audit against the current effect form: docs/effect-grammar-audit.md.
  */
 import { DAMAGE_TYPES, type RollKind } from "@/lib/actions";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
-import type { ConditionDef, Modifier } from "@/lib/conditions";
+import type { Duration, Lifecycle, Modifier } from "@/lib/conditions";
 import { MODIFIER_TARGET_GROUPS, SKILLS, type ModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula } from "@/lib/itemTypes";
 
@@ -33,7 +33,7 @@ const word = (text: string): Slot => ({ kind: "word", text });
 const num = (id: string, label: string, min = 0, max = 99): Slot => ({ kind: "number", id, label, min, max });
 const dice: Slot = { kind: "dice", id: "dice", label: "dice expression" };
 const amountSlot: Slot = { kind: "amount", id: "amount", label: "amount" };
-const condition: Slot[] = [{ kind: "condition", id: "condition", label: "condition" }, word("condition")];
+const condition: Slot[] = [{ kind: "condition", id: "condition", label: "effect" }, word("effect")]; // another catalog effect, by name
 const keep: Slot = { kind: "choice", id: "keep", label: "which", options: [{ value: "disadvantage", text: "lower" }, { value: "advantage", text: "higher" }] };
 
 /** "(DC [12] [Agility] save for [half])": a save against the damage. */
@@ -467,7 +467,7 @@ export function readRule(text: string, conditions: string[] = [], root: Slot[] =
     if (s.kind === "word") return [{ text: s.text }];
     if (s.kind === "optional") return [{ text: s.slots[0]?.kind === "word" ? `${s.lead} ${s.slots[0].text}` : s.lead }, ...(after.length ? offers(after[0], after.slice(1)) : [{ text: "." }])]; // "up to", "or by using your action"
     if (s.kind === "choice") return s.options.filter((o) => o.text).map((o) => ({ text: o.text }));
-    if (s.kind === "condition") return conditions.map((c) => ({ text: `${c} condition` }));
+    if (s.kind === "condition") return conditions.map((c) => ({ text: `${c} effect` }));
     if (s.kind === "amount") return [{ text: "1d6", hint: true }, { text: "your" }, { text: "its" }];
     if (s.kind === "dice") return [{ text: "2d6", hint: true }];
     return [{ text: s.label, hint: true }];
@@ -491,8 +491,8 @@ export function readRule(text: string, conditions: string[] = [], root: Slot[] =
         return e;
       }
       if (s.kind === "condition") {
-        const name = [...conditions].sort((a, b) => b.length - a.length).find((c) => lower(rest).startsWith(lower(`${c} condition`)));
-        if (!name) return { next: offers(s, after), error: "not a condition in the catalog" };
+        const name = [...conditions].sort((a, b) => b.length - a.length).find((c) => lower(rest).startsWith(lower(`${c} effect`)));
+        if (!name) return { next: offers(s, after), error: "not an effect in the catalog" };
         rest = rest.slice(name.length).trimStart();
         filled[s.id] = name;
         continue;
@@ -528,7 +528,11 @@ export function readRule(text: string, conditions: string[] = [], root: Slot[] =
 /** A lifecycle sentence ("you" = whoever has the condition; "the source" = whoever applied it). */
 export const CONDITION_SENTENCE: Slot[] = [{
   kind: "choice", id: "rule", label: "select", options: [
-    { value: "lasts", text: "It lasts", next: [num("rounds", "rounds", 1, 600), word("rounds")] },
+    { value: "lasts", text: "It lasts", next: [{ kind: "choice", id: "for", label: "how long", options: [
+      { value: "equipped", text: "while equipped" }, // only for what an item gives
+      { value: "always", text: "always" }, // a creature's own
+      { value: "rounds", text: "", next: [num("rounds", "rounds", 1, 600), word("rounds")] },
+    ] }] },
     { value: "apply_save", text: "When it's applied, a DC", next: [num("dc", "DC", 1, 40), attrs("attr"), word("save"), { kind: "choice", id: "outcome_save", label: "what a success does", options: [{ value: "negates", text: "avoids it" }, { value: "halves", text: "halves how long it lasts" }] }] },
     { value: "end_save", text: "You can end it with a DC", next: [
       num("dc", "DC", 1, 40), attrs("attr"), word("save"),
@@ -545,17 +549,17 @@ export const CONDITION_SENTENCE: Slot[] = [{
   ],
 }];
 
-type Lifecycle = Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "ends_on_trigger" | "concentration" | "reapply" | "stack_limit">;
 
 /** A condition's lifecycle from its sentences; a problem if one's missing or said twice. */
-export function compileLifecycle(rules: Filled[]): { lifecycle?: Lifecycle; problem?: string } {
+export function compileLifecycle(rules: Filled[]): { lifecycle?: Required<Lifecycle> & { duration: Duration }; problem?: string } {
   const count = (v: string) => rules.filter((r) => r.rule === v).length;
   if (count("lasts") !== 1) return { problem: count("lasts") ? `say how long it lasts once, not ${count("lasts")} times` : "say how long it lasts (It lasts … rounds)" };
   for (const v of ["apply_save", "end_save", "again"]) if (count(v) > 1) return { problem: `"${CONDITION_SENTENCE[0].kind === "choice" ? CONDITION_SENTENCE[0].options.find((o) => o.value === v)!.text : v}…" is said twice` };
   const one = (v: string) => rules.find((r) => r.rule === v), ends = new Set(rules.filter((r) => r.rule === "ends").map((r) => r.ends));
   const lasts = one("lasts")!, apply = one("apply_save"), end = one("end_save"), again = one("again");
   return { lifecycle: {
-    rounds: Number(lasts.rounds),
+    duration: lasts.for === "equipped" || lasts.for === "always" ? lasts.for : "rounds",
+    rounds: lasts.for === "equipped" || lasts.for === "always" ? 1 : Number(lasts.rounds),
     apply_save_attr: apply ? (apply.attr as Attribute) : "", apply_save_dc: apply ? Number(apply.dc) : 12, apply_save_outcome: apply?.outcome_save === "halves" ? "halves" : "negates",
     save_attr: end ? (end.attr as Attribute) : "", save_dc: end ? Number(end.dc) : 12, save_when: (end?.when as "end" | "start" | "damaged") ?? "end",
     save_action: end?.action !== undefined ? 1 : 0, saves_needed: end?.needed !== undefined ? Number(end.saves) : 1,
@@ -565,8 +569,8 @@ export function compileLifecycle(rules: Filled[]): { lifecycle?: Lifecycle; prob
 }
 
 /** A condition's lifecycle as sentences (what the builder loads). */
-export function lifecycleSentences(c: Partial<Lifecycle>): Filled[] {
-  const out: Filled[] = [{ rule: "lasts", rounds: c.rounds ?? 1 }];
+export function lifecycleSentences(c: Partial<Lifecycle & { duration: Duration }>): Filled[] {
+  const out: Filled[] = [c.duration === "equipped" || c.duration === "always" ? { rule: "lasts", for: c.duration } : { rule: "lasts", for: "rounds", rounds: c.rounds ?? 1 }];
   if (c.apply_save_attr) out.push({ rule: "apply_save", dc: c.apply_save_dc ?? 12, attr: c.apply_save_attr, outcome_save: c.apply_save_outcome ?? "negates" });
   if (c.save_attr) out.push({ rule: "end_save", dc: c.save_dc ?? 12, attr: c.save_attr, when: c.save_when ?? "end", ...(c.save_action ? { action: 1 } : {}), ...((c.saves_needed ?? 1) > 1 ? { needed: 1, saves: c.saves_needed! } : {}) });
   for (const [flag, v] of [[c.ends_on_damage, "damage"], [c.ends_on_attack, "attack"], [c.ends_on_trigger, "trigger"], [c.concentration, "concentration"]] as const) if (flag) out.push({ rule: "ends", ends: v });

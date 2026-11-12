@@ -1,13 +1,14 @@
 /**
- * The built-in conditions (5e's, with this setting's names for Charmed and Petrified) and the effects they're made
- * of. Seeded into the catalog once each (by key); the GM can rename them and change their descriptions, rounds and
- * saves, but their effects' rules stay as they are.
+ * The built-in effects (5e's conditions, with this setting's names for Charmed and Petrified), each made of building
+ * blocks below. Seeded into the catalog once each (by key); the GM can rename them and change their descriptions,
+ * rounds and saves, but their rules follow the code.
  */
 import type { Modifier } from "@/lib/conditions";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { ATTRIBUTES } from "@/lib/attributes";
 
-export const BUILTIN_EFFECTS: { key: string; name: string; description: string; modifiers: Modifier[] }[] = [
+/** Building blocks the built-ins share (before 2026-11-13 they were catalog effects of their own, with these keys). */
+export const BUILTIN_PIECES: { key: string; name: string; description: string; modifiers: Modifier[] }[] = [
   { key: "incapacitated", name: "Incapacitated", description: "Can't take actions, bonus actions or reactions.", modifiers: [{ kind: "forbid", what: "actions" }, { kind: "forbid", what: "bonus" }, { kind: "forbid", what: "reactions" }] },
   { key: "immobile", name: "Can't move", description: "Their speed is 0.", modifiers: [{ kind: "forbid", what: "movement" }] },
   { key: "exposed", name: "Exposed", description: "Attacks against them have advantage.", modifiers: [{ kind: "roll", roll: "attacked", mode: "advantage" }] },
@@ -24,6 +25,7 @@ export const BUILTIN_EFFECTS: { key: string; name: string; description: string; 
   { key: "rigid", name: "Rigid", description: "Resistant to all damage.", modifiers: DAMAGE_TYPES.map((t): Modifier => ({ kind: "resist", damage_type: t, level: "resistant" })) },
 ];
 
+/** The built-ins as the pieces they're made of. */
 export const BUILTIN_CONDITIONS: { key: string; name: string; description: string; effects: string[] }[] = [
   { key: "incapacitated", name: "Incapacitated", description: "Can't act or react.", effects: ["incapacitated"] },
   { key: "prone", name: "Prone", description: "On the ground: half speed; their attacks have disadvantage, attacks against them advantage.", effects: ["crawling", "hampered", "exposed"] },
@@ -40,3 +42,8 @@ export const BUILTIN_CONDITIONS: { key: string; name: string; description: strin
   { key: "hypnotized", name: "Hypnotized", description: "Entranced (5e Charmed): can't attack whoever hypnotized them.", effects: ["spellbound"] },
   { key: "catatonic", name: "Catatonic", description: "Locked rigid (5e Petrified, minus the stone): can't act, react or move; fails Might and Agility saves; easy to hit; resists all damage.", effects: ["incapacitated", "immobile", "limp", "exposed", "rigid"] },
 ];
+
+/** The built-in effects, each with every rule of its pieces. */
+export const BUILTIN_EFFECTS: { key: string; name: string; description: string; modifiers: Modifier[] }[] = BUILTIN_CONDITIONS.map((c) => ({
+  key: c.key, name: c.name, description: c.description, modifiers: c.effects.flatMap((k) => BUILTIN_PIECES.find((p) => p.key === k)?.modifiers ?? []),
+}));

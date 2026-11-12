@@ -5,8 +5,8 @@ import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
   getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea } from "@/lib/db";
-import { getPendingRound, listConditionDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
-import { describeCondition } from "@/lib/conditions";
+import { getPendingRound, listEffectDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
+import { asCondition, describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
 import { applyConditionNow, rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -197,13 +197,13 @@ export async function gmSetAllegiance(tokenId: number, allegiance: string) {
   revalidatePath("/play");
 }
 
-/** The conditions catalog, for putting one on a token by hand. */
+/** The catalog effects that last a number of rounds, for putting one on a token by hand. */
 export async function gmConditionCatalog(): Promise<{ id: number; name: string; text: string }[]> {
   await requireGm();
-  return listConditionDefs().flatMap((d) => { const c = getCondition(d.id); return c ? [{ id: c.id, name: c.name, text: describeCondition(c) }] : []; });
+  return listEffectDefs().filter((e) => e.duration === "rounds").map((e) => ({ id: e.id, name: e.name, text: describeCondition(asCondition(e)) }));
 }
 
-/** The GM puts a catalog condition on a token (again: its rounds start over). */
+/** The GM puts a catalog effect on a token (again: by its rule for being put on again). */
 export async function gmApplyCondition(tokenId: number, conditionId: number) {
   await requireGm();
   const t = listTokensById(Number(tokenId)), c = getCondition(Number(conditionId));

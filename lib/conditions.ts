@@ -1,9 +1,10 @@
 /**
- * Conditions, Effects and Modifiers (see the backlog doc's conceptual model):
+ * Effects and modifiers:
  * - a Modifier is one change while it's active (+2 defense, disadvantage on attacks, 1d2 poison damage a round);
- * - an Effect is a named, reusable set of modifiers (Incapacitated, Entranced) with no lifecycle of its own;
- * - a Condition is what's put on a creature (Poisoned, Mesmerized): the effects it applies, plus its lifecycle (how
- *   long it lasts, the save that ends it). Actions apply conditions; the engine only ever reads modifiers.
+ * - an Effect is what the GM makes: a name, its rules (modifiers) and how long it lasts (rounds, with its saves and
+ *   what ends it; while equipped; always). Actions, the GM, items, creatures and professions grant effects.
+ * - a Condition is the engine's word for an effect as it was put on a creature (a kept copy, with rounds left); the
+ *   engine only ever reads modifiers.
  */
 import type { Boost, DamageType, RollGrant, RollKind } from "@/lib/actions";
 import { DAMAGE_TYPES, rollKindLabel } from "@/lib/actions";
@@ -143,21 +144,24 @@ export function resistsOf(mods: Modifier[], into: Record<string, Resist[]> = {})
   return into;
 }
 
-/** A named set of modifiers, reusable across conditions. */
+/** An effect's rules: a name and the modifiers it applies (what the engine reads). */
 export interface EffectDef {
   id: number;
   name: string;
   description: string;
   modifiers: Modifier[];
-  builtin?: string; // a built-in effect's key: its modifiers are fixed
+  builtin?: string; // a built-in effect's key: its rules are fixed
 }
 
-/** What's put on a creature: the effects it applies, how long it lasts, and the save that ends it. */
-export interface ConditionDef {
-  id: number;
-  name: string;
-  description: string;
-  effects: number[]; // effect ids
+/**
+ * How long an effect lasts: so many rounds (put on by an action or the GM, with its saves and what ends it), while the
+ * item that gives it is equipped, or always (a creature's own: fire resistance, darkvision).
+ */
+export type Duration = "rounds" | "equipped" | "always";
+export const DURATIONS: [Duration, string][] = [["rounds", "for a number of rounds"], ["equipped", "while equipped"], ["always", "always"]];
+
+/** An effect's lifecycle once it's put on someone: how long it lasts in rounds, the saves against it, what ends it. */
+export interface Lifecycle {
   rounds: number; // 6 s each; out of an encounter, every 6 s of game time is a round
   save_attr: Attribute | ""; // rolled at the end of each round; success ends it ('' = none)
   save_dc: number;
@@ -169,15 +173,33 @@ export interface ConditionDef {
   saves_needed?: number; // successful saves it takes to end it (default 1)
   ends_on_damage?: number; // 1: ends when they take damage (a deep sleep)
   ends_on_attack?: number; // 1: ends when they attack (invisibility)
-  ends_on_trigger?: number; // 1: ends once one of its effects' triggers fires (a one-off burst)
+  ends_on_trigger?: number; // 1: ends once one of its triggers fires (a one-off burst)
   concentration?: number; // 1: whoever put it on must keep concentrating (one at a time; hurt: a Fortitude save; down: it ends)
   reapply?: "refresh" | "stack" | "ignore"; // put on again while it's on: its rounds start over (default), another runs alongside, or nothing happens
   stack_limit?: number; // stacking: at most this many at once (0 = no limit); past it, the one with the fewest rounds left starts over
-  builtin?: string; // a built-in condition's key: the effects it applies are fixed
+}
+export const DEFAULT_LIFECYCLE: Required<Lifecycle> = {
+  rounds: 1, save_attr: "", save_dc: 12, apply_save_attr: "", apply_save_dc: 12, apply_save_outcome: "negates", save_when: "end", save_action: 0,
+  saves_needed: 1, ends_on_damage: 0, ends_on_attack: 0, ends_on_trigger: 0, concentration: 0, reapply: "refresh", stack_limit: 0,
+};
+
+/** A catalog effect: its rules, how long it lasts, and (in rounds) its lifecycle. */
+export interface Effect extends EffectDef, Lifecycle {
+  duration: Duration;
 }
 
-/** A condition with its effects filled in, as it was when it was put on someone (later catalog edits don't reach it). */
-export type Condition = Omit<ConditionDef, "effects"> & { effects: EffectDef[] };
+/**
+ * An effect as it's put on a creature (the engine's view): its lifecycle and its rules, kept as they were when it was
+ * put on (later catalog edits don't reach it). `effects` holds the rules (one entry for a catalog effect).
+ */
+export type Condition = Lifecycle & { id: number; name: string; description: string; builtin?: string; effects: EffectDef[] };
+
+/** A catalog effect as it's put on someone. */
+export const asCondition = (e: Effect): Condition => ({
+  ...Object.fromEntries(Object.keys(DEFAULT_LIFECYCLE).map((k) => [k, e[k as keyof Lifecycle] ?? DEFAULT_LIFECYCLE[k as keyof Lifecycle]])) as unknown as Required<Lifecycle>,
+  id: e.id, name: e.name, description: e.description, ...(e.builtin ? { builtin: e.builtin } : {}),
+  effects: [{ id: e.id, name: e.name, description: e.description, modifiers: e.modifiers }],
+});
 
 /** A condition on a creature: how many rounds it has left, and who put it there. */
 export interface Affliction {
@@ -277,7 +299,7 @@ export function describeEffect(e: Pick<EffectDef, "modifiers">): string {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** "Fortitude DC 12 when applied negates · 6 rounds · Fortitude DC 12 ends it". */
-export const describeLifecycle = (c: Pick<ConditionDef, "rounds" | "save_attr" | "save_dc" | "apply_save_attr" | "apply_save_dc" | "apply_save_outcome" | "save_when" | "save_action" | "saves_needed" | "ends_on_damage" | "ends_on_attack" | "ends_on_trigger" | "concentration" | "reapply" | "stack_limit">, withRounds = true) =>
+export const describeLifecycle = (c: Lifecycle, withRounds = true) =>
   [
     c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
     withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,

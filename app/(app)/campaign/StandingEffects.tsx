@@ -4,11 +4,12 @@ import { getStandingEffects, listEffectDefs } from "@/lib/db";
 import { saveStandingEffects } from "./standingActions";
 
 /**
- * The catalog effects an item gives whoever has it equipped, or a creature always has (fire resistance, immune to
- * poison, +1 defense): no rounds, no save; they last as long as the item is worn or the creature exists.
+ * The catalog effects an item gives whoever has it equipped (effects that last "while equipped"), or a creature always
+ * has (effects that last "always"): fire resistance, immune to poison, +1 defense. No rounds, no saves.
  */
 export default function StandingEffects({ owner }: { owner: { item_id: number } | { creature_id: number } }) {
-  const effects = listEffectDefs(), on = getStandingEffects(owner);
+  const on = getStandingEffects(owner), lasting = "item_id" in owner ? "equipped" : "always";
+  const effects = listEffectDefs().filter((e) => e.duration === lasting || on.includes(e.id)); // (and any it already has)
   return (
     <div className="space-y-2" data-standing-effects>
       <h3 className="font-semibold">{"item_id" in owner ? "Effects while equipped" : "Always has these effects"}</h3>
@@ -21,7 +22,7 @@ export default function StandingEffects({ owner }: { owner: { item_id: number } 
             </label>
           ))
         ) : (
-          <p className="text-sm opacity-60">No effects in the catalog yet.</p>
+          <p className="text-sm opacity-60">No effects that last {"item_id" in owner ? "while equipped" : "always"} yet.</p>
         )}
         <div className="flex items-center gap-3">
           {effects.length > 0 && <button className="btn btn-primary btn-xs">Save effects</button>}

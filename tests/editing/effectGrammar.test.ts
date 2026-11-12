@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   CONDITION_SENTENCE, EFFECT_SENTENCE, MADE_CONDITION, checkRule, compile, compileLifecycle, effectSentences, effectText, idsUnder, lifecycleSentences, readRule, render, sentencesOf,
 } from "@/lib/effectGrammar";
-import { BUILTIN_EFFECTS } from "@/lib/builtinConditions";
+import { BUILTIN_EFFECTS, BUILTIN_PIECES } from "@/lib/builtinConditions";
 import type { Modifier, Trigger } from "@/lib/conditions";
 
 // The catalog the sentences name conditions from.
@@ -113,9 +113,9 @@ test("every built-in effect reads and compiles back to the same rules", () => {
 });
 
 test("groups are said once: resistance to every type, disadvantage on every check", () => {
-  const rigid = BUILTIN_EFFECTS.find((e) => e.key === "rigid")!;
+  const rigid = BUILTIN_PIECES.find((e) => e.key === "rigid")!;
   assert.deepEqual(effectSentences(rigid.modifiers), ["You are resistant to all damage."]);
-  const fear = BUILTIN_EFFECTS.find((e) => e.key === "fear")!;
+  const fear = BUILTIN_PIECES.find((e) => e.key === "fear")!;
   assert.equal(effectSentences(fear.modifiers).length, 2);
   assert.equal(effectText({ modifiers: [{ kind: "forbid", what: "actions" }, { kind: "forbid", what: "movement" }] }), "You can't take actions. You can't move.");
 });
@@ -135,7 +135,7 @@ test("readRule: wrong words are an error, extra words too", () => {
   assert.ok(bad.error);
   const extra = readRule("You can't move. Ever.", names);
   assert.match(extra.error ?? "", /extra words/);
-  assert.match(readRule("When you hit a creature, it gains the Nonexistent condition.", names).error ?? "", /not a condition|choices/);
+  assert.match(readRule("When you hit a creature, it gains the Nonexistent effect.", names).error ?? "", /not an effect|choices/);
 });
 
 test("readRule ignores case and punctuation", () => {
@@ -179,7 +179,7 @@ test("idsUnder lists every blank under a choice (cleared when it changes)", () =
 });
 
 test("lifecycles: sentences and back", () => {
-  const lc = { rounds: 6, save_attr: "fortitude" as const, save_dc: 13, save_when: "start" as const, save_action: 1, saves_needed: 2, apply_save_attr: "wisdom" as const, apply_save_dc: 14, apply_save_outcome: "halves" as const, ends_on_damage: 1, ends_on_attack: 0, ends_on_trigger: 0, concentration: 1, reapply: "stack" as const, stack_limit: 3 };
+  const lc = { duration: "rounds" as const, rounds: 6, save_attr: "fortitude" as const, save_dc: 13, save_when: "start" as const, save_action: 1, saves_needed: 2, apply_save_attr: "wisdom" as const, apply_save_dc: 14, apply_save_outcome: "halves" as const, ends_on_damage: 1, ends_on_attack: 0, ends_on_trigger: 0, concentration: 1, reapply: "stack" as const, stack_limit: 3 };
   const sentences = lifecycleSentences(lc);
   const texts = sentences.map((f) => render(f, CONDITION_SENTENCE));
   assert.ok(texts.includes("It lasts 6 rounds."));
@@ -193,9 +193,9 @@ test("lifecycles: sentences and back", () => {
 
 test("lifecycles: rounds said once, other rules at most once", () => {
   assert.match(compileLifecycle([]).problem!, /how long it lasts/);
-  assert.match(compileLifecycle([{ rule: "lasts", rounds: 1 }, { rule: "lasts", rounds: 2 }]).problem!, /once, not 2 times/);
-  assert.match(compileLifecycle([{ rule: "lasts", rounds: 1 }, { rule: "again", again: "ignore" }, { rule: "again", again: "stack" }]).problem!, /said twice/);
-  assert.equal(render({ rule: "lasts", rounds: 1 }, CONDITION_SENTENCE), "It lasts 1 round.");
+  assert.match(compileLifecycle([{ rule: "lasts", for: "rounds", rounds: 1 }, { rule: "lasts", for: "rounds", rounds: 2 }]).problem!, /once, not 2 times/);
+  assert.match(compileLifecycle([{ rule: "lasts", for: "rounds", rounds: 1 }, { rule: "again", again: "ignore" }, { rule: "again", again: "stack" }]).problem!, /said twice/);
+  assert.equal(render({ rule: "lasts", for: "rounds", rounds: 1 }, CONDITION_SENTENCE), "It lasts 1 round.");
   const one = readRule("It lasts 1 round.", [], CONDITION_SENTENCE);
   assert.ok(one.complete, "singular reads too");
 });
@@ -203,4 +203,21 @@ test("lifecycles: rounds said once, other rules at most once", () => {
 test("sentencesOf gives one sentence per rule (or group)", () => {
   assert.equal(sentencesOf([]).length, 0);
   assert.equal(sentencesOf([{ kind: "autofail", save: "might" }, { kind: "autofail", save: "agility" }]).length, 2);
+});
+
+test("lifecycles: while equipped and always read, render and compile", () => {
+  for (const duration of ["equipped", "always"] as const) {
+    const [lasts] = lifecycleSentences({ duration });
+    const text = render(lasts, CONDITION_SENTENCE);
+    assert.equal(text, duration === "equipped" ? "It lasts while equipped." : "It lasts always.");
+    const r = readRule(text, [], CONDITION_SENTENCE);
+    assert.ok(r.complete, r.error);
+    assert.equal(compileLifecycle([r.filled]).lifecycle?.duration, duration);
+  }
+  assert.equal(compileLifecycle([readRule("It lasts 3 rounds.", [], CONDITION_SENTENCE).filled]).lifecycle?.duration, "rounds");
+});
+
+test("rules name other effects: 'it gains the Burning effect'", () => {
+  const texts = effectSentences([trig({ on: "hitting", condition: 5, condition_on: "other" })], nameOf);
+  assert.deepEqual(texts, ["When you hit a creature, it gains the Burning effect."]);
 });
