@@ -18,6 +18,7 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
+import { trapsOnStep, trapsWhereStopped } from "./traps";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -174,7 +175,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
  * by the shortest route, without spending movement. It walks step by step and stops early where a map event
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
-export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string }> {
+export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string; trap?: string }> {
   const user = await requireUser();
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
@@ -217,17 +218,23 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
 
   const walked: Point[] = [route[0]];
   let stopped = false;
+  const told: string[] = []; // traps they set off (theirs to know)
   for (const step of route.slice(1)) {
+    const from = walked[walked.length - 1];
     moveToken(me.token_id, step.x, step.y); // also remembers what they saw from here
     walked.push(step);
+    const sprung = trapsOnStep(me.level_id, me.token_id, from, step);
+    told.push(...sprung.map((t) => t.player));
+    if (sprung.some((t) => t.stops)) { stopped = true; break; }
     if (fireTriggers().length) {
       stopped = true; // the player isn't told which trigger (that's the GM's script)
       break;
     }
   }
+  if (!stopped && walked.length > 1) told.push(...trapsWhereStopped(me.level_id, me.token_id, walked[walked.length - 1]).map((t) => t.player)); // ending a move in one
   syncAurasOn(me.level_id); // walked into (or out of) an aura
   revalidatePath("/play");
-  return { route: walked, stopped };
+  return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}) };
 }
 
 /** The player's character's planner in a running encounter. */

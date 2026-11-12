@@ -1073,7 +1073,8 @@ export default function MapView({
       const end = r.route[r.route.length - 1];
       setWalking({ id: t.id, route: r.route, started: performance.now() });
       changeTokens({ move: { id: t.id, col: end.x, row: end.y } });
-      if (r.stopped) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
+      if (r.trap) setControlResult({ label: "Trap", ok: false, text: r.trap });
+      else if (r.stopped) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
     });
   }
   /** A click inside the movement overlay walks the player's character there. */
