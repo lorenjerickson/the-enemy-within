@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
-import { MAP_LAYERS, STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
+import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
 import TilesEditor from "./TilesEditor";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
@@ -28,12 +28,13 @@ import { FEET_PER_SQUARE, crosses, pointToSegment, reachAreas, reachableSquares,
 import type { Contest, Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
 import TrapsEditor from "./TrapsEditor";
-import { drawTrap, trapFromDrag, type TrapShape } from "./trapDraw";
+import { trapFromDrag, type TrapShape } from "./trapDraw";
 import type { Trap } from "@/lib/traps";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";
 import ControlsEditor from "./ControlsEditor";
-import GameIcon from "./GameIcon";
+import ControlButtons from "./ControlButtons";
+import { drawEditorAids, drawPings } from "./mapOverlays";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
@@ -1221,36 +1222,6 @@ export default function MapView({
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
       }
-      // Pings: expanding rings with who pinged, on top of everything (even fog).
-      const drawPings = () => {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        for (const p of pings) {
-          const t = (Date.now() - p.at) / PING_MS;
-          if (t >= 1) continue;
-          const px = x0 + p.x * size, py = y0 + p.y * size;
-          const colour = p.gm ? "250,204,21" : "96,165,250";
-          ctx.save();
-          for (const lag of [0, 0.25]) {
-            const u = ((t * 3 + lag) % 1);
-            ctx.strokeStyle = `rgba(${colour},${(1 - u) * (1 - t * 0.5)})`;
-            ctx.lineWidth = 3 / k;
-            ctx.beginPath();
-            ctx.arc(px, py, (6 + u * 34) / k, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-          ctx.fillStyle = `rgb(${colour})`;
-          ctx.beginPath();
-          ctx.arc(px, py, 4 / k, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.font = `bold ${12 / k}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.lineWidth = 3 / k;
-          ctx.strokeStyle = "rgba(0,0,0,0.7)";
-          ctx.strokeText(p.name, px, py - 14 / k);
-          ctx.fillText(p.name, px, py - 14 / k);
-          ctx.restore();
-        }
-      };
       // Fog of war: black where never seen, dimmed where seen before, clear where in sight now.
       if (fogged) {
         fogCanvas.current ??= { fog: document.createElement("canvas"), mask: document.createElement("canvas") };
@@ -1752,156 +1723,20 @@ export default function MapView({
         ctx.fillText(label, tx, ty - 4 / k);
         ctx.restore();
       }
-      drawPings();
-      // Highlight the tile picked in the editor.
-      const highlighted = drawnTiles.find((t) => t.id === selectedTileId);
-      if (highlighted && selected === "tiles") {
-        const r = cellToRect(state, SCENE.w, SCENE.h, highlighted);
-        ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.strokeRect(r.x, r.y, r.w, r.h);
-        ctx.restore();
-      }
-      // Highlight the note picked in the editor.
-      const note = drawnNotes.find((n) => n.id === selectedNoteId);
-      if (note && selected === "notes") {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        const { width: nw, height: nh } = noteLayout(ctx, note, size);
-        ctx.strokeRect(x0 + note.x * size - 4, y0 + note.y * size - 4, nw + 8, nh + 8);
-        ctx.restore();
-      }
-      // Highlight the light picked in the editor.
-      const lt = optimisticLights.find((l) => l.id === selectedLightId);
-      if (lt && selected === "lighting") {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.beginPath();
-        ctx.arc(x0 + lt.x * size, y0 + lt.y * size, size * 0.45, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      // Highlight the positional sound picked in the editor.
-      const ps = drawnPositional.find((p) => p.id === selectedPositionalId);
-      if (ps && selected === "sounds") {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.beginPath();
-        ctx.arc(x0 + ps.x * size, y0 + ps.y * size, ps.radius * size, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      // Highlight the token picked in the editor.
-      const token = drawnTokens.find((t) => t.id === selectedTokenId);
-      if (token && selected === "tokens") {
-        const r = cellToRect(state, SCENE.w, SCENE.h, { col: token.col, row: token.row, cols: 1, rows: 1 });
-        const sideOn = state.mapImage.perspective === "portrait" && token.token_side && state.tokenImages.get(token.token_side);
-        ctx.save();
-        if (sideOn) {
-          // Side-on figures aren't round: outline their cell.
-          ctx.strokeStyle = "rgb(129,140,248)";
-          ctx.lineWidth = 3 / k;
-          ctx.setLineDash([6 / k, 4 / k]);
-          ctx.strokeRect(r.x, r.y, r.w, r.h);
-        } else {
-          // A 4px ring (on screen, whatever the zoom) around the round token.
-          ctx.strokeStyle = token.character_id ? "#93c5fd" : "#fca5a5";
-          ctx.lineWidth = 4 / k;
-          ctx.beginPath();
-          ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.42, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-      // Structure: preview of the line being drawn, and highlight of the selected piece.
-      if (drawingLine && structureTool.kind !== "staircase") {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        const style = STRUCTURE_STYLES[structureTool.kind];
-        ctx.save();
-        ctx.globalAlpha = 0.6;
-        ctx.strokeStyle = style.color;
-        ctx.lineWidth = style.width;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(x0 + drawingLine.start.x * size, y0 + drawingLine.start.y * size);
-        ctx.lineTo(x0 + drawingLine.end.x * size, y0 + drawingLine.end.y * size);
-        ctx.stroke();
-        ctx.restore();
-      }
-      const piece = optimisticStructures.find((s) => s.id === selectedStructureId);
-      if (piece && selected === "structure") {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        ctx.save();
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 3 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        const pad = 6;
-        const [ax, bx] = [Math.min(piece.x1, piece.x2), Math.max(piece.x1, piece.x2)];
-        const [ay, by] = [Math.min(piece.y1, piece.y2), Math.max(piece.y1, piece.y2)];
-        const extra = piece.kind === "staircase" ? 1 : 0;
-        ctx.strokeRect(x0 + ax * size - pad, y0 + ay * size - pad, (bx - ax + extra) * size + 2 * pad, (by - ay + extra) * size + 2 * pad);
-        ctx.restore();
-      }
-      // Trap being dragged out.
-      if (trapDrag) {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        const a = trapFromDrag(trapShape, trapDrag);
-        if (a) drawTrap(ctx, a, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { draft: true });
-      }
-      // Effect area being dragged out.
-      if (effectDrag) {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        const a = effectRect(effectDrag);
-        ctx.save();
-        ctx.fillStyle = "rgba(167,139,250,0.15)";
-        ctx.strokeStyle = "rgb(167,139,250)";
-        ctx.lineWidth = 2 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.fillRect(x0 + a.x * size, y0 + a.y * size, a.w * size, a.h * size);
-        ctx.strokeRect(x0 + a.x * size, y0 + a.y * size, a.w * size, a.h * size);
-        ctx.restore();
-      }
-      // Party start area (while on the tokens layer), and one being dragged out.
-      const startArea = startDrag ? effectRect(startDrag) : selected === "tokens" || placingChar ? optimisticStart : null;
-      if (startArea) {
-        const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
-        const r = { x: x0 + startArea.x * size, y: y0 + startArea.y * size, w: startArea.w * size, h: startArea.h * size };
-        ctx.save();
-        ctx.fillStyle = "rgba(52,211,153,0.15)";
-        ctx.strokeStyle = "rgb(52,211,153)";
-        ctx.lineWidth = 2 / k;
-        ctx.setLineDash([6 / k, 4 / k]);
-        ctx.fillRect(r.x, r.y, r.w, r.h);
-        ctx.strokeRect(r.x, r.y, r.w, r.h);
-        ctx.setLineDash([]);
-        ctx.fillStyle = "rgb(52,211,153)";
-        ctx.font = `${12 / k}px sans-serif`;
-        ctx.textBaseline = "top";
-        ctx.fillText("Party start", r.x + 4 / k, r.y + 4 / k);
-        ctx.restore();
-      }
-      // Placement preview: outline of the cells the tile will cover.
-      if (placing) {
-        const r = cellToRect(state, SCENE.w, SCENE.h, spanOf(placing));
-        ctx.save();
-        ctx.fillStyle = "rgba(99,102,241,0.25)";
-        ctx.strokeStyle = "rgb(129,140,248)";
-        ctx.lineWidth = 2 / k;
-        ctx.fillRect(r.x, r.y, r.w, r.h);
-        ctx.strokeRect(r.x, r.y, r.w, r.h);
-        ctx.restore();
-      }
+      drawPings(ctx, state, pings, k); // on top of everything (even fog)
+      drawEditorAids(ctx, state, k, {
+        tile: selected === "tiles" ? drawnTiles.find((t) => t.id === selectedTileId) : undefined,
+        note: selected === "notes" ? drawnNotes.find((n) => n.id === selectedNoteId) : undefined,
+        light: selected === "lighting" ? optimisticLights.find((l) => l.id === selectedLightId) : undefined,
+        sound: selected === "sounds" ? drawnPositional.find((p) => p.id === selectedPositionalId) : undefined,
+        token: selected === "tokens" ? drawnTokens.find((t) => t.id === selectedTokenId) : undefined,
+        line: drawingLine && structureTool.kind !== "staircase" ? { ...drawingLine, kind: structureTool.kind } : null,
+        piece: selected === "structure" ? optimisticStructures.find((x) => x.id === selectedStructureId) : undefined,
+        trap: trapDrag ? trapFromDrag(trapShape, trapDrag) : null,
+        effectArea: effectDrag ? effectRect(effectDrag) : null,
+        startArea: startDrag ? effectRect(startDrag) : selected === "tokens" || placingChar ? optimisticStart : null,
+        placing: placing ? spanOf(placing) : null,
+      });
     };
     draw();
     const observer = new ResizeObserver(draw);
@@ -2255,63 +2090,6 @@ export default function MapView({
   );
 }
 
-/**
- * Icon buttons fixed to the viewport (the canvas), one row per edge, 12px in from the edge and
- * centred along it. They ignore zoom and pan so they're always in reach.
- */
-function ControlButtons({
-  controls,
-  size,
-  inset = { left: 0, right: 0 },
-  onRun,
-}: {
-  controls: MapControl[];
-  size: { w: number; h: number };
-  inset?: { left: number; right: number }; // pixels covered by docked UI on each side; buttons stay clear of it
-  onRun: (control: MapControl) => void;
-}) {
-  const MARGIN = 12, GAP = 6, B = 26;
-  const placed = (["top", "right", "bottom", "left"] as const).flatMap((edge) => {
-    const row = controls.filter((c) => c.edge === edge);
-    const horizontal = edge === "top" || edge === "bottom";
-    const total = row.length * B + Math.max(0, row.length - 1) * GAP;
-    const free = size.w - inset.left - inset.right; // the visible width between docked UI
-    const start = horizontal ? inset.left + (free - total) / 2 : (size.h - total) / 2;
-    return row.map((c, i) => {
-      const along = start + i * (B + GAP);
-      const x = horizontal ? along : edge === "left" ? inset.left + MARGIN : size.w - inset.right - MARGIN - B;
-      const y = horizontal ? (edge === "top" ? MARGIN : size.h - MARGIN - B) : along;
-      return { c, x, y, edge };
-    });
-  });
-  return (
-    <>
-      {placed.map(({ c, x, y, edge }) => (
-        <div
-          key={c.id}
-          // Tooltips open towards the middle of the scene so they aren't cut off at the edge.
-          className={`tooltip absolute z-10 ${{ top: "tooltip-bottom", bottom: "tooltip-top", left: "tooltip-right", right: "tooltip-left" }[edge]}`}
-          data-tip={c.label}
-          style={{ left: x, top: y }}
-        >
-          <button
-            type="button"
-            data-control-button={c.label}
-            aria-label={c.label}
-            onClick={() => onRun(c)}
-            className="flex items-center justify-center rounded-md border border-white/70 bg-black/50 text-white/90 shadow hover:border-white hover:bg-black/70 hover:text-white"
-            style={{ width: B, height: B }}
-          >
-            <GameIcon name={c.icon} className="size-4" />
-          </button>
-        </div>
-      ))}
-    </>
-  );
-}
-
-/** The cells (with a cell's margin) taking in a contested move: the two creatures where they stand and where they
- * were when it happened, and the contested spot. */
 function contestBox(c: Contest, tokens: { id: number; col: number; row: number }[]) {
   const pts = [c.spot, c.a.from, c.b.from, ...tokens.filter((t) => t.id === c.a.id || t.id === c.b.id)];
   return {
