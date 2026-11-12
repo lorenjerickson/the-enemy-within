@@ -571,7 +571,7 @@ export async function saveTrapSettings(locationId: number, id: number, formData:
   const known = new Set(listEffectDefs().map((e) => e.id));
   saveTrap(t.id, {
     name: text("name") || "Trap",
-    springs: springs.length ? springs : ["enter"],
+    springs, // none ticked: only a trigger sets it off
     who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
     often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
     damage: damage || null,

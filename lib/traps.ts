@@ -24,7 +24,7 @@ export interface Trap {
   id: number;
   name: string;
   area: TrapArea;
-  springs: AreaFires[]; // when: as someone comes into it, starts a round in it, or ends a move in it ("end")
+  springs: AreaFires[]; // when: as someone comes into it, starts a round in it, or ends a move in it ("end"); none: only when a trigger sets it off
   who: TrapWho;
   often: TrapOften;
   damage: string | null; // dice ('' / null = none)
@@ -38,6 +38,9 @@ export interface Trap {
   found: 0 | 1; // found (or revealed by the GM): players see it
   sprung: number[]; // tokens it has sprung on (once: any spends it; each: those it won't spring on again)
 }
+
+/** What zone checks need (traps and triggers alike). */
+export type Zone = Pick<Trap, "area" | "springs" | "who" | "often" | "sprung">;
 
 export const TRAP_WHO: [TrapWho, string][] = [["", "anyone"], ["party", "the party"], ["hostile", "the party's enemies"]];
 export const TRAP_OFTEN: [TrapOften, string][] = [["once", "once"], ["each", "once for each creature"], ["always", "every time"]];
@@ -73,12 +76,12 @@ export function canSpring(t: Pick<Trap, "who" | "often" | "sprung">, tokenId: nu
 }
 
 /** The traps a token's step springs (those it comes into that spring on entering), in the order given. */
-export function sprungByStep(traps: Trap[], tokenId: number, side: Allegiance, from: Point, to: Point): Trap[] {
+export function sprungByStep<T extends Zone>(traps: T[], tokenId: number, side: Allegiance, from: Point, to: Point): T[] {
   return traps.filter((t) => t.springs.includes("enter") && canSpring(t, tokenId, side) && entersTrap(t.area, from, to));
 }
 
 /** The traps that spring on a token standing in them at the start of a round, or at the end of a move ("start" / "end"). */
-export function sprungWhereStanding(traps: Trap[], tokenId: number, side: Allegiance, at: Point, when: "start" | "end"): Trap[] {
+export function sprungWhereStanding<T extends Zone>(traps: T[], tokenId: number, side: Allegiance, at: Point, when: "start" | "end"): T[] {
   return traps.filter((t) => t.springs.includes(when) && canSpring(t, tokenId, side) && inTrap(t.area, at));
 }
 

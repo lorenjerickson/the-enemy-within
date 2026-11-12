@@ -35,3 +35,9 @@ test("saving what it does, moving it, finding it, springing and re-arming it, re
   assert.equal(getTrap(id), undefined);
   assert.ok(listTraps(lv).every((x) => x.id !== id));
 });
+
+test("a trap with no 'when' ticked springs only when a trigger sets it off", () => {
+  const id = addTrap(lv, { shape: "rect", x: 0, y: 0, w: 1, h: 1 });
+  saveTrap(id, { name: "Ceiling", springs: [], who: "", often: "once", damage: "4d6", damage_type: "bludgeoning", save_attr: "agility", save_dc: 14, save_half: 1, effects: [], stops: 1, find_dc: 18 });
+  assert.deepEqual(getTrap(id)!.springs, []);
+});

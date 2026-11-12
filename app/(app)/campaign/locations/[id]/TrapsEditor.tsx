@@ -24,6 +24,7 @@ function TrapSettings({ locationId, trap: t, effects }: { locationId: number; tr
         {WHEN.map(([k, label]) => (
           <label key={k} className="flex items-center gap-1"><input type="checkbox" name={`springs_${k}`} defaultChecked={t.springs.includes(k)} className="checkbox checkbox-xs" />{label}</label>
         ))}
+        <span className="text-xs opacity-60">(none ticked: only a trigger sets it off)</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="opacity-70">On</span>
