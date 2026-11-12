@@ -19,6 +19,8 @@ import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, 
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { trapsOnStep, trapsWhereStopped } from "./traps";
+import { listTraps, setTrapFound } from "@/lib/db";
+import { distanceToTrap } from "@/lib/traps";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -80,9 +82,14 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
       setSecretRevealed(s.id, true);
       if (s.discovery_id) revealDiscovery(s.discovery_id); // into the party's journals
     }
+    // Traps in range they beat the find DC of (each trap has its own).
+    const traps = me ? listTraps(me.level_id).filter((t) => !t.found && scored.total >= t.find_dc && distanceToTrap(t.area, { x: me.col + 0.5, y: me.row + 0.5 }) <= SEARCH_RANGE + 0.5) : [];
+    for (const t of traps) setTrapFound(t.id, true);
+    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`)];
+    if (traps.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
-    outcome = found.length ? `You find: ${found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)).join("; ")}` : "You search but find nothing.";
-    logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${found.length ? `found ${found.map((s) => s.name).join(", ")}` : success ? "nothing there" : "failed"}`);
+    outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
+    logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).

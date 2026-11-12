@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canSpring, describeTrapArea, entersTrap, inTrap, sprungByStep, sprungWhereStanding, type Trap, type TrapArea } from "@/lib/traps";
+import { canSpring, describeTrapArea, distanceToTrap, entersTrap, inTrap, sprungByStep, sprungWhereStanding, type Trap, type TrapArea } from "@/lib/traps";
 
 const pit: TrapArea = { shape: "rect", x: 3, y: 0, w: 1, h: 1 }; // one square, col 3 row 0
 const plate: TrapArea = { shape: "circle", x: 5.5, y: 5.5, r: 0.4 }; // a small plate in the middle of a square
@@ -58,4 +58,11 @@ test("descriptions in feet", () => {
   assert.equal(describeTrapArea({ shape: "circle", x: 0, y: 0, r: 2 }), "10 ft radius");
   assert.equal(describeTrapArea({ shape: "rect", x: 0, y: 0, w: 3, h: 2 }), "15 × 10 ft");
   assert.equal(describeTrapArea(wire), "a 20 ft tripwire");
+});
+
+test("distance to a trap's edge", () => {
+  assert.equal(distanceToTrap(pit, c(3, 0)), 0);
+  assert.equal(distanceToTrap(pit, c(5, 0)), 1.5);
+  assert.equal(distanceToTrap({ shape: "circle", x: 0, y: 0, r: 1 }, { x: 3, y: 0 }), 2);
+  assert.equal(distanceToTrap(wire, { x: 8, y: 0 }), 2);
 });

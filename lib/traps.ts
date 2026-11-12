@@ -82,6 +82,13 @@ export function sprungWhereStanding(traps: Trap[], tokenId: number, side: Allegi
   return traps.filter((t) => t.springs.includes(when) && canSpring(t, tokenId, side) && inTrap(t.area, at));
 }
 
+/** How far a point is from the trap's edge (grid units; 0 inside it). */
+export function distanceToTrap(a: TrapArea, p: Point): number {
+  if (a.shape === "circle") return Math.max(0, Math.hypot(p.x - a.x, p.y - a.y) - a.r);
+  if (a.shape === "rect") return Math.hypot(Math.max(a.x - p.x, 0, p.x - (a.x + a.w)), Math.max(a.y - p.y, 0, p.y - (a.y + a.h)));
+  return pointToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 });
+}
+
 /** "10 ft radius", "15 × 10 ft", "a 20 ft tripwire". */
 export function describeTrapArea(a: TrapArea): string {
   if (a.shape === "circle") return `${+(a.r * 5).toFixed(1)} ft radius`;

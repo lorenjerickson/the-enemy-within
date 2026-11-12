@@ -3,7 +3,7 @@
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { TRAP_OFTEN, TRAP_WHO, describeTrapArea, type Trap } from "@/lib/traps";
-import { rearmTrap, saveTrapSettings } from "../actions";
+import { rearmTrap, revealTrap, saveTrapSettings } from "../actions";
 import type { TrapShape } from "./trapDraw";
 
 const SHAPES: [TrapShape, string, string][] = [
@@ -82,6 +82,7 @@ export default function TrapsEditor({ locationId, shape, onShape, traps, effects
               <details>
                 <summary className="flex cursor-pointer items-center gap-2">
                   <span className="flex-1"><span className="font-medium">{t.name}</span> <span className="opacity-60">{describeTrapArea(t.area)}{t.damage ? ` · ${t.damage} ${t.damage_type}`.trimEnd() : ""}{t.found ? " · found" : ""}{t.sprung.length && t.often === "once" ? " · spent" : ""}</span></span>
+                  {t.id > 0 && <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); revealTrap(locationId, t.id, !t.found); }} data-reveal-trap={t.id}>{t.found ? "Hide" : "Reveal"}</button>}
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); onRemove(t.id); }}>Remove</button>
                 </summary>
                 {t.id > 0 && <TrapSettings locationId={locationId} trap={t} effects={effects} />}

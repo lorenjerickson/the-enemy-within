@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
 import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap } from "@/lib/db";
+import { addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES } from "@/lib/aoe";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
@@ -590,5 +590,12 @@ export async function saveTrapSettings(locationId: number, id: number, formData:
 export async function rearmTrap(locationId: number, id: number) {
   await requireGm();
   resetTrap(Number(id));
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** GM reveals a trap to the players (or hides it again). */
+export async function revealTrap(locationId: number, id: number, found: boolean) {
+  await requireGm();
+  setTrapFound(Number(id), !!found);
   revalidatePath(`/campaign/locations/${locationId}`);
 }

@@ -79,7 +79,7 @@ interface MapState {
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
   secrets: MapSecret[];
-  traps: Trap[]; // GM only (players see found ones once Search finds them)
+  traps: Trap[]; // the GM's; a player's map gets only found ones
   effects: MapEffect[];
   lasting: LastingArea[]; // areas actions left on the map for a while
   time: number; // seconds, drives animated effects
@@ -238,7 +238,7 @@ const FX_MS = 1000; // how long a script's effect plays
 const SIGHT = 500;
 
 /** Layers only the GM ever sees. */
-const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "traps"];
+const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds"];
 
 const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -705,7 +705,7 @@ export default function MapView({
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
-  traps?: Trap[]; // the GM's traps (players get none for now)
+  traps?: Trap[]; // the GM's traps (players get only the found ones)
   trapEffects?: { id: number; name: string }[]; // catalog effects lasting rounds, for what traps put on
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
@@ -1132,7 +1132,7 @@ export default function MapView({
       const at = walkAt(walking);
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, traps: readOnly ? [] : optimisticTraps,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, traps: optimisticTraps,
     effects: drawnEffects, lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
