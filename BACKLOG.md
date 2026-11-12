@@ -21,7 +21,7 @@ From the code review on 2026-11-06. Roughly in the order to tackle them.
 
 ## When next touching that area
 
-8. **Split `MapView.tsx`** (2,294 lines; one ~1,650-line component serving the editor and live play): layer renderers → `mapLayers.ts` first (mechanical), then session overlays (pick highlights, plan ring, target lines, pings), then pointer handling per mode.
+8. **Split `MapView.tsx`**: steps 1–3 done 2026-11-13 (2,899 → 1,591 lines): helpers and layer renderers in `mapLayers.tsx`; pings, editor highlights/drafts and session overlays in `mapOverlays.ts`; `ControlButtons.tsx`. Still to do when next touching it: pointer handling per mode (onPointerDown/Move/Up, ~500 lines; editor tools vs session play) — needs click-testing the editor and /play afterwards.
 9. **Split `lib/db.ts`** (2,118 lines, 185 exports; 40 tables and 74 migrations scattered through it) into `lib/db/*.ts` behind an index re-export, or at least gather the schema at the top.
 10. ~~**Light visibility polygons recomputed per light per frame**~~ Done 2026-11-10: `viewPast` caches each spot's view (grid units) per walls array; lights, the darkness mask, sounds, lasting areas and area effects use it. while flicker/effects animate: memoize per light + structures.
 
