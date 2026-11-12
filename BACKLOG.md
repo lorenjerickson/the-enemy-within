@@ -24,5 +24,9 @@ From the code review on 2026-11-06. Roughly in the order to tackle them.
 
 ## Later / leave for now
 
-11. **No tests.** Keep a tiny `tests/` (run with `npx tsx --test`) with 4–5 regression tests for round resolution, movement and script prompts, built from the ad-hoc simulations used to find today's bugs. Leave `resolveRound.ts`'s structure alone until more rules arrive.
+11. ~~**No tests.**~~ Done 2026-11-12: `npm test` (Node's runner, no dependencies; each file gets its own temp database), run in CI before the build. 253 tests: engine rules (`tests/engine`), round resolution scenarios (`tests/round`, via `harness.ts`), effect sentences, scripts and formatter (`tests/editing`), and characters, inventory, professions, fighters, game scripts, triggers and campaign export/import against a real database (`tests/db`).
 12. **`/play` polls every 3 s** (`AutoRefresh`), re-rendering the whole server tree for every client. Fine at this table size.
+13. **Gaps the tests found** (each is a `{ todo }` test: fix, then drop the todo):
+    - Open-ground routes arc off the straight line (3,5 → 7,5 goes via 5,3): `reachableSquares` keeps the first-found of several equally short predecessors; prefer the straightest. Can walk someone into a lasting area. (`tests/round/movement.test.ts`)
+    - Two effect rules render badly: a "when you take damage" damage trigger ("your Might increases by ? for ? rounds") and an "it takes" amount from an attribute modifier ("your:fortitude"). Not makeable in the builder; only older data. Likely moot after #0. (`tests/editing/effectGrammar.test.ts`)
+    - Script ternary branches can't assign (`a ? x = 1 : x = 2`). (`tests/editing/script.test.ts`)

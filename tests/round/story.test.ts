@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { act, attack, fighter, gear, mover, resolve } from "./harness";
 import { gmStory, playerStory, severity, storyFor } from "@/lib/roundStory";
 
-const name = (id: number) => `T${id}`;
+const name = (id: number) => ["", "Ann", "Bob", "Cy"][id] ?? "someone";
 
 function brawl() {
   // T1 hits T2; T2 is too slow to hit back; T3 just stands there.
@@ -30,12 +30,12 @@ test("the attacker's story has no numbers: how bad it looked, not how much", () 
 test("whoever took the hit learns how much", () => {
   const lines = [...storyFor(brawl().story, 2, name).values()].flat();
   assert.ok(lines.some((l) => /\(-6\)/.test(l)), lines.join(" | "));
-  assert.ok(lines.some((l) => /T1/.test(l)));
+  assert.ok(lines.some((l) => /Ann/.test(l)));
 });
 
 test("nothing about anyone they didn't deal with", () => {
   const lines = [...playerStory(brawl().story, [3], name).values()].flat();
-  for (const l of lines) assert.doesNotMatch(l, /T1|T2/, l);
+  for (const l of lines) assert.doesNotMatch(l, /Ann|Bob/, l);
 });
 
 test("a player's story across their tokens comes in time order", () => {
@@ -45,7 +45,7 @@ test("a player's story across their tokens comes in time order", () => {
 
 test("the GM's story tells everything with exact damage", () => {
   const all = gmStory(brawl().story, name).flatMap((s) => s.lines).join("\n");
-  assert.match(all, /T1 hits T2: moderate damage \(6\)/);
-  assert.match(all, /T2 is thrown off by T1's blow/);
+  assert.match(all, /Ann hits Bob: moderate damage \(6\)/);
+  assert.match(all, /Bob is thrown off by Ann's blow/);
   assert.equal(gmStory(undefined, name).length, 0);
 });
