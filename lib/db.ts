@@ -1,6 +1,7 @@
 import type { Affliction, Condition, Duration, Effect, Lifecycle, Modifier } from "@/lib/conditions";
 import { BUILTIN_CONDITIONS, BUILTIN_EFFECTS, BUILTIN_PIECES } from "@/lib/builtinConditions";
 import { DEFAULT_LIFECYCLE, asCondition, reapplied } from "@/lib/conditions";
+import { SEEDED_EFFECTS, compileSeed } from "@/lib/seedEffects";
 import type { RollSpec, RolledPart } from "@/lib/rolls";
 import type { PlanStep } from "@/lib/roundPlan";
 import type { Replay } from "@/lib/resolveRound";
@@ -2366,10 +2367,36 @@ function seedBuiltinEffects(): void {
   })();
 }
 
-/** Conditions to effects, then the built-ins: at start-up, and after a campaign import. */
+// Catalog effects added once each (lib/seedEffects.ts), by name: after that they're the GM's to edit, rename or delete.
+db.exec("CREATE TABLE IF NOT EXISTS seeded_effects (name TEXT PRIMARY KEY)");
+/** Adds each seeded effect not added before (one the GM already has by that name counts as added). */
+export function seedCatalogEffects(): void {
+  const done = new Set(db.prepare<[], { name: string }>("SELECT name FROM seeded_effects").all().map((r) => r.name));
+  const todo = SEEDED_EFFECTS.filter((e) => !done.has(e.name));
+  if (!todo.length) return;
+  db.transaction(() => {
+    const idOf = (name: string) => db.prepare<[string], { id: number }>("SELECT id FROM effects WHERE name = ? COLLATE NOCASE").get(name)?.id ?? -1;
+    // An effect a rule names: by name, else a built-in piece of that name (Sickly, Hampered), added if it isn't there.
+    const named = (name: string) => {
+      const piece = BUILTIN_PIECES.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (idOf(name) !== -1 || !piece) return idOf(name);
+      return db.prepare<[string], { id: number }>("SELECT id FROM effects WHERE builtin = ?").get(piece.key)?.id ?? saveEffectDef(null, { name: piece.name, description: piece.description, modifiers: piece.modifiers, builtin: piece.key });
+    };
+    for (const e of todo) {
+      if (idOf(e.name) === -1) {
+        const { modifiers, lifecycle } = compileSeed(e, named, (m) => (idOf(m.name) !== -1 ? idOf(m.name) : saveEffectDef(null, { name: m.name, description: "Made by an effect's rule.", modifiers: m.effect, rounds: m.rounds, reapply: m.reapply, stack_limit: m.stack_limit })));
+        saveEffectDef(null, { name: e.name, description: e.description, modifiers, ...lifecycle });
+      }
+      db.prepare("INSERT INTO seeded_effects (name) VALUES (?)").run(e.name);
+    }
+  })();
+}
+
+/** Conditions to effects, then the built-ins, then the seeded catalog effects: at start-up, and after a campaign import. */
 export function settleEffects(): void {
   migrateConditions();
   seedBuiltinEffects();
+  seedCatalogEffects();
 }
 
 // Strain: points on a creature's attributes (each −1 to it, never below half), left by conditions; they outlast them
