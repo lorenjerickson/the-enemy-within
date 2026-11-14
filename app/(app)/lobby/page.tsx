@@ -5,6 +5,7 @@ import { getOpenGameSession, isRemovedFrom, listPlayerCharacters, markPresent } 
 import AutoRefresh from "../AutoRefresh";
 import PlayerPresence from "../sessions/PlayerPresence";
 import { checkIn } from "./actions";
+import Logo from "@/app/Logo";
 
 /** A player waiting for the session to begin: they're present while this page is open. */
 export default async function Lobby() {
@@ -19,6 +20,7 @@ export default async function Lobby() {
   return (
     <div className="max-w-xl space-y-4">
       <AutoRefresh checkIn={checkIn} />
+      <Logo variant="wide" width={576} className="w-full h-auto" priority />
       {!session ? (
         <p className="opacity-70">There&apos;s no session right now.</p>
       ) : (

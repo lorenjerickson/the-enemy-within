@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { playAs } from "./sessions/actions";
 import { getGm, getOpenGameSession, isRemovedFrom, listPresentPlayers } from "@/lib/db";
 import JoinPrompt from "./lobby/JoinPrompt";
+import Logo from "@/app/Logo";
 import { logout, requireUser } from "@/lib/auth";
 
 async function doLogout() {
@@ -29,7 +30,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <header className="navbar bg-base-200 px-4">
-        <Link href="/" className="text-lg font-bold mr-6">The Enemy Within</Link>
+        <Link href="/" className="mr-6"><Logo variant="wide" width={98} className="h-10 w-auto" priority /></Link>
         {user.role === "gm" && (
           <nav className="flex-1">
             <ul className="menu menu-horizontal gap-1">

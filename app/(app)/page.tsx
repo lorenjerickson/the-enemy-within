@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { getOpenGameSession } from "@/lib/db";
+import Logo from "@/app/Logo";
 
 export default async function Home() {
   await connection();
@@ -9,6 +10,7 @@ export default async function Home() {
   const session = user.role === "player" ? getOpenGameSession() : undefined;
   return (
     <div className="space-y-4">
+      <Logo variant="wide" width={576} className="w-full max-w-xl h-auto" priority />
       <p>Welcome, {user.name}.</p>
       {session && (
         <div className="rounded-box bg-base-200 p-4 max-w-xl flex items-center gap-4">
