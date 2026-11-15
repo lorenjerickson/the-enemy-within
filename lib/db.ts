@@ -1242,6 +1242,11 @@ export function deleteStructure(id: number): void {
   db.prepare<[number]>("DELETE FROM map_structures WHERE id = ?").run(id);
 }
 
+/** Moves a line's two ends (a wall made longer or shorter); level links don't move. */
+export function setStructureEnds(id: number, e: { x1: number; y1: number; x2: number; y2: number }): void {
+  db.prepare("UPDATE map_structures SET x1 = @x1, y1 = @y1, x2 = @x2, y2 = @y2 WHERE id = @id AND kind != 'staircase'").run({ ...e, id });
+}
+
 /** Removes every structure on a level (walls, doors, windows, stairs, level links); returns how many. */
 export function deleteLevelStructures(levelId: number): number {
   return db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId).changes;

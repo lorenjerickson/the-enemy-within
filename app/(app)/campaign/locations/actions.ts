@@ -5,7 +5,7 @@ import { syncAurasOn } from "@/lib/auraSync";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
-import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, setStructureEnds, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES } from "@/lib/aoe";
@@ -184,6 +184,15 @@ export async function placeStructure(
 export async function removeStructure(locationId: number, id: number) {
   await requireGm();
   deleteStructure(id);
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** A line's new ends (to 1/20 of a cell), e.g. a wall stretched along itself. */
+export async function moveStructureEnds(locationId: number, id: number, e: { x1: number; y1: number; x2: number; y2: number }) {
+  await requireGm();
+  const ends = { x1: snapHeight(Number(e.x1)), y1: snapHeight(Number(e.y1)), x2: snapHeight(Number(e.x2)), y2: snapHeight(Number(e.y2)) };
+  if (Object.values(ends).some((v) => !Number.isFinite(v)) || (ends.x1 === ends.x2 && ends.y1 === ends.y2)) throw new Error("A line needs two different ends");
+  setStructureEnds(id, ends);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
