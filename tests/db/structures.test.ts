@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { level } from "./seed";
-import { addStructure, deleteLevelStructures, listStructures, setStructureEnds } from "@/lib/db";
+import { addStructure, deleteLevelStructures, listStructures, setStructureEnds, splitStructure } from "@/lib/db";
 
 const wall = (lv: number, x1: number, y1: number, x2: number, y2: number) => addStructure(lv, { kind: "wall", x1, y1, x2, y2, target_level_id: null } as never);
 
@@ -23,4 +23,17 @@ test("a line's ends move; a level link stays put", () => {
   const [w2, link2] = listStructures(lv);
   assert.deepEqual([w2.x1, w2.y1, w2.x2, w2.y2], [-1, 0, 6, 0]);
   assert.deepEqual([link2.x1, link2.y1], [2, 2]);
+});
+
+test("breaking a line makes two of the same kind meeting at the point", () => {
+  const lv = level();
+  addStructure(lv, { kind: "door", x1: 0, y1: 0, x2: 0, y2: 4, target_level_id: null } as never);
+  const [door] = listStructures(lv);
+  assert.equal(splitStructure(door.id, { x: 0, y: 0 }), null); // at an end: nothing to break
+  const made = splitStructure(door.id, { x: 0, y: 1.5 });
+  const [a, b] = listStructures(lv);
+  assert.equal(b.id, made);
+  assert.deepEqual([a.kind, a.x1, a.y1, a.x2, a.y2], ["door", 0, 0, 0, 1.5]);
+  assert.deepEqual([b.kind, b.x1, b.y1, b.x2, b.y2], ["door", 0, 1.5, 0, 4]);
+  assert.equal(b.name, `Door ${b.id}`);
 });

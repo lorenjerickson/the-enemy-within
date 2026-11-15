@@ -42,7 +42,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, breakStructure, removeTile, removeToken, toggleLayer } from "../actions";
 import { GM_ONLY_LAYERS, capitalize, type Area, EyeIcon, type MapState, type CellRect, useImage, noteLayout, SCENE, JOIN_DISTANCE, fitScene, gridOrigin, figureCells, HOLD_MS, LIFT_MS, PING_MS, FX_MS, SIGHT, LAYER_RENDERERS } from "./mapLayers";
 
 
@@ -1236,7 +1236,24 @@ export default function MapView({
         // A click without a drag draws nothing: it selects the piece under the pointer (or nothing).
         if (e) {
           const { gx, gy } = gridAt(e);
-          setSelectedStructureId(structureAt(gx, gy) ?? null);
+          const id = structureAt(gx, gy), s = optimisticStructures.find((x) => x.id === id);
+          // Shift+click on a line breaks it there (at a grid corner when snapping a straight line to the grid).
+          if (e.shiftKey && s && s.kind !== "staircase" && s.id > 0) {
+            const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len2 = dx * dx + dy * dy;
+            const t = Math.max(0, Math.min(1, ((gx - s.x1) * dx + (gy - s.y1) * dy) / len2));
+            const onGrid = !gridless && structureTool.snap !== e.altKey && (dx === 0 || dy === 0);
+            const at = onGrid ? { x: Math.round(s.x1 + t * dx), y: Math.round(s.y1 + t * dy) } : { x: snapHeight(s.x1 + t * dx), y: snapHeight(s.y1 + t * dy) };
+            if ((at.x !== s.x1 || at.y !== s.y1) && (at.x !== s.x2 || at.y !== s.y2)) {
+              startTransition(async () => {
+                changeStructures({ update: { ...s, x2: at.x, y2: at.y } });
+                changeStructures({ add: { ...s, id: -Date.now(), x1: at.x, y1: at.y, name: null } });
+                await breakStructure(locationId, s.id, at);
+              });
+            }
+            setSelectedStructureId(s.id);
+            return;
+          }
+          setSelectedStructureId(id ?? null);
         }
         return;
       }

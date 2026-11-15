@@ -1247,6 +1247,23 @@ export function setStructureEnds(id: number, e: { x1: number; y1: number; x2: nu
   db.prepare("UPDATE map_structures SET x1 = @x1, y1 = @y1, x2 = @x2, y2 = @y2 WHERE id = @id AND kind != 'staircase'").run({ ...e, id });
 }
 
+/**
+ * Breaks a line in two at a point on it: the line now ends there, and a second piece of the same kind (a door: open
+ * and locked the same) runs on to the old end. Returns the new piece's id; a level link or a point at an end: none.
+ */
+export function splitStructure(id: number, at: { x: number; y: number }): number | null {
+  const s = db.prepare<[number], { level_id: number; kind: string; x1: number; y1: number; x2: number; y2: number; open: number; locked: number; lock_dc: number }>(
+    "SELECT level_id, kind, x1, y1, x2, y2, open, locked, lock_dc FROM map_structures WHERE id = ?"
+  ).get(id);
+  if (!s || s.kind === "staircase" || (at.x === s.x1 && at.y === s.y1) || (at.x === s.x2 && at.y === s.y2)) return null;
+  return db.transaction(() => {
+    db.prepare("UPDATE map_structures SET x2 = ?, y2 = ? WHERE id = ?").run(at.x, at.y, id);
+    const made = Number(db.prepare("INSERT INTO map_structures (level_id, kind, x1, y1, x2, y2, open, locked, lock_dc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(s.level_id, s.kind, at.x, at.y, s.x2, s.y2, s.open, s.locked, s.lock_dc).lastInsertRowid);
+    nameUnnamed();
+    return made;
+  })();
+}
+
 /** Removes every structure on a level (walls, doors, windows, stairs, level links); returns how many. */
 export function deleteLevelStructures(levelId: number): number {
   return db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId).changes;
