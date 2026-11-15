@@ -205,6 +205,8 @@ export default function MapView({
   const [drawingLine, setDrawingLine] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(null);
   // A selected line's end being dragged along the line (longer or shorter): which end, and where it is now.
+  // A level link being dragged out: from where the drag started to the pointer (grid units; cells on grid maps).
+  const [linkDrag, setLinkDrag] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
   const [stretch, setStretch] = useState<{ id: number; which: 1 | 2; x: number; y: number } | null>(null);
   type StructureChange = { add: MapStructure } | { remove: number } | { update: MapStructure } | { clear: true };
   const [optimisticStructures, changeStructures] = useOptimistic(structures, (ss: MapStructure[], c: StructureChange) =>
@@ -601,6 +603,24 @@ export default function MapView({
     return near && near.d < 0.4 ? near.id : undefined;
   };
 
+  /** Where a level link's drag is: the cell on grid maps, the point (to 1/20) on gridless ones. */
+  const linkPointAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!gridless) { const c = cellAt(e); return { x: c.col, y: c.row }; }
+    const { gx, gy } = gridAt(e);
+    return { x: snapHeight(gx), y: snapHeight(gy) };
+  };
+  /**
+   * The level link a drag covers, as stored (x1,y1 its top-left; it reaches to x2+1,y2+1): every cell from start to end
+   * on grid maps; on gridless ones the dragged rectangle, at least a unit each way (a click: a unit centred there).
+   */
+  const linkArea = (d: { start: { x: number; y: number }; end: { x: number; y: number } }) => {
+    const { start: a, end: b } = d;
+    if (!gridless) return { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+    const span = (p: number, q: number) => (Math.abs(q - p) < 1 ? (p === q ? [p - 0.5, p - 0.5] : [Math.min(p, q), Math.min(p, q)]) : [Math.min(p, q), Math.max(p, q) - 1]);
+    const [x1, x2] = span(a.x, b.x), [y1, y2] = span(a.y, b.y);
+    return { x1: snapHeight(x1), y1: snapHeight(y1), x2: snapHeight(x2), y2: snapHeight(y2) };
+  };
+
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
   function gridAt(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -975,14 +995,10 @@ export default function MapView({
       }
       if (structureTool.kind === "staircase") {
         if (!structureTool.targetLevelId) return;
-        // A level link fills a cell, or on gridless maps a unit square centred on the pointer.
-        const cell = gridless ? tokenAt(e) : cellAt(e);
-        const target = otherLevels.find((l) => l.id === structureTool.targetLevelId)!;
-        const piece = { kind: "staircase" as const, x1: cell.col, y1: cell.row, x2: cell.col, y2: cell.row, target_level_id: target.id };
-        startTransition(async () => {
-          changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0, name: null, locked: 0, lock_dc: 15 } });
-          await placeStructure(locationId, levelId, piece);
-        });
+        // A level link covers the area dragged out (placed when the drag ends).
+        const at = linkPointAt(e);
+        setLinkDrag({ start: at, end: at });
+        e.currentTarget.setPointerCapture(e.pointerId);
       } else {
         const corner = cornerAt(e);
         setDrawingLine({ start: corner, end: corner });
@@ -1010,6 +1026,11 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (linkDrag) {
+      const at = linkPointAt(e);
+      if (at.x !== linkDrag.end.x || at.y !== linkDrag.end.y) setLinkDrag({ ...linkDrag, end: at });
+      return;
+    }
     if (stretch) {
       // The dragged end slides along the line, from the end that stays: whole squares on the grid (straight lines), else 1/20.
       const s = optimisticStructures.find((x) => x.id === stretch.id);
@@ -1217,6 +1238,17 @@ export default function MapView({
       }
       return;
     }
+    if (linkDrag) {
+      setLinkDrag(null);
+      const target = otherLevels.find((l) => l.id === structureTool.targetLevelId);
+      if (!target) return;
+      const piece = { kind: "staircase" as const, ...linkArea(linkDrag), target_level_id: target.id };
+      startTransition(async () => {
+        changeStructures({ add: { id: -Date.now(), ...piece, target_name: target.name, open: 0, name: null, locked: 0, lock_dc: 15 } });
+        await placeStructure(locationId, levelId, piece);
+      });
+      return;
+    }
     if (stretch) {
       const s = optimisticStructures.find((x) => x.id === stretch.id);
       setStretch(null);
@@ -1323,7 +1355,7 @@ export default function MapView({
         trigger: trapDrag && selected === "triggers" ? trapFromDrag(trapShape, trapDrag) : null,
         effectArea: effectDrag ? effectRect(effectDrag) : null,
         startArea: startDrag ? effectRect(startDrag) : selected === "tokens" || placingChar ? optimisticStart : null,
-        placing: placing ? spanOf(placing) : null,
+        placing: placing ? spanOf(placing) : linkDrag ? ((r) => ({ col: r.x1, row: r.y1, cols: r.x2 - r.x1 + 1, rows: r.y2 - r.y1 + 1 }))(linkArea(linkDrag)) : null,
         scale: selected === "structure" && gridless,
       });
     };

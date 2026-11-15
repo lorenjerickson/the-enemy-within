@@ -101,7 +101,7 @@ export default function StructureEditor({
         {tool.kind === "staircase"
           ? levels.length === 0
             ? "Add another level first — a level link leads from this level to another."
-            : `Click ${gridless ? "the map" : "a grid cell"} to place a level link (stairs to the chosen level).`
+            : `Drag out the area a level link covers (stairs to the chosen level); a click places one ${gridless ? "token-sized square" : "cell"}.`
           : tool.kind === "stairs"
             ? "Drag from the top step to the bottom step of a flight. Tokens stand on it part way down."
             : tool.snap && !gridless
@@ -131,7 +131,7 @@ export default function StructureEditor({
                   <span>{STRUCTURE_LABELS[s.kind]}{s.kind === "door" && (s.locked ? " (locked)" : s.open ? " (open)" : " (closed)")}</span>
                   <span className="text-xs opacity-60">
                     {s.kind === "staircase"
-                      ? `cell ${s.x1}, ${s.y1} → ${s.target_name ?? "(missing level)"}`
+                      ? `${s.x1 === s.x2 && s.y1 === s.y2 ? `cell ${s.x1}, ${s.y1}` : `(${s.x1}, ${s.y1}) – (${s.x2 + 1}, ${s.y2 + 1})`} → ${s.target_name ?? "(missing level)"}`
                       : `(${+s.x1.toFixed(2)}, ${+s.y1.toFixed(2)}) – (${+s.x2.toFixed(2)}, ${+s.y2.toFixed(2)})`}
                   </span>
                 </button>

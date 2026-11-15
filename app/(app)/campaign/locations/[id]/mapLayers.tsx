@@ -239,13 +239,15 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
     for (const s of state.structures) {
       if ((s.kind === "wall" || s.kind === "window") && !state.showWalls) continue; // GM only (windows are drawn on the map art)
       if (s.kind === "staircase") {
-        const r = cellToRect(state, w, h, { col: s.x1, row: s.y1, cols: 1, rows: 1 });
+        // A level link covers x1,y1 to x2+1,y2+1 (one cell when the corners are the same).
+        const r = cellToRect(state, w, h, { col: Math.min(s.x1, s.x2), row: Math.min(s.y1, s.y2), cols: Math.abs(s.x2 - s.x1) + 1, rows: Math.abs(s.y2 - s.y1) + 1 });
         ctx.fillStyle = "rgba(17,24,39,0.7)";
         ctx.fillRect(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
         ctx.strokeStyle = "#e5e7eb";
         ctx.lineWidth = 2;
-        for (let i = 1; i < 4; i++) {
-          const y = r.y + (r.h * i) / 4;
+        const treads = Math.max(4, Math.round((2 * r.h) / size)); // a tread every half cell (at least 3)
+        for (let i = 1; i < treads; i++) {
+          const y = r.y + (r.h * i) / treads;
           ctx.beginPath();
           ctx.moveTo(r.x + r.w * 0.2, y);
           ctx.lineTo(r.x + r.w * 0.8, y);
