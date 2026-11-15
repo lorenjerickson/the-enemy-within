@@ -178,6 +178,19 @@ export function drawEditorAids(ctx: CanvasRenderingContext2D, state: MapState, k
     const [ay, by] = [Math.min(piece.y1, piece.y2), Math.max(piece.y1, piece.y2)];
     const extra = piece.kind === "staircase" ? 1 : 0;
     ctx.strokeRect(x0 + ax * size - pad, y0 + ay * size - pad, (bx - ax + extra) * size + 2 * pad, (by - ay + extra) * size + 2 * pad);
+    // A line's ends: handles to drag it longer or shorter along itself.
+    if (piece.kind !== "staircase") {
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgb(129,140,248)";
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2 / k;
+      for (const [x, y] of [[piece.x1, piece.y1], [piece.x2, piece.y2]]) {
+        ctx.beginPath();
+        ctx.arc(x0 + x * size, y0 + y * size, 6 / k, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
     ctx.restore();
   }
   // Trap being dragged out.

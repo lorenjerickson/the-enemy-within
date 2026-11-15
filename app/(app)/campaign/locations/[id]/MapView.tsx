@@ -42,7 +42,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, removeTile, removeToken, toggleLayer } from "../actions";
 import { GM_ONLY_LAYERS, capitalize, type Area, EyeIcon, type MapState, type CellRect, useImage, noteLayout, SCENE, JOIN_DISTANCE, fitScene, gridOrigin, figureCells, HOLD_MS, LIFT_MS, PING_MS, FX_MS, SIGHT, LAYER_RENDERERS } from "./mapLayers";
 
 
@@ -204,10 +204,16 @@ export default function MapView({
   const [structureTool, setStructureTool] = useState<StructureTool>({ kind: "wall", targetLevelId: otherLevels[0]?.id ?? null, snap: true });
   const [drawingLine, setDrawingLine] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(null);
+  // A selected line's end being dragged along the line (longer or shorter): which end, and where it is now.
+  const [stretch, setStretch] = useState<{ id: number; which: 1 | 2; x: number; y: number } | null>(null);
   type StructureChange = { add: MapStructure } | { remove: number } | { update: MapStructure } | { clear: true };
   const [optimisticStructures, changeStructures] = useOptimistic(structures, (ss: MapStructure[], c: StructureChange) =>
     "add" in c ? [...ss, c.add] : "update" in c ? ss.map((s) => (s.id === c.update.id ? c.update : s)) : "clear" in c ? [] : ss.filter((s) => s.id !== c.remove)
   );
+  // What's drawn: the structures, with a line being stretched at its new length.
+  const shownStructures = stretch
+    ? optimisticStructures.map((s) => (s.id !== stretch.id ? s : stretch.which === 1 ? { ...s, x1: stretch.x, y1: stretch.y } : { ...s, x2: stretch.x, y2: stretch.y }))
+    : optimisticStructures;
   /** On portrait maps a placed token drops to the floor below (the server does the same). */
   const portrait = mapImage.perspective === "portrait";
   const gridless = !!grid.gridless;
@@ -553,7 +559,7 @@ export default function MapView({
 
   const state: MapState = {
     background, backgroundImage, mapImage, mapImageEl, grid,
-    tiles: drawnTiles, tileImages: loadedTileImages, structures: optimisticStructures,
+    tiles: drawnTiles, tileImages: loadedTileImages, structures: shownStructures,
     showWalls: !readOnly && !optimisticHideWalls,
     // Down tokens get a skull; during playback, as of the second shown.
     down: new Set(replayFrame ? [...replayFrame.down, ...downTokens.filter((id) => !(replay && id in replay.start))] : downTokens),
@@ -956,6 +962,17 @@ export default function MapView({
       return;
     }
     if (e.button === 0 && selected === "structure") {
+      // On an end of the selected line: drag it along the line.
+      const sel = optimisticStructures.find((s) => s.id === selectedStructureId && s.kind !== "staircase");
+      if (sel) {
+        const { gx, gy } = gridAt(e);
+        const which = Math.hypot(gx - sel.x1, gy - sel.y1) < 0.4 ? 1 : Math.hypot(gx - sel.x2, gy - sel.y2) < 0.4 ? 2 : 0;
+        if (which) {
+          setStretch({ id: sel.id, which, x: which === 1 ? sel.x1 : sel.x2, y: which === 1 ? sel.y1 : sel.y2 });
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       if (structureTool.kind === "staircase") {
         if (!structureTool.targetLevelId) return;
         // A level link fills a cell, or on gridless maps a unit square centred on the pointer.
@@ -993,6 +1010,19 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (stretch) {
+      // The dragged end slides along the line, from the end that stays: whole squares on the grid (straight lines), else 1/20.
+      const s = optimisticStructures.find((x) => x.id === stretch.id);
+      if (!s) return;
+      const fixed = stretch.which === 1 ? { x: s.x2, y: s.y2 } : { x: s.x1, y: s.y1 }, was = stretch.which === 1 ? { x: s.x1, y: s.y1 } : { x: s.x2, y: s.y2 };
+      const len = Math.hypot(was.x - fixed.x, was.y - fixed.y), ux = (was.x - fixed.x) / len, uy = (was.y - fixed.y) / len;
+      const { gx, gy } = gridAt(e);
+      const onGrid = !gridless && structureTool.snap !== e.altKey && (ux === 0 || uy === 0);
+      const t = Math.max(onGrid ? 1 : 0.25, onGrid ? Math.round((gx - fixed.x) * ux + (gy - fixed.y) * uy) : (gx - fixed.x) * ux + (gy - fixed.y) * uy);
+      const x = snapHeight(fixed.x + ux * t), y = snapHeight(fixed.y + uy * t);
+      if (x !== stretch.x || y !== stretch.y) setStretch({ ...stretch, x, y });
+      return;
+    }
     if (targetMode?.area) {
       const { gx, gy } = gridAt(e);
       setAimAt({ x: gx, y: gy });
@@ -1187,6 +1217,18 @@ export default function MapView({
       }
       return;
     }
+    if (stretch) {
+      const s = optimisticStructures.find((x) => x.id === stretch.id);
+      setStretch(null);
+      const moved = s && (stretch.which === 1 ? { ...s, x1: stretch.x, y1: stretch.y } : { ...s, x2: stretch.x, y2: stretch.y });
+      if (s && moved && (moved.x1 !== s.x1 || moved.y1 !== s.y1 || moved.x2 !== s.x2 || moved.y2 !== s.y2)) {
+        startTransition(async () => {
+          changeStructures({ update: moved });
+          await moveStructureEnds(locationId, moved.id, { x1: moved.x1, y1: moved.y1, x2: moved.x2, y2: moved.y2 });
+        });
+      }
+      return;
+    }
     if (drawingLine) {
       const { start, end } = drawingLine;
       setDrawingLine(null);
@@ -1259,7 +1301,7 @@ export default function MapView({
         sound: selected === "sounds" ? drawnPositional.find((p) => p.id === selectedPositionalId) : undefined,
         token: selected === "tokens" ? drawnTokens.find((t) => t.id === selectedTokenId) : undefined,
         line: drawingLine && structureTool.kind !== "staircase" ? { ...drawingLine, kind: structureTool.kind } : null,
-        piece: selected === "structure" ? optimisticStructures.find((x) => x.id === selectedStructureId) : undefined,
+        piece: selected === "structure" ? shownStructures.find((x) => x.id === selectedStructureId) : undefined,
         trap: trapDrag && selected !== "triggers" ? trapFromDrag(trapShape, trapDrag) : null,
         trigger: trapDrag && selected === "triggers" ? trapFromDrag(trapShape, trapDrag) : null,
         effectArea: effectDrag ? effectRect(effectDrag) : null,
