@@ -7,6 +7,7 @@ import TilesEditor from "./TilesEditor";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
 import { DARK_BELOW, brightEnough } from "@/lib/light";
 import { landingRow, snapHeight } from "@/lib/gravity";
+import { snapWallEnd } from "@/lib/wallSnap";
 import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
@@ -610,18 +611,14 @@ export default function MapView({
   };
   /**
    * Where a structure line starts or ends. Snapping on: the nearest grid corner (on portrait maps only across;
-   * heights follow the pointer). Snapping off (or Alt held): where the pointer is, to 1/20 of a cell, joining
-   * the end of a nearby piece so walls drawn on irregular maps meet without gaps.
+   * heights follow the pointer). Snapping off (or Alt held): where the pointer is, to 1/20 of a cell, joining a
+   * nearby piece's end or line, or lining up with ends nearby (lib/wallSnap.ts), so walls meet squarely.
    */
   const cornerAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { gx, gy } = gridAt(e);
     if (!gridless && structureTool.snap !== e.altKey) return { x: Math.round(gx), y: portrait ? snapHeight(gy) : Math.round(gy) };
-    const ends = optimisticStructures.filter((s) => s.kind !== "staircase").flatMap((s) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]);
-    const near = ends
-      .map((p) => ({ p, d: Math.hypot(p.x - gx, p.y - gy) }))
-      .filter(({ d }) => d < JOIN_DISTANCE)
-      .sort((a, b) => a.d - b.d)[0];
-    return near ? near.p : { x: snapHeight(gx), y: snapHeight(gy) };
+    const lines = optimisticStructures.filter((s) => s.kind !== "staircase").map((s) => ({ a: { x: s.x1, y: s.y1 }, b: { x: s.x2, y: s.y2 } }));
+    return snapWallEnd({ x: snapHeight(gx), y: snapHeight(gy) }, lines, JOIN_DISTANCE, drawingLine ? [drawingLine.start] : []);
   };
   /** Where a token under the pointer goes: its cell, or on portrait maps its column with the pointer at its middle. */
   const tokenAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
