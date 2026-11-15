@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { MapStructure } from "@/lib/db";
 import { STRUCTURE_KINDS, STRUCTURE_LABELS, type StructureKind } from "@/lib/maps";
 import NameInput from "./NameInput";
@@ -45,6 +46,15 @@ export default function StructureEditor({
   onLockDoor: (id: number, locked: boolean) => void;
   onLockDc: (id: number, dc: number) => void;
 }) {
+  // A piece selected on the map scrolls into view in the list.
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    // Only the list scrolls (scrollIntoView would scroll the page too, moving the map from under the pointer).
+    const ul = list.current, li = ul?.querySelector<HTMLElement>(`[data-structure="${selectedId}"]`)?.closest("li");
+    if (!ul || !li) return;
+    if (li.offsetTop < ul.scrollTop) ul.scrollTop = li.offsetTop;
+    else if (li.offsetTop + li.offsetHeight > ul.scrollTop + ul.clientHeight) ul.scrollTop = li.offsetTop + li.offsetHeight - ul.clientHeight;
+  }, [selectedId]);
   return (
     <div className="space-y-3">
       <label className="label cursor-pointer gap-2 text-sm" title="Players never see wall lines. Hidden walls still block.">
@@ -105,7 +115,7 @@ export default function StructureEditor({
         {pieces.length === 0 ? (
           <p className="text-xs opacity-60">None yet.</p>
         ) : (
-          <ul className="max-h-48 overflow-y-auto rounded-box bg-base-100 text-sm">
+          <ul ref={list} className="relative max-h-48 overflow-y-auto rounded-box bg-base-100 text-sm">
             {pieces.map((s) => (
               <li key={s.id} className={`flex items-center gap-2 px-2 py-1 ${s.id === selectedId ? "bg-primary/20" : ""}`}>
                 <button type="button" data-structure={s.id} onClick={() => onSelect(s.id)} className="flex flex-1 items-center gap-2 text-left">

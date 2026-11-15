@@ -583,6 +583,17 @@ export default function MapView({
     }
   };
 
+  /** The structure at a point (grid units): a level link it's inside, else the nearest line within reach. */
+  const structureAt = (gx: number, gy: number): number | undefined => {
+    const link = optimisticStructures.find((s) => s.kind === "staircase" && gx >= Math.min(s.x1, s.x2) && gx <= Math.max(s.x1, s.x2) + 1 && gy >= Math.min(s.y1, s.y2) && gy <= Math.max(s.y1, s.y2) + 1);
+    if (link) return link.id;
+    const near = optimisticStructures
+      .filter((s) => s.kind !== "staircase")
+      .map((s) => ({ id: s.id, d: pointToSegment({ x: gx, y: gy }, { x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }) }))
+      .sort((a, b) => a.d - b.d)[0];
+    return near && near.d < 0.4 ? near.id : undefined;
+  };
+
   /** Pointer position in grid units (fractional), accounting for zoom and pan. */
   function gridAt(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1182,7 +1193,14 @@ export default function MapView({
     if (drawingLine) {
       const { start, end } = drawingLine;
       setDrawingLine(null);
-      if (start.x === end.x && start.y === end.y) return; // a click without a drag draws nothing
+      if (start.x === end.x && start.y === end.y) {
+        // A click without a drag draws nothing: it selects the piece under the pointer (or nothing).
+        if (e) {
+          const { gx, gy } = gridAt(e);
+          setSelectedStructureId(structureAt(gx, gy) ?? null);
+        }
+        return;
+      }
       // On portrait maps a nearly level wall, window or door is drawn level (a floor), so hand-drawn floors come out flat.
       const level = portrait && structureTool.kind !== "stairs" && start.x !== end.x && Math.abs(end.y - start.y) <= 0.25;
       const piece = { kind: structureTool.kind, x1: start.x, y1: start.y, x2: end.x, y2: level ? start.y : end.y, target_level_id: null };
