@@ -1242,6 +1242,11 @@ export function deleteStructure(id: number): void {
   db.prepare<[number]>("DELETE FROM map_structures WHERE id = ?").run(id);
 }
 
+/** Removes every structure on a level (walls, doors, windows, stairs, level links); returns how many. */
+export function deleteLevelStructures(levelId: number): number {
+  return db.prepare<[number]>("DELETE FROM map_structures WHERE level_id = ?").run(levelId).changes;
+}
+
 /** A token on a level: who it is (creature or character), how it looks, and its cell. */
 export interface MapToken {
   id: number;

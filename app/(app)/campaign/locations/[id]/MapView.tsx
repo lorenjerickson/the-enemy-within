@@ -41,7 +41,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, removeTile, removeToken, toggleLayer } from "../actions";
 import { GM_ONLY_LAYERS, capitalize, type Area, EyeIcon, type MapState, type CellRect, useImage, noteLayout, SCENE, JOIN_DISTANCE, fitScene, gridOrigin, figureCells, HOLD_MS, LIFT_MS, PING_MS, FX_MS, SIGHT, LAYER_RENDERERS } from "./mapLayers";
 
 
@@ -203,9 +203,9 @@ export default function MapView({
   const [structureTool, setStructureTool] = useState<StructureTool>({ kind: "wall", targetLevelId: otherLevels[0]?.id ?? null, snap: true });
   const [drawingLine, setDrawingLine] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
   const [selectedStructureId, setSelectedStructureId] = useState<number | null>(null);
-  type StructureChange = { add: MapStructure } | { remove: number };
+  type StructureChange = { add: MapStructure } | { remove: number } | { update: MapStructure } | { clear: true };
   const [optimisticStructures, changeStructures] = useOptimistic(structures, (ss: MapStructure[], c: StructureChange) =>
-    "add" in c ? [...ss, c.add] : ss.filter((s) => s.id !== c.remove)
+    "add" in c ? [...ss, c.add] : "update" in c ? ss.map((s) => (s.id === c.update.id ? c.update : s)) : "clear" in c ? [] : ss.filter((s) => s.id !== c.remove)
   );
   /** On portrait maps a placed token drops to the floor below (the server does the same). */
   const portrait = mapImage.perspective === "portrait";
@@ -1574,6 +1574,13 @@ export default function MapView({
                     changeStructures({ remove: id });
                     setSelectedStructureId(null);
                     await removeStructure(locationId, id);
+                  })
+                }
+                onRemoveAll={() =>
+                  startTransition(async () => {
+                    changeStructures({ clear: true });
+                    setSelectedStructureId(null);
+                    await removeAllStructures(locationId, levelId);
                   })
                 }
               />

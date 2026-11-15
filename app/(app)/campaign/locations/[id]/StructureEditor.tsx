@@ -25,6 +25,7 @@ export default function StructureEditor({
   selectedId,
   onSelect,
   onDelete,
+  onRemoveAll,
   onToggleDoor,
   onRenameDoor,
   onLockDoor,
@@ -41,6 +42,7 @@ export default function StructureEditor({
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+  onRemoveAll: () => void;
   onToggleDoor: (id: number, open: boolean) => void;
   onRenameDoor: (id: number, name: string) => void;
   onLockDoor: (id: number, locked: boolean) => void;
@@ -111,7 +113,14 @@ export default function StructureEditor({
       </p>
 
       <div className="space-y-1">
-        <div className="text-sm font-semibold">Placed structure</div>
+        <div className="flex items-center justify-between text-sm font-semibold">
+          Placed structure
+          {pieces.length > 0 && (
+            <button type="button" className="btn btn-ghost btn-xs text-error" data-remove-all onClick={() => confirm(`Remove all ${pieces.length} structures on this level? This can't be undone.`) && onRemoveAll()}>
+              Remove all
+            </button>
+          )}
+        </div>
         {pieces.length === 0 ? (
           <p className="text-xs opacity-60">None yet.</p>
         ) : (
