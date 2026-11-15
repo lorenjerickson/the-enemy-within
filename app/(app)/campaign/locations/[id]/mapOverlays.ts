@@ -3,7 +3,7 @@ import { STRUCTURE_STYLES } from "@/lib/maps";
 import type { LightSource, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
 import type { TrapArea } from "@/lib/traps";
 import { drawTrap } from "./trapDraw";
-import { FX_MS, PING_MS, SCENE, SIGHT, cellToRect, gridOrigin, inScene, noteLayout, viewPast, type Area, type CellRect, type MapState } from "./mapLayers";
+import { mapRect, FX_MS, PING_MS, SCENE, SIGHT, cellToRect, gridOrigin, inScene, noteLayout, viewPast, type Area, type CellRect, type MapState } from "./mapLayers";
 import { blockingSegments, insidePolygon, visibilityPolygon, type Point, type Segment } from "@/lib/visibility";
 import { areaPolygon, caughtBy, placeArea } from "@/lib/aoe";
 import { drawAreaFx, drawFx, type Fx } from "@/lib/vfx";
@@ -57,6 +57,7 @@ export interface EditorAids {
   effectArea?: Area | null; // an effect's area being dragged out
   startArea?: Area | null; // the party's start area (shown, or being dragged out)
   placing?: CellRect | null; // the cells a tile being placed will cover
+  scale?: boolean; // a token-sized square in the middle of the map (gridless maps: how wide to make doors and halls)
 }
 
 export function drawEditorAids(ctx: CanvasRenderingContext2D, state: MapState, k: number, a: EditorAids) {
@@ -129,6 +130,24 @@ export function drawEditorAids(ctx: CanvasRenderingContext2D, state: MapState, k
       ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w * 0.42, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+  // Scale: one token's square (5 ft) in the middle of the map, under everything else drawn here.
+  if (a.scale) {
+    const { size } = gridOrigin(state, SCENE.w, SCENE.h);
+    const p = state.background.padding, r = mapRect(state, SCENE.w, SCENE.h) ?? { x: p.left, y: p.top, w: SCENE.w - p.left - p.right, h: SCENE.h - p.top - p.bottom };
+    const x = r.x + r.w / 2 - size / 2, y = r.y + r.h / 2 - size / 2;
+    ctx.save();
+    ctx.fillStyle = "rgba(129,140,248,0.25)";
+    ctx.strokeStyle = "rgba(129,140,248,0.8)";
+    ctx.lineWidth = 2 / k;
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeRect(x, y, size, size);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = `${12 / k}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("1 token (5 ft)", x + size / 2, y + size + 4 / k);
     ctx.restore();
   }
   // Structure: preview of the line being drawn, and highlight of the selected piece.

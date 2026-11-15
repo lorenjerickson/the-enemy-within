@@ -1268,6 +1268,7 @@ export default function MapView({
         effectArea: effectDrag ? effectRect(effectDrag) : null,
         startArea: startDrag ? effectRect(startDrag) : selected === "tokens" || placingChar ? optimisticStart : null,
         placing: placing ? spanOf(placing) : null,
+        scale: selected === "structure" && gridless,
       });
     };
     draw();
