@@ -5,6 +5,7 @@ import { listEffectDefs, type Action, type ActionOwner } from "@/lib/db";
 import { describeCondition, asCondition, type Effect } from "@/lib/conditions";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
+import EffectChips, { type EffectOption } from "./EffectChips";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -27,8 +28,13 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
 }
 
 function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?: Action; effects: Effect[] }) {
-  // Effects that last a number of rounds (and any it already grants).
-  const conditions = effects.filter((e) => e.duration === "rounds" || (initial?.conditions ?? []).some((x) => x.id === e.id));
+  // Every catalog effect; an action can put on only those lasting rounds (and keeps any it already grants), the rest
+  // are listed greyed out with why (they're for items or creatures).
+  const grants = initial?.conditions ?? [];
+  const options: EffectOption[] = effects.map((e) => ({
+    id: e.id, name: e.name, about: describeCondition(asCondition(e)) || e.description,
+    unavailable: e.duration === "rounds" || grants.some((x) => x.id === e.id) ? undefined : e.duration === "always" ? "lasts always: for creatures" : "while equipped: for items",
+  }));
   return (
     <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
       <input name="name" placeholder="Action name (e.g. Circle of Flames)" required defaultValue={initial?.name} className="input input-sm col-span-2 w-full" />
@@ -133,18 +139,7 @@ function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?:
             <legend className="px-1 text-sm font-semibold">{on === "self" ? "Puts on whoever uses it" : "Puts on the target (on a hit, or a failed save)"}</legend>
             <div className="space-y-1" data-action-conditions={on}>
               <div className="text-xs font-semibold opacity-80">Effects (from the catalog)</div>
-              {conditions.length ? (
-                <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  {conditions.map((c) => (
-                    <label key={c.id} className="flex items-center gap-1 text-sm" title={describeCondition(asCondition(c))}>
-                      <input type="checkbox" name={`condition_${on}`} value={c.id} defaultChecked={(initial?.conditions ?? []).some((x) => x.id === c.id && x.on === on)} className="checkbox checkbox-xs" />
-                      {c.name}
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs opacity-60">None in the catalog yet (Campaign › Effects).</p>
-              )}
+              <EffectChips name={`condition_${on}`} options={options} initial={grants.filter((x) => x.on === on).map((x) => x.id)} />
             </div>
           </fieldset>
         );
