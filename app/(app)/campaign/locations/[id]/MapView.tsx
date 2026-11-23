@@ -13,7 +13,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing } from "../../../../(play)/play/actions";
+import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode } from "../../../../(play)/play/moveMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
@@ -149,9 +149,11 @@ export default function MapView({
   controls: MapControl[];
   scriptNames: ScriptNames; // names for the script editor's suggestions (this level's lights, doors …)
 }) {
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
   /** What the last clicked control button's script returned. */
   const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
+  // A level link the player's character stepped onto: they're asked whether to take it (`back`: where they came from).
+  const [levelPrompt, setLevelPrompt] = useState<{ id: number; to: string; back: Point } | null>(null);
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
   const [dockWidth, setDockWidth] = useState(0); // in a session: how much of the screen edge the dock covers
   const [hiddenSet, setHidden] = useOptimistic(new Set<MapLayer>(readOnly ? [...hidden, ...GM_ONLY_LAYERS] : hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
@@ -513,8 +515,9 @@ export default function MapView({
       const end = r.route[r.route.length - 1];
       setWalking({ id: t.id, route: r.route, started: performance.now() });
       changeTokens({ move: { id: t.id, col: end.x, row: end.y } });
+      if (r.link) setLevelPrompt({ id: r.link.id, to: r.link.to, back: r.route[r.route.length - 2] });
       if (r.trap) setControlResult({ label: "Trap", ok: false, text: r.trap });
-      else if (r.stopped) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
+      else if (r.stopped && !r.link) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
     });
   }
   /** A click inside the movement overlay walks the player's character there. */
@@ -1724,6 +1727,23 @@ export default function MapView({
     // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
     // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
     <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
+      {levelPrompt && (
+        <dialog open className="modal modal-open" aria-labelledby="level-link-title" data-level-prompt>
+          <div className="modal-box space-y-3">
+            <h3 id="level-link-title" className="font-bold">Go to {levelPrompt.to}?</h3>
+            <div className="modal-action">
+              {([[false, "Stay here"], [true, `Go to ${levelPrompt.to}`]] as const).map(([go, label]) => (
+                <button key={label} type="button" className={`btn ${go ? "btn-primary" : ""}`} disabled={pending} onClick={() => startTransition(async () => {
+                  const r = await takeLevelLink(levelPrompt.id, go, levelPrompt.back);
+                  setLevelPrompt(null);
+                  if (r.error) setControlResult({ label: "Move", ok: false, text: r.error });
+                  else if (!go) { const t = drawnTokens.find((x) => x.character_id === fog?.move?.characterId); if (t) changeTokens({ move: { id: t.id, col: levelPrompt.back.x, row: levelPrompt.back.y } }); }
+                })}>{label}</button>
+              ))}
+            </div>
+          </div>
+        </dialog>
+      )}
         <div className="flex-1 min-w-0 flex flex-col gap-1">
             <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
             {surface}

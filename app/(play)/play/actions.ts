@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
@@ -22,6 +22,7 @@ import { trapsOnStep, trapsWhereStopped } from "./traps";
 import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
 import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
+import { arrivalSpot, inLink, linkEntered } from "@/lib/levelLinks";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -183,7 +184,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
  * by the shortest route, without spending movement. It walks step by step and stops early where a map event
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
-export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string; trap?: string }> {
+export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string } }> {
   const user = await requireUser();
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
@@ -226,6 +227,8 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
 
   const walked: Point[] = [route[0]];
   let stopped = false;
+  let link: { id: number; to: string } | undefined; // a level link they stepped onto: they're asked whether to take it
+  const links = listStructures(me.level_id);
   const told: string[] = []; // traps they set off (theirs to know)
   for (const step of route.slice(1)) {
     const from = walked[walked.length - 1];
@@ -241,6 +244,12 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
       stopped = true; // the player isn't told which trigger (that's the GM's script)
       break;
     }
+    const onto = linkEntered(links, from, step);
+    if (onto) {
+      stopped = true;
+      link = { id: onto.id, to: links.find((l) => l.id === onto.id)?.target_name ?? "another level" };
+      break;
+    }
   }
   if (!stopped && walked.length > 1) {
     const end = walked[walked.length - 1];
@@ -249,7 +258,35 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   }
   syncAurasOn(me.level_id); // walked into (or out of) an aura
   revalidatePath("/play");
-  return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}) };
+  return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
+}
+
+/**
+ * The player answers the level link prompt: taking it moves their token to the level it leads to (onto the link
+ * there that leads back, else the same spot); declining steps them back off it to `back` (where they came from).
+ */
+export async function takeLevelLink(linkId: number, go: boolean, back: Point): Promise<{ error?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, movement is limited" };
+  const link = listStructures(me.level_id).find((s) => s.id === Number(linkId) && s.kind === "staircase");
+  const here = { x: me.col, y: me.row };
+  if (!link || link.target_level_id === null || !inLink(link, here)) return { error: "You're not on a way to another level" };
+  if (go) {
+    const to = arrivalSpot(me.level_id, here, listStructures(link.target_level_id));
+    moveTokenToLevel(me.token_id, link.target_level_id, to.x, to.y);
+    logSessionEvent(`${me.name} went to ${link.target_name ?? "another level"}`);
+    syncAurasOn(me.level_id);
+    syncAurasOn(link.target_level_id);
+  } else {
+    const b = { x: Number(back?.x), y: Number(back?.y) };
+    if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || Math.hypot(b.x - here.x, b.y - here.y) > 1.5 || inLink(link, b)) return { error: "Can't step back there" };
+    moveToken(me.token_id, b.x, b.y);
+  }
+  revalidatePath("/play");
+  return {};
 }
 
 /** The player's character's planner in a running encounter. */

@@ -1396,6 +1396,12 @@ export function moveToken(id: number, col: number, row: number): void {
   recordSighting(id);
 }
 
+/** Moves a token to another level (taking a level link). */
+export function moveTokenToLevel(id: number, levelId: number, col: number, row: number): void {
+  db.prepare<[number, number, number, number]>("UPDATE map_tokens SET level_id = ?, col = ?, row = ? WHERE id = ?").run(levelId, col, row, id);
+  recordSighting(id);
+}
+
 // Fog of war: every spot a character's token has stood on a level (its centre, grid units); what was seen from them stays explored.
 db.exec(`CREATE TABLE IF NOT EXISTS sightings (
   character_id INTEGER NOT NULL,
