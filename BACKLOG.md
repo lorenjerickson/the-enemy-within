@@ -2,6 +2,16 @@
 
 From the code review on 2026-11-06. Roughly in the order to tackle them.
 
+## Item artwork — partially complete; eight service rejections (2026-11-22)
+
+Generated and linked 58 of the 66 missing item illustrations using built-in `image_gen`: muted detailed illustrations on ivory backgrounds, early twentieth-century equipment, preserving explicitly named models. All 9 existing item images preserved; 67/75 items now have art. Outputs: `data/images/item-*-generated.png` (Great Axe: `item-1-great-axe.png`). Database backup and original inventory: `data/item-artwork/`; exact prompts, per-item outputs and errors: `manifest.json`; checks: `verification.json`.
+
+Verified all 58 PNGs (square, at least 1024px, CRC/decompression), matching database links and exactly one matching asset-library entry each. All other item fields and original artwork references equal the backup. SQLite integrity check passed. Visually inspected generated outputs as returned. No application code changed; no deployment performed.
+
+Remaining blank after image service output moderation rejections: Police Positive Revolver (38), Mk 2 Grenade (50), Dynamite and Fuse (53), Tarot Deck (55), Switchblade (70), Brass Knuckles (71), Lockpicks (72), Tommy Gun (74). Tarot output was flagged sexual; other rejected outputs were flagged illicit. No retries or substitutes. Next action: user-provided replacement artwork or a separately reviewed follow-up for these eight only; preserve the 58 completed outputs.
+
+Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, zero retries/delegates. Codex weekly account-wide usage moved from 1% at approximately 16:16 PST to 3% at 16:42 PST on 2026-11-22 (two percentage points; not proven request-level attribution, separate image allowance not exposed). No observed reset during work. Original limit: stop above five percentage points; further generation requires a reviewed extension of the 66-call bound. Existing package/public-asset changes were present before this task and were left untouched.
+
 ## Next
 
 0. ~~**Collapse conditions and effects into one thing: effects.**~~ Done 2026-11-13. An effect is a name, its rules and how long it lasts: so many rounds (with its saves and what ends it), while equipped (offered to items), or always (offered to creatures). Actions and the GM put on effects lasting rounds. The conditions table is kept empty: at start-up and after importing an older export, any conditions become effects (`migrateConditions`): a custom condition with one effect of its own merges into it (keeping the effect's name and id), anything else becomes a new effect named after the condition; actions, trigger/aura rules, effects on tokens and aura passes are repointed; the old built-ins' building blocks go unless something has one or no built-in uses it. Built-ins are single effects with all their rules. Rules now say "gains the X effect". Engine unchanged (it still keeps an effect put on someone as a `Condition` snapshot). Still to do as its own slice: fold actions' own boosts and advantage/disadvantage ("statuses") into effects.

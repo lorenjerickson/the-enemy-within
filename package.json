@@ -36,5 +36,9 @@
     "daisyui": "^5.7.50",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "@3d-dice/dice-box@1.1.4": true,
+    "better-sqlite3@13.0.3": true
   }
 }

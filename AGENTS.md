@@ -1,3 +1,5 @@
+Read and maintain [BACKLOG.md](BACKLOG.md) for project work and handoffs.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
