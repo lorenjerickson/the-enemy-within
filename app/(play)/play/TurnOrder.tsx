@@ -3,6 +3,7 @@
 import { setGmPlanToken, useGmPlanToken } from "./gmPlanner";
 import { setMoveMode } from "./moveMode";
 import { gmRollInitiativeFor } from "./gmActions";
+import PlanCountdown from "./PlanCountdown";
 
 export interface TurnRow {
   tokenId: number;
@@ -14,6 +15,7 @@ export interface TurnRow {
   rolling?: boolean; // rolling their plan's dice
   turn: boolean;
   statuses: { source: string; text: string }[]; // what actions left on them (Blinding flash: disadvantage on attack rolls)
+  clock?: number; // the last one planning: when their time runs out (ms)
 }
 
 /**
@@ -50,7 +52,10 @@ export default function TurnOrder({ rows }: { rows: TurnRow[] }) {
             {r.down ? (
               <span className="badge badge-sm badge-error">down</span>
             ) : (
-              <span className={`badge badge-sm ${r.ready ? "badge-success" : r.rolling ? "badge-secondary" : "badge-ghost"}`}>{r.ready ? "ready" : r.rolling ? "rolling…" : "planning"}</span>
+              <>
+                <span className={`badge badge-sm ${r.ready ? "badge-success" : r.rolling ? "badge-secondary" : "badge-ghost"}`}>{r.ready ? "ready" : r.rolling ? "rolling…" : "planning"}</span>
+                {r.clock && !r.ready && <PlanCountdown endsAt={r.clock} compact />}
+              </>
             )}
           </button>
           {r.initiative === null && (

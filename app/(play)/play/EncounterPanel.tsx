@@ -5,6 +5,7 @@ import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, remove
 import { planView } from "@/lib/roundPlanServer";
 import type { CreaturePlan } from "./CreaturePlans";
 import TurnOrder from "./TurnOrder";
+import { planClock } from "./planClock";
 import { describeStatus } from "@/lib/status";
 import RoundScrubber from "./RoundScrubber";
 import { allegianceOf } from "@/lib/sides";
@@ -18,6 +19,7 @@ export default function EncounterPanel() {
   const rolling = levelId === undefined ? new Set<number>() : rollingTokens(levelId);
   const down = levelId === undefined ? new Set<number>() : downTokens(levelId); // sit out planning until revived
   const statuses: ReturnType<typeof listTokenStatuses> = levelId === undefined ? new Map() : listTokenStatuses(levelId);
+  const clock = levelId === undefined ? null : planClock(levelId); // the last player planning: their countdown
   // Tokens by id; several with the same name get numbers (Human 1, Human 2) so the GM can tell them apart.
   const labels = levelId === undefined ? new Map<number, string>() : tokenLabels(levelId);
   const names = new Map(
@@ -43,7 +45,7 @@ export default function EncounterPanel() {
             rows={[
               ...enc.order.map((o, i) => ({ tokenId: o.token_id, initiative: o.initiative, turn: i === enc.turn })),
               ...waiting.map((id) => ({ tokenId: id, initiative: null, turn: false })),
-            ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId), rolling: rolling.has(r.tokenId), statuses: (statuses.get(r.tokenId) ?? []).map((s) => ({ source: s.source, text: describeStatus(s) })) }))}
+            ].map((r) => ({ ...r, name: names.get(r.tokenId)?.name ?? "(gone)", player: names.get(r.tokenId)?.player ?? null, down: down.has(r.tokenId), ready: ready.has(r.tokenId), rolling: rolling.has(r.tokenId), statuses: (statuses.get(r.tokenId) ?? []).map((s) => ({ source: s.source, text: describeStatus(s) })), ...(clock?.tokenId === r.tokenId ? { clock: clock.endsAt } : {}) }))}
           />
           <p className="text-xs opacity-60">Click someone in the turn order to plan their round (as their player would).</p>
           {levelId !== undefined && listLastingAreas(levelId).length > 0 && (

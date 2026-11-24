@@ -8,6 +8,7 @@ import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WH
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
+import PlanCountdown from "./PlanCountdown";
 import TargetPicker from "./TargetPicker";
 import RoundScrubber from "./RoundScrubber";
 import RoundHistory from "./RoundHistory";
@@ -27,10 +28,11 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
   things?: { id: number; name: string }[]; // levers, switches, objects within reach (interactable map triggers)
+  planClock?: number | null; // they're the last one planning: when their time runs out (ms)
   running?: number; // running speed (feet a round): Dash; 0 = can't run
   standing?: { mode: "follow" | "pursue" | "evade"; name: string } | null; // out of an encounter: who they follow / pursue / evade
   onMap: boolean;
@@ -178,6 +180,7 @@ export default function PickLock({
   return (
     <div className="space-y-3 text-sm">
       {scrubber}
+      {plan && planClock && !plan.ready && <PlanCountdown endsAt={planClock} />}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
       {hideSpots && (
         <p className="text-xs" data-hide-pick>You&apos;re seen. Click a blind spot on the map (green) to slip into it and hide; it&apos;s harder in a hurry (disadvantage). Enemies you can&apos;t see may still spot you there. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setHideSpots(null)}>Cancel</button></p>

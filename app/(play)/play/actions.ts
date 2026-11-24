@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getGmLevelId, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -26,6 +26,7 @@ import { fireTrigger } from "./mapTriggers";
 import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { walkRoute, walkWithFollowers } from "./walk";
+import { planClock } from "./planClock";
 import { hidingPlaces, reveal, settleHide } from "./hiding";
 import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll } from "@/lib/rolls";
@@ -465,6 +466,14 @@ export async function hidePlanOptions(): Promise<{ error?: string; seen?: boolea
   const p = planner(user.id);
   if (!p) return { error: "Not in an encounter" };
   return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), timeline(p.plan, p.walking).left * p.walking);
+}
+
+/** A screen's planning countdown reached 0: settle it now (the last player goes without a plan) rather than on the next refresh. */
+export async function checkPlanClock(): Promise<void> {
+  const user = await requireUser();
+  const levelId = user.role === "gm" ? getGmLevelId() : getPlayerToken(user.id)?.level_id;
+  if (levelId !== undefined) planClock(levelId);
+  revalidatePath("/play");
 }
 
 /** The player's character's planner in a running encounter. */
