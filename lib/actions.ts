@@ -15,6 +15,7 @@ export type DamageType = (typeof DAMAGE_TYPES)[number];
 export interface Boost {
   target: ModifierTarget;
   value: string; // signed number or dice
+  unit?: string; // a speed change's units (lib/speed.ts SPEED_CHANGE_UNITS); unsaid: feet per round
   on?: "self" | "target"; // who gets it: whoever uses the action (default), or who it's used on
 }
 

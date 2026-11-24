@@ -15,7 +15,7 @@ import type { RollTweak } from "@/lib/status";
 
 /** One change while it's active. More kinds (set, multiply, resist, forbid…) come with the backlog. */
 export type Modifier =
-  | { kind: "boost"; target: ModifierTarget; value: string } // add a number or dice (+2, -1d4)
+  | { kind: "boost"; target: ModifierTarget; value: string; unit?: string } // add a number or dice (+2, -1d4); unit: a speed change's (unsaid: ft per round)
   | { kind: "roll"; roll: RollKind; mode: "advantage" | "disadvantage" }
   | { kind: "periodic"; value: string; heal: boolean; damage_type: DamageType | ""; save_attr?: Attribute | ""; save_dc?: number; save_pct?: number } // at the end of each round (a save leaves save_pct % of the damage)
   | { kind: "instant"; value: string; heal: boolean; damage_type: DamageType | "" } // once, as the condition lands (a healing draught)
@@ -24,7 +24,7 @@ export type Modifier =
   | { kind: "forbid"; what: Forbid } // can't do it at all (Incapacitated: no actions, bonus actions or reactions)
   | { kind: "autofail"; save: Attribute } // fails that kind of save without rolling (Stunned: Might and Agility)
   | { kind: "speed"; factor: number } // their speed multiplied (×½ crawling, ×2 hasted), after any boosts; several multiply together
-  | { kind: "set"; target: ModifierTarget; value: number; plus?: Attribute } // becomes at least this (Strength 19; defense 13 + Agility); the highest wins
+  | { kind: "set"; target: ModifierTarget; value: number; plus?: Attribute; unit?: string } // becomes at least this (Strength 19; defense 13 + Agility); the highest wins
   | { kind: "multiply"; target: ModifierTarget; factor: number } // multiplied after boosts and settings (damage ×2, defense ×½)
   | { kind: "temphp"; value: string } // temporary health as it lands (the highest counts, it doesn't add up)
   | { kind: "maxhp"; value: number } // maximum health raised (or lowered) while it lasts
@@ -32,7 +32,7 @@ export type Modifier =
   | RollTweak // reroll / minroll / crit / nocrit: what happens to the dice
   | { kind: "strain"; attribute: Attribute; points: number } // strain points on an attribute as it lands (each −1; negative: treatment takes them off); they outlast the condition and drain with rest
   | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft; blind: how far they still perceive, ft, default 5)
-  | { kind: "cap"; target: ModifierTarget | "darkvision"; value: number } // at most this ("reduced to"); the lowest cap wins, over boosts and "becomes"
+  | { kind: "cap"; target: ModifierTarget | "darkvision"; value: number; unit?: string } // at most this ("reduced to"); the lowest cap wins, over boosts and "becomes"
   | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /**
@@ -237,12 +237,12 @@ export const lingers = (c: Condition) => modifiersOf(c).some((m) => m.kind !== "
 export function rollChanges(c: Condition | Pick<Condition, "effects">): { boosts: Boost[]; grants: RollGrant[]; sets: { target: ModifierTarget; value: number; plus?: Attribute }[]; factors: { target: ModifierTarget; factor: number }[]; tweaks: RollTweak[]; caps: { target: ModifierTarget; value: number }[] } {
   const mods = c.effects.flatMap((e) => e.modifiers);
   return {
-    boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value }] : [])),
+    boosts: mods.flatMap((m) => (m.kind === "boost" ? [{ target: m.target, value: m.value, ...(m.unit ? { unit: m.unit } : {}) }] : [])),
     grants: mods.flatMap((m) => (m.kind === "roll" ? [{ roll: m.roll, mode: m.mode }] : [])),
-    sets: mods.flatMap((m) => (m.kind === "set" ? [{ target: m.target, value: m.value, ...(m.plus ? { plus: m.plus } : {}) }] : [])),
+    sets: mods.flatMap((m) => (m.kind === "set" ? [{ target: m.target, value: m.value, ...(m.plus ? { plus: m.plus } : {}), ...(m.unit ? { unit: m.unit } : {}) }] : [])),
     factors: mods.flatMap((m) => (m.kind === "multiply" ? [{ target: m.target, factor: m.factor }] : [])),
     tweaks: mods.filter((m): m is RollTweak => m.kind === "reroll" || m.kind === "minroll" || m.kind === "crit" || m.kind === "nocrit"),
-    caps: mods.flatMap((m) => (m.kind === "cap" && m.target !== "darkvision" ? [{ target: m.target, value: m.value }] : [])),
+    caps: mods.flatMap((m) => (m.kind === "cap" && m.target !== "darkvision" ? [{ target: m.target, value: m.value, ...(m.unit ? { unit: m.unit } : {}) }] : [])),
   };
 }
 

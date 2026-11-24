@@ -50,3 +50,13 @@ export function formatSpeed(s: Speed): string {
   if (s.dist === "km" && s.per === "h") return `${n} km/h`;
   return `${n} ${s.dist}/${s.per}`;
 }
+
+/** Units a speed change can be given in (an effect: "walking speed increases by 2 ft per second"). Unsaid: ft per round. */
+export const SPEED_CHANGE_UNITS: [string, string][] = [["ft/round", "ft per round"], ["ft/s", "ft per second"], ["m/s", "m per second"], ["mph", "mph"], ["km/h", "km/h"]];
+
+/** A speed change (an effect's number, in its unit) in feet per round. */
+export function speedChangeFtPerRound(value: number, unit?: string): number {
+  if (!unit || unit === "ft/round") return value;
+  const [dist, per] = unit === "mph" ? ["mi", "h"] : unit === "km/h" ? ["km", "h"] : unit.split("/");
+  return feetPerSecond(asSpeed({ value, dist, per })) * SECONDS.round;
+}

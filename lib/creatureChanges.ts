@@ -1,4 +1,4 @@
-import { asSpeed, feetPerSecond } from "@/lib/speed";
+import { asSpeed, feetPerSecond, speedChangeFtPerRound } from "@/lib/speed";
 /**
  * Everything that changes a creature's numbers right now, in one place, so every roll and every speed sees the same
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
@@ -147,8 +147,15 @@ export function speedFactor(tokenId: number): number {
 export function speedOf(tokenId: number, movement: string | Record<string, unknown>, type: MovementType = "walking"): number {
   // Feet a round (6 s): boosts are still in feet per round until they carry units. Use speedFps (feet per second).
   const base = feetPerSecond(asSpeed((typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0)) * 6;
-  const changes = changesOn(tokenId);
-  return Math.max(0, Math.round(settled(base + steadyBoost(changes, `movement:${type}`), changes, `movement:${type}`).value * speedFactor(tokenId) * 100) / 100);
+  const target = `movement:${type}` as const;
+  // Speed changes in their own units (unsaid: feet per round), worked out in feet per round.
+  const changes = changesOn(tokenId).map((s) => ({
+    ...s,
+    boosts: s.boosts.map((b) => (b.target === target && b.unit ? { ...b, value: String(speedChangeFtPerRound(steady(b.value), b.unit)), unit: undefined } : b)),
+    sets: s.sets?.map((x) => (x.target === target ? { ...x, value: speedChangeFtPerRound(x.value, x.unit) } : x)),
+    caps: s.caps?.map((x) => (x.target === target ? { ...x, value: speedChangeFtPerRound(x.value, x.unit) } : x)),
+  }));
+  return Math.max(0, Math.round(settled(base + steadyBoost(changes, target), changes, target).value * speedFactor(tokenId) * 100) / 100);
 }
 
 /** A token's speed now (boosts, conditions), in feet per second. */

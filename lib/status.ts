@@ -13,9 +13,9 @@ export interface Status {
   boosts: Boost[];
   grants: RollGrant[];
   conditions?: Condition[]; // catalog conditions it puts on them (Poisoned…): these run on by rounds, apart from the status
-  sets?: { target: ModifierTarget; value: number; plus?: Attribute }[]; // "becomes" (at least): Strength 19, defense 13 + Agility
+  sets?: { target: ModifierTarget; value: number; plus?: Attribute; unit?: string }[]; // "becomes" (at least): Strength 19, defense 13 + Agility
   factors?: { target: ModifierTarget; factor: number }[]; // multiplied: damage ×2, defense ×½
-  caps?: { target: ModifierTarget; value: number }[]; // at most: "Might is reduced to 8" (the lowest wins, after "becomes")
+  caps?: { target: ModifierTarget; value: number; unit?: string }[]; // at most: "Might is reduced to 8" (the lowest wins, after "becomes")
   tweaks?: RollTweak[]; // what happens to the dice: rerolls, a minimum, a wider critical range, no criticals against them
 }
 

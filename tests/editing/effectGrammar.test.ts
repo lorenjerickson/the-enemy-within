@@ -30,6 +30,10 @@ const SAMPLES: Modifier[] = [
   { kind: "forbid", what: "bonus" },
   { kind: "forbid", what: "reactions" },
   { kind: "forbid", what: "movement" },
+  { kind: "boost", target: "movement:walking", value: "+10" }, // a speed change in ft per round (unsaid)
+  { kind: "boost", target: "movement:running", value: "+2", unit: "ft/s" }, // ... in its own units
+  { kind: "set", target: "movement:flying", value: 70, unit: "mph" },
+  { kind: "cap", target: "movement:walking", value: 1, unit: "m/s" },
   { kind: "forbid", what: "attack-source" },
   { kind: "autofail", save: "might" },
   { kind: "speed", factor: 0.5 },
@@ -220,4 +224,9 @@ test("lifecycles: while equipped and always read, render and compile", () => {
 test("rules name other effects: 'it gains the Burning effect'", () => {
   const texts = effectSentences([trig({ on: "hitting", condition: 5, condition_on: "other" })], nameOf);
   assert.deepEqual(texts, ["When you hit a creature, it gains the Burning effect."]);
+});
+
+test("a speed change reads with its units", () => {
+  assert.equal(effectText({ modifiers: [{ kind: "boost", target: "movement:running", value: "+2", unit: "ft/s" }] }), "Your running speed increases by 2 ft per second.");
+  assert.equal(effectText({ modifiers: [{ kind: "boost", target: "movement:walking", value: "+10" }] }), "Your walking speed increases by 10 ft per round.");
 });

@@ -1,3 +1,4 @@
+import { SPEED_CHANGE_UNITS } from "@/lib/speed";
 /**
  * The effect sentence grammar (draft): an effect's rules written as a player's handbook would, in the second person
  * ("you" = whoever has the effect, always), built blank by blank, each choice deciding the blanks that follow. The
@@ -67,8 +68,17 @@ const HOW: Slot = { kind: "choice", id: "how", label: "how", options: [
   { value: "max", text: "is reduced to", next: [num("to", "value")] },
   { value: "x2", text: "is doubled" }, { value: "x0.5", text: "is halved" }, { value: "x0", text: "drops to zero" },
 ] };
+/** A speed's change, in its units ("increases by 2 ft per second"; unsaid in old effects: ft per round). */
+const SPEED_UNIT: Slot = { kind: "choice", id: "unit", label: "unit", options: SPEED_CHANGE_UNITS.map(([value, text]) => ({ value, text })) };
+const HOW_SPEED: Slot = { kind: "choice", id: "how", label: "how", options: [
+  { value: "plus", text: "increases by", next: [amountSlot, SPEED_UNIT] },
+  { value: "minus", text: "decreases by", next: [amountSlot, SPEED_UNIT] },
+  { value: "min", text: "is raised to", next: [num("to", "value", 0, 9999), SPEED_UNIT] },
+  { value: "max", text: "is reduced to", next: [num("to", "value", 0, 9999), SPEED_UNIT] },
+  { value: "x2", text: "is doubled" }, { value: "x0.5", text: "is halved" }, { value: "x0", text: "drops to zero" },
+] };
 const YOUR_STAT: Slot = { kind: "choice", id: "stat", label: "what", options: [
-  ...STATS.map((o): Option => ({ ...o, next: [HOW] })),
+  ...STATS.map((o): Option => ({ ...o, next: [String(o.value).startsWith("movement:") ? HOW_SPEED : HOW] })),
   { value: "speed", text: "speed", next: [{ kind: "choice", id: "how", label: "how", options: [{ value: "x0.5", text: "is halved" }, { value: "x2", text: "is doubled" }] }] },
   { value: "darkvision", text: "darkvision", next: [{ kind: "choice", id: "how", label: "how", options: [{ value: "min", text: "is raised to" }, { value: "max", text: "is reduced to" }] }, num("to", "feet", 0, 300), word("feet")] },
   { value: "crit", text: "attacks score a critical hit on a d20 roll of", next: [num("range", "lowest roll", 2, 20), word("or higher")] },
@@ -205,14 +215,16 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
     case "your": {
       if (f.stat === "crit") return one({ kind: "crit", range: Number(f.range) });
       if (f.stat === "speed") return one({ kind: "speed", factor: Number(String(f.how).slice(1)) });
-      if (f.how === "max") return f.stat === "health" ? none("maximum health can't be capped yet") : one({ kind: "cap", target: f.stat as ModifierTarget | "darkvision", value: Number(f.to) });
+      // A speed's change in its units (ft per round is the default, left unsaid).
+      const unit = String(f.stat).startsWith("movement:") && f.unit && f.unit !== "ft/round" ? { unit: String(f.unit) } : {};
+      if (f.how === "max") return f.stat === "health" ? none("maximum health can't be capped yet") : one({ kind: "cap", target: f.stat as ModifierTarget | "darkvision", value: Number(f.to), ...unit });
       if (f.stat === "darkvision") return one({ kind: "sense", sense: "darkvision", range: Number(f.to) });
       const target = f.stat as ModifierTarget;
-      if (f.how === "min") return one({ kind: "set", target, value: Number(f.to), ...(f.plus_attr ? { plus: f.plus_attr as Attribute } : {}) });
+      if (f.how === "min") return one({ kind: "set", target, value: Number(f.to), ...(f.plus_attr ? { plus: f.plus_attr as Attribute } : {}), ...unit });
       if (String(f.how).startsWith("x")) return one({ kind: "multiply", target, factor: Number(String(f.how).slice(1)) });
       const by = f.how === "minus" ? `-${amount.replace(/^[+-]/, "")}` : amount;
       if (f.stat === "health") return /^[+-]?\d+$/.test(by) ? one({ kind: "maxhp", value: Number(by) }) : none("maximum health takes a plain number, not dice");
-      return one({ kind: "boost", target, value: signed(by) });
+      return one({ kind: "boost", target, value: signed(by), ...unit });
     }
     case "roll": {
       const kinds = rollKinds(String(f.roll));
@@ -333,6 +345,9 @@ function saveFilled(m: { save_attr?: string; save_dc?: number; save_pct?: number
   return { save: 1, save_dc: m.save_dc ?? 12, save_attr: m.save_attr!, ...(pct === 50 ? { save_for: "half" } : pct === 0 ? { save_for: "none" } : { save_for: "pct", save_pct: pct }) };
 }
 
+/** A speed change's unit, said (ft per round when unsaid); nothing for anything else. */
+const speedUnit = (target: string, unit?: string): Filled => (target.startsWith("movement:") ? { unit: unit ?? "ft/round" } : {});
+
 /** The sentence(s) for one modifier (a trigger with damage and a condition is two). */
 function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[] {
   const sign = (v: string) => (v.startsWith("-") ? "-" : "+"), bare = (v: string) => v.replace(/^[+-]/, "");
@@ -340,7 +355,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "boost":
       if (m.target === "health") return [{ when: "applied", outcome: "your_health", amount: bare(m.value) }];
       if (m.target === "attack" || m.target === "save" || m.target === "check" || m.target.startsWith("save:") || m.target.startsWith("skill:")) return [{ when: "roll", roll: m.target, sign: sign(m.value), dice: bare(m.value) }];
-      return [{ when: "your", stat: m.target, how: m.value.startsWith("-") ? "minus" : "plus", amount: bare(m.value) }];
+      return [{ when: "your", stat: m.target, how: m.value.startsWith("-") ? "minus" : "plus", amount: bare(m.value), ...speedUnit(m.target, m.unit) }];
     case "roll":
       return m.roll === "attacked" ? [{ when: "attacked", keep: m.mode }] : [{ when: "roll", roll: m.roll, sign: "twice", keep: m.mode }];
     case "periodic":
@@ -358,7 +373,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "speed":
       return [{ when: "your", stat: "speed", how: `x${m.factor}` }];
     case "set":
-      return [{ when: "your", stat: m.target, how: "min", to: m.value, ...(m.plus ? { plus: 1, plus_attr: m.plus } : {}) }];
+      return [{ when: "your", stat: m.target, how: "min", to: m.value, ...(m.plus ? { plus: 1, plus_attr: m.plus } : {}), ...speedUnit(m.target, m.unit) }];
     case "multiply":
       return [{ when: "your", stat: m.target, how: `x${m.factor}` }];
     case "temphp":
@@ -395,7 +410,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "strain":
       return [m.points >= 0 ? { when: "applied", outcome: "strain", strain_attr: m.attribute, points: m.points } : { when: "applied", outcome: "relieve", strain_attr: m.attribute, points: -m.points }];
     case "cap":
-      return [{ when: "your", stat: m.target, how: "max", to: m.value }];
+      return [{ when: "your", stat: m.target, how: "max", to: m.value, ...speedUnit(m.target, m.unit) }];
     case "sense":
       return [m.sense === "blind" ? { when: "you", cant: "see", feet: m.range ?? 5 } : m.sense === "invisible" ? { when: "are", are: "invisible" } : m.sense === "seeinvisible" ? { when: "can" } : { when: "your", stat: "darkvision", how: "min", to: m.range ?? 60 }];
     case "aura":

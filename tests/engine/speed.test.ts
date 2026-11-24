@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { asSpeed, convertSpeed, feetPerSecond, formatSpeed } from "@/lib/speed";
+import { asSpeed, convertSpeed, feetPerSecond, formatSpeed, speedChangeFtPerRound } from "@/lib/speed";
 
 test("old plain numbers are feet per round: 30 is 5 ft/s, 60 is 10 ft/s", () => {
   assert.equal(feetPerSecond(asSpeed(30)), 5);
@@ -19,4 +19,11 @@ test("converting and showing speeds", () => {
   assert.equal(formatSpeed({ value: 70, dist: "mi", per: "h" }), "70 mph");
   assert.equal(formatSpeed({ value: 5, dist: "ft", per: "s" }), "5 ft/s");
   assert.deepEqual(asSpeed({ value: "x", dist: "furlong" }), { value: 0, dist: "ft", per: "s" }, "junk: 0 ft/s");
+});
+
+test("a speed change in its own units, in feet per round (unsaid: ft per round)", () => {
+  assert.equal(speedChangeFtPerRound(10), 10);
+  assert.equal(speedChangeFtPerRound(2, "ft/s"), 12);
+  assert.ok(Math.abs(speedChangeFtPerRound(70, "mph") - 616) < 0.01);
+  assert.ok(Math.abs(speedChangeFtPerRound(1, "m/s") - 19.685) < 0.01);
 });
