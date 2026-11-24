@@ -1453,15 +1453,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS token_walks (
   at INTEGER NOT NULL
 )`);
 
-/** Records a walk (route: token corners, start first) by `userId` (0: nobody's own screen played it). */
-export function addTokenWalk(levelId: number, tokenId: number, route: { x: number; y: number }[], userId: number): void {
+addColumn("token_walks", "fps", "REAL NOT NULL DEFAULT 5"); // how fast it went (feet per second): played back in real time
+
+/** Records a walk (route: token corners, start first) at `fps` feet per second, by `userId` (0: nobody's own screen played it). */
+export function addTokenWalk(levelId: number, tokenId: number, route: { x: number; y: number }[], userId: number, fps = 5): void {
   db.prepare("DELETE FROM token_walks WHERE at < ?").run(Date.now() - 60_000);
-  db.prepare("INSERT INTO token_walks (level_id, token_id, route, user_id, at) VALUES (?, ?, ?, ?, ?)").run(levelId, tokenId, JSON.stringify(route), userId, Date.now());
+  db.prepare("INSERT INTO token_walks (level_id, token_id, route, user_id, at, fps) VALUES (?, ?, ?, ?, ?, ?)").run(levelId, tokenId, JSON.stringify(route), userId, Date.now(), fps);
 }
 
-export function listTokenWalks(levelId: number, afterId: number): { id: number; token_id: number; route: { x: number; y: number }[]; user_id: number }[] {
+export function listTokenWalks(levelId: number, afterId: number): { id: number; token_id: number; route: { x: number; y: number }[]; user_id: number; fps: number }[] {
   return db
-    .prepare<[number, number, number], { id: number; token_id: number; route: string; user_id: number }>("SELECT id, token_id, route, user_id FROM token_walks WHERE level_id = ? AND id > ? AND at > ? ORDER BY id")
+    .prepare<[number, number, number], { id: number; token_id: number; route: string; user_id: number; fps: number }>("SELECT id, token_id, route, user_id, fps FROM token_walks WHERE level_id = ? AND id > ? AND at > ? ORDER BY id")
     .all(levelId, afterId, Date.now() - 5_000)
     .map((r) => ({ ...r, route: JSON.parse(r.route) }));
 }

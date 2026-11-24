@@ -251,7 +251,7 @@ export async function moveTokenTo(locationId: number, id: number, col: number, r
   syncAurasOn(levelId); // moved into (or out of) an aura
   if (!getEncounter(levelId)) revealAfterStep(levelId, id); // out of encounters: hidden ones given away (rounds work it out themselves)
   const now = listTokens(levelId).find((t) => t.id === id);
-  if (was && now) for (const w of moveFollowers(levelId, id, walkLength([{ x: was.col, y: was.row }, { x: now.col, y: now.row }], isGridlessLevel(levelId)))) addTokenWalk(levelId, w.tokenId, w.route, 0); // out of encounters: those following / pursuing / evading it (every map plays their walks)
+  if (was && now) for (const w of moveFollowers(levelId, id, walkLength([{ x: was.col, y: was.row }, { x: now.col, y: now.row }], isGridlessLevel(levelId)))) addTokenWalk(levelId, w.tokenId, w.route, 0, w.fps); // out of encounters: those following / pursuing / evading it (every map plays their walks)
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }

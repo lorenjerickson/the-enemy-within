@@ -99,7 +99,7 @@ export default function PickLock({
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
   const spent = (id: PlayerActionId) => (plan && DEFERRED_ACTIONS.includes(id) ? DEFERRED_WHY : plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || id === "hide" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || id === "hide" || (id === "dash" && running > 0) || CHASE_ACTIONS.includes(id)); // Dash out of one: Run (free moves at running speed) // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
@@ -159,6 +159,7 @@ export default function PickLock({
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
     : id === "evade" ? "Evade someone: whenever they move, you move away as far as they moved"
     : id === "move" ? (freeMovement ? "Move: click anywhere you've seen to walk there" : `Move (${moveLeft} ft left)`)
+    : id === "dash" ? (running > 0 ? "Run: while it's on, clicking where to go runs there (your running speed) instead of walking" : "No running speed")
     : `${base}: not available yet`;
 
   // Once the last round has played back: step through it second by second (only what they could have seen).
@@ -299,6 +300,7 @@ export default function PickLock({
                 {a.label}
                 <span className="block opacity-60">
                   {a.id === "move" && onMap && !plan ? (freeMovement ? "free" : `${moveLeft} ft left`)
+                    : a.id === "dash" && !plan ? (dashingNow ? "running" : "run")
                     : plan && ACTION_SECONDS[a.id] ? `${ACTION_SECONDS[a.id]} s`
                     : plan && CHASE_ACTIONS.includes(a.id) ? "follows them"
                     : "hint" in a ? a.hint : ""}
