@@ -94,6 +94,7 @@ export default function MapView({
   triggers = [],
   discoveries = [],
   fog,
+  linkPrompt = null,
   hideWalls,
   dockSide,
   dockTools = [],
@@ -138,6 +139,7 @@ export default function MapView({
   triggers?: MapTrigger[]; // the GM's map triggers (players get none)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
+  linkPrompt?: { id: number; to: string; back: Point } | null; // from the server: a level link their character reached in a round
   fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
@@ -153,7 +155,8 @@ export default function MapView({
   /** What the last clicked control button's script returned. */
   const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
   // A level link the player's character stepped onto: they're asked whether to take it (`back`: where they came from).
-  const [levelPrompt, setLevelPrompt] = useState<{ id: number; to: string; back: Point } | null>(null);
+  const [stepPrompt, setLevelPrompt] = useState<{ id: number; to: string; back: Point } | null>(null);
+  const levelPrompt = stepPrompt ?? linkPrompt;
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
   const [dockWidth, setDockWidth] = useState(0); // in a session: how much of the screen edge the dock covers
   const [hiddenSet, setHidden] = useOptimistic(new Set<MapLayer>(readOnly ? [...hidden, ...GM_ONLY_LAYERS] : hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {

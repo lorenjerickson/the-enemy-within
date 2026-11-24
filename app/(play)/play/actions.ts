@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
@@ -270,10 +270,12 @@ export async function takeLevelLink(linkId: number, go: boolean, back: Point): P
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
   if (!me) return { error: "You're not on the map yet" };
-  if (getEncounter(me.level_id)) return { error: "In an encounter, movement is limited" };
+  const asked = getLinkPrompt(me.token_id); // after a round (in an encounter); outside one, straight after the step
+  if (getEncounter(me.level_id) && asked?.id !== Number(linkId)) return { error: "In an encounter, movement is limited" };
   const link = listStructures(me.level_id).find((s) => s.id === Number(linkId) && s.kind === "staircase");
   const here = { x: me.col, y: me.row };
   if (!link || link.target_level_id === null || !inLink(link, here)) return { error: "You're not on a way to another level" };
+  clearLinkPrompt(me.token_id);
   if (go) {
     const to = arrivalSpot(me.level_id, here, listStructures(link.target_level_id));
     moveTokenToLevel(me.token_id, link.target_level_id, to.x, to.y);
@@ -281,8 +283,8 @@ export async function takeLevelLink(linkId: number, go: boolean, back: Point): P
     syncAurasOn(me.level_id);
     syncAurasOn(link.target_level_id);
   } else {
-    const b = { x: Number(back?.x), y: Number(back?.y) };
-    if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || Math.hypot(b.x - here.x, b.y - here.y) > 1.5 || inLink(link, b)) return { error: "Can't step back there" };
+    const b = asked ? asked.back : { x: Number(back?.x), y: Number(back?.y) }; // after a round: where the server noted they came from
+    if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || (!asked && Math.hypot(b.x - here.x, b.y - here.y) > 1.5) || inLink(link, b)) return { error: "Can't step back there" };
     moveToken(me.token_id, b.x, b.y);
   }
   revalidatePath("/play");
@@ -313,6 +315,8 @@ export async function planStep(step: StepRequest): Promise<{ error?: string }> {
   const user = await requireUser();
   const p = planner(user.id);
   if (!p) return { error: "Not in an encounter" };
+  const asked = getLinkPrompt(getPlayerToken(user.id)!.token_id);
+  if (asked) return { error: `First say whether you'll take the way to ${asked.to}` };
   const error = addPlanStep(p, step);
   revalidatePath("/play");
   return error ? { error } : {};

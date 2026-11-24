@@ -23,8 +23,10 @@ export default function LevelMap({
   contest = null,
   selectedTarget = null,
   planExplored,
+  linkPrompt = null,
 }: {
   locationId: number;
+  linkPrompt?: { id: number; to: string; back: { x: number; y: number } } | null; // a level link a player's character reached in a round: take it?
   level: MapLevel;
   levels: MapLevel[];
   readOnly?: boolean;
@@ -57,7 +59,7 @@ export default function LevelMap({
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   return (
-    <MapView downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

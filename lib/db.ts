@@ -1396,6 +1396,33 @@ export function moveToken(id: number, col: number, row: number): void {
   recordSighting(id);
 }
 
+// A level link a token came onto in a round: its player is asked (before planning again) whether to take it;
+// `back` is where they stepped from (where "Stay" puts them).
+db.exec(`CREATE TABLE IF NOT EXISTS link_prompts (
+  token_id INTEGER PRIMARY KEY,
+  link_id INTEGER NOT NULL,
+  back_col REAL NOT NULL,
+  back_row REAL NOT NULL
+)`);
+
+export function setLinkPrompt(tokenId: number, linkId: number, back: { col: number; row: number }): void {
+  db.prepare("INSERT OR REPLACE INTO link_prompts (token_id, link_id, back_col, back_row) VALUES (?, ?, ?, ?)").run(tokenId, linkId, back.col, back.row);
+}
+
+/** The level link prompt waiting for a token, with the name of the level it leads to. */
+export function getLinkPrompt(tokenId: number): { id: number; to: string; back: { x: number; y: number } } | undefined {
+  const r = db
+    .prepare<[number], { link_id: number; back_col: number; back_row: number; to: string | null }>(
+      "SELECT p.link_id, p.back_col, p.back_row, l.name AS \"to\" FROM link_prompts p JOIN map_structures s ON s.id = p.link_id LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE p.token_id = ?"
+    )
+    .get(tokenId);
+  return r && { id: r.link_id, to: r.to ?? "another level", back: { x: r.back_col, y: r.back_row } };
+}
+
+export function clearLinkPrompt(tokenId: number): void {
+  db.prepare("DELETE FROM link_prompts WHERE token_id = ?").run(tokenId);
+}
+
 /** Moves a token to another level (taking a level link). */
 export function moveTokenToLevel(id: number, levelId: number, col: number, row: number): void {
   db.prepare<[number, number, number, number]>("UPDATE map_tokens SET level_id = ?, col = ?, row = ? WHERE id = ?").run(levelId, col, row, id);

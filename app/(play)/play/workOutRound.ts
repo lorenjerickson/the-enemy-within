@@ -20,6 +20,7 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
+import { setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -79,7 +80,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.
@@ -124,6 +125,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const t = listMapTriggers(levelId).find((x) => x.id === f.triggerId);
     if (t) fireTrigger(levelId, t, f.tokenId);
   }
+  // Characters who came onto a level link: their player is asked whether to take it before planning again.
+  for (const l of result.linksReached) if (tokens.find((t) => t.id === l.tokenId)?.character_id) setLinkPrompt(l.tokenId, l.linkId, l.back);
   const lines = log.length ? log : ["Nothing happened."];
   logSessionEvent(`Round ${enc.round}: ${lines.join(" ")}`);
   saveEncounter(levelId, { ...enc, round: enc.round + 1 });
