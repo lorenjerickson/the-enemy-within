@@ -8,6 +8,7 @@ export interface LevelLink {
   x2: number;
   y2: number;
   target_level_id: number | null;
+  target_name?: string | null;
 }
 
 type Spot = { x: number; y: number }; // a token's corner (col, row), grid units

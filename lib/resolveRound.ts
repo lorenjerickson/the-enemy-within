@@ -23,6 +23,7 @@ import { fits, relation, type Allegiance } from "@/lib/sides";
 import { auraAffliction, auraWants, syncAuras, type AuraModifier } from "@/lib/auras";
 import { canSpring, entersTrap, inTrap, type Trap } from "@/lib/traps";
 import type { MapTrigger } from "@/lib/triggers";
+import { linkEntered, type LevelLink } from "@/lib/levelLinks";
 
 /** A trap as a round needs it: the effects it puts on, filled in from the catalog. */
 export type RoundTrap = Trap & { given: Condition[] };
@@ -166,6 +167,7 @@ export function resolveMovement(
   lit: (p: Pos) => boolean = () => true, // whether a spot is lit (light sources, the level's overall light): in the dark, only darkvision sees
   traps: RoundTrap[] = [], // the GM's traps on the level: they spring on whoever comes into one (each second), starts the round in one, or ends it in one
   triggers: MapTrigger[] = [], // the GM's map triggers: noted the second they fire (their outcomes happen after the round), stopping the mover at once
+  links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
 ) {
   const passes = new Set(auraPasses);
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
@@ -609,6 +611,20 @@ export function resolveMovement(
       }
     }
   };
+  // Level links: whoever comes onto one stops there (asked after the round, if a player's, whether to take it).
+  const linksReached: { linkId: number; tokenId: number; sec: number; back: Pos }[] = [];
+  const linksFor = (sec: number, before: Map<number, Pos>) => {
+    for (const id of [...fighters.keys()]) {
+      const from = before.get(id), to = pos.get(id);
+      if (down.has(id) || !from || !to || unmoved(from, to) || linksReached.some((l) => l.tokenId === id)) continue;
+      const l = linkEntered(links, { x: from.col, y: from.row }, { x: to.col, y: to.row });
+      if (!l) continue;
+      trapped.add(id);
+      linksReached.push({ linkId: l.id, tokenId: id, sec, back: from });
+      log.push(`${sec} s: ${nameOf(id)} reaches the way to ${l.target_name ?? "another level"} and stops there.`);
+      story.push({ sec, k: "link", who: id, to: l.target_name ?? "another level" });
+    }
+  };
   const centreOf = (p: Pos) => ({ x: p.col + 0.5, y: p.row + 0.5 });
   const order = [...movers].sort((a, b) => b.initiative - a.initiative);
   const wants = new Map(order.map((m) => [m.tokenId, planner(m, walls, gridless)]));
@@ -914,6 +930,7 @@ export function resolveMovement(
     // Traps that spring on whoever comes into one this second (stepping onto it, through it, across a tripwire).
     trapsFor("enter", sec, (t, id) => { const from = before.get(id), to = pos.get(id); return !!from && !!to && !unmoved(from, to) && entersTrap(t.area, centreOf(from), centreOf(to)); });
     triggersFor("enter", sec, (t, id) => { const from = before.get(id), to = pos.get(id); return !!from && !!to && !unmoved(from, to) && entersTrap(t.area, centreOf(from), centreOf(to)); });
+    linksFor(sec, before);
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
     syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,
       (target, c, source) => afflict(target, c, source, sec, source), (target, a) => release(target, a, "left", sec));
@@ -1225,7 +1242,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

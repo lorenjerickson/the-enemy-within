@@ -1,6 +1,7 @@
 // Small builders for round-resolution tests: fighters with fixed rolls, movers, plan steps, and one call to resolve.
 import { resolveMovement, type Combatant, type Mover, type RoundTrap } from "@/lib/resolveRound";
 import type { MapTrigger } from "@/lib/triggers";
+import type { LevelLink } from "@/lib/levelLinks";
 import type { GearAction, PlanStep } from "@/lib/roundPlan";
 import type { PlayerActionId } from "@/lib/playerActions";
 import type { Allegiance } from "@/lib/sides";
@@ -46,14 +47,14 @@ export const condition = (id: number, name: string, modifiers: Modifier[], extra
 export function resolve(
   movers: Mover[],
   fighters: Record<number, Combatant>,
-  o: { bystanders?: { tokenId: number; name: string; at: Pos }[]; walls?: Segment[]; lasting?: LastingArea[]; decisions?: Record<string, number>; afflictions?: Record<number, Affliction[]>; rollers?: number[]; gridless?: boolean; lit?: (p: Pos) => boolean; traps?: RoundTrap[]; triggers?: MapTrigger[] } = {},
+  o: { bystanders?: { tokenId: number; name: string; at: Pos }[]; walls?: Segment[]; lasting?: LastingArea[]; decisions?: Record<string, number>; afflictions?: Record<number, Affliction[]>; rollers?: number[]; gridless?: boolean; lit?: (p: Pos) => boolean; traps?: RoundTrap[]; triggers?: MapTrigger[]; links?: LevelLink[] } = {},
 ) {
   const r = resolveMovement(
     movers, o.bystanders ?? [], o.walls ?? [], o.gridless ?? false,
     new Map(Object.entries(fighters).map(([k, v]) => [Number(k), v])),
     o.walls ?? [], o.lasting ?? [], o.decisions ?? {},
     new Map(Object.entries(o.afflictions ?? {}).map(([k, v]) => [Number(k), v])),
-    new Set(o.rollers ?? []), new Set(), o.lit, o.traps, o.triggers,
+    new Set(o.rollers ?? []), new Set(), o.lit, o.traps, o.triggers, o.links,
   );
   return { ...r, text: r.log.join("\n"), at: (sec: number) => r.frames[sec - 1].lines.join("\n") };
 }
