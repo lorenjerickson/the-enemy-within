@@ -11,7 +11,7 @@ export const PLAYER_ACTIONS = [
   { id: "follow", label: "Follow", icon: "GiFootprint", kind: "movement", desc: "Follow someone you pick, for the seconds you choose: toward them by the shortest way, but only as far as they move (the gap holds; when they stop, you stop)." },
   { id: "attack", label: "Attack", icon: "GiCrossedSwords", kind: "action", desc: "Strike someone with your main-hand weapon (or bare hands): an attack roll against their defense, then damage." },
   { id: "use", label: "Use", icon: "GiSwapBag", kind: "action", desc: "Use something you have: in a round, an item in your hand or on your belt (Refit brings one out of a pack); out of combat, anything you carry. Consumables are used up." },
-  { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something nearby: a door, a lever, an object (no effect yet)." },
+  { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something within reach: open or close a door (in a round, it happens after the round); pick a lock out of combat." },
   { id: "disengage", label: "Disengage", icon: "GiReturnArrow", kind: "action", desc: "Slip away from close quarters (no effect yet)." },
   { id: "assist", label: "Assist", icon: "GiShakingHands", kind: "action", desc: "Help someone with what they're doing (no effect yet)." },
   { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Try to get out of sight (no effect yet)." },

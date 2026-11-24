@@ -111,6 +111,7 @@ export default function PickLock({
     setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
     if (plan && id === "use") { setTargetMode(null); setRefitting(false); return setUsing(!using); }
+    if (plan && id === "interact") { setTargetMode(null); setRefitting(false); return setInteracting(!interacting); }
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
@@ -121,7 +122,7 @@ export default function PickLock({
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
-    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
     : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"
@@ -148,17 +149,17 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {scrubber}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
-      {!plan && interacting && (
+      {interacting && (
         <section className="space-y-1" data-interact>
-          <div className="text-xs font-semibold opacity-80">Within reach</div>
+          <div className="text-xs font-semibold opacity-80">{plan ? "Within reach (where your plan leaves you): the door opens or closes after the round" : "Within reach"}</div>
           {doors.length ? (
             <ul className="space-y-1">
               {doors.map((d) => (
                 <li key={d.id} className="flex items-center gap-2" data-door={d.id}>
                   <span className="flex-1">{d.name} <span className="opacity-60">({d.locked ? "locked" : d.open ? "open" : "closed"})</span></span>
                   {d.locked
-                    ? <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => pickLock(d.id))}>Pick lock</button>
-                    : <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => interactDoor(d.id))}>{d.open ? "Close" : "Open"}</button>}
+                    ? (plan ? <span className="text-xs opacity-60">pick it out of combat</span> : <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => pickLock(d.id))}>Pick lock</button>)
+                    : <button type="button" className="btn btn-sm" disabled={pending || (!!plan && (plan.ready || !!spent("interact")))} onClick={() => { setInteracting(false); run(() => (plan ? planStep({ kind: "action", action: "interact", door: d.id }) : interactDoor(d.id))); }}>{d.open ? "Close" : "Open"}</button>}
                 </li>
               ))}
             </ul>

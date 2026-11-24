@@ -191,7 +191,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   // Doors within reach of their character (Interact: open, close; a locked one can be picked).
   const doorsNearby = me
     ? listStructures(me.level_id)
-        .filter((s) => s.kind === "door" && distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, s) <= REACH)
+        .filter((s) => s.kind === "door" && distanceToDoor(plan ? { x: plan.from.col + 0.5, y: plan.from.row + 0.5 } : { x: me.col + 0.5, y: me.row + 0.5 }, s) <= REACH) // in a round: from where the plan leaves them
         .map((s) => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open, locked: !!s.locked }))
     : [];
   const tools: DockTool[] = [

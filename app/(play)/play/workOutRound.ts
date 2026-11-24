@@ -20,7 +20,7 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
-import { setLinkPrompt } from "@/lib/db";
+import { getDoor, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -126,6 +126,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const t = listMapTriggers(levelId).find((x) => x.id === f.triggerId);
     if (t) fireTrigger(levelId, t, f.tokenId);
   }
+  // Doors worked this round (Interact): open or closed now, in the order it happened.
+  for (const d of result.doorsWorked) { const door = getDoor(d.doorId); if (door && !door.locked) setDoorOpen(door.id, !door.open); }
   // Characters who came onto a level link: their player is asked whether to take it before planning again.
   for (const l of result.linksReached) if (tokens.find((t) => t.id === l.tokenId)?.character_id) setLinkPrompt(l.tokenId, l.linkId, l.back);
   const lines = log.length ? log : ["Nothing happened."];
