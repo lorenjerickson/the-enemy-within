@@ -1,4 +1,4 @@
-import { downTokens, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, listMapTriggers, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
@@ -9,6 +9,7 @@ import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
 import { REACH, distanceToDoor } from "../app/(play)/play/reach";
+import { interactablesNear } from "@/lib/triggers";
 import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
@@ -24,7 +25,7 @@ export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 /** Their equipment as the plan so far leaves it (after any refit). */
 export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[]; door?: number } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[]; door?: number; thing?: number } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -96,7 +97,13 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     }
     // Interact: a door within reach of where the plan leaves them (not a locked one: that needs picking, out of rounds).
     let door: { id: number; name: string; open: boolean } | undefined;
-    if (step.action === "interact") {
+    let thing: { id: number; name: string } | undefined; // or a lever / switch / object (an interactable map trigger)
+    if (step.action === "interact" && step.thing !== undefined) {
+      const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
+      const side = allegianceOf(listTokens(p.tok.level_id).find((t) => t.id === p.tok.token_id) ?? { character_id: null });
+      thing = interactablesNear(listMapTriggers(p.tok.level_id), p.tok.token_id, side, { x: from.col + 0.5, y: from.row + 0.5 }, REACH).find((x) => x.id === Number(step.thing));
+      if (!thing) return "That's out of reach from there";
+    } else if (step.action === "interact") {
       const d = listStructures(p.tok.level_id).find((s) => s.id === Number(step.door) && s.kind === "door");
       if (!d) return "Pick a door within reach";
       const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
@@ -140,7 +147,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       if (t && !fits(tg.who, relation(me, allegianceOf(t)))) return `${name} isn't one of the ${tg.who === "enemy" ? "enemies" : "friendlies"}`;
     }
     const first = picks && !aim ? picks[0] : undefined;
-    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}) };
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking) ?? unavailable(p.plan, 0, stepKind(add), 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (why) return why;

@@ -170,6 +170,7 @@ export function resolveMovement(
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
 ) {
   const passes = new Set(auraPasses);
+  const thingsWorked: { tokenId: number; triggerId: number; sec: number }[] = []; // levers / objects worked (their triggers fire after the round)
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
   const itemsUsed: { tokenId: number; item: NonNullable<GearAction["item"]> }[] = []; // items whose actions were done (consumables are used up)
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
@@ -1025,6 +1026,13 @@ export function resolveMovement(
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
       if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
+      // Interact with a lever / switch / object: its trigger fires after the round (like any map trigger's outcomes).
+      if (step.action === "interact" && step.thing) {
+        thingsWorked.push({ tokenId: m.tokenId, triggerId: step.thing.id, sec });
+        say(`${m.name} works ${step.thing.name} (after the round).`);
+        story.push({ sec, k: "worked", who: m.tokenId, name: step.thing.name });
+        continue;
+      }
       // Interact with a door: it opens (or closes) after the round (walls don't change mid-round).
       if (step.action === "interact" && step.door) {
         doorsWorked.push({ tokenId: m.tokenId, doorId: step.door.id, sec });
@@ -1270,7 +1278,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

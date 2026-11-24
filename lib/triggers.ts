@@ -6,7 +6,8 @@
  * act once the round is resolved (only stopping the mover is immediate).
  */
 import type { AreaFires } from "@/lib/aoe";
-import type { TrapArea, TrapOften, TrapWho } from "@/lib/traps";
+import { canSpring, distanceToTrap, type TrapArea, type TrapOften, type TrapWho } from "@/lib/traps";
+import type { Allegiance } from "@/lib/sides";
 
 export type TriggerOutcome =
   | { kind: "door"; door: number; to: "open" | "close" | "lock" | "unlock" }
@@ -27,6 +28,7 @@ export interface MapTrigger {
   often: TrapOften;
   outcomes: TriggerOutcome[];
   sprung: number[]; // tokens it has fired for
+  interact?: boolean; // also fires when someone within reach Interacts with it (a lever, a switch, an object: by its name)
 }
 
 export const OUTCOME_KINDS: [TriggerOutcome["kind"], string][] = [
@@ -46,4 +48,9 @@ export function describeOutcome(o: TriggerOutcome, name: (kind: TriggerOutcome["
     case "stop": return "stops them";
     case "script": return "runs a script";
   }
+}
+
+/** Interactable triggers (levers, switches, objects) a token at `at` (its centre) can reach and set off: by name. */
+export function interactablesNear(triggers: MapTrigger[], tokenId: number, side: Allegiance, at: { x: number; y: number }, reach: number): { id: number; name: string }[] {
+  return triggers.filter((t) => t.interact && canSpring(t, tokenId, side) && distanceToTrap(t.area, at) <= reach).map((t) => ({ id: t.id, name: t.name }));
 }

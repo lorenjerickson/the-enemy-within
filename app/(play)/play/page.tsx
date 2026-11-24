@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
+import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -21,6 +21,7 @@ import GmPlanningMode from "./GmPlanningMode";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf } from "@/lib/sides";
+import { interactablesNear } from "@/lib/triggers";
 import { playerStory } from "@/lib/roundStory";
 import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
@@ -194,6 +195,10 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         .filter((s) => s.kind === "door" && distanceToDoor(plan ? { x: plan.from.col + 0.5, y: plan.from.row + 0.5 } : { x: me.col + 0.5, y: me.row + 0.5 }, s) <= REACH) // in a round: from where the plan leaves them
         .map((s) => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open, locked: !!s.locked }))
     : [];
+  // Levers, switches and objects (interactable map triggers) within reach, by name.
+  const interactables = me
+    ? interactablesNear(listMapTriggers(me.level_id), me.token_id, allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }), plan ? { x: plan.from.col + 0.5, y: plan.from.row + 0.5 } : { x: me.col + 0.5, y: me.row + 0.5 }, REACH)
+    : [];
   const tools: DockTool[] = [
     {
       id: "me",
@@ -213,7 +218,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, (JSON.parse(me.movement).walking ?? 0) - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

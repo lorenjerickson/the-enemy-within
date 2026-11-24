@@ -41,7 +41,8 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet a round); it uses the round's action
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean } };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string } };
+// thing: Interact with a lever / switch / object (an interactable map trigger): it fires after the round
 // door: Interact with a door (opened or closed after the round; open: how it was when planned)
 // picks: the targets chosen for an action aimed at several (or, in an area, which of those there it's meant for)
 // seconds: how long an Evade / Pursue lasts (unset = the rest of the round).

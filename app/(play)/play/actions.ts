@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -21,6 +21,9 @@ import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
+import { interactablesNear } from "@/lib/triggers";
+import { fireTrigger } from "./mapTriggers";
+import { allegianceOf } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { moveFollowers, walkRoute } from "./walk";
 import { walkLength } from "@/lib/standing";
@@ -58,6 +61,22 @@ export async function interactDoor(doorId: number): Promise<{ error?: string }> 
   logSessionEvent(`${me.name} ${door.open ? "closed" : "opened"} ${door.name ?? `Door ${door.id}`}.`);
   revalidatePath("/play");
   return {};
+}
+
+/** Interact, out of an encounter: the player works a lever, switch or object within reach (an interactable map trigger): it fires now. */
+export async function interactThing(triggerId: number): Promise<{ error?: string; told?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  const side = allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id });
+  const near = interactablesNear(listMapTriggers(me.level_id), me.token_id, side, { x: me.col + 0.5, y: me.row + 0.5 }, REACH);
+  const t = listMapTriggers(me.level_id).find((x) => x.id === Number(triggerId));
+  if (!t || !near.some((n) => n.id === t.id)) return { error: "That's out of reach" };
+  const fired = fireTrigger(me.level_id, t, me.token_id);
+  revalidatePath("/play");
+  return { told: [`You work ${t.name}.`, ...(fired.told.get(me.token_id) ?? [])].join(" ") };
 }
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */

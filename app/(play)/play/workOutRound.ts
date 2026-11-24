@@ -126,6 +126,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const t = listMapTriggers(levelId).find((x) => x.id === f.triggerId);
     if (t) fireTrigger(levelId, t, f.tokenId);
   }
+  // Levers / switches / objects worked this round (Interact): their triggers fire now.
+  for (const w of result.thingsWorked) { const t = listMapTriggers(levelId).find((x) => x.id === w.triggerId); if (t) fireTrigger(levelId, t, w.tokenId); }
   // Doors worked this round (Interact): open or closed now, in the order it happened.
   for (const d of result.doorsWorked) { const door = getDoor(d.doorId); if (door && !door.locked) setDoorOpen(door.id, !door.open); }
   // Characters who came onto a level link: their player is asked whether to take it before planning again.

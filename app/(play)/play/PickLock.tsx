@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { interactDoor, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
+import { interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
@@ -26,9 +26,10 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  running = 0, standing = null, doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
+  things?: { id: number; name: string }[]; // levers, switches, objects within reach (interactable map triggers)
   running?: number; // running speed (feet a round): Dash; 0 = can't run
   standing?: { mode: "follow" | "pursue" | "evade"; name: string } | null; // out of an encounter: who they follow / pursue / evade
   onMap: boolean;
@@ -151,9 +152,15 @@ export default function PickLock({
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
       {interacting && (
         <section className="space-y-1" data-interact>
-          <div className="text-xs font-semibold opacity-80">{plan ? "Within reach (where your plan leaves you): the door opens or closes after the round" : "Within reach"}</div>
-          {doors.length ? (
+          <div className="text-xs font-semibold opacity-80">{plan ? "Within reach (where your plan leaves you): it happens after the round" : "Within reach"}</div>
+          {doors.length || things.length ? (
             <ul className="space-y-1">
+              {things.map((t) => (
+                <li key={`t${t.id}`} className="flex items-center gap-2" data-thing={t.id}>
+                  <span className="flex-1">{t.name}</span>
+                  <button type="button" className="btn btn-sm" disabled={pending || (!!plan && (plan.ready || !!spent("interact")))} onClick={() => { setInteracting(false); if (plan) run(() => planStep({ kind: "action", action: "interact", thing: t.id })); else startTransition(async () => { const r = await interactThing(t.id); setError(r.error ?? null); setTold(r.told ?? null); }); }}>Use</button>
+                </li>
+              ))}
               {doors.map((d) => (
                 <li key={d.id} className="flex items-center gap-2" data-door={d.id}>
                   <span className="flex-1">{d.name} <span className="opacity-60">({d.locked ? "locked" : d.open ? "open" : "closed"})</span></span>

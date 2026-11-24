@@ -76,6 +76,7 @@ function TriggerSettings({ locationId, trigger: t, things }: { locationId: numbe
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="opacity-70">Fires when someone</span>
         {WHEN.map(([k, label]) => <label key={k} className="flex items-center gap-1"><input type="checkbox" name={`springs_${k}`} defaultChecked={t.springs.includes(k)} className="checkbox checkbox-xs" />{label}</label>)}
+        <label className="flex items-center gap-1" title="Players within 5 ft see it by its name under Interact (a lever, a switch, an object)"><input type="checkbox" name="interact" defaultChecked={!!t.interact} className="checkbox checkbox-xs" />interacts with it</label>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="opacity-70">For</span>

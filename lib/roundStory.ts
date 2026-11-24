@@ -18,7 +18,8 @@ export type StoryEvent = { sec: number } & (
   | { k: "ability"; who: number; name: string; target: number | null } // an ability that does no damage (on themselves, or on someone)
   | { k: "caught"; who: number; by: number | null; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number }
   | { k: "down"; who: number }
-  | { k: "door"; who: number; name: string; open: boolean } // they opened (or closed) a door
+  | { k: "door"; who: number; name: string; open: boolean }
+  | { k: "worked"; who: number; name: string } // they worked a lever, switch or object // they opened (or closed) a door
   | { k: "link"; who: number; to: string } // they came onto a level link (and stopped there)
   | { k: "trap"; who: number; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number; stops?: boolean } // they set off a trap (outcome: their save against it)
   | { k: "chase"; who: number; target: number; action: string; why: "range" | "close" | "down" | "time"; next?: number } // next: who they turned on
@@ -91,6 +92,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
       case "dodge": add(e.sec, e.ok ? "You get ready to dodge." : "You try to get ready to dodge, but you're not quick enough."); break;
       case "link": if (mine) add(e.sec, `You reach the way to ${e.to} and stop there.`); break;
       case "door": if (mine) add(e.sec, `You ${e.open ? "open" : "close"} ${e.name}.`); break;
+      case "worked": if (mine) add(e.sec, `You work ${e.name}.`); break;
       case "refit": add(e.sec, e.from ? `You put away ${e.from} and take up ${e.to}.` : `You take up ${e.to}.`); break;
       case "interrupted": add(e.sec, `${e.by ? `${cap(name(e.by))}'s blow` : "The blow"} throws you off, and you can't ${deed(e.action)}.`); break;
       case "attack": {
@@ -198,6 +200,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "trap": add(e.sec, `${who} sets off ${e.name}: ${e.outcome === "save" && !e.dmg ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}${e.stops ? "; it stops them" : ""}.`); break;
       case "link": add(e.sec, `${who} reaches the way to ${e.to}.`); break;
       case "door": add(e.sec, `${who} ${e.open ? "opens" : "closes"} ${e.name}.`); break;
+      case "worked": add(e.sec, `${who} works ${e.name}.`); break;
       case "caught": add(e.sec, `${e.by === null ? e.name : `${n(e.by)}'s ${e.name}`} catches ${who}: ${e.outcome === "save" ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}.`); break;
       case "down": add(e.sec, `${who} goes down.`); break;
       case "chase": {

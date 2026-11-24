@@ -682,9 +682,11 @@ export async function saveTriggerSettings(locationId: number, id: number, formDa
   try { raw = JSON.parse(text("outcomes") || "[]"); } catch { throw new Error("The outcomes couldn't be read"); }
   const outcomes = (Array.isArray(raw) ? raw : []).map(cleanOutcome).filter((o): o is TriggerOutcome => !!o);
   const springs = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`springs_${k}`));
+  const interact = !!formData.get("interact"); // a lever / switch / object: Interact sets it off
   saveMapTrigger(t.id, {
     name: text("name") || "Trigger",
-    springs: springs.length ? springs : ["enter"],
+    springs: springs.length || interact ? springs : ["enter"], // only Interact: nothing else sets it off
+    interact,
     who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
     often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
     outcomes,

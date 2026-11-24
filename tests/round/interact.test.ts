@@ -19,3 +19,9 @@ test("a 1 s Interact is done before a 2 s attack can interrupt it", () => {
   );
   assert.equal(r.doorsWorked.length, 1);
 });
+
+test("working a lever is noted, to fire its trigger after the round, with a story line", () => {
+  const r = resolve([mover(1, { col: 0, row: 0 }, [act("interact", { thing: { id: 3, name: "the signal lever" } })])], { 1: fighter() });
+  assert.deepEqual(r.thingsWorked, [{ tokenId: 1, triggerId: 3, sec: 1 }]);
+  assert.match(playerStory(r.story, [1], (id) => `T${id}`).get(1)!.join(" "), /You work the signal lever/);
+});
