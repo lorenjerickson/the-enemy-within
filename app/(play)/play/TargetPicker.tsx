@@ -9,7 +9,8 @@ type Candidate = { id: number; name: string; allegiance?: string | null; charact
  * anyone on the map), only the kind it's for (friendlies / enemies, as the one acting sees them), and only those in an
  * aimed area when there are more there than it may affect.
  * aiming: an area attack, aimed at a spot on the map, so no one to pick from the list (yet).
- * duration: for Evade / Pursue, how long to keep at it (1 s up to the time left, or the rest of the round).
+ * duration: for Evade / Pursue / Follow, how long to keep at it (1 s up to the time left, or the rest of the round),
+ * laid out on the plan as 1-second slices (each removable).
  * me: the one acting, offered first when the action can be used on themselves.
  * several: picking more than one (exactly / up to N): toggle each, then Done.
  */
@@ -39,11 +40,12 @@ export default function TargetPicker({ targets, onPick, onCancel, title = "Attac
       </div>
       {duration && (
         <div className="flex flex-wrap items-center gap-1 text-xs" data-chase-seconds>
-          <span className="opacity-70">For</span>
+          <span className="opacity-70" title="Laid out on your plan as 1-second slices: take any out (one in the middle takes out what comes after it)">Keep at it for</span>
           {Array.from({ length: Math.max(0, Math.floor(duration.left + 1e-9) - 1) }, (_, i) => i + 1).map((s) => (
             <button key={s} type="button" data-seconds={s} className={`btn btn-xs ${duration.seconds === s ? "btn-primary" : ""}`} onClick={() => duration.onChange(s)}>{s} s</button>
           ))}
-          <button type="button" data-seconds="rest" className={`btn btn-xs ${!duration.seconds ? "btn-primary" : ""}`} onClick={() => duration.onChange(undefined)}>rest of round</button>
+          <button type="button" data-seconds="rest" className={`btn btn-xs ${!duration.seconds ? "btn-primary" : ""}`} onClick={() => duration.onChange(undefined)}>rest of round ({Math.floor(duration.left + 1e-9)} s)</button>
+          <span className="w-full opacity-60">One 1-second slice per second on your plan; take any out (one in the middle takes out what comes after it).</span>
         </div>
       )}
       {aiming ? null : shown.length === 0 && !self ? (
