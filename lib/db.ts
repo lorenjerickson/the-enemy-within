@@ -1396,6 +1396,48 @@ export function moveToken(id: number, col: number, row: number): void {
   recordSighting(id);
 }
 
+// Standing orders out of encounters: a player's character follows, pursues or evades another token, moving whenever
+// that one moves. Cleared when an encounter starts on the level, they move on their own, or they stop it.
+export type StandingMode = "follow" | "pursue" | "evade";
+db.exec(`CREATE TABLE IF NOT EXISTS token_follows (
+  token_id INTEGER PRIMARY KEY,
+  target_id INTEGER NOT NULL,
+  mode TEXT NOT NULL
+)`);
+
+export function setStandingOrder(tokenId: number, targetId: number, mode: StandingMode): void {
+  db.prepare("INSERT OR REPLACE INTO token_follows (token_id, target_id, mode) VALUES (?, ?, ?)").run(tokenId, targetId, mode);
+}
+
+export function clearStandingOrder(tokenId: number): void {
+  db.prepare("DELETE FROM token_follows WHERE token_id = ?").run(tokenId);
+}
+
+/** Clears every standing order on a level (an encounter starts there). */
+export function clearStandingOrdersOn(levelId: number): void {
+  db.prepare("DELETE FROM token_follows WHERE token_id IN (SELECT id FROM map_tokens WHERE level_id = ?)").run(levelId);
+}
+
+/** A token's standing order, if the one it's about is still on the same level. */
+export function getStandingOrder(tokenId: number): { targetId: number; mode: StandingMode } | undefined {
+  const r = db
+    .prepare<[number], { target_id: number; mode: StandingMode }>(
+      "SELECT f.target_id, f.mode FROM token_follows f JOIN map_tokens a ON a.id = f.token_id JOIN map_tokens b ON b.id = f.target_id AND b.level_id = a.level_id WHERE f.token_id = ?"
+    )
+    .get(tokenId);
+  return r && { targetId: r.target_id, mode: r.mode };
+}
+
+/** Who has a standing order about this token (on its level). */
+export function listStandingOrdersOn(targetId: number): { tokenId: number; mode: StandingMode }[] {
+  return db
+    .prepare<[number], { token_id: number; mode: StandingMode }>(
+      "SELECT f.token_id, f.mode FROM token_follows f JOIN map_tokens a ON a.id = f.token_id JOIN map_tokens b ON b.id = f.target_id AND b.level_id = a.level_id WHERE f.target_id = ?"
+    )
+    .all(targetId)
+    .map((r) => ({ tokenId: r.token_id, mode: r.mode }));
+}
+
 // A level link a token came onto in a round: its player is asked (before planning again) whether to take it;
 // `back` is where they stepped from (where "Stay" puts them).
 db.exec(`CREATE TABLE IF NOT EXISTS link_prompts (

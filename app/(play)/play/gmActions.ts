@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea } from "@/lib/db";
+  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea , clearStandingOrdersOn } from "@/lib/db";
 import { getPendingRound, listEffectDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
 import { asCondition, describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
@@ -41,6 +41,7 @@ export async function rollInitiative() {
   saveEncounter(levelId, { round: 1, turn: 0, order });
   clearRoundPlans(levelId);
   setEncounterWaiting(levelId, waiting);
+  clearStandingOrdersOn(levelId); // following / pursuing / evading out of combat ends: rounds take over
   logSessionEvent("The GM called for initiative.");
   revalidatePath("/play");
 }

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, getEncounter, getEncounterWaiting, getRoundPlan, listTokens, moveTokenToLevel, placeCharacterToken, saveEncounter, saveRoundPlan, setEncounterWaiting } from "@/lib/db";
+import { addCreatureToken, clearStandingOrdersOn, getStandingOrder, listStandingOrdersOn, setStandingOrder, getEncounter, getEncounterWaiting, getRoundPlan, listTokens, moveTokenToLevel, placeCharacterToken, saveEncounter, saveRoundPlan, setEncounterWaiting } from "@/lib/db";
 
 test("taking a level link leaves the encounter on the old level and arrives outside the new one's", () => {
   const up = level("Upstairs"), down = level("Cellar");
@@ -17,4 +17,17 @@ test("taking a level link leaves the encounter on the old level and arrives outs
   assert.deepEqual(getEncounterWaiting(up), [cat]);
   assert.equal(getRoundPlan(up, hero).ready, false, "their plan there is gone");
   assert.equal(getEncounter(down), undefined);
+});
+
+test("standing orders: kept while both are on the same level, cleared per token or for a level", () => {
+  const hall = level("Hall"), yard = level("Yard");
+  const a = placeCharacterToken(hall, character("A"), 0, 0), b = placeCharacterToken(hall, character("B"), 3, 0);
+  setStandingOrder(a, b, "follow");
+  assert.deepEqual(getStandingOrder(a), { targetId: b, mode: "follow" });
+  assert.deepEqual(listStandingOrdersOn(b), [{ tokenId: a, mode: "follow" }]);
+  moveTokenToLevel(b, yard, 0, 0);
+  assert.equal(getStandingOrder(a), undefined, "not once they're on another level");
+  moveTokenToLevel(b, hall, 3, 0);
+  clearStandingOrdersOn(hall);
+  assert.equal(getStandingOrder(a), undefined);
 });

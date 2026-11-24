@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
@@ -225,6 +225,7 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
     route = squares.map((s) => ({ x: s.col, y: s.row }));
   }
 
+  clearStandingOrder(me.token_id); // moving on their own ends following / pursuing / evading
   const walked: Point[] = [route[0]];
   let stopped = false;
   let link: { id: number; to: string } | undefined; // a level link they stepped onto: they're asked whether to take it
@@ -286,6 +287,29 @@ export async function takeLevelLink(linkId: number, go: boolean, back: Point): P
     const b = asked ? asked.back : { x: Number(back?.x), y: Number(back?.y) }; // after a round: where the server noted they came from
     if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || (!asked && Math.hypot(b.x - here.x, b.y - here.y) > 1.5) || inLink(link, b)) return { error: "Can't step back there" };
     moveToken(me.token_id, b.x, b.y);
+  }
+  revalidatePath("/play");
+  return {};
+}
+
+/**
+ * Out of an encounter: the player's character follows, pursues or evades someone they can see, moving whenever that
+ * one moves, until they move on their own, stop it, or an encounter starts. `mode` null stops it.
+ */
+export async function setStanding(mode: "follow" | "pursue" | "evade" | null, targetId?: number): Promise<{ error?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (mode === null) {
+    clearStandingOrder(me.token_id);
+  } else {
+    if (!["follow", "pursue", "evade"].includes(mode)) return { error: "Unknown order" };
+    if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+    const id = Number(targetId);
+    if (id === me.token_id || !listTokens(me.level_id).some((t) => t.id === id)) return { error: "They're not here" };
+    if (!seenFrom(me.level_id, { col: me.col, row: me.row }, me.token_id).has(id)) return { error: "You can't see them" };
+    setStandingOrder(me.token_id, id, mode);
   }
   revalidatePath("/play");
   return {};
