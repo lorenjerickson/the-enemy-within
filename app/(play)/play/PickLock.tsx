@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
+import { interactDoor, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
@@ -28,7 +28,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
 export default function PickLock({
   running = 0, standing = null, doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
-  doors: { id: number; name: string }[];
+  doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
   running?: number; // running speed (feet a round): Dash; 0 = can't run
   standing?: { mode: "follow" | "pursue" | "evade"; name: string } | null; // out of an encounter: who they follow / pursue / evade
   onMap: boolean;
@@ -73,7 +73,8 @@ export default function PickLock({
   const [refitting, setRefitting] = useState(false);
   const [using, setUsing] = useState(false); // Use: picking which item (in hand or on a belt) to use
   const [usingOn, setUsingOn] = useState<(typeof gear)[number] | null>(null); // out of combat: an item picked, now who on
-  const [told, setTold] = useState<string | null>(null); // what an item used out of combat did
+  const [told, setTold] = useState<string | null>(null);
+  const [interacting, setInteracting] = useState(false); // Interact: what's within reach (doors) // what an item used out of combat did
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
@@ -94,7 +95,7 @@ export default function PickLock({
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
   const spent = (id: PlayerActionId) => (plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
@@ -114,6 +115,7 @@ export default function PickLock({
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
     if (id === "use") { setTold(null); setUsingOn(null); return setUsing(!using); }
+    if (id === "interact") return setInteracting(!interacting);
     if (CHASE_ACTIONS.includes(id)) return setOrdering(ordering === id ? null : (id as "follow" | "pursue" | "evade"));
   };
   const hint = (id: PlayerActionId, base: string) =>
@@ -122,6 +124,7 @@ export default function PickLock({
     : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
+    : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"
     : id === "follow" ? "Follow someone: whenever they move, you go after them as far as they went"
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
     : id === "evade" ? "Evade someone: whenever they move, you move away as far as they moved"
@@ -145,6 +148,23 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {scrubber}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
+      {!plan && interacting && (
+        <section className="space-y-1" data-interact>
+          <div className="text-xs font-semibold opacity-80">Within reach</div>
+          {doors.length ? (
+            <ul className="space-y-1">
+              {doors.map((d) => (
+                <li key={d.id} className="flex items-center gap-2" data-door={d.id}>
+                  <span className="flex-1">{d.name} <span className="opacity-60">({d.locked ? "locked" : d.open ? "open" : "closed"})</span></span>
+                  {d.locked
+                    ? <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => pickLock(d.id))}>Pick lock</button>
+                    : <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => interactDoor(d.id))}>{d.open ? "Close" : "Open"}</button>}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-xs opacity-70">Nothing within reach to interact with.</p>}
+        </section>
+      )}
       {!plan && using && !usingOn && (
         usableItems.length
           ? <GearActions title="Use what?" gear={usableItems} enabled={onMap && !pending} blocked={(g) => (g.damage || g.area ? "Only in an encounter" : null)} onUse={pickNow} />
@@ -245,16 +265,7 @@ export default function PickLock({
           </section>
         );
       })}
-      {!plan && doors.length > 0 && (
-        <ul className="space-y-1" data-pick-lock>
-          {doors.map((d) => (
-            <li key={d.id} className="flex items-center gap-2">
-              <span className="flex-1">{d.name} <span className="opacity-60">(locked)</span></span>
-              <button type="button" className="btn btn-sm" disabled={pending} onClick={() => run(() => pickLock(d.id))}>Pick lock</button>
-            </li>
-          ))}
-        </ul>
-      )}
+
       {error && <p className="text-warning">{error}</p>}
     </div>
   );
