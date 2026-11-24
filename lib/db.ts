@@ -1751,6 +1751,18 @@ export function getPlayerToken(playerId: number): { token_id: number; character_
     .get(playerId, getPlayerTokenLevelId(playerId) ?? -1); // the token on the map they're seeing
 }
 
+/** Anyone on the map as an actor (a character or a creature), in the shape a player's token comes in (character_id null: a creature). */
+export type ActorToken = { token_id: number; character_id: number | null; name: string; attributes: string; movement: string; moved: number; level_id: number; col: number; row: number };
+export function getTokenActor(tokenId: number): ActorToken | undefined {
+  return db
+    .prepare<[number], ActorToken>(
+      `SELECT t.id AS token_id, t.character_id, COALESCE(c.name, cr.name, 'someone') AS name, COALESCE(c.attributes, cr.attributes, '{}') AS attributes,
+              COALESCE(c.movement, cr.movement, '{}') AS movement, t.moved, t.level_id, t.col, t.row
+       FROM map_tokens t LEFT JOIN characters c ON c.id = t.character_id LEFT JOIN creatures cr ON cr.id = t.creature_id WHERE t.id = ?`
+    )
+    .get(tokenId);
+}
+
 /** A GM-only sticky note on the map. */
 export interface MapNote {
   id: number;

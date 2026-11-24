@@ -9,6 +9,7 @@ import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
+import { getTokenActor, type ActorToken, type User } from "@/lib/db";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getGmLevelId, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
@@ -32,17 +33,30 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 
+/**
+ * Who's acting, and their token: a player's own character; the GM playing an absent player's, or a creature of theirs.
+ * The GM only watching a present player can't do anything (error).
+ */
+async function acting(): Promise<{ user: User; me: ActorToken | undefined; error?: string }> {
+  const user = await requireUser();
+  if (!getOpenGameSession()?.began_at) return { user, me: undefined, error: "Only during a session" };
+  if (user.watching) return { user, me: undefined, error: `You're watching ${user.name}: only they can do that` };
+  if (user.role === "player") return { user, me: getPlayerToken(user.id) };
+  if (user.actingToken) return { user, me: getTokenActor(user.actingToken) };
+  return { user, me: undefined, error: "Pick someone on the map to act as" };
+}
+
 /** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
 export async function pickLock(doorId: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   const door = getDoor(Number(doorId));
   if (!me || !door || door.level_id !== me.level_id) return { error: "That door isn't here" };
   if (!door.locked) return { error: "It isn't locked" };
   if (distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, door) > REACH) return { error: "You're too far away" };
   const spec = skillCheckFor(me.token_id, "sleight of hand", JSON.parse(me.attributes) as Attributes);
   spec.label = `Pick the lock on ${door.name ?? `Door ${door.id}`}: ${spec.label}`;
+  if (me.character_id === null) return { error: "Creatures can't do that yet" }; // rolled for them automatically: next step
   requestRoll(user.id, me.character_id, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
   revalidatePath("/play");
   return {};
@@ -50,9 +64,8 @@ export async function pickLock(doorId: number): Promise<{ error?: string }> {
 
 /** Interact, out of an encounter: the player opens or closes a door within reach (a locked one has to be picked first). */
 export async function interactDoor(doorId: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   const door = getDoor(Number(doorId));
   if (!me || !door || door.level_id !== me.level_id) return { error: "That door isn't here" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
@@ -66,9 +79,8 @@ export async function interactDoor(doorId: number): Promise<{ error?: string }> 
 
 /** Interact, out of an encounter: the player works a lever, switch or object within reach (an interactable map trigger): it fires now. */
 export async function interactThing(triggerId: number): Promise<{ error?: string; told?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
   const side = allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id });
@@ -82,9 +94,8 @@ export async function interactThing(triggerId: number): Promise<{ error?: string
 
 /** Assist, out of an encounter: the player helps someone on their side within 5 ft whom they can see: advantage on that one's next roll. */
 export async function assistNow(targetId: number): Promise<{ error?: string; told?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
   const tokens = listTokens(me.level_id), t = tokens.find((x) => x.id === Number(targetId));
@@ -108,24 +119,24 @@ export async function assistNow(targetId: number): Promise<{ error?: string; tol
  * could reach with a round's walking. Unseen: they're asked for the Stealth roll straight away.
  */
 export async function startHide(): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  if (me.character_id === null) return { error: "Creatures can't do that yet" };
   const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
-  if (!places.seen) askStealth(user.id, me, false);
+  if (!places.seen) askStealth(user.id, { ...me, character_id: me.character_id }, false);
   revalidatePath("/play");
   return places;
 }
 
 /** Hide, out of an encounter, step two (they were seen): they walk to a blind spot they picked, then roll Stealth with disadvantage. */
 export async function hideAt(col: number, row: number): Promise<{ error?: string; route?: Point[] }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  if (me.character_id === null) return { error: "Creatures can't do that yet" };
   const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
   const goal = places.spots.find((c) => c.col === Math.round(Number(col)) && c.row === Math.round(Number(row)));
   if (!goal) return { error: "That isn't a blind spot you can reach" };
@@ -134,24 +145,24 @@ export async function hideAt(col: number, row: number): Promise<{ error?: string
   clearStandingOrder(me.token_id);
   const w = walkRoute(me.level_id, me.token_id, squares.map((s) => ({ x: s.col, y: s.row })));
   if (w.walked.length > 1) addTokenWalk(me.level_id, me.token_id, w.walked, user.id, speedFps(me.token_id, me.movement) || 5);
-  if (!w.stopped) askStealth(user.id, { ...me, col: goal.col, row: goal.row }, true);
+  if (!w.stopped) askStealth(user.id, { ...me, character_id: me.character_id, col: goal.col, row: goal.row }, true);
   revalidatePath("/play");
   return { route: w.walked, ...(w.stopped ? { error: "Something stops you on the way" } : {}) };
 }
 
-function askStealth(playerId: number, me: NonNullable<ReturnType<typeof getPlayerToken>>, disadvantage: boolean) {
+function askStealth(playerId: number, me: ActorToken & { character_id: number }, disadvantage: boolean) {
   const spec = skillCheckFor(me.token_id, "stealth", JSON.parse(me.attributes) as Attributes);
   requestRoll(playerId, me.character_id, { ...spec, label: `Hide: ${spec.label}${disadvantage ? " (in a hurry: disadvantage)" : ""}`, ...(disadvantage ? { mode: spec.mode === "advantage" ? "normal" : "disadvantage" } : {}) }, { kind: "hide", levelId: me.level_id, tokenId: me.token_id });
 }
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */
 export async function search(): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   const spec = skillCheckFor(me.token_id, "investigation", JSON.parse(me.attributes) as Attributes);
   spec.label = `Search: ${spec.label}`;
+  if (me.character_id === null) return { error: "Creatures can't do that yet" };
   requestRoll(user.id, me.character_id, spec, { kind: "search", dc: SEARCH_DC });
   revalidatePath("/play");
   return {};
@@ -160,6 +171,7 @@ export async function search(): Promise<{ error?: string }> {
 /** The player's dice have landed: check they fit the roll, score it, and settle what it was for. */
 export async function submitRoll(requestId: number, thrown: number[][]): Promise<{ error?: string }> {
   const user = await requireUser();
+  if (user.watching) return { error: `You're watching ${user.name}: only they can roll` };
   const req = getOpenRollRequest(user.id);
   if (!req || req.id !== Number(requestId) || req.result) return { error: "Nothing to roll" };
   const scored = scoreRoll(req.spec, thrown);
@@ -241,6 +253,7 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
 
 export async function closeRoll(requestId: number): Promise<void> {
   const user = await requireUser();
+  if (user.watching) return;
   closeRollRequest(Number(requestId), user.id);
   revalidatePath("/play");
 }
@@ -248,7 +261,7 @@ export async function closeRoll(requestId: number): Promise<void> {
 /** Points at a spot on the map for everyone in the session. */
 export async function sendPing(levelId: number, x: number, y: number): Promise<void> {
   const user = await requireUser();
-  if (!getOpenGameSession()?.began_at) return;
+  if (!getOpenGameSession()?.began_at || user.watching) return;
   addPing(Number(levelId), Number(x), Number(y), user);
 }
 
@@ -276,9 +289,8 @@ export async function fxSince(levelId: number, afterId: number) {
  * reach (costing 5 ft per step on the shortest route), on gridless maps a point in a clear straight line.
  */
 export async function moveMyToken(col: number, row: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
@@ -310,9 +322,8 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
 export async function freeMove(gx: number, gy: number, run = false): Promise<{ route?: Point[]; fps?: number; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[]; times: number[] }[] }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   const fps = speedFps(me.token_id, me.movement, run ? "running" : "walking"); // walking or running, feet per second
   if (fps <= 0) return { error: run ? "You can't run" : "You can't move" };
@@ -367,9 +378,8 @@ export async function freeMove(gx: number, gy: number, run = false): Promise<{ r
  * there that leads back, else the same spot); declining steps them back off it to `back` (where they came from).
  */
 export async function takeLevelLink(linkId: number, go: boolean, back: Point): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   const asked = getLinkPrompt(me.token_id); // after a round (in an encounter); outside one, straight after the step
   if (getEncounter(me.level_id) && asked?.id !== Number(linkId)) return { error: "In an encounter, movement is limited" };
@@ -397,9 +407,8 @@ export async function takeLevelLink(linkId: number, go: boolean, back: Point): P
  * one moves, until they move on their own, stop it, or an encounter starts. `mode` null stops it.
  */
 export async function setStanding(mode: "follow" | "pursue" | "evade" | null, targetId?: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (mode === null) {
     clearStandingOrder(me.token_id);
@@ -421,9 +430,8 @@ export async function setStanding(mode: "follow" | "pursue" | "evade" | null, ta
  * the server) and a consumable is used up. Attacks and areas need an encounter.
  */
 export async function useItemNow(actionId: number, targetId?: number): Promise<{ error?: string; told?: string }> {
-  const user = await requireUser();
-  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
-  const me = getPlayerToken(user.id);
+  const { user, me, error } = await acting();
+  if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
   const g = gearActions(me.token_id, undefined, { packs: true }).find((x) => x.id === Number(actionId) && x.item);
@@ -462,8 +470,7 @@ export async function useItemNow(actionId: number, targetId?: number): Promise<{
 
 /** Planning Hide in a round: seen (from where the plan leaves them, by an enemy they can see)? and the blind spots in reach in the time left. */
 export async function hidePlanOptions(): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   if (!p) return { error: "Not in an encounter" };
   return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), timeline(p.plan, p.walking).left * p.walking);
 }
@@ -476,16 +483,15 @@ export async function checkPlanClock(): Promise<void> {
   revalidatePath("/play");
 }
 
-/** The player's character's planner in a running encounter. */
-function planner(userId: number) {
-  const me = getPlayerToken(userId);
-  return me ? tokenPlanner(me.token_id) : null;
+/** The acting token's planner in a running encounter (none while the GM only watches). */
+async function planner() {
+  const { me, error } = await acting();
+  return !error && me ? tokenPlanner(me.token_id) : null;
 }
 
 /** The player picks who's their target (clicking a token on the map): someone else they can see from where their plan has them. */
 export async function selectTarget(tokenId: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   if (!p) return { error: "Not in an encounter" };
   const id = Number(tokenId);
   if (id === p.tok.token_id) return {};
@@ -497,10 +503,9 @@ export async function selectTarget(tokenId: number): Promise<{ error?: string }>
 
 /** Round planning: add an action, or a move to a square (reachable from where the plan leaves them, in the time left). */
 export async function planStep(step: StepRequest): Promise<{ error?: string }> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   if (!p) return { error: "Not in an encounter" };
-  const asked = getLinkPrompt(getPlayerToken(user.id)!.token_id);
+  const asked = getLinkPrompt(p.tok.token_id);
   if (asked) return { error: `First say whether you'll take the way to ${asked.to}` };
   const error = addPlanStep(p, step);
   revalidatePath("/play");
@@ -510,33 +515,29 @@ export async function planStep(step: StepRequest): Promise<{ error?: string }> {
 /** Takes the last step off the plan (and un-readies). */
 /** Takes a step out of the player's plan (the ones after it move up). */
 export async function removeStep(index: number): Promise<{ error?: string }> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   const error = p ? removePlanStep(p, Number(index)) : "Nothing planned";
   revalidatePath("/play");
   return error ? { error } : {};
 }
 
 export async function setPlanReady(ready: boolean): Promise<{ error?: string }> {
-  const user = await requireUser();
-  const p = planner(user.id);
-  const error = p ? setReady(p, ready, true) : null;
+  const p = await planner();
+  const error = p ? setReady(p, ready, (await requireUser()).role === "player") : null; // a player rolls their plan's dice; the GM's creatures' roll themselves
   revalidatePath("/play");
   return error ? { error } : {};
 }
 
 /** Roll (or cancel before throwing): the plan's dice prompt opens, and everyone sees them rolling. */
 export async function rollPlan(rolling: boolean): Promise<void> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   if (p) startPlanRoll(p, rolling);
   revalidatePath("/play");
 }
 
 /** The plan's dice have landed (per roll, per part): checked and kept on the plan, which is then set. */
 export async function submitPlanDice(thrown: number[][][]): Promise<{ error?: string }> {
-  const user = await requireUser();
-  const p = planner(user.id);
+  const p = await planner();
   const error = p ? submitPlanRoll(p, thrown) : "Not in an encounter";
   revalidatePath("/play");
   return error ? { error } : {};
