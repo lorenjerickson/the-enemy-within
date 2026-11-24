@@ -73,6 +73,22 @@ const syntaxCheck = linter(
   { delay: 250 }
 );
 
+/** run('…') naming a script that isn't in the library: underlined (only where the editor knows the library's names). */
+function libraryCheck(names: () => ScriptNames) {
+  return linter(
+    (view) => {
+      const known = names().script;
+      if (!known) return [];
+      const lower = new Set(known.map((k) => k.toLowerCase()));
+      const doc = view.state.doc.toString();
+      return [...doc.matchAll(/\brun\s*\(\s*(['"])([^'"]*)\1/g)]
+        .filter((m) => !lower.has(m[2].trim().toLowerCase()))
+        .map((m) => ({ from: m.index!, to: m.index! + m[0].length, severity: "warning" as const, message: `There's no script called '${m[2]}' in the library (Campaign › Scripts)` }));
+    },
+    { delay: 250 }
+  );
+}
+
 const isIdentifier = (s: string) => /^[A-Za-z_]\w*$/.test(s);
 
 /** Autocomplete from the scripting model (lib/scriptSchema.ts) and the game's real names. */
@@ -100,6 +116,26 @@ function completions(names: () => ScriptNames) {
             const after = view.state.sliceDoc(to, to + 2);
             const extra = after.startsWith(`${quote}]`) ? 2 : after.startsWith(quote) || after.startsWith("]") ? 1 : 0;
             const insert = `${name}${quote}]`;
+            view.dispatch({ changes: { from, to: to + extra, insert }, selection: { anchor: from + insert.length } });
+          },
+        })),
+      };
+    }
+
+    // Inside run('…: the library's scripts, closing the quote and bracket.
+    const call = before.match(/\brun\s*\(\s*(['"])([^'"]*)$/);
+    if (call) {
+      const quote = call[1];
+      return {
+        from: ctx.pos - call[2].length,
+        options: (n.script ?? []).map((name): Completion => ({
+          label: name,
+          detail: n.about?.[name],
+          type: "function",
+          apply: (view, _c, from, to) => {
+            const after = view.state.sliceDoc(to, to + 2);
+            const extra = after.startsWith(`${quote})`) ? 2 : after.startsWith(quote) || after.startsWith(")") ? 1 : 0;
+            const insert = `${name}${quote})`;
             view.dispatch({ changes: { from, to: to + extra, insert }, selection: { anchor: from + insert.length } });
           },
         })),
@@ -202,6 +238,7 @@ export default function ScriptEditor({
           closeBrackets(),
           autocompletion({ override: [completions(() => latest.current.names)], activateOnTyping: true }),
           syntaxCheck,
+          libraryCheck(() => latest.current.names),
           lintGutter(),
           placeholderText(placeholder),
           theme,

@@ -1,6 +1,7 @@
 import { getVars, listCharacters, listEffects, listLights, listLocations, listStructures, listTimers, listTokens } from "./db";
 import type { ScriptNames } from "./scriptSchema";
 import { listObjectives } from "./story";
+import { listLibraryScripts } from "./scriptLibrary";
 
 /**
  * Real names for the script editor's autocomplete. With a map level (map button scripts), lights, effects,
@@ -13,7 +14,9 @@ export function scriptNames(levelId?: number): ScriptNames {
     timer: listTimers().map((t) => t.name),
     objective: listObjectives().map((o) => o.title),
     var: Object.keys(getVars()),
+    script: listLibraryScripts().map((s) => s.name), // run('…')
   };
+  names.about = Object.fromEntries(listLibraryScripts().filter((s) => s.description).map((s) => [s.name, s.description]));
   if (levelId !== undefined) {
     const tokens = listTokens(levelId);
     names.actor = tokens.map((t) => t.name);
@@ -23,6 +26,6 @@ export function scriptNames(levelId?: number): ScriptNames {
     names.door = listStructures(levelId).filter((s) => s.kind === "door").map((s) => s.name ?? `Door ${s.id}`);
   }
   // Each name once (several rats share a name).
-  for (const k of Object.keys(names) as (keyof ScriptNames)[]) names[k] = [...new Set(names[k])];
+  for (const k of Object.keys(names) as Exclude<keyof ScriptNames, "about">[]) if (Array.isArray(names[k])) names[k] = [...new Set(names[k])];
   return names;
 }

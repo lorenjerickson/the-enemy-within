@@ -14,11 +14,12 @@ import {
   type VarValue,
 } from "./db";
 import type { ScriptAnswers, ScriptPrompt } from "./scriptPrompt";
-import { Collection, FREEFORM, Health, PromptNeeded, plain, promptHelpers, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type TriggerDef } from "./script";
+import { Collection, FREEFORM, Health, PromptNeeded, plain, promptHelpers, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type Hooks, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";
 import { fallDice, floorsUnder, hasFloors, landingRow, snapHeight } from "./gravity";
 import { OBJECTIVE_STATUSES, listObjectives, setObjectiveRevealed, setObjectiveStatus, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 import { objectiveSettled } from "./storyRules";
+import { findLibraryScript } from "./scriptLibrary";
 
 /** A script's outcome; `prompt` when it stopped to ask the GM something (run it again with the answers). */
 export type ScriptResult = { ok: true; value: string } | { ok: false; error: string; prompt?: ScriptPrompt };
@@ -597,14 +598,43 @@ export function runGameScript(
   const [game, changes] = loadGame(levelId);
   const triggers: TriggerDef[] = [];
   // select() and ask() put questions to the GM; it throws PromptNeeded (before anything is saved) until it has its answer.
-  const globals = { game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers(answers) };
-  const result = runScript(source, globals, { onTrigger: (t) => triggers.push(t), bind });
+  const hooks: Hooks = { onTrigger: (t) => triggers.push(t), bind };
+  const globals = withLibrary({ game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers(answers) }, hooks);
+  const result = runScript(source, globals, hooks);
   const settled = saveGame(game, changes, triggers);
   // Objectives the script succeeded or failed: rewards and penalties, as when the GM settles one.
   for (const [id, status] of settled) objectiveSettled(id, status);
   syncObjectiveJournals(); // objectives the script revealed
   fireTriggers(depth);
   return toPlain(result);
+}
+
+/** How deep library scripts may call library scripts (a guard against a script that calls itself). */
+const MAX_RUN = 10;
+
+/**
+ * run('name'): runs a script from the GM's library (Campaign › Scripts) right there, with the same game (and map,
+ * answers, triggers) as the script that called it, so what it changes is saved with the rest. Returns its last value.
+ */
+function withLibrary<G extends Record<string, unknown>>(globals: G, hooks: Hooks = {}): G {
+  let depth = 0;
+  const g = globals as Record<string, unknown>;
+  g.run = new Method((name) => {
+    if (typeof name !== "string" || !name.trim()) throw new ScriptError("run() needs a library script's name, e.g. run('open the vault')");
+    const lib = findLibraryScript(name);
+    if (!lib) throw new ScriptError(`There's no script called '${name}' in the library`);
+    if (depth >= MAX_RUN) throw new ScriptError(`run('${lib.name}'): library scripts calling each other ${MAX_RUN} deep (does one call itself?)`);
+    depth++;
+    try {
+      return runScript(lib.source, g, hooks);
+    } catch (e) {
+      if (e instanceof ScriptError && !e.message.startsWith("In ")) throw new ScriptError(`In '${lib.name}': ${e.message}`);
+      throw e;
+    } finally {
+      depth--;
+    }
+  });
+  return globals;
 }
 
 /** How many triggers may set off further triggers in a row (a guard against loops). */
@@ -636,7 +666,7 @@ export function fireTriggers(depth = 0): string[] {
     let holds = false;
     try {
       const [game, changes] = loadGame(trigger.level_id ?? undefined);
-      holds = truthy(runScript(triggerScript(trigger.prelude, trigger.condition), { game, ...HELPERS, ...mapHelpers(game, changes) }, { bind }));
+      holds = truthy(runScript(triggerScript(trigger.prelude, trigger.condition), withLibrary({ game, ...HELPERS, ...mapHelpers(game, changes) }, { bind }), { bind }));
     } catch (e) {
       fail(e);
       continue;
@@ -694,7 +724,7 @@ export function tryGameScript(source: string, levelId?: number, answers?: Script
 export function checkGameState(source: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
     const [game, changes] = loadGame();
-    return { ok: true, value: toPlain(runScript(source, { game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers() })) };
+    return { ok: true, value: toPlain(runScript(source, withLibrary({ game, ...HELPERS, ...mapHelpers(game, changes), ...promptHelpers() }))) };
   } catch (e) {
     if (e instanceof ScriptError) return { ok: false, error: e.message };
     throw e;

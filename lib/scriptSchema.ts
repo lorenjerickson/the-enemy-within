@@ -8,7 +8,7 @@ import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE } from "./attributes";
 export type ItemKind = "character" | "location" | "actor" | "creature" | "light" | "effect" | "door" | "timer" | "objective";
 
 /** Real names to suggest: characters, locations, the level's lights … and game.vars keys. */
-export type ScriptNames = Partial<Record<ItemKind | "var", string[]>>;
+export type ScriptNames = Partial<Record<ItemKind | "var" | "script", string[]>> & { about?: Record<string, string> }; // script: the library's names (about: their descriptions)
 
 type Member = { label: string; type?: string; detail: string; method?: boolean };
 
@@ -136,7 +136,7 @@ function memberType(type: string, name: string, names: ScriptNames): string | un
 
 /** Helpers callable on their own (game.ts HELPERS and map helpers). */
 export const HELPER_NAMES: Member[] = [
-  { label: "roll", detail: "roll('2d6+1')", method: true }, { label: "select", detail: "select(coll, 'instructions') → what the GM picks", method: true }, { label: "fx", detail: "fx('arrow', A, B) · fx('circle', where, 10) · fx('cone', A, towards, 15): an effect on everyone's map", method: true }, { label: "ask", detail: "ask('Health points', 'number' | 'text' | 'yes/no', default) → what the GM enters", method: true }, { label: "mod", detail: "mod(score) → modifier", method: true },
+  { label: "run", detail: "run('name') → runs that script from the library (Campaign › Scripts)", method: true }, { label: "roll", detail: "roll('2d6+1')", method: true }, { label: "select", detail: "select(coll, 'instructions') → what the GM picks", method: true }, { label: "fx", detail: "fx('arrow', A, B) · fx('circle', where, 10) · fx('cone', A, towards, 15): an effect on everyone's map", method: true }, { label: "ask", detail: "ask('Health points', 'number' | 'text' | 'yes/no', default) → what the GM enters", method: true }, { label: "mod", detail: "mod(score) → modifier", method: true },
   { label: "min", detail: "min(…)", method: true }, { label: "max", detail: "max(…)", method: true },
   { label: "sum", detail: "sum(list)", method: true }, { label: "avg", detail: "avg(list)", method: true },
   { label: "count", detail: "count(list)", method: true },
