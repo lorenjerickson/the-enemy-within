@@ -12,7 +12,7 @@ export default function ActionTip({ name, desc, lines = [], why, children }: { n
   const [at, setAt] = useState<{ right: number; top: number; left: number } | null>(null);
   return (
     <div
-      className="relative"
+      className="relative h-full"
       onPointerEnter={(e) => {
         const r = e.currentTarget.getBoundingClientRect();
         setAt({ right: window.innerWidth - r.left + 8, top: Math.min(r.top, window.innerHeight - 220), left: r.right + 8 });

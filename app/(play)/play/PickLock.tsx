@@ -183,9 +183,9 @@ export default function PickLock({
         return (
           <section key={kind} className="space-y-1" data-action-group={kind}>
             <div className="text-xs font-semibold opacity-80">{title}</div>
-            <ul className="grid grid-cols-3 gap-2" data-player-actions>
+            <ul className="grid grid-cols-3 auto-rows-fr gap-2" data-player-actions>
         {group.map((a) => (
-          <li key={a.id}>
+          <li key={a.id} className="h-full">
           <ActionTip name={a.label} desc={a.desc} lines={basicLines(a.id)} why={!usable(a.id) ? hint(a.id, a.label) : null}>
             <button
               type="button"
@@ -193,7 +193,7 @@ export default function PickLock({
               disabled={!usable(a.id) || pending}
               aria-pressed={a.id === "move" ? walkingNow : a.id === "dash" ? dashingNow : undefined}
               onClick={() => press(a.id)}
-              className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${(a.id === "move" && walkingNow) || (a.id === "dash" && dashingNow) ? "btn-primary" : ""}`}
+              className={`btn h-full min-h-20 w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${(a.id === "move" && walkingNow) || (a.id === "dash" && dashingNow) ? "btn-primary" : ""}`}
             >
               <GameIcon name={a.icon} className="size-7" />
               <span className="text-xs leading-tight">

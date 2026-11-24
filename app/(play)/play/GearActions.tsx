@@ -16,7 +16,8 @@ export const gearTargetMode = (g: Gear, tokenId: number | null) =>
  * Actions from someone's gear, own abilities and professions (Aimed shot, Bite, Mesmerize…): one aimed at someone plans
  * it on a target (an attack if it does damage); one that only affects its user (Case the Scene) is planned straight away.
  */
-export default function GearActions({ gear, enabled, onUse, blocked }: {
+export default function GearActions({ gear, enabled, onUse, blocked, compact = false }: {
+  compact?: boolean; // the GM's planning panel: smaller tiles, four to a row (the same as its other actions)
   gear: Gear[];
   enabled: boolean;
   onUse: (g: Gear) => void;
@@ -26,14 +27,14 @@ export default function GearActions({ gear, enabled, onUse, blocked }: {
   return (
     <div className="space-y-1" data-gear-actions>
       <div className="text-xs font-semibold opacity-80">From their gear and professions</div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid auto-rows-fr ${compact ? "grid-cols-4 gap-1" : "grid-cols-3 gap-2"}`}>
         {gear.map((g) => (
           <ActionTip key={g.id} name={`${g.name} (${g.source})`} desc={g.description} lines={gearSummary(g)} why={!enabled ? "Only in an encounter" : blocked?.(g)}>
             <button
               type="button"
               data-gear-action={g.id}
               disabled={!enabled || !!blocked?.(g)}
-              className="btn h-auto w-full flex-col gap-0 py-2 text-xs disabled:bg-base-100/60 disabled:text-base-content/80"
+              className={`btn h-full w-full flex-col gap-0 disabled:bg-base-100/60 disabled:text-base-content/80 ${compact ? "btn-xs min-h-12 py-1 text-[10px]" : "min-h-20 py-2 text-xs"}`}
               onClick={() => onUse(g)}
             >
               <span className="font-semibold">{g.name}</span>
