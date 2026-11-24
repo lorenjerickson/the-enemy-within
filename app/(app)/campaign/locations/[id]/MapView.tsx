@@ -825,6 +825,7 @@ export default function MapView({
         const r = await hideAt(cell.col, cell.row);
         if (r.route && me) { startWalks([{ tokenId: me.id, route: r.route }]); const end = r.route[r.route.length - 1]; changeTokens({ move: { id: me.id, col: end.x, row: end.y } }); }
         if (r.error) setControlResult({ label: "Hide", ok: false, text: r.error });
+        else if (r.told) setControlResult({ label: "Hide", ok: true, text: r.told }); // a creature: rolled for it
       });
       return;
     }

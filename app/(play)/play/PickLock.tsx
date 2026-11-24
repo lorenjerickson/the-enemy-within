@@ -89,7 +89,7 @@ export default function PickLock({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
-  const run = (f: () => Promise<{ error?: string } | void>) => { setMoveMode(false); startTransition(async () => setError((await f())?.error ?? null)); };
+  const run = (f: () => Promise<{ error?: string; told?: string } | void>) => { setMoveMode(false); startTransition(async () => { const r = await f(); setError(r?.error ?? null); if (r?.told) setTold(r.told); }); }; // told: a creature's check, rolled for it
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
   // A gear action picked (from the gear list, or through Use): planned straight away if it needs no target, else aimed.
   const useGear = (g: (typeof gear)[number]) => { setUsing(false); return g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }); };
@@ -147,6 +147,7 @@ export default function PickLock({
         setError(r.error ?? null);
         if (r.seen && r.spots?.length) setHideSpots(r.spots); // pick a blind spot on the map
         else if (r.seen) setNoCover(true);
+        else if (r.told) setTold(r.told); // a creature: rolled for it
         else if (!r.error) setTold("Unseen: roll Stealth to hide.");
       });
     }

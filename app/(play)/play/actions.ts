@@ -9,7 +9,7 @@ import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { getTokenActor, type ActorToken, type User } from "@/lib/db";
+import { getTokenActor, type ActorToken, type RollAction, type User } from "@/lib/db";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getGmLevelId, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
@@ -30,7 +30,7 @@ import { walkRoute, walkWithFollowers } from "./walk";
 import { planClock } from "./planClock";
 import { hidingPlaces, reveal, settleHide } from "./hiding";
 import type { Attributes } from "@/lib/attributes";
-import { rollSpec, scoreRoll } from "@/lib/rolls";
+import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 
 /**
@@ -47,7 +47,7 @@ async function acting(): Promise<{ user: User; me: ActorToken | undefined; error
 }
 
 /** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
-export async function pickLock(doorId: number): Promise<{ error?: string }> {
+export async function pickLock(doorId: number): Promise<{ error?: string; told?: string }> {
   const { user, me, error } = await acting();
   if (error) return { error };
   const door = getDoor(Number(doorId));
@@ -56,10 +56,9 @@ export async function pickLock(doorId: number): Promise<{ error?: string }> {
   if (distanceToDoor({ x: me.col + 0.5, y: me.row + 0.5 }, door) > REACH) return { error: "You're too far away" };
   const spec = skillCheckFor(me.token_id, "sleight of hand", JSON.parse(me.attributes) as Attributes);
   spec.label = `Pick the lock on ${door.name ?? `Door ${door.id}`}: ${spec.label}`;
-  if (me.character_id === null) return { error: "Creatures can't do that yet" }; // rolled for them automatically: next step
-  requestRoll(user.id, me.character_id, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
+  const told = check(user.id, me, spec, { kind: "pickLock", doorId: door.id, dc: door.lock_dc });
   revalidatePath("/play");
-  return {};
+  return told ? { told } : {};
 }
 
 /** Interact, out of an encounter: the player opens or closes a door within reach (a locked one has to be picked first). */
@@ -118,25 +117,23 @@ export async function assistNow(targetId: number): Promise<{ error?: string; tol
  * Hide, out of an encounter, step one: whether an enemy they can see sees them now, and (if so) the blind spots they
  * could reach with a round's walking. Unseen: they're asked for the Stealth roll straight away.
  */
-export async function startHide(): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
+export async function startHide(): Promise<{ error?: string; told?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
   const { user, me, error } = await acting();
   if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
-  if (me.character_id === null) return { error: "Creatures can't do that yet" };
   const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
-  if (!places.seen) askStealth(user.id, { ...me, character_id: me.character_id }, false);
+  const told = places.seen ? null : askStealth(user.id, me, false);
   revalidatePath("/play");
-  return places;
+  return { ...places, ...(told ? { told } : {}) };
 }
 
 /** Hide, out of an encounter, step two (they were seen): they walk to a blind spot they picked, then roll Stealth with disadvantage. */
-export async function hideAt(col: number, row: number): Promise<{ error?: string; route?: Point[] }> {
+export async function hideAt(col: number, row: number): Promise<{ error?: string; told?: string; route?: Point[] }> {
   const { user, me, error } = await acting();
   if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
-  if (me.character_id === null) return { error: "Creatures can't do that yet" };
   const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
   const goal = places.spots.find((c) => c.col === Math.round(Number(col)) && c.row === Math.round(Number(row)));
   if (!goal) return { error: "That isn't a blind spot you can reach" };
@@ -145,27 +142,39 @@ export async function hideAt(col: number, row: number): Promise<{ error?: string
   clearStandingOrder(me.token_id);
   const w = walkRoute(me.level_id, me.token_id, squares.map((s) => ({ x: s.col, y: s.row })));
   if (w.walked.length > 1) addTokenWalk(me.level_id, me.token_id, w.walked, user.id, speedFps(me.token_id, me.movement) || 5);
-  if (!w.stopped) askStealth(user.id, { ...me, character_id: me.character_id, col: goal.col, row: goal.row }, true);
+  const told = w.stopped ? null : askStealth(user.id, { ...me, col: goal.col, row: goal.row }, true);
   revalidatePath("/play");
-  return { route: w.walked, ...(w.stopped ? { error: "Something stops you on the way" } : {}) };
+  return { route: w.walked, ...(told ? { told } : {}), ...(w.stopped ? { error: "Something stops you on the way" } : {}) };
 }
 
-function askStealth(playerId: number, me: ActorToken & { character_id: number }, disadvantage: boolean) {
+/**
+ * A check someone makes: a player's character asks its player to roll (null: the result comes with their dice); a
+ * creature the GM plays rolls automatically, and how it went comes back straight away.
+ */
+function check(playerId: number, me: ActorToken, spec: RollSpec, action: RollAction): string | null {
+  if (me.character_id !== null) {
+    requestRoll(playerId, me.character_id, spec, action);
+    return null;
+  }
+  const rolled = rollSpec(spec);
+  return `${spec.label}: ${rolled.total}. ${settleRoll(me.name, me, action, rolled).outcome}`;
+}
+
+function askStealth(playerId: number, me: ActorToken, disadvantage: boolean): string | null {
   const spec = skillCheckFor(me.token_id, "stealth", JSON.parse(me.attributes) as Attributes);
-  requestRoll(playerId, me.character_id, { ...spec, label: `Hide: ${spec.label}${disadvantage ? " (in a hurry: disadvantage)" : ""}`, ...(disadvantage ? { mode: spec.mode === "advantage" ? "normal" : "disadvantage" } : {}) }, { kind: "hide", levelId: me.level_id, tokenId: me.token_id });
+  return check(playerId, me, { ...spec, label: `Hide: ${spec.label}${disadvantage ? " (in a hurry: disadvantage)" : ""}`, ...(disadvantage ? { mode: spec.mode === "advantage" ? "normal" : "disadvantage" } : {}) }, { kind: "hide", levelId: me.level_id, tokenId: me.token_id });
 }
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */
-export async function search(): Promise<{ error?: string }> {
+export async function search(): Promise<{ error?: string; told?: string }> {
   const { user, me, error } = await acting();
   if (error) return { error };
   if (!me) return { error: "You're not on the map yet" };
   const spec = skillCheckFor(me.token_id, "investigation", JSON.parse(me.attributes) as Attributes);
   spec.label = `Search: ${spec.label}`;
-  if (me.character_id === null) return { error: "Creatures can't do that yet" };
-  requestRoll(user.id, me.character_id, spec, { kind: "search", dc: SEARCH_DC });
+  const told = check(user.id, me, spec, { kind: "search", dc: SEARCH_DC });
   revalidatePath("/play");
-  return {};
+  return told ? { told } : {};
 }
 
 /** The player's dice have landed: check they fit the roll, score it, and settle what it was for. */
@@ -176,19 +185,41 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
   if (!req || req.id !== Number(requestId) || req.result) return { error: "Nothing to roll" };
   const scored = scoreRoll(req.spec, thrown);
   if (!scored) return { error: "Those dice don't fit this roll" };
-  let success = false, outcome = "";
   const a = req.action;
+  if (a.kind === "conditionSave") {
+    saveRollResult(req.id, { ...scored, outcome: `You rolled ${scored.total}.`, success: true });
+    recordConditionSave(a.levelId, a.key, scored.total);
+    revalidatePath("/play");
+    return {};
+  }
+  if (a.kind === "rolloff") {
+    saveRollResult(req.id, { ...scored, outcome: `You rolled ${scored.total}.`, success: true }); // first: settling may ask them to roll again (a tie)
+    recordRollOff(a.levelId, a.tokenId, scored.total);
+    revalidatePath("/play");
+    return {};
+  }
+  const { success, outcome } = settleRoll(user.name, user.role === "player" ? getPlayerToken(user.id) : user.actingToken ? getTokenActor(user.actingToken) : undefined, a, scored);
+  saveRollResult(req.id, { ...scored, outcome, success });
+  revalidatePath("/play");
+  return {};
+}
+
+/**
+ * What a check came to (pick a lock, Search, Hide, initiative): settles it and says how it went. Rolled by a player
+ * (their dice) or for a creature the GM plays (automatically). me: whoever made it.
+ */
+function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, scored: { total: number }): { success: boolean; outcome: string } {
+  let success = false, outcome = "";
   if (a.kind === "pickLock") {
     const door = getDoor(a.doorId);
     const name = door?.name ?? `Door ${a.doorId}`;
     success = scored.total >= a.dc;
     if (success && door?.locked) setDoorLocked(door.id, false);
     outcome = success ? `The lock on ${name} clicks open.` : `The lock on ${name} won't give.`;
-    logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${scored.total} vs DC ${a.dc})`);
+    logSessionEvent(`${me0?.name ?? who} ${success ? "picked the lock on" : "failed to pick the lock on"} ${name} (${scored.total} vs DC ${a.dc})`);
     outcome += ` (${scored.total} vs ${a.dc})`;
   }
   if (a.kind === "search") {
-    const me0 = getPlayerToken(user.id);
     const me = me0 && (a.at ? { ...me0, col: a.at.col, row: a.at.row } : me0); // a Search in a round: from where they stood when it finished
     success = scored.total >= a.dc;
     const found = success && me
@@ -211,7 +242,7 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     if (traps.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
-    logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
+    logSessionEvent(`${me?.name ?? who} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
   }
   if (a.kind === "hide" && a.inRound) {
     // Hidden already (in the round): the roll sets how hard they are to find, if they haven't been given away since.
@@ -228,27 +259,9 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     settleInitiative(a.levelId, a.tokenId, scored.total);
     success = true;
     outcome = `Initiative ${scored.total}.`;
-    logSessionEvent(`${getPlayerToken(user.id)?.name ?? user.name} rolled ${scored.total} for initiative.`);
+    logSessionEvent(`${me0?.name ?? who} rolled ${scored.total} for initiative.`);
   }
-  if (a.kind === "conditionSave") {
-    success = true;
-    outcome = `You rolled ${scored.total}.`;
-    saveRollResult(req.id, { ...scored, outcome, success });
-    recordConditionSave(a.levelId, a.key, scored.total);
-    revalidatePath("/play");
-    return {};
-  }
-  if (a.kind === "rolloff") {
-    success = true;
-    outcome = `You rolled ${scored.total}.`;
-    saveRollResult(req.id, { ...scored, outcome, success }); // first: settling may ask them to roll again (a tie)
-    recordRollOff(a.levelId, a.tokenId, scored.total);
-    revalidatePath("/play");
-    return {};
-  }
-  saveRollResult(req.id, { ...scored, outcome, success });
-  revalidatePath("/play");
-  return {};
+  return { success, outcome };
 }
 
 export async function closeRoll(requestId: number): Promise<void> {
