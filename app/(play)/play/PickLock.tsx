@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding } from "./actions";
+import { pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
@@ -72,6 +72,8 @@ export default function PickLock({
   const [ordering, setOrdering] = useState<"follow" | "pursue" | "evade" | null>(null); // out of an encounter: picking who to follow / pursue / evade
   const [refitting, setRefitting] = useState(false);
   const [using, setUsing] = useState(false); // Use: picking which item (in hand or on a belt) to use
+  const [usingOn, setUsingOn] = useState<(typeof gear)[number] | null>(null); // out of combat: an item picked, now who on
+  const [told, setTold] = useState<string | null>(null); // what an item used out of combat did
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
@@ -80,12 +82,19 @@ export default function PickLock({
   // A gear action picked (from the gear list, or through Use): planned straight away if it needs no target, else aimed.
   const useGear = (g: (typeof gear)[number]) => { setUsing(false); return g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }); };
   // Use: items in a hand or on a belt (in a round, a pack's need a Refit first).
-  const usableItems = gear.filter((g) => g.item && (g.item.where === "hand" || g.item.where === "belt"));
+  const usableItems = gear.filter((g) => g.item && (!plan || g.item.where === "hand" || g.item.where === "belt")); // out of combat: anything carried
+  // Out of combat it happens now: on themselves, or on someone they pick (attacks and areas need an encounter).
+  const useNow = (g: (typeof gear)[number], target?: number) => {
+    setUsing(false);
+    setUsingOn(null);
+    startTransition(async () => { const r = await useItemNow(g.id, target); setError(r.error ?? null); setTold(r.told ?? null); });
+  };
+  const pickNow = (g: (typeof gear)[number]) => (g.self ? useNow(g) : setUsingOn(g));
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
   const spent = (id: PlayerActionId) => (plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
@@ -104,6 +113,7 @@ export default function PickLock({
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
+    if (id === "use") { setTold(null); setUsingOn(null); return setUsing(!using); }
     if (CHASE_ACTIONS.includes(id)) return setOrdering(ordering === id ? null : (id as "follow" | "pursue" | "evade"));
   };
   const hint = (id: PlayerActionId, base: string) =>
@@ -111,6 +121,7 @@ export default function PickLock({
     : plan && spent(id) ? spent(id)!
     : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
+    : id === "use" ? "Use something you carry: it happens straight away"
     : id === "follow" ? "Follow someone: whenever they move, you go after them as far as they went"
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
     : id === "evade" ? "Evade someone: whenever they move, you move away as far as they moved"
@@ -133,6 +144,15 @@ export default function PickLock({
   return (
     <div className="space-y-3 text-sm">
       {scrubber}
+      {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
+      {!plan && using && !usingOn && (
+        usableItems.length
+          ? <GearActions title="Use what?" gear={usableItems} enabled={onMap && !pending} blocked={(g) => (g.damage || g.area ? "Only in an encounter" : null)} onUse={pickNow} />
+          : <p className="text-xs opacity-70" data-use-none>You carry nothing you can use. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUsing(false)}>Close</button></p>
+      )}
+      {!plan && usingOn && (
+        <TargetPicker title={`${usingOn.name}: on who?`} targets={targets} me={usingOn.targets !== "others" && self ? self : null} onCancel={() => setUsingOn(null)} onPick={(id) => useNow(usingOn, id)} />
+      )}
       {plan && using && (
         usableItems.length
           ? <GearActions title="Use what? (in hand or on your belt)" gear={usableItems} enabled={!plan.ready && onMap && !dice?.rolled} blocked={(g) => unavailable(plan.steps, plan.used, g.kind === "reaction" ? "reaction" : "action", g.seconds, forbidden)} onUse={useGear} />

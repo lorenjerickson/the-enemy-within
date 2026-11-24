@@ -1,7 +1,9 @@
 "use server";
 
-import { recordConditionSave, recordRollOff } from "./workOutRound";
-import { skillCheckFor, speedOf } from "@/lib/creatureChanges";
+import { applyConditionNow, recordConditionSave, recordRollOff } from "./workOutRound";
+import { gearActions, useUpItem } from "@/lib/combat";
+import type { Condition } from "@/lib/conditions";
+import { saveRollFor, skillCheckFor, speedOf } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db";
 import { seenFrom } from "@/lib/sight";
 import { planEnd } from "@/lib/roundPlan";
@@ -9,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -23,7 +25,7 @@ import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { moveFollowers, walkRoute } from "./walk";
 import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
-import { scoreRoll } from "@/lib/rolls";
+import { rollSpec, scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 
 /** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
@@ -290,6 +292,50 @@ export async function setStanding(mode: "follow" | "pursue" | "evade" | null, ta
   }
   revalidatePath("/play");
   return {};
+}
+
+/**
+ * Use, out of an encounter: one of their items' actions (anything they carry, packs too) happens straight away, on
+ * themselves or someone they can see within its reach: its effects land (healing at once; a save as it lands, rolled by
+ * the server) and a consumable is used up. Attacks and areas need an encounter.
+ */
+export async function useItemNow(actionId: number, targetId?: number): Promise<{ error?: string; told?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  const g = gearActions(me.token_id, undefined, { packs: true }).find((x) => x.id === Number(actionId) && x.item);
+  if (!g?.item) return { error: "You don't have that" };
+  if (g.damage || g.area) return { error: "Only in an encounter" };
+  const labels = tokenLabels(me.level_id);
+  const target = g.self || targetId === undefined || Number(targetId) === me.token_id ? me.token_id : Number(targetId);
+  if (target === me.token_id && g.targets === "others") return { error: "Pick someone else" };
+  if (target !== me.token_id) {
+    const t = listTokens(me.level_id).find((x) => x.id === target);
+    if (!t) return { error: "They're not here" };
+    if (!seenFrom(me.level_id, { col: me.col, row: me.row }, me.token_id).has(target)) return { error: "You can't see them" };
+    const gap = isGridlessLevel(me.level_id) ? Math.hypot(t.col - me.col, t.row - me.row) : Math.max(Math.abs(t.col - me.col), Math.abs(t.row - me.row));
+    if (gap > g.range + 0.05) return { error: `Out of reach (${g.range * FEET_PER_SQUARE} ft)` };
+  }
+  const told: string[] = [];
+  const land = (who: number, list: Condition[]) => {
+    for (const c of list) {
+      if (c.apply_save_attr) {
+        const dc = c.apply_save_dc ?? 12, total = rollSpec(saveRollFor(who, c.apply_save_attr, `${c.apply_save_attr} save against ${c.name} (DC ${dc})`)).total;
+        if (total >= dc && c.apply_save_outcome !== "halves") { told.push(`${labels.get(who) ?? "they"} resists ${c.name} (${total} vs DC ${dc})`); continue; }
+      }
+      const happened = applyConditionNow(me.level_id, who, c);
+      told.push(`${labels.get(who) ?? "they"}: ${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
+    }
+  };
+  land(me.token_id, g.statuses?.self?.conditions ?? []);
+  land(target, g.statuses?.target?.conditions ?? []);
+  const usedUp = useUpItem(me.token_id, g.item);
+  const line = `${me.name} uses ${g.name}${target !== me.token_id ? ` on ${labels.get(target)}` : ""}: ${told.join("; ") || "no effect"}${usedUp ? " (used up)" : ""}`;
+  logSessionEvent(line);
+  revalidatePath("/play");
+  return { told: line };
 }
 
 /** The player's character's planner in a running encounter. */
