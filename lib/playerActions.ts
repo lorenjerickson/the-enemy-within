@@ -37,6 +37,10 @@ export const actionKind = (id: PlayerActionId): ActionKind => PLAYER_ACTIONS.fin
  */
 export const REACTIONS: PlayerActionId[] = ["dodge"];
 
+/** Actions on hold (see the backlog): shown, but they can't be planned. */
+export const DEFERRED_ACTIONS: PlayerActionId[] = ["disengage", "ready"];
+export const DEFERRED_WHY = "Deferred: not in yet";
+
 /** Search: an Investigation check against this DC reveals hidden things within SEARCH_RANGE grid squares (5 ft each). */
 export const SEARCH_DC = 14;
 export const SEARCH_RANGE = 2; // 10 ft

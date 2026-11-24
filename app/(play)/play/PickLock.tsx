@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots, useHideSpots } from "./hideMode";
-import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
@@ -98,7 +98,7 @@ export default function PickLock({
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
-  const spent = (id: PlayerActionId) => (plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
+  const spent = (id: PlayerActionId) => (plan && DEFERRED_ACTIONS.includes(id) ? DEFERRED_WHY : plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
   const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || id === "hide" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {

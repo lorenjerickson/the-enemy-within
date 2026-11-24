@@ -1,7 +1,7 @@
 import { downTokens, listMapTriggers, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
-import { CHASE_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
+import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
 import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
@@ -40,6 +40,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const run = step.kind === "move" && step.run ? p.running : undefined; // a Dash: at running speed
   if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
+  if (step.kind === "action" && DEFERRED_ACTIONS.includes(step.action) && step.use === undefined) return DEFERRED_WHY;
   // Hide: seen (by an enemy they can see, from where the plan leaves them), they must first slip into a blind spot they
   // can reach in the time left (a move), and then hide in a hurry; with no blind spot in reach, they can't.
   if (step.kind === "action" && step.action === "hide" && !step.hurried) {

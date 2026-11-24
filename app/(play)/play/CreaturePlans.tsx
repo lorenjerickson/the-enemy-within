@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
+import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmHidePlanOptions, gmPlanStep, gmSetReady, gmRemoveStep } from "./gmActions";
@@ -50,6 +50,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   // Why an action can't be planned now (greyed out with why), or null. Dash: running speed, and it takes the action.
   const blocked = (id: PlayerActionId) =>
     !current ? null
+    : DEFERRED_ACTIONS.includes(id) ? DEFERRED_WHY
     : id === "dash" ? (!current.runPerSecond ? "No running speed" : unavailable(current.plan.steps, current.plan.used, "movement", 0, current.forbidden) ?? unavailable(current.plan.steps, current.plan.used, "action", 0, current.forbidden))
     : id === "shake" && !current.shakeable ? "Nothing to shake off"
     : unavailable(current.plan.steps, current.plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, current.forbidden);
