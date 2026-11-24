@@ -1577,6 +1577,7 @@ export default function MapView({
             ) : selected === "triggers" ? (
               <TriggersEditor
                 locationId={locationId}
+                scripts={scriptNames.script}
                 things={{
                   door: optimisticStructures.filter((x) => x.kind === "door").map((x) => ({ id: x.id, name: x.name || `Door ${x.id}` })),
                   light: optimisticLights.map((x) => ({ id: x.id, name: x.name })),

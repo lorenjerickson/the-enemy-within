@@ -26,7 +26,7 @@ type Pickable = keyof TriggerThings;
 const PICKS: Pickable[] = ["door", "light", "effect", "secret", "trap", "discovery"];
 
 /** Adding one outcome: what kind, which thing, and (doors, lights, effects) what happens to it. */
-function AddOutcome({ things, onAdd }: { things: TriggerThings; onAdd: (o: TriggerOutcome) => void }) {
+function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; scripts?: string[]; onAdd: (o: TriggerOutcome) => void }) {
   const [kind, setKind] = useState<TriggerOutcome["kind"]>("door");
   const [id, setId] = useState("");
   const [to, setTo] = useState("open");
@@ -61,12 +61,19 @@ function AddOutcome({ things, onAdd }: { things: TriggerThings; onAdd: (o: Trigg
         <button type="button" className="btn btn-xs" disabled={!ready} onClick={add}>Add</button>
       </div>
       {kind === "script" && <textarea className="textarea textarea-xs w-full font-mono" rows={3} placeholder="game.vars.alarm = true" value={script} onChange={(e) => setScript(e.target.value)} />}
+      {kind === "script" && scripts.length > 0 && (
+        <select aria-label="Run a library script" className="select select-xs w-full" value="" data-trigger-library
+          onChange={(e) => { const n = e.target.value; if (n) setScript((s) => `${s.trim() ? `${s.trimEnd()}\n` : ""}run(${n.includes("'") ? `"${n}"` : `'${n}'`})`); }}>
+          <option value="">Library… (adds run(&apos;…&apos;))</option>
+          {scripts.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      )}
     </div>
   );
 }
 
 /** What a trigger does, as a form (saved as a whole). */
-function TriggerSettings({ locationId, trigger: t, things }: { locationId: number; trigger: MapTrigger; things: TriggerThings }) {
+function TriggerSettings({ locationId, trigger: t, things, scripts }: { locationId: number; trigger: MapTrigger; things: TriggerThings; scripts?: string[] }) {
   const [outcomes, setOutcomes] = useState<TriggerOutcome[]>(t.outcomes);
   const name = (kind: TriggerOutcome["kind"], id: number) => ((PICKS as string[]).includes(kind) ? things[kind as Pickable].find((x) => x.id === id)?.name : undefined) ?? `#${id}`;
   return (
@@ -95,7 +102,7 @@ function TriggerSettings({ locationId, trigger: t, things }: { locationId: numbe
             ))}
           </ul>
         ) : <p className="text-xs opacity-60">Nothing yet.</p>}
-        <AddOutcome things={things} onAdd={(o) => setOutcomes([...outcomes, o])} />
+        <AddOutcome things={things} scripts={scripts} onAdd={(o) => setOutcomes([...outcomes, o])} />
       </div>
       <div className="flex items-center gap-2">
         <button className="btn btn-primary btn-xs">Save trigger</button>
@@ -106,7 +113,7 @@ function TriggerSettings({ locationId, trigger: t, things }: { locationId: numbe
 }
 
 /** Triggers layer editor: pick a shape and drag it out on the map; set what each does; remove. Players never see triggers. */
-export default function TriggersEditor({ locationId, shape, onShape, triggers, things, onRemove }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; triggers: MapTrigger[]; things: TriggerThings; onRemove: (id: number) => void }) {
+export default function TriggersEditor({ locationId, shape, onShape, triggers, things, scripts, onRemove }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; triggers: MapTrigger[]; things: TriggerThings; scripts?: string[]; onRemove: (id: number) => void }) {
   return (
     <div className="space-y-3 text-sm" data-triggers-editor>
       <div className="join" role="radiogroup" aria-label="Trigger shape">
@@ -126,7 +133,7 @@ export default function TriggersEditor({ locationId, shape, onShape, triggers, t
                   <span className="flex-1"><span className="font-medium">{t.name}</span> <span className="opacity-60">{describeTrapArea(t.area)} · {t.outcomes.length ? `${t.outcomes.length} thing${t.outcomes.length === 1 ? "" : "s"}` : "does nothing yet"}{t.sprung.length && t.often === "once" ? " · spent" : ""}</span></span>
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); onRemove(t.id); }}>Remove</button>
                 </summary>
-                {t.id > 0 && <TriggerSettings locationId={locationId} trigger={t} things={things} />}
+                {t.id > 0 && <TriggerSettings locationId={locationId} trigger={t} things={things} scripts={scripts} />}
               </details>
             </li>
           ))}

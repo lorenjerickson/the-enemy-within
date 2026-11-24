@@ -131,6 +131,8 @@ Helpers: `roll('2d6+1')`, `mod(score)`, and `sum`, `avg`, `min`, `max`, `count` 
 
 Not yet: locations, lights, encounters (they need runtime state first).
 
+**Library scripts with `run()`.** Campaign › Scripts keeps named scripts; `run('open the vault')` runs one right there, with the same game (its changes are saved with the rest) and gives back its last value. Names ignore case; the editor suggests them inside `run('…')` (and its Library… menu inserts a call). An unknown name, or scripts calling each other more than 10 deep, is an error.
+
 ## Map buttons
 
 Location → Controls: click a button's label to edit its script (saved only if it parses). Clicking the button on the map runs it; the result or error shows under the map.

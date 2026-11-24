@@ -18,7 +18,9 @@ export function ScriptConsole({ names }: { names: ScriptNames }) {
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const run = () => source.trim() && startTransition(async () => setResult(await runWithPrompts("console", (answers) => runScript(source, answers))));
+  const runSource = (src: string) => startTransition(async () => setResult(await runWithPrompts("console", (answers) => runScript(src, answers))));
+  const run = () => source.trim() && runSource(source);
+  const library = names.script ?? [];
   return (
     <form
       className="flex flex-col gap-2 max-w-3xl"
@@ -32,6 +34,14 @@ export function ScriptConsole({ names }: { names: ScriptNames }) {
         <button className="btn btn-primary btn-sm" disabled={pending || !source.trim()}>Run</button>
         <span className="text-xs opacity-60">⌘/Ctrl+Enter. See docs/scripting.md.</span>
       </div>
+      {library.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 text-xs" data-console-library>
+          <span className="opacity-60">Run from the library:</span>
+          {library.map((s) => (
+            <button key={s} type="button" className="btn btn-xs" disabled={pending} title={names.about?.[s]} onClick={() => runSource(`run(${s.includes("'") ? `"${s}"` : `'${s}'`})`)}>{s}</button>
+          ))}
+        </div>
+      )}
       <ScriptPickOverlay owner="console" />
       {result && (
         <pre data-script-result className={`rounded-box bg-base-200 p-3 text-sm overflow-auto max-h-96 ${result.ok ? "" : "text-error"}`}>

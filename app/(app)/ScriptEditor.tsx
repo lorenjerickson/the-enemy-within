@@ -216,6 +216,19 @@ export default function ScriptEditor({
   const latest = useRef({ names, onChange, onSubmit });
   latest.current = { names, onChange, onSubmit };
 
+  // Library: puts run('name') at the cursor (on its own line if the line has something on it already).
+  const insertRun = (script: string) => {
+    const v = view.current;
+    if (!v) return;
+    const q = script.includes("'") ? '"' : "'";
+    const at = v.state.selection.main.head, line = v.state.doc.lineAt(at);
+    const call = `run(${q}${script}${q})`;
+    const insert = line.text.trim() ? `\n${call}` : call;
+    const pos = line.text.trim() ? line.to : at;
+    v.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } });
+    v.focus();
+  };
+
   const format = () => {
     const v = view.current;
     if (!v) return;
@@ -284,7 +297,13 @@ export default function ScriptEditor({
       <div ref={host} className={expanded ? "min-h-0 flex-1" : "resize-y overflow-auto"} />
       <div className="flex items-center gap-2 text-xs">
         <span className="opacity-60">Ctrl+Space suggests · Shift+Alt+F formats{expanded && " · Esc closes"}</span>
-        <button type="button" className="btn btn-ghost btn-xs ml-auto opacity-60 hover:opacity-100" onClick={format}>Format</button>
+        {(names.script?.length ?? 0) > 0 && (
+          <select aria-label="Insert a library script" className="select select-ghost select-xs ml-auto w-auto opacity-60 hover:opacity-100" value="" onChange={(e) => e.target.value && insertRun(e.target.value)} data-script-library>
+            <option value="">Library…</option>
+            {names.script!.map((s) => <option key={s} value={s} title={names.about?.[s]}>{s}</option>)}
+          </select>
+        )}
+        <button type="button" className={`btn btn-ghost btn-xs opacity-60 hover:opacity-100 ${(names.script?.length ?? 0) > 0 ? "" : "ml-auto"}`} onClick={format}>Format</button>
         <button type="button" className="btn btn-ghost btn-xs opacity-60 hover:opacity-100" onClick={() => (setExpanded(!expanded), requestAnimationFrame(() => view.current?.focus()))}>
           {expanded ? "Done" : "Expand"}
         </button>
