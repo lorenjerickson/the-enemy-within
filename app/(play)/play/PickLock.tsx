@@ -180,7 +180,6 @@ export default function PickLock({
   return (
     <div className="space-y-3 text-sm">
       {scrubber}
-      {plan && planClock && !plan.ready && <PlanCountdown endsAt={planClock} />}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
       {hideSpots && (
         <p className="text-xs" data-hide-pick>You&apos;re seen. Click a blind spot on the map (green) to slip into it and hide; it&apos;s harder in a hurry (disadvantage). Enemies you can&apos;t see may still spot you there. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setHideSpots(null)}>Cancel</button></p>
@@ -277,7 +276,13 @@ export default function PickLock({
           {selected !== null ? <>Target: <b className="text-error">{targets.find((t) => t.id === selected)?.name}</b> <span className="opacity-70">(used for targeted actions; click someone else on the map to change)</span></> : <span className="opacity-70">Click someone on the map to make them your target.</span>}
         </p>
       )}
-      {plan && <RoundPlanView plan={plan} pending={pending} label={label} onRemove={(i) => run(() => removeStep(i))} onReady={() => run(() => setPlanReady(!plan.ready))} dice={dice && { ...dice, onRoll: () => run(() => rollPlan(true)) }} />}
+      {/* The plan stays in view at the top while the action lists scroll beneath it. */}
+      {plan && (
+        <div className="sticky top-0 z-10 -mx-3 space-y-2 bg-base-200 px-3 py-2 shadow-sm" data-plan-header>
+          {planClock && !plan.ready && <PlanCountdown endsAt={planClock} />}
+          <RoundPlanView plan={plan} pending={pending} label={label} onRemove={(i) => run(() => removeStep(i))} onReady={() => run(() => setPlanReady(!plan.ready))} dice={dice && { ...dice, onRoll: () => run(() => rollPlan(true)) }} />
+        </div>
+      )}
       <RoundHistory rounds={history} />
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
       {ACTION_GROUPS.map(([kind, title]) => {

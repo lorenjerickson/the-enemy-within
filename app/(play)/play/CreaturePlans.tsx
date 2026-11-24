@@ -65,14 +65,17 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
     <div className="space-y-2" data-creature-plans>
       {current ? (
         <div className="space-y-2">
-          <RoundPlanView
-            title={`${current.name}'s round${current.player ? ` (planning for ${current.player})` : ""}`}
-            plan={current.plan}
-            pending={pending}
-            label={label}
-            onRemove={(i) => run(() => gmRemoveStep(current.tokenId, i))}
-            onReady={() => run(() => gmSetReady(current.tokenId, !current.plan.ready))}
-          />
+          {/* The plan stays in view at the top while the action lists scroll beneath it. */}
+          <div className="sticky top-0 z-10 -mx-3 bg-base-200 px-3 py-2 shadow-sm" data-plan-header>
+            <RoundPlanView
+              title={`${current.name}'s round${current.player ? ` (planning for ${current.player})` : ""}`}
+              plan={current.plan}
+              pending={pending}
+              label={label}
+              onRemove={(i) => run(() => gmRemoveStep(current.tokenId, i))}
+              onReady={() => run(() => gmSetReady(current.tokenId, !current.plan.ready))}
+            />
+          </div>
           {choosing && (
             <TargetPicker
               title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
