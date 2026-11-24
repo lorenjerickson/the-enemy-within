@@ -239,7 +239,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {!real && <ActingAs session={session} user={user} name={creature !== null && me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : user.name} />}
       {/* Watching: their prompts show as they see them, but can't be rolled. */}
       <fieldset disabled={watching} className="contents">
-        {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
+        {rp && me && <PlanRollPrompt key={getEncounter(me.level_id)?.round ?? 0} rolls={diceRolls} rolled={rp.rolled} />}
         <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       </fieldset>
       {place ? (

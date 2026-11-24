@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import type DiceBox from "@3d-dice/dice-box";
+import { useState, useTransition } from "react";
+import { clearDice, diceBox } from "./diceBox";
 import { diceToThrow, formulaText, type RollSpec, type RolledPart } from "@/lib/rolls";
 import { closeRoll, submitRoll } from "./actions";
 
@@ -18,7 +18,6 @@ const MODE_LABEL = { normal: "No advantage", advantage: "Advantage", disadvantag
  * disadvantage, and a Roll button that throws 3D dice (dice-box); the dice decide, the server scores and settles.
  */
 export default function RollPrompt({ request }: { request: PromptRequest | null }) {
-  const box = useRef<DiceBox | null>(null);
   const [rolling, setRolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -29,14 +28,10 @@ export default function RollPrompt({ request }: { request: PromptRequest | null 
     setRolling(true);
     setError(null);
     try {
-      if (!box.current) {
-        const { default: Box } = await import("@3d-dice/dice-box");
-        box.current = new Box({ container: "#dice-box", assetPath: "/assets/dice-box/", scale: 7, theme: "default", themeColor: "#7c3aed" });
-        await box.current.init();
-      }
+      const box = await diceBox();
       const throws = diceToThrow(spec);
       // dice-box resolves with every die thrown, each tagged with the group (notation) it came from.
-      const dice = await box.current.roll(throws.filter((t) => t !== null).map((t) => `${t.count}d${t.sides}`));
+      const dice = await box.roll(throws.filter((t) => t !== null).map((t) => `${t.count}d${t.sides}`));
       let g = 0;
       const thrown = throws.map((t) => {
         if (!t) return [];
@@ -53,14 +48,13 @@ export default function RollPrompt({ request }: { request: PromptRequest | null 
   }
 
   function close() {
-    box.current?.clear();
+    clearDice();
     startTransition(() => closeRoll(request!.id));
   }
 
   return (
     <>
-      {/* The 3D dice tumble across the whole screen, above the map. */}
-      <div id="dice-box" className="pointer-events-none fixed inset-0 z-30 [&_canvas]:size-full" />
+      {/* The 3D dice tumble across the whole screen, above the map (the page's one dice layer: diceBox). */}
       <div data-roll-prompt className="fixed left-1/2 top-16 z-40 w-[min(26rem,calc(100vw-7rem))] -translate-x-1/2 space-y-3 rounded-box bg-base-200/95 p-4 shadow-2xl backdrop-blur">
         <div className="text-sm opacity-80">{spec.label}</div>
         <div className="flex items-center gap-3">
