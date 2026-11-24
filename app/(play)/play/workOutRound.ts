@@ -13,14 +13,15 @@ import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
 import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
-import { saveRollFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
+import { saveRollFor, skillCheckFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
+import { SEARCH_DC } from "@/lib/playerActions";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
-import { clearAssist, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
+import { clearAssist, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -129,6 +130,14 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   // Help (Assist) still to be used carries on; what was spent (or replaced) is gone.
   for (const a of listAssists(levelId)) clearAssist(a.tokenId);
   for (const a of result.assistsLeft) setAssist(a.tokenId, a.by, a.name);
+  // Searches done this round: each player rolls Investigation now, from where they searched (with advantage if helped then).
+  for (const s of result.searches) {
+    const t = tokens.find((x) => x.id === s.tokenId), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
+    const c = t?.character_id ? getCharacter(t.character_id) : undefined;
+    if (!t || !c || !player) continue;
+    const spec = skillCheckFor(t.id, "investigation", c.attributes);
+    requestRoll(player, c.id, helpedSpec({ ...spec, label: `Search: ${spec.label}` }, s.helpedBy), { kind: "search", dc: SEARCH_DC, at: s.at });
+  }
   // Levers / switches / objects worked this round (Interact): their triggers fire now.
   for (const w of result.thingsWorked) { const t = listMapTriggers(levelId).find((x) => x.id === w.triggerId); if (t) fireTrigger(levelId, t, w.tokenId); }
   // Doors worked this round (Interact): open or closed now, in the order it happened.

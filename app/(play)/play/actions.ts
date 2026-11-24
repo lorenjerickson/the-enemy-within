@@ -133,7 +133,8 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     outcome += ` (${scored.total} vs ${a.dc})`;
   }
   if (a.kind === "search") {
-    const me = getPlayerToken(user.id);
+    const me0 = getPlayerToken(user.id);
+    const me = me0 && (a.at ? { ...me0, col: a.at.col, row: a.at.row } : me0); // a Search in a round: from where they stood when it finished
     success = scored.total >= a.dc;
     const found = success && me
       ? listSecrets(me.level_id).filter((s) => !s.revealed && Math.hypot(s.x - (me.col + 0.5), s.y - (me.row + 0.5)) <= SEARCH_RANGE + 0.5)

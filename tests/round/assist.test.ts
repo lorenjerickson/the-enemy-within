@@ -55,3 +55,11 @@ test("a player's own save mid-round, once helped: they're asked to roll it with 
   const r = run({ [asked!.save.key]: 18 });
   assert.deepEqual(r.assistsLeft, [], "spent on that save");
 });
+
+test("a Search done in the round is noted for its roll after the round, from where they stood, helped if they were by then", () => {
+  const r = resolve([mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("search")])], { 1: fighter(), 2: fighter() });
+  assert.deepEqual(r.searches, [{ tokenId: 2, at: { col: 1, row: 0 }, sec: 3, helpedBy: "T1" }]);
+  assert.deepEqual(r.assistsLeft, [], "the help goes to the search roll");
+  const alone = resolve([mover(2, { col: 1, row: 0 }, [act("search")])], { 2: fighter() });
+  assert.deepEqual(alone.searches, [{ tokenId: 2, at: { col: 1, row: 0 }, sec: 3 }]);
+});

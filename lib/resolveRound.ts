@@ -175,6 +175,7 @@ export function resolveMovement(
   /** Their next d20 roll (an attack, a save, Dodge's check): advantage if they've been helped, and the help is spent. */
   const helpMode = (id: number): RollMode[] => (helped.delete(id) ? ["advantage"] : []);
   const passes = new Set(auraPasses);
+  const searches: { tokenId: number; at: Pos; sec: number; helpedBy?: string }[] = []; // Searches done (each player rolls after the round)
   const thingsWorked: { tokenId: number; triggerId: number; sec: number }[] = []; // levers / objects worked (their triggers fire after the round)
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
   const itemsUsed: { tokenId: number; item: NonNullable<GearAction["item"]> }[] = []; // items whose actions were done (consumables are used up)
@@ -1036,6 +1037,15 @@ export function resolveMovement(
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
       if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
+      // Search: they're asked for the Investigation roll after the round, from here (help by then is spent on it).
+      if (step.action === "search") {
+        const help = helped.get(m.tokenId);
+        helped.delete(m.tokenId);
+        searches.push({ tokenId: m.tokenId, at: { ...pos.get(m.tokenId)! }, sec, ...(help ? { helpedBy: help.name } : {}) });
+        say(`${m.name} searches the area (rolls after the round${help ? `, helped by ${help.name}` : ""}).`);
+        story.push({ sec, k: "ability", who: m.tokenId, name: "Search", target: null });
+        continue;
+      }
       // Assist: whoever they help (next to them now) has advantage on their next attack roll (this round or later).
       if (step.action === "assist" && step.target) {
         const at = where(step.target.id);
@@ -1297,7 +1307,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })) };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })) };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

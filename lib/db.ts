@@ -2734,7 +2734,7 @@ export interface RollRequest {
 /** What a roll is for. */
 export type RollAction =
   | { kind: "pickLock"; doorId: number; dc: number }
-  | { kind: "search"; dc: number }
+  | { kind: "search"; dc: number; at?: { col: number; row: number } } // at: where they searched from (a Search in a round: where they stood when it finished)
   | { kind: "initiative"; levelId: number; tokenId: number }
   | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
   | { kind: "conditionSave"; levelId: number; tokenId: number; key: string }; // a save against a condition as it lands, mid-round
