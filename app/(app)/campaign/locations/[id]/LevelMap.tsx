@@ -1,4 +1,5 @@
 import { listDiscoveries } from "@/lib/story";
+import { getOpenGameSession, gmPlayedPlayers } from "@/lib/db";
 import { playerReplay } from "@/lib/replayView";
 import { blockingSegments } from "@/lib/visibility";
 import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, listTraps, listMapTriggers, listEffectDefs, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas, listHidden } from "@/lib/db";
@@ -62,8 +63,15 @@ export default function LevelMap({
   const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.character_id!, dv]] : []; }));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
+  // In a session: tokens of the absent players the GM plays (not the one being played now): a click switches to them.
+  const session = dock ? getOpenGameSession() : undefined;
+  const absent = session?.began_at ? gmPlayedPlayers(session.id) : [];
+  const playAs = Object.fromEntries(all.flatMap((t) => {
+    const pid = t.character_id !== null ? getCharacterPlayer(t.character_id) : null;
+    return pid && absent.includes(pid) && !mine.includes(t.id) && tokens.some((x) => x.id === t.id) ? [[t.id, pid]] : [];
+  }));
   return (
-    <MapView hiddenTokens={gm ? [...hidden.keys()] : []} linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView playAs={playAs} hiddenTokens={gm ? [...hidden.keys()] : []} linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

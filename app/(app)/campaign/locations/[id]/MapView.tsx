@@ -23,6 +23,7 @@ import { setScrub, useScrub } from "../../../../(play)/play/scrub";
 import { caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { setSheetToken } from "../../../../(play)/play/sheetToken";
+import { playAs as playAsPlayer } from "../../../sessions/actions";
 import { allegianceOf, fits, maxPicks, picksSeveral, relation } from "@/lib/sides";
 import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../../sessions/ScriptPick";
 import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, squareKey } from "@/lib/movement";
@@ -102,7 +103,9 @@ export default function MapView({
   dockTools = [],
   dockInitial = null,
   dockOpposite,
+  playAs = {},
 }: {
+  playAs?: Record<number, number>; // in a session: tokens of absent players the GM plays (token → player): a click switches to playing as them
   locationId: number;
   levelId: number;
   hidden: MapLayer[];
@@ -861,6 +864,15 @@ export default function MapView({
       const hit = [...(replayedTokens ?? drawnTokens)].reverse().find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
       if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
     }
+    // The GM (or the GM playing an absent player) clicking another absent player's token: switch to playing as them.
+    if (readOnly && playAs && !moveOn && !targetMode && e.button === 0) {
+      const { gx, gy } = gridAt(e);
+      const hit = [...(fogged ? fogged.tokens : drawnTokens)].reverse().find((t) => playAs[t.id] && gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      if (hit) {
+        tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
+        return;
+      }
+    }
     // A player in an encounter clicking someone else they can see (not moving or picking a target): their selected target.
     if (readOnly && fog?.move && !fog.move.free && !moveOn && !targetMode && e.button === 0) {
       const { gx, gy } = gridAt(e);
@@ -1202,7 +1214,10 @@ export default function MapView({
     if (tp && e && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) <= 6) {
       // In an encounter, a click on someone who plans this round opens planning for them (or switches to them); the
       // planning panel shows their details, so no sheet card. Anyone else (or out of an encounter): their sheet.
-      if (!readOnly && gmPlans?.[tp.id]) {
+      if (playAs[tp.id] && !moveOn && !targetMode) {
+        const player = playAs[tp.id];
+        startTransition(async () => { await playAsPlayer(player); }); // their screen (a redirect)
+      } else if (!readOnly && gmPlans?.[tp.id]) {
         if (tp.id !== planningAs) {
           setMoveMode(false);
           setTargetMode(null);
