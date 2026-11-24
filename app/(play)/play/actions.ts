@@ -26,7 +26,7 @@ import { fireTrigger } from "./mapTriggers";
 import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { moveFollowers, walkRoute } from "./walk";
-import { reveal } from "./hiding";
+import { hidingPlaces, reveal, settleHide } from "./hiding";
 import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll } from "@/lib/rolls";
@@ -103,6 +103,47 @@ export async function assistNow(targetId: number): Promise<{ error?: string; tol
   return { told: `You help ${name}: ${now ? "the roll they're making" : "their next roll"} has advantage.` };
 }
 
+/**
+ * Hide, out of an encounter, step one: whether an enemy they can see sees them now, and (if so) the blind spots they
+ * could reach with a round's walking. Unseen: they're asked for the Stealth roll straight away.
+ */
+export async function startHide(): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedOf(me.token_id, me.movement));
+  if (!places.seen) askStealth(user.id, me, false);
+  revalidatePath("/play");
+  return places;
+}
+
+/** Hide, out of an encounter, step two (they were seen): they walk to a blind spot they picked, then roll Stealth with disadvantage. */
+export async function hideAt(col: number, row: number): Promise<{ error?: string; route?: Point[] }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedOf(me.token_id, me.movement));
+  const goal = places.spots.find((c) => c.col === Math.round(Number(col)) && c.row === Math.round(Number(row)));
+  if (!goal) return { error: "That isn't a blind spot you can reach" };
+  const squares = squareRoute({ col: Math.round(me.col), row: Math.round(me.row) }, goal, movementBlockers(listStructures(me.level_id)), () => true);
+  if (!squares) return { error: "You can't get there" };
+  clearStandingOrder(me.token_id);
+  const w = walkRoute(me.level_id, me.token_id, squares.map((s) => ({ x: s.col, y: s.row })));
+  if (w.walked.length > 1) addTokenWalk(me.level_id, me.token_id, w.walked, user.id);
+  if (!w.stopped) askStealth(user.id, { ...me, col: goal.col, row: goal.row }, true);
+  revalidatePath("/play");
+  return { route: w.walked, ...(w.stopped ? { error: "Something stops you on the way" } : {}) };
+}
+
+function askStealth(playerId: number, me: NonNullable<ReturnType<typeof getPlayerToken>>, disadvantage: boolean) {
+  const spec = skillCheckFor(me.token_id, "stealth", JSON.parse(me.attributes) as Attributes);
+  requestRoll(playerId, me.character_id, { ...spec, label: `Hide: ${spec.label}${disadvantage ? " (in a hurry: disadvantage)" : ""}`, ...(disadvantage ? { mode: spec.mode === "advantage" ? "normal" : "disadvantage" } : {}) }, { kind: "hide", levelId: me.level_id, tokenId: me.token_id });
+}
+
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */
 export async function search(): Promise<{ error?: string }> {
   const user = await requireUser();
@@ -159,6 +200,11 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
     logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
+  }
+  if (a.kind === "hide") {
+    const r = settleHide(a.levelId, a.tokenId, scored.total);
+    success = r.hidden;
+    outcome = r.told;
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).

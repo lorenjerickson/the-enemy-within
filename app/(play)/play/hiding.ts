@@ -1,4 +1,4 @@
-import { clearHidden, getIllumination, isGridlessLevel, listHidden, listLights, listStructures, listTokens, logSessionEvent, tokenLabels } from "@/lib/db";
+import { clearHidden, setHidden, getIllumination, isGridlessLevel, listHidden, listLights, listStructures, listTokens, logSessionEvent, tokenLabels } from "@/lib/db";
 import { blindSpots, watched, type Watcher } from "@/lib/hiding";
 import { brightEnough } from "@/lib/light";
 import { FEET_PER_SQUARE, reachableSquares } from "@/lib/movement";
@@ -71,4 +71,36 @@ export function hidingPlaces(levelId: number, tokenId: number, at: { col: number
   const reach = [...reachableSquares(here, Math.max(0, feet) / FEET_PER_SQUARE, movementBlockers(listStructures(levelId))).values()].map((s) => ({ col: s.col, row: s.row }));
   const others = listTokens(levelId).filter((t) => t.id !== tokenId).map((t) => `${Math.round(t.col)},${Math.round(t.row)}`);
   return { seen: watched(at, watchers), spots: blindSpots(reach.filter((c) => !others.includes(`${c.col},${c.row}`)), watchers) };
+}
+
+/** Every enemy of a token, as watchers (not just those it can see): who would really see it somewhere. */
+export function allWatchers(levelId: number, tokenId: number): Watcher[] {
+  const tokens = listTokens(levelId), me = tokens.find((t) => t.id === tokenId);
+  if (!me) return [];
+  const walls = blockingSegments(listStructures(levelId)), illumination = getIllumination(levelId), lights = listLights(levelId), mine = sensesOf(tokenId, levelId);
+  return tokens
+    .filter((t) => t.id !== tokenId && relation(allegianceOf(t), allegianceOf(me)) !== "friendly")
+    .map((t) => {
+      const s = sensesOf(t.id, levelId), from = { x: t.col + 0.5, y: t.row + 0.5 };
+      const view = visibilityPolygon(from, s.blind ? s.blindRange : SIGHT, walls);
+      return { id: t.id, sees: (p) => seesThem(s, mine) && insidePolygon(p, view) && (s.blind || brightEnough(from, p, s.darkvision, illumination, lights, walls)) };
+    });
+}
+
+/**
+ * The Stealth roll is in: hidden with that total, unless an enemy (any, known or not) sees them as they roll, which
+ * fails it outright. Returns what they're told.
+ */
+export function settleHide(levelId: number, tokenId: number, total: number): { hidden: boolean; told: string } {
+  const t = listTokens(levelId).find((x) => x.id === tokenId);
+  if (!t) return { hidden: false, told: "You're not there any more." };
+  const seer = allWatchers(levelId, tokenId).find((w) => w.sees({ x: t.col + 0.5, y: t.row + 0.5 }));
+  const name = tokenLabels(levelId).get(tokenId) ?? "Someone";
+  if (seer) {
+    logSessionEvent(`${name} tries to hide, but ${tokenLabels(levelId).get(seer.id) ?? "someone"} can see them.`);
+    return { hidden: false, told: "You try to hide, but someone can still see you." };
+  }
+  setHidden(tokenId, total);
+  logSessionEvent(`${name} hides (Stealth ${total}).`);
+  return { hidden: true, told: "You're hidden." };
 }

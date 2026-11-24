@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
 import { addCreatureToken, addStructure, clearHidden, listHidden, moveToken, placeCharacterToken, setHidden } from "@/lib/db";
-import { hidingPlaces, revealAfterStep } from "../../app/(play)/play/hiding";
+import { hidingPlaces, revealAfterStep, settleHide } from "../../app/(play)/play/hiding";
 import { seenFrom } from "@/lib/sight";
 
 test("someone hidden is unseen by those not on their side (not even as a guess), seen by their own side", () => {
@@ -37,4 +37,17 @@ test("hiding places: seen now or not, and the blind spots behind a wall from the
   const at = hidingPlaces(lv, milo, { col: 1, row: 0 }, 30);
   assert.equal(at.seen, true);
   assert.ok(at.spots.length > 0 && at.spots.every((c) => c.col >= 3), "only past the wall: " + JSON.stringify(at.spots));
+});
+
+test("the Stealth roll: hidden with that total, unless any enemy (known or not) sees them as they roll", () => {
+  const lv = level("Hall");
+  addStructure(lv, { kind: "wall", x1: 3, y1: -3, x2: 3, y2: 3, target_level_id: null } as never);
+  const milo = placeCharacterToken(lv, character("Milo"), 1, 0);
+  const guard = addCreatureToken(lv, creature("Guard"), 6, 0); // beyond the wall
+  assert.deepEqual(settleHide(lv, milo, 16), { hidden: true, told: "You're hidden." });
+  assert.equal(listHidden(lv).get(milo), 16);
+  clearHidden(milo);
+  moveToken(guard, 2, 2); // now on his side
+  assert.equal(settleHide(lv, milo, 16).hidden, false);
+  assert.equal(listHidden(lv).has(milo), false);
 });
