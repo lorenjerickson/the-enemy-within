@@ -19,14 +19,15 @@ export const PLAYER_ACTIONS = [
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action", desc: "Look around: an Investigation check for anything hidden within 10 ft." },
   { id: "shake", label: "Shake off", icon: "GiBiceps", kind: "action", desc: "Spend your action fighting off a condition that allows it (it says so): roll its save; a success counts towards ending it." },
   { id: "refit", label: "Refit", icon: "GiSwordClash", kind: "bonus", desc: "Swap what's in one equipment slot for something you carry, put something away (stow it in a belt or pack, leaving the slot empty), or bring something out of a pack onto your belt; what you plan after it uses the new gear." },
+  { id: "wait", label: "Wait", icon: "GiSandsOfTime", kind: "free", desc: "Do nothing for a second (each click adds one): it uses no action, movement, bonus action or reaction, so what you plan next happens later in the round." },
   { id: "dodge", label: "Dodge", icon: "GiDodging", kind: "reaction", desc: "From the second it's planned for, attacks against you have disadvantage for the rest of the round, if you beat DC 12 (d20 + Agility). Plan it first." },
 ] as const;
 
 export type PlayerActionId = (typeof PLAYER_ACTIONS)[number]["id"];
-export type ActionKind = "movement" | "action" | "bonus" | "reaction";
+export type ActionKind = "movement" | "action" | "bonus" | "reaction" | "free"; // free: uses none of them (Wait)
 
 /** The groups in the Actions panel. */
-export const ACTION_GROUPS: [ActionKind, string][] = [["movement", "Movement"], ["action", "Actions"], ["bonus", "Bonus actions"], ["reaction", "Reactions"]];
+export const ACTION_GROUPS: [ActionKind, string][] = [["movement", "Movement"], ["action", "Actions"], ["bonus", "Bonus actions"], ["reaction", "Reactions"], ["free", "Time"]];
 
 export const actionKind = (id: PlayerActionId): ActionKind => PLAYER_ACTIONS.find((a) => a.id === id)?.kind ?? "action";
 

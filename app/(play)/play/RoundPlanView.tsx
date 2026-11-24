@@ -6,9 +6,10 @@ import { ROUND_SECONDS, stepKind, type PlanStep } from "@/lib/roundPlan";
 
 export type TimedStep = PlanStep & { start: number; end: number };
 
-const KIND_LABEL = { movement: "Move", action: "Action", bonus: "Bonus action", reaction: "Reaction" } as const;
+const KIND_LABEL = { movement: "Move", action: "Action", bonus: "Bonus action", reaction: "Reaction", free: "Wait" } as const;
 const SEGMENT = {
   movement: "bg-sky-500/75 text-white",
+  free: "bg-base-300 text-base-content",
   action: "bg-amber-500/85 text-black",
   bonus: "bg-emerald-500/80 text-black",
   reaction: "bg-violet-500/80 text-white",

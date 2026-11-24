@@ -1043,7 +1043,7 @@ export function resolveMovement(
       if (down.has(m.tokenId)) continue; // down: the rest of their plan is gone
       if (stepKind(step) === "reaction") continue; // reactions: readied above (and stopped there, if they're stopped)
       // A condition stopping that kind of step (Stunned, Incapacitated): it doesn't happen.
-      const stopped = fighters.get(m.tokenId)?.limits?.forbid[stepKind(step)];
+      const k = stepKind(step), stopped = k === "free" ? undefined : fighters.get(m.tokenId)?.limits?.forbid[k];
       if (stopped) {
         say(`${m.name} can't ${step.use ? `use ${step.use.name}` : step.action} (${stopped}).`);
         story.push({ sec, k: "stopped", who: m.tokenId, action: step.use ? `use ${step.use.name}` : step.action, target: step.target?.id ?? null, why: stopped });
@@ -1075,6 +1075,7 @@ export function resolveMovement(
         say(`${m.name} ${step.put.from ? `takes ${step.put.item.name} out of ${step.put.from.name} and puts it on ${step.put.into.name}` : `puts away ${step.put.item.name} (into ${step.put.into.name})`}.`);
         continue;
       }
+      if (step.action === "wait") continue; // Wait: nothing happens (only time passes)
       // Hit while doing it (not in the second it finishes: blows landing together both count).
       if ((hitAt.get(m.tokenId) ?? []).some((t) => t > start && t < sec)) {
         say(`${m.name}'s ${step.action} is interrupted: they were hit.`);

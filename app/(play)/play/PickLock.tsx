@@ -158,6 +158,7 @@ export default function PickLock({
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
     : plan ? (id === "refit" ? "Refit: swap something into an equipment slot, put something away, or bring something out of a pack onto your belt (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "hide" ? "Hide (2 s): unseen where your plan leaves you, hide there; seen, pick a blind spot you can reach in time (then Stealth with disadvantage)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round, as 1-second slices on your plan` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : id === "wait" ? "Wait: only in a round (each click adds a second of doing nothing)"
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
     : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"

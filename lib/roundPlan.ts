@@ -10,7 +10,7 @@ export const ROUND_SECONDS = 6;
 
 /** How long each action takes, in seconds (defaults; tune freely). Move and Dash are movement, timed by distance. */
 export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
-  interact: 1, use: 2, attack: 2, refit: 2, shake: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
+  wait: 1, interact: 1, use: 2, attack: 2, refit: 2, shake: 2, disengage: 1, dodge: 1, assist: 1, hide: 2, ready: 1, search: 3,
 };
 
 /** One step of a round plan, in the order declared. */
@@ -137,7 +137,7 @@ export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use
 export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typeof stepKind>, seconds: number, forbidden: Partial<Record<string, string>> = {}): string | null {
   if (forbidden[kind]) return `${forbidden[kind]}: can't ${kind === "movement" ? "move" : kind === "action" ? "take actions" : kind === "bonus" ? "take bonus actions" : "react"}`;
   const left = ROUND_SECONDS - used;
-  if (kind !== "movement" && plan.some((s) => stepKind(s) === kind)) return `You've already planned your ${kind === "bonus" ? "bonus action" : kind} this round`;
+  if (kind !== "movement" && kind !== "free" && plan.some((s) => stepKind(s) === kind)) return `You've already planned your ${kind === "bonus" ? "bonus action" : kind} this round`;
   if (kind === "action" && plan.some(isDash)) return "You're dashing this round: that's your action";
   if (left <= 1e-9) return "No time left this round";
   if (seconds > left + 1e-9) return `Not enough time left (${+left.toFixed(1)} s)`;
