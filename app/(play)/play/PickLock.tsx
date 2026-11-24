@@ -71,11 +71,16 @@ export default function PickLock({
   const walkingNow = moving && !runMode, dashingNow = moving && runMode;
   const [ordering, setOrdering] = useState<"follow" | "pursue" | "evade" | null>(null); // out of an encounter: picking who to follow / pursue / evade
   const [refitting, setRefitting] = useState(false);
+  const [using, setUsing] = useState(false); // Use: picking which item (in hand or on a belt) to use
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
   const run = (f: () => Promise<{ error?: string } | void>) => { setMoveMode(false); startTransition(async () => setError((await f())?.error ?? null)); };
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
+  // A gear action picked (from the gear list, or through Use): planned straight away if it needs no target, else aimed.
+  const useGear = (g: (typeof gear)[number]) => { setUsing(false); return g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }); };
+  // Use: items in a hand or on a belt (in a round, a pack's need a Refit first).
+  const usableItems = gear.filter((g) => g.item && (g.item.where === "hand" || g.item.where === "belt"));
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
@@ -95,6 +100,7 @@ export default function PickLock({
     }
     setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
+    if (plan && id === "use") { setTargetMode(null); setRefitting(false); return setUsing(!using); }
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
@@ -103,7 +109,7 @@ export default function PickLock({
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
-    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "follow" ? "Follow someone: whenever they move, you go after them as far as they went"
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
@@ -127,6 +133,11 @@ export default function PickLock({
   return (
     <div className="space-y-3 text-sm">
       {scrubber}
+      {plan && using && (
+        usableItems.length
+          ? <GearActions title="Use what? (in hand or on your belt)" gear={usableItems} enabled={!plan.ready && onMap && !dice?.rolled} blocked={(g) => unavailable(plan.steps, plan.used, g.kind === "reaction" ? "reaction" : "action", g.seconds, forbidden)} onUse={useGear} />
+          : <p className="text-xs opacity-70" data-use-none>Nothing in hand or on your belt to use. (Refit brings something out of a pack.) <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUsing(false)}>Close</button></p>
+      )}
       {!plan && standing && (
         <div className="alert text-sm py-2" data-standing>
           <span>{standing.mode === "follow" ? "Following" : standing.mode === "pursue" ? "Pursuing" : "Evading"} {standing.name}</span>
@@ -210,7 +221,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {(kind === "action" || kind === "reaction") && <GearActions gear={gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }))} />}
+            {(kind === "action" || kind === "reaction") && <GearActions gear={gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={useGear} />}
           </section>
         );
       })}

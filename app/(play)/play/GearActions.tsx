@@ -16,7 +16,8 @@ export const gearTargetMode = (g: Gear, tokenId: number | null) =>
  * Actions from someone's gear, own abilities and professions (Aimed shot, Bite, Mesmerize…): one aimed at someone plans
  * it on a target (an attack if it does damage); one that only affects its user (Case the Scene) is planned straight away.
  */
-export default function GearActions({ gear, enabled, onUse, blocked, compact = false }: {
+export default function GearActions({ gear, enabled, onUse, blocked, compact = false, title = "From their gear and professions" }: {
+  title?: string;
   compact?: boolean; // the GM's planning panel: smaller tiles, four to a row (the same as its other actions)
   gear: Gear[];
   enabled: boolean;
@@ -26,7 +27,7 @@ export default function GearActions({ gear, enabled, onUse, blocked, compact = f
   if (!gear.length) return null;
   return (
     <div className="space-y-1" data-gear-actions>
-      <div className="text-xs font-semibold opacity-80">From their gear and professions</div>
+      <div className="text-xs font-semibold opacity-80">{title}</div>
       <div className={`grid auto-rows-fr ${compact ? "grid-cols-4 gap-1" : "grid-cols-3 gap-2"}`}>
         {gear.map((g) => (
           <ActionTip key={g.id} name={`${g.name} (${g.source})`} desc={g.description} lines={gearSummary(g)} why={!enabled ? "Only in an encounter" : blocked?.(g)}>

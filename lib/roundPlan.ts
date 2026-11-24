@@ -16,6 +16,7 @@ export const ACTION_SECONDS: Partial<Record<PlayerActionId, number>> = {
 /** One step of a round plan, in the order declared. */
 /** An action from someone's gear (an item's or a creature's own, e.g. Aimed shot or Bite), as a plan needs it. */
 export interface GearAction {
+  item?: { id: number; where: "hand" | "worn" | "belt" | "pack"; container?: number }; // an item's action: which item, and where it is (Use: in hand or on a belt; consumables are used up)
   id: number;
   name: string;
   seconds: number;
