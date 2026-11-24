@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
-import { gmPlanStep, gmSetReady, gmRemoveStep } from "./gmActions";
+import { gmHidePlanOptions, gmPlanStep, gmSetReady, gmRemoveStep } from "./gmActions";
 import { useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
+import { setHideSpots } from "./hideMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
@@ -114,6 +115,13 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 onClick={() =>
                   a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!walkingNow))
                   : a.id === "dash" ? (setTargetMode(null), setRefitting(false), setMoveMode(!dashingNow, true))
+                  : a.id === "hide" ? (setMoveMode(false), setTargetMode(null), startTransition(async () => {
+                      const r = await gmHidePlanOptions(current.tokenId);
+                      if (r.error) return setError(r.error);
+                      if (!r.seen) setError((await gmPlanStep(current.tokenId, { kind: "action", action: "hide" })).error ?? null);
+                      else if (r.spots?.length) { setHideSpots(r.spots, { tokenId: current.tokenId }); setError("Seen: click a blind spot on the map (green)."); }
+                      else setError("Seen, and no cover within reach: they can't hide.");
+                    }))
                   : a.id === "refit" ? (setMoveMode(false), setRefitting(!refitting))
                   : TARGETED_ACTIONS.includes(a.id) ? (setMoveMode(false), setChoosing(a.id))
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))

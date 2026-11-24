@@ -14,7 +14,7 @@ export const PLAYER_ACTIONS = [
   { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something within reach: open or close a door, work a lever, switch or object (in a round, it happens after the round); pick a lock out of combat." },
   { id: "disengage", label: "Disengage", icon: "GiReturnArrow", kind: "action", desc: "Slip away from close quarters (no effect yet)." },
   { id: "assist", label: "Assist", icon: "GiShakingHands", kind: "action", desc: "Help someone on your side within 5 ft (click them on the map): advantage on their next roll." },
-  { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Try to get out of sight (no effect yet)." },
+  { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Get out of sight: unseen, roll Stealth where you are; seen, slip into a blind spot within reach first (Stealth with disadvantage); no cover, no hiding. Hidden from everyone not on your side until you act on someone, an enemy comes right next to you, you move into view, or a Search beats your Stealth." },
   { id: "ready", label: "Ready", icon: "GiHourglass", kind: "action", desc: "Hold yourself ready to act (no effect yet)." },
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action", desc: "Look around: an Investigation check for anything hidden within 10 ft." },
   { id: "shake", label: "Shake off", icon: "GiBiceps", kind: "action", desc: "Spend your action fighting off a condition that allows it (it says so): roll its save; a success counts towards ending it." },

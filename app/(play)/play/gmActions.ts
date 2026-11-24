@@ -11,7 +11,8 @@ import type { Attributes } from "@/lib/attributes";
 import { getPendingRound, listEffectDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
 import { asCondition, describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
-import { settleHide, reveal as revealToken } from "./hiding";
+import { hidingPlaces, settleHide, reveal as revealToken } from "./hiding";
+import { planEnd, timeline } from "@/lib/roundPlan";
 import { applyConditionNow, rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
@@ -214,6 +215,14 @@ export async function gmHide(tokenId: number, hide: boolean): Promise<{ told: st
   const r = settleHide(t.level_id, t.id, total);
   revalidatePath("/play");
   return { told: r.hidden ? `Hidden (Stealth ${total}).` : "An enemy can see them: they can't hide." };
+}
+
+/** The GM planning Hide for one of theirs: seen? and the blind spots in reach in the time left. */
+export async function gmHidePlanOptions(tokenId: number): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
+  await requireGm();
+  const p = tokenPlanner(Number(tokenId));
+  if (!p) return { error: "They can't plan now" };
+  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), (timeline(p.plan, p.walking).left * p.walking) / 6);
 }
 
 /** Whether a token is hidden (Hide), with its Stealth total. */

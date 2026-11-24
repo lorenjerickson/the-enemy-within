@@ -16,7 +16,7 @@ import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { assistNow, freeMove, hideAt, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
-import { setHideSpots, useHideSpots } from "../../../../(play)/play/hideMode";
+import { setHideSpots, useHidePick } from "../../../../(play)/play/hideMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
@@ -566,7 +566,7 @@ export default function MapView({
   const lift = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null); // holding on a token to pick it up
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
-  const hideSpots = useHideSpots(); // Hide (seen, out of combat): blind spots to pick on the map
+  const hidePick = useHidePick(), hideSpots = hidePick?.spots ?? null; // Hide (seen): blind spots to pick on the map
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
   // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
   const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
@@ -802,6 +802,15 @@ export default function MapView({
       const cell = hideSpots.find((c) => Math.floor(gx) === c.col && Math.floor(gy) === c.row);
       if (!cell) return;
       setHideSpots(null);
+      if (hidePick?.plan) { // planning a round's Hide: the move into the blind spot, then a hurried Hide
+        const plan = hidePick.plan;
+        startTransition(async () => {
+          const step = { kind: "action" as const, action: "hide" as const, cover: cell };
+          const r = plan.tokenId !== null ? await gmPlanStep(plan.tokenId, step) : await planStep(step);
+          if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+        });
+        return;
+      }
       const me = drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
       startTransition(async () => {
         const r = await hideAt(cell.col, cell.row);

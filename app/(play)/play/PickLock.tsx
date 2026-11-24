@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
+import { hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots, useHideSpots } from "./hideMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
@@ -115,6 +115,17 @@ export default function PickLock({
     setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
     if (plan && id === "use") { setTargetMode(null); setRefitting(false); return setUsing(!using); }
+    if (plan && id === "hide") {
+      setTargetMode(null);
+      if (hideSpots || noCover) { setHideSpots(null); return setNoCover(false); }
+      return startTransition(async () => {
+        const r = await hidePlanOptions();
+        if (r.error) return setError(r.error);
+        if (!r.seen) setError((await planStep({ kind: "action", action: "hide" })).error ?? null);
+        else if (r.spots?.length) setHideSpots(r.spots, { tokenId: null }); // pick a blind spot on the map
+        else setNoCover(true);
+      });
+    }
     if (plan && id === "interact") { setTargetMode(null); setRefitting(false); return setInteracting(!interacting); }
     if (plan && id === "assist") return setTargetMode(target?.action === "assist" ? null : { action: "assist", tokenId: null, range: 1, targeting: { who: "friendly", count: "one", n: 1 }, visible: targets.map((t) => t.id) }); // map clicks only
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
@@ -138,7 +149,7 @@ export default function PickLock({
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
-    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "hide" ? "Hide (2 s): unseen where your plan leaves you, hide there; seen, pick a blind spot you can reach in time (then Stealth with disadvantage)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
     : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"
@@ -167,10 +178,10 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {scrubber}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
-      {!plan && hideSpots && (
+      {hideSpots && (
         <p className="text-xs" data-hide-pick>You&apos;re seen. Click a blind spot on the map (green) to slip into it and hide; it&apos;s harder in a hurry (disadvantage). Enemies you can&apos;t see may still spot you there. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setHideSpots(null)}>Cancel</button></p>
       )}
-      {!plan && noCover && (
+      {noCover && (
         <p className="text-xs text-warning" data-hide-none>You&apos;re seen, and there&apos;s no cover within reach: you can&apos;t hide here. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setNoCover(false)}>OK</button></p>
       )}
       {!plan && target?.now && (

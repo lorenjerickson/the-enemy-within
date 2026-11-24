@@ -6,7 +6,7 @@ import type { Condition } from "@/lib/conditions";
 import { saveRollFor, skillCheckFor, speedOf } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db";
 import { seenFrom } from "@/lib/sight";
-import { planEnd } from "@/lib/roundPlan";
+import { planEnd, timeline } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
@@ -454,6 +454,14 @@ export async function useItemNow(actionId: number, targetId?: number): Promise<{
   logSessionEvent(line);
   revalidatePath("/play");
   return { told: line };
+}
+
+/** Planning Hide in a round: seen (from where the plan leaves them, by an enemy they can see)? and the blind spots in reach in the time left. */
+export async function hidePlanOptions(): Promise<{ error?: string; seen?: boolean; spots?: { col: number; row: number }[] }> {
+  const user = await requireUser();
+  const p = planner(user.id);
+  if (!p) return { error: "Not in an encounter" };
+  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), (timeline(p.plan, p.walking).left * p.walking) / 6);
 }
 
 /** The player's character's planner in a running encounter. */
