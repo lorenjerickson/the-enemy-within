@@ -14,6 +14,7 @@ import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
 import RefitPicker, { type RefitOption } from "./RefitPicker";
+import type { PutOptions } from "@/lib/combat";
 import ActionTip from "./ActionTip";
 import { basicLines } from "./basicLines";
 import { planTargeted } from "./targetPlan";
@@ -29,6 +30,7 @@ export interface CreaturePlan {
   things?: { id: number; name: string }[]; // and levers / switches / objects
   gear: (GearAction & { source: string })[]; // its own, its gear's and its professions' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
+  puts?: PutOptions; // what Refit could put away / bring onto the belt (characters only)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
   attackRange?: number; // squares its plain Attack reaches
   sees?: number[]; // who it could see (and so aim at) from where its plan has it
@@ -126,7 +128,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
             </section>
           )}
           {refitting && (
-            <RefitPicker options={current.refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", swap: { slot, item } })); }} />
+            <RefitPicker options={current.refits} onCancel={() => setRefitting(false)} puts={current.puts} onPick={(slot, item) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", swap: { slot, item } })); }} onPut={(put) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", put })); }} />
           )}
           {/* The same actions players have, grouped by kind: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
           <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find an action…" aria-label="Find an action" className="input input-sm w-full" data-action-search />

@@ -114,7 +114,7 @@ export function planningData(): { creatures: CreaturePlan[]; targets: { id: numb
   const targets = tokens.map((t) => ({ id: t.id, name: labels.get(t.id)!, allegiance: allegianceOf(t), character_id: t.character_id }));
   const creatures = [...enc.order.map((o) => o.token_id), ...getEncounterWaiting(levelId)].flatMap((id) => {
     const t = tokens.find((x) => x.id === id), v = !down.has(id) && t ? planView(id) : null;
-    return t && v ? [{ tokenId: id, name: labels.get(id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null, plan: { steps: v.steps, used: v.used, ready: v.ready }, runPerSecond: v.runPerSecond, gear: v.gear, refits: v.refits, allegiance: allegianceOf(t), attackRange: v.attackRange, sees: v.sees, forbidden: v.forbidden, shakeable: v.shakeable, doors: v.doors, things: v.things }] : [];
+    return t && v ? [{ tokenId: id, name: labels.get(id)!, player: (t.character_id !== null && characterPlayers().get(t.character_id)) || null, plan: { steps: v.steps, used: v.used, ready: v.ready }, runPerSecond: v.runPerSecond, gear: v.gear, refits: v.refits, puts: v.puts, allegiance: allegianceOf(t), attackRange: v.attackRange, sees: v.sees, forbidden: v.forbidden, shakeable: v.shakeable, doors: v.doors, things: v.things }] : [];
   });
   return { creatures, targets, history: gmRounds(levelId) };
 }

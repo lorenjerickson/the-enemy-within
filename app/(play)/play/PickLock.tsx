@@ -22,6 +22,7 @@ import { setTargetMode, useTargetMode, type TargetMode } from "./targetMode";
 
 import type { TimedStep } from "./RoundPlanView";
 import RefitPicker, { type RefitOption } from "./RefitPicker";
+import type { PutOptions } from "@/lib/combat";
 
 /**
  * The player's Actions panel. Out of an encounter, actions happen straight away (Move is free, Search rolls).
@@ -29,7 +30,7 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], puts, dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
   things?: { id: number; name: string }[]; // levers, switches, objects within reach (interactable map triggers)
@@ -47,6 +48,7 @@ export default function PickLock({
   selected?: number | null; // their selected target (kept from last round): used for a targeted action straight away
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
+  puts?: PutOptions; // what Refit could put away, or bring out of a pack onto the belt
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
   lastRound?: { round: number; seconds: number; endsAt: number } | null; // the last round's replay, to step through once it has played
@@ -154,7 +156,7 @@ export default function PickLock({
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
-    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "hide" ? "Hide (2 s): unseen where your plan leaves you, hide there; seen, pick a blind spot you can reach in time (then Stealth with disadvantage)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round, as 1-second slices on your plan` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something into an equipment slot, put something away, or bring something out of a pack onto your belt (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "hide" ? "Hide (2 s): unseen where your plan leaves you, hide there; seen, pick a blind spot you can reach in time (then Stealth with disadvantage)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round, as 1-second slices on your plan` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
     : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"
@@ -272,7 +274,7 @@ export default function PickLock({
         />
       )}
       {plan && refitting && (
-        <RefitPicker options={refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", swap: { slot, item } })); }} />
+        <RefitPicker options={refits} puts={puts} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", swap: { slot, item } })); }} onPut={(put) => { setRefitting(false); run(() => planStep({ kind: "action", action: "refit", put })); }} />
       )}
       {plan && (
         <p className="text-xs opacity-80" data-selected-target>
