@@ -1,0 +1,20 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { character, creature, level } from "./seed";
+import { addCreatureToken, getEncounter, getEncounterWaiting, getRoundPlan, listTokens, moveTokenToLevel, placeCharacterToken, saveEncounter, saveRoundPlan, setEncounterWaiting } from "@/lib/db";
+
+test("taking a level link leaves the encounter on the old level and arrives outside the new one's", () => {
+  const up = level("Upstairs"), down = level("Cellar");
+  const rat = addCreatureToken(up, creature("Rat"), 0, 0);
+  const hero = placeCharacterToken(up, character("Hero"), 1, 0);
+  const cat = addCreatureToken(up, creature("Cat"), 2, 0);
+  saveEncounter(up, { round: 2, turn: 2, order: [{ token_id: rat, initiative: 15 }, { token_id: hero, initiative: 12 }, { token_id: cat, initiative: 8 }] });
+  setEncounterWaiting(up, [hero, cat]);
+  saveRoundPlan(up, hero, [], true);
+  moveTokenToLevel(hero, down, 4, 5);
+  assert.deepEqual(listTokens(down).map((t) => [t.id, t.col, t.row]), [[hero, 4, 5]]);
+  assert.deepEqual(getEncounter(up), { round: 2, turn: 1, order: [{ token_id: rat, initiative: 15 }, { token_id: cat, initiative: 8 }] }, "still the cat's turn");
+  assert.deepEqual(getEncounterWaiting(up), [cat]);
+  assert.equal(getRoundPlan(up, hero).ready, false, "their plan there is gone");
+  assert.equal(getEncounter(down), undefined);
+});

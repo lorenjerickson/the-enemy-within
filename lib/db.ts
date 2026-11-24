@@ -1423,10 +1423,26 @@ export function clearLinkPrompt(tokenId: number): void {
   db.prepare("DELETE FROM link_prompts WHERE token_id = ?").run(tokenId);
 }
 
-/** Moves a token to another level (taking a level link). */
+/**
+ * Moves a token to another level (taking a level link). It leaves the encounter on the level it was on (turn order,
+ * round plan, waiting list); on the new level it arrives outside any encounter there (the GM adds it).
+ */
 export function moveTokenToLevel(id: number, levelId: number, col: number, row: number): void {
-  db.prepare<[number, number, number, number]>("UPDATE map_tokens SET level_id = ?, col = ?, row = ? WHERE id = ?").run(levelId, col, row, id);
-  recordSighting(id);
+  db.transaction(() => {
+    const from = db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(id)?.level_id;
+    db.prepare<[number, number, number, number]>("UPDATE map_tokens SET level_id = ?, col = ?, row = ? WHERE id = ?").run(levelId, col, row, id);
+    recordSighting(id);
+    if (from === undefined) return;
+    db.prepare("DELETE FROM round_plans WHERE level_id = ? AND token_id = ?").run(from, id);
+    const enc = getEncounter(from);
+    if (!enc) return;
+    const at = enc.order.findIndex((o) => o.token_id === id);
+    if (at >= 0) {
+      const order = enc.order.filter((o) => o.token_id !== id);
+      saveEncounter(from, { ...enc, order, turn: Math.max(0, Math.min(enc.turn - (at < enc.turn ? 1 : 0), order.length - 1)) });
+    }
+    setEncounterWaiting(from, getEncounterWaiting(from).filter((t) => t !== id));
+  })();
 }
 
 // Fog of war: every spot a character's token has stood on a level (its centre, grid units); what was seen from them stays explored.
