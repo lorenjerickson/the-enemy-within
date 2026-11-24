@@ -13,7 +13,7 @@ export const PLAYER_ACTIONS = [
   { id: "use", label: "Use", icon: "GiSwapBag", kind: "action", desc: "Use something you have: in a round, an item in your hand or on your belt (Refit brings one out of a pack); out of combat, anything you carry. Consumables are used up." },
   { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something within reach: open or close a door, work a lever, switch or object (in a round, it happens after the round); pick a lock out of combat." },
   { id: "disengage", label: "Disengage", icon: "GiReturnArrow", kind: "action", desc: "Slip away from close quarters (no effect yet)." },
-  { id: "assist", label: "Assist", icon: "GiShakingHands", kind: "action", desc: "Help someone with what they're doing (no effect yet)." },
+  { id: "assist", label: "Assist", icon: "GiShakingHands", kind: "action", desc: "Help someone on your side within 5 ft (click them on the map): advantage on their next roll." },
   { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Try to get out of sight (no effect yet)." },
   { id: "ready", label: "Ready", icon: "GiHourglass", kind: "action", desc: "Hold yourself ready to act (no effect yet)." },
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action", desc: "Look around: an Investigation check for anything hidden within 10 ft." },
@@ -42,7 +42,7 @@ export const SEARCH_DC = 14;
 export const SEARCH_RANGE = 2; // 10 ft
 
 /** Actions aimed at someone: the player picks a target when planning them. */
-export const TARGETED_ACTIONS: PlayerActionId[] = ["attack", "evade", "pursue", "follow"];
+export const TARGETED_ACTIONS: PlayerActionId[] = ["attack", "evade", "pursue", "follow", "assist"];
 
 /**
  * Evade and Pursue: movement that follows the target, re-decided every second, for as long as planned (the rest of
@@ -55,7 +55,7 @@ export const CHASE_ACTIONS: PlayerActionId[] = ["evade", "pursue", "follow"]; //
  * Actions that need their target within a range (grid squares; 1 = next to them). Declared on someone out of reach,
  * the actor pursues them first, for as long as that still leaves time to do the action.
  */
-export const ACTION_RANGE: Partial<Record<PlayerActionId, number>> = { attack: 1 };
+export const ACTION_RANGE: Partial<Record<PlayerActionId, number>> = { attack: 1, assist: 1 };
 
 /**
  * Refit (bonus action): swap what's in one equipment slot for something else they carry that fits it. Planned

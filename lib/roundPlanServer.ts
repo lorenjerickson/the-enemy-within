@@ -146,6 +146,12 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       const me = allegianceOf(tokens.find((x) => x.id === p.tok.token_id) ?? { character_id: null });
       if (t && !fits(tg.who, relation(me, allegianceOf(t)))) return `${name} isn't one of the ${tg.who === "enemy" ? "enemies" : "friendlies"}`;
     }
+    // Assist: someone else on their side.
+    if (step.action === "assist") {
+      const tokens = listTokens(p.tok.level_id), t = tokens.find((x) => x.id === Number(step.target));
+      if (!t || t.id === p.tok.token_id) return "Pick someone else to help";
+      if (relation(allegianceOf(tokens.find((x) => x.id === p.tok.token_id) ?? { character_id: null }), allegianceOf(t)) !== "friendly") return "Only someone on your side";
+    }
     const first = picks && !aim ? picks[0] : undefined;
     add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}) };
   }

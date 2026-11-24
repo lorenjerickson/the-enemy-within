@@ -168,7 +168,10 @@ export function resolveMovement(
   traps: RoundTrap[] = [], // the GM's traps on the level: they spring on whoever comes into one (each second), starts the round in one, or ends it in one
   triggers: MapTrigger[] = [], // the GM's map triggers: noted the second they fire (their outcomes happen after the round), stopping the mover at once
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
+  assists: Map<number, { by: number; name: string }> = new Map(), // who has been helped (Assist): advantage on their next attack roll
 ) {
+  const helped = new Map(assists); // as the round goes: help given (Assist), and spent on an attack
+  const helpUsed = new Set<number>(); // spent this second (taken off at its end)
   const passes = new Set(auraPasses);
   const thingsWorked: { tokenId: number; triggerId: number; sec: number }[] = []; // levers / objects worked (their triggers fire after the round)
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
@@ -367,7 +370,10 @@ export function resolveMovement(
     return lit(pt) || d * FEET_PER_SQUARE <= sv.darkvision + 1e-6;
   };
   /** Advantage / disadvantage from not being seen: attacking someone you can't see, attacking someone who can't see you. */
-  const unseen = (attacker: number, target: number): RollMode[] => [...(!sightOf(attacker, target) ? (["disadvantage"] as const) : []), ...(!sightOf(target, attacker) ? (["advantage"] as const) : [])];
+  const unseen = (attacker: number, target: number): RollMode[] => {
+    if (helped.has(attacker)) helpUsed.add(attacker); // helped (Assist): advantage on this attack, then it's spent
+    return [...(!sightOf(attacker, target) ? (["disadvantage"] as const) : []), ...(!sightOf(target, attacker) ? (["advantage"] as const) : []), ...(helped.has(attacker) ? (["advantage"] as const) : [])];
+  };
   /** A creature's triggers: its own (and its gear's), and those of conditions on it. */
   const triggersOf = (id: number) => [
     ...(fighters.get(id)?.triggers ?? []).map((t) => ({ ...t, a: undefined as Affliction | undefined })),
@@ -1026,6 +1032,15 @@ export function resolveMovement(
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
       if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
+      // Assist: whoever they help (next to them now) has advantage on their next attack roll (this round or later).
+      if (step.action === "assist" && step.target) {
+        const at = where(step.target.id);
+        if (!at || !inReach(pos.get(m.tokenId)!, at, 1)) { say(`${m.name} can't reach ${step.target.name} to help.`); story.push({ sec, k: "attack", who: m.tokenId, target: step.target.id, outcome: "reach" } as StoryEvent); continue; }
+        helped.set(step.target.id, { by: m.tokenId, name: m.name });
+        say(`${m.name} helps ${step.target.name}: advantage on their next roll.`);
+        story.push({ sec, k: "assist", who: m.tokenId, target: step.target.id });
+        continue;
+      }
       // Interact with a lever / switch / object: its trigger fires after the round (like any map trigger's outcomes).
       if (step.action === "interact" && step.thing) {
         thingsWorked.push({ tokenId: m.tokenId, triggerId: step.thing.id, sec });
@@ -1226,6 +1241,8 @@ export function resolveMovement(
         didAttack(m.tokenId, sec);
       }
     }
+    for (const id of helpUsed) helped.delete(id); // help spent on an attack this second
+    helpUsed.clear();
     // Evade / Pursue end: within range of what's planned next, within 5 ft, the target down, or their time up.
     for (const [id, c] of chases) {
       if (chaseOver.has(id) || down.has(id) || sec - lag.get(id)! <= c.start + 1e-9) continue;
@@ -1278,7 +1295,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })) };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

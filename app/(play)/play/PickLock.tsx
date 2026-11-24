@@ -113,6 +113,7 @@ export default function PickLock({
     if (id === "refit") return setRefitting(!refitting);
     if (plan && id === "use") { setTargetMode(null); setRefitting(false); return setUsing(!using); }
     if (plan && id === "interact") { setTargetMode(null); setRefitting(false); return setInteracting(!interacting); }
+    if (plan && id === "assist") return setTargetMode(target?.action === "assist" ? null : { action: "assist", tokenId: null, range: 1, targeting: { who: "friendly", count: "one", n: 1 }, visible: targets.map((t) => t.id) }); // map clicks only
     if (plan && TARGETED_ACTIONS.includes(id)) return setChoosing(id);
     if (plan) return run(() => planStep({ kind: "action", action: id }));
     if (id === "search") return run(search);
@@ -205,7 +206,10 @@ export default function PickLock({
           onPick={(picked) => { const mode = ordering; setOrdering(null); run(() => setStanding(mode, picked)); }}
         />
       )}
-      {plan && choosing && (
+      {plan && choosing === "assist" && (
+        <p className="text-xs" data-assist-pick>Click who to help on the map (someone on your side; you close in first if they're out of reach). <button type="button" className="btn btn-ghost btn-xs" onClick={() => setTargetMode(null)}>Cancel</button></p>
+      )}
+      {plan && choosing && choosing !== "assist" && (
         <TargetPicker
           title={target?.area ? `${target.label}: click where to aim it on the map` : target?.label ? `${target.label}: click the target on the map, or pick:` : `Click who to ${label(choosing!).toLowerCase()} on the map, or pick:`}
           aiming={!!target?.area && !target.aimed}

@@ -20,7 +20,7 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
-import { getDoor, setDoorOpen, setLinkPrompt } from "@/lib/db";
+import { clearAssist, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -80,7 +80,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }]))));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.
@@ -126,6 +126,9 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const t = listMapTriggers(levelId).find((x) => x.id === f.triggerId);
     if (t) fireTrigger(levelId, t, f.tokenId);
   }
+  // Help (Assist) still to be used carries on; what was spent (or replaced) is gone.
+  for (const a of listAssists(levelId)) clearAssist(a.tokenId);
+  for (const a of result.assistsLeft) setAssist(a.tokenId, a.by, a.name);
   // Levers / switches / objects worked this round (Interact): their triggers fire now.
   for (const w of result.thingsWorked) { const t = listMapTriggers(levelId).find((x) => x.id === w.triggerId); if (t) fireTrigger(levelId, t, w.tokenId); }
   // Doors worked this round (Interact): open or closed now, in the order it happened.
