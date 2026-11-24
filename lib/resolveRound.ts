@@ -690,7 +690,12 @@ export function resolveMovement(
   const chases = new Map<number, { start: number; end: number; action: string; target: { id: number; name: string } }>();
   for (const m of order) {
     for (const s of timeline(m.plan, m.fps).steps) {
-      if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) chases.set(m.tokenId, { start: s.start, end: s.end, action: s.step.action, target: s.step.target });
+      if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) {
+        // Back-to-back 1-second slices of the same chase on the same target are one continuous chase.
+        const c = chases.get(m.tokenId);
+        if (c && c.action === s.step.action && c.target.id === s.step.target.id && Math.abs(c.end - s.start) < 1e-9) c.end = s.end;
+        else chases.set(m.tokenId, { start: s.start, end: s.end, action: s.step.action, target: s.step.target });
+      }
     }
   }
   const chaseOver = new Set<number>();

@@ -177,6 +177,21 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   }
   const why = cannotAdd(p.plan, add, p.walking) ?? unavailable(p.plan, 0, stepKind(add), 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (why) return why;
+  // Evade / Pursue / Follow: laid out as 1-second slices (each removable), for the seconds picked or the rest of the
+  // round (whole seconds; a part second left over stays free).
+  if (add.kind === "action" && CHASE_ACTIONS.includes(add.action)) {
+    const n = add.seconds ?? Math.floor(timeline(p.plan, p.walking).left + 1e-9);
+    if (n < 1) return "No time left this round";
+    let plan = p.plan;
+    for (let i = 0; i < n; i++) {
+      const slice: PlanStep = { ...add, seconds: 1 };
+      if (cannotAdd(plan, slice, p.walking)) break;
+      plan = [...plan, slice];
+    }
+    saveRoundPlan(p.tok.level_id, p.tok.token_id, plan, false);
+    if (add.target && add.target.id !== p.tok.token_id) setTokenTarget(p.tok.token_id, add.target.id);
+    return null;
+  }
   saveRoundPlan(p.tok.level_id, p.tok.token_id, [...p.plan, add], false);
   // Whoever it's aimed at (someone else) stays their selected target, this round and the next.
   if (add.kind === "action" && add.target && add.target.id !== p.tok.token_id) setTokenTarget(p.tok.token_id, add.target.id);
@@ -193,7 +208,9 @@ export function removePlanStep(p: Planner, index: number): string | null {
   if (p.ready) return "Ready already; undo that to change the plan";
   if (!Number.isInteger(index) || index < 0 || index >= p.plan.length) return "That step isn't in the plan";
   const removed = p.plan[index];
-  const rest = [...p.plan.slice(0, index), ...p.plan.slice(index + 1)];
+  // A chase's second taken out of the middle (anything planned after it): everything after it goes too.
+  const interiorSlice = removed.kind === "action" && CHASE_ACTIONS.includes(removed.action) && index < p.plan.length - 1;
+  const rest = interiorSlice ? p.plan.slice(0, index) : [...p.plan.slice(0, index), ...p.plan.slice(index + 1)];
   if (removed.kind === "move") {
     const j = rest.findIndex((s, k) => k >= index && s.kind === "move");
     if (j >= 0) rest.splice(j, 1, ...(remeasure(p, planEnd(rest.slice(0, j), { col: p.tok.col, row: p.tok.row }), (rest[j] as Extract<PlanStep, { kind: "move" }>).to) ?? []));
