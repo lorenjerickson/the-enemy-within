@@ -1,4 +1,6 @@
-import { listStructures, moveToken } from "@/lib/db";
+import { downTokens, getEncounter, isGridlessLevel, listStandingOrdersOn, listStructures, listTokens, moveToken, setLinkPrompt } from "@/lib/db";
+import { standingRoute, walkLength } from "@/lib/standing";
+import { movementBlockers } from "@/lib/visibility";
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
 import { linkEntered } from "@/lib/levelLinks";
@@ -54,4 +56,30 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
   }
   syncAurasOn(levelId); // walked into (or out of) an aura
   return { walked, stopped, told, ...(link ? { link } : {}) };
+}
+
+/**
+ * Out of an encounter, after a token has moved `moved` (walkLength): whoever follows, pursues or evades it walks
+ * (walkRoute: traps, triggers and level links as for anyone walking), then those following them, and so on (each
+ * token once). A follower who comes onto a level link is asked whether to take it. Returns the walks, to play back.
+ */
+export function moveFollowers(levelId: number, leaderId: number, moved: number, done = new Set<number>()): { tokenId: number; route: Point[] }[] {
+  if (getEncounter(levelId)) return [];
+  done.add(leaderId);
+  const tokens = listTokens(levelId), leader = tokens.find((t) => t.id === leaderId);
+  if (!leader) return [];
+  const walls = movementBlockers(listStructures(levelId)), gridless = isGridlessLevel(levelId), down = downTokens(levelId);
+  const walks: { tokenId: number; route: Point[] }[] = [];
+  for (const o of listStandingOrdersOn(leaderId)) {
+    const t = tokens.find((x) => x.id === o.tokenId);
+    if (!t || done.has(t.id) || down.has(t.id)) continue;
+    done.add(t.id);
+    const route = standingRoute(o.mode, { x: t.col, y: t.row }, { x: leader.col, y: leader.row }, moved, walls, gridless);
+    if (route.length < 2) continue;
+    const w = walkRoute(levelId, t.id, route);
+    if (w.link) { const back = w.walked[w.walked.length - 2]; setLinkPrompt(t.id, w.link.id, { col: back.x, row: back.y }); }
+    walks.push({ tokenId: t.id, route: w.walked });
+    walks.push(...moveFollowers(levelId, t.id, walkLength(w.walked, gridless), done));
+  }
+  return walks;
 }

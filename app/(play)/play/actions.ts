@@ -20,7 +20,8 @@ import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
-import { walkRoute } from "./walk";
+import { moveFollowers, walkRoute } from "./walk";
+import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -182,7 +183,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
  * by the shortest route, without spending movement. It walks step by step and stops early where a map event
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
-export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string } }> {
+export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[]; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[] }[] }> {
   const user = await requireUser();
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
@@ -225,8 +226,9 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
 
   clearStandingOrder(me.token_id); // moving on their own ends following / pursuing / evading
   const { walked, stopped, told, link } = walkRoute(me.level_id, me.token_id, route);
+  const followers = walked.length > 1 ? moveFollowers(me.level_id, me.token_id, walkLength(walked, isGridlessLevel(me.level_id))) : []; // those following / pursuing / evading them
   revalidatePath("/play");
-  return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
+  return { route: walked, stopped, followers, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
 }
 
 /**
