@@ -36,8 +36,8 @@ export default function LevelMap({
   contest?: Contest | null; // a contested move waiting on the GM (GM only)
   selectedTarget?: number | null; // a player's selected target (player only)
   planExplored?: Record<number, { x: number; y: number }[]>; // GM planning as a character: where it has stood (its fog of war)
-  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number }>; // GM planning creatures' rounds
-  fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // a player's fog of war (and movement: left, and whether it's free)
+  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number; runPerSecond?: number }>; // GM planning creatures' rounds
+  fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // a player's fog of war (and movement: left, and whether it's free)
   dock?: { side: "left" | "right"; tools: DockTool[]; initial?: string | null; opposite?: { tools: DockTool[]; initial?: string | null } }; // in a session: full screen, with this dock
 }) {
   // A player's view gets nothing GM-only (notes, controls, scripts, sounds, the creature list).

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding } from "./actions";
-import { setMoveMode, useMoveMode } from "./moveMode";
+import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
 import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
@@ -26,9 +26,10 @@ import RefitPicker, { type RefitOption } from "./RefitPicker";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  standing = null, doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
+  running = 0, standing = null, doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string }[];
+  running?: number; // running speed (feet a round): Dash; 0 = can't run
   standing?: { mode: "follow" | "pursue" | "evade"; name: string } | null; // out of an encounter: who they follow / pursue / evade
   onMap: boolean;
   moveLeft: number;
@@ -66,7 +67,8 @@ export default function PickLock({
     setTargetMode(null);
     run(() => planTargeted(m, { target: id }));
   };
-  const moving = useMoveMode();
+  const moving = useMoveMode(), runMode = useRunMode();
+  const walkingNow = moving && !runMode, dashingNow = moving && runMode;
   const [ordering, setOrdering] = useState<"follow" | "pursue" | "evade" | null>(null); // out of an encounter: picking who to follow / pursue / evade
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -77,14 +79,19 @@ export default function PickLock({
 
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
-  const spent = (id: PlayerActionId) => (plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? id !== "dash" && !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
+  const spent = (id: PlayerActionId) => (plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
       setTargetMode(null);
       setRefitting(false);
-      return setMoveMode(!moving);
+      return setMoveMode(!walkingNow);
+    }
+    if (id === "dash") {
+      setTargetMode(null);
+      setRefitting(false);
+      return setMoveMode(!dashingNow, true);
     }
     setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
@@ -96,7 +103,7 @@ export default function PickLock({
   const hint = (id: PlayerActionId, base: string) =>
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
-    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: not yet" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : plan ? (id === "refit" ? "Refit: swap something you carry into an equipment slot (2 s, bonus action)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round (until within 5 ft, or within range of what comes next)` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "follow" ? "Follow someone: whenever they move, you go after them as far as they went"
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
@@ -184,9 +191,9 @@ export default function PickLock({
               type="button"
               data-action={a.id}
               disabled={!usable(a.id) || pending}
-              aria-pressed={a.id === "move" ? moving : undefined}
+              aria-pressed={a.id === "move" ? walkingNow : a.id === "dash" ? dashingNow : undefined}
               onClick={() => press(a.id)}
-              className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${a.id === "move" && moving ? "btn-primary" : ""}`}
+              className={`btn h-auto w-full flex-col gap-1 py-2 disabled:bg-base-100/60 disabled:text-base-content/80 ${(a.id === "move" && walkingNow) || (a.id === "dash" && dashingNow) ? "btn-primary" : ""}`}
             >
               <GameIcon name={a.icon} className="size-7" />
               <span className="text-xs leading-tight">

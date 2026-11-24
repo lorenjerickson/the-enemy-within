@@ -15,7 +15,7 @@ import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
-import { setMoveMode, useMoveMode } from "../../../../(play)/play/moveMode";
+import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
@@ -123,7 +123,7 @@ export default function MapView({
   partyStartElsewhere: string | null; // "Location › Level" when it's marked on another level
   toPlace: { id: number; name: string; image: string | null; player: string }[]; // first session: players' characters to place in the start area
   readOnly?: boolean; // a player's view: look, zoom and pan only; no editors, no GM-only layers
-  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
+  gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number; runPerSecond?: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[]; // planned targeted actions: lines to the target, from where they'll be
   planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
@@ -140,7 +140,7 @@ export default function MapView({
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
   linkPrompt?: { id: number; to: string; back: Point } | null; // from the server: a level link their character reached in a round
-  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -467,16 +467,19 @@ export default function MapView({
   }, [fogOn, fogVisible, JSON.stringify(fog?.darkvision ?? {}), shownIllumination, optimisticLights, fogWalls, explored, JSON.stringify(drawnTokens)]); // eslint-disable-line react-hooks/exhaustive-deps -- tokens by content (a new array every frame otherwise)
   // Move (players): while it's on, show how far their character can walk with the movement they have left.
   const moveOn = useMoveMode();
+  const runOn = useRunMode(); // a Dash: the reach at running speed, for the seconds left
   // The GM planning a creature's round: its reach from where its plan leaves it.
   const gmPlan = !readOnly && gmSel !== null && moveOn ? gmPlans?.[gmSel] : undefined; // only while Move is on
   const reachAt = useMemo(() => {
-    const m = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false, perSecond: gmPlan.perSecond } : moveOn ? fog?.move : null;
+    const walkM = gmPlan ? { feet: gmPlan.feetLeft, from: gmPlan.from, free: false, perSecond: gmPlan.perSecond, runPerSecond: gmPlan.runPerSecond } : moveOn ? fog?.move : null;
+    // A Dash: as far as running for the seconds left goes (feet left at walking pace ÷ walking pace = seconds left).
+    const m = walkM && runOn && walkM.perSecond && walkM.runPerSecond ? { ...walkM, feet: (walkM.feet / walkM.perSecond) * walkM.runPerSecond, perSecond: walkM.runPerSecond } : walkM;
     if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
     const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
     return { from: { col: t.col, row: t.row }, feet: m.feet, perSecond: m.perSecond ?? 0, at: t, token };
-  }, [moveOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens]);
+  }, [moveOn, runOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens]);
   // The area itself, worked out only when where they start, how far they can go or the walls change (it's costly on
   // gridless maps: the way round each wall end counts too).
   const reachFromKey = reachAt ? `${reachAt.from.col},${reachAt.from.row},${reachAt.feet}` : "";
@@ -550,7 +553,8 @@ export default function MapView({
       return;
     }
     startTransition(async () => {
-      const r = gmPlan && gmSel !== null ? await gmPlanStep(gmSel, { kind: "move", col, row }) : await planStep({ kind: "move", col, row });
+      const step = { kind: "move" as const, col, row, ...(runOn ? { run: true } : {}) }; // run: a Dash
+      const r = gmPlan && gmSel !== null ? await gmPlanStep(gmSel, step) : await planStep(step);
       if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
     });
   }

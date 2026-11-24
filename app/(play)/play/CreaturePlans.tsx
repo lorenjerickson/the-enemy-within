@@ -6,7 +6,7 @@ import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import { gmPlanStep, gmSetReady, gmRemoveStep } from "./gmActions";
 import { useGmPlanToken } from "./gmPlanner";
-import { setMoveMode, useMoveMode } from "./moveMode";
+import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
 import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
@@ -22,6 +22,7 @@ export interface CreaturePlan {
   name: string;
   player: string | null; // a player's character the GM is planning for (absent or AFK)
   plan: { steps: TimedStep[]; used: number; ready: boolean };
+  runPerSecond?: number; // running pace (Dash); 0: can't run
   gear: (GearAction & { source: string })[]; // its own, its gear's and its professions' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
@@ -38,12 +39,19 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const target = useTargetMode();
   const choosing = target && target.tokenId === (selected) ? target.action : null;
   const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, visible: creatures.find((c) => c.tokenId === selected)?.sees, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
-  const moving = useMoveMode();
+  const moving = useMoveMode(), runMode = useRunMode();
+  const walkingNow = moving && !runMode, dashingNow = moving && runMode;
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   // Anything else in the planning panel ends Move (its waypoint clicks and overlay) first.
   const run = (f: () => Promise<{ error?: string } | void>) => { setMoveMode(false); startTransition(async () => setError((await f())?.error ?? null)); };
+  // Why an action can't be planned now (greyed out with why), or null. Dash: running speed, and it takes the action.
+  const blocked = (id: PlayerActionId) =>
+    !current ? null
+    : id === "dash" ? (!current.runPerSecond ? "No running speed" : unavailable(current.plan.steps, current.plan.used, "movement", 0, current.forbidden) ?? unavailable(current.plan.steps, current.plan.used, "action", 0, current.forbidden))
+    : id === "shake" && !current.shakeable ? "Nothing to shake off"
+    : unavailable(current.plan.steps, current.plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, current.forbidden);
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
   const current = creatures.find((c) => c.tokenId === selected);
   if (!creatures.length) return null;
@@ -96,15 +104,16 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                 <div className="text-xs font-semibold opacity-80">{title}</div>
               <div className="grid grid-cols-4 gap-1">
             {group.map((a) => (
-              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={(a.id === "shake" && !current.shakeable ? "Nothing to shake off" : unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden)) ?? (a.id === "dash" ? "Not in yet" : null)}>
+              <ActionTip key={a.id} name={a.label} desc={a.desc} lines={basicLines(a.id)} why={blocked(a.id)}>
               <button
                 type="button"
                 data-gm-action={a.id}
-                aria-pressed={a.id === "move" ? moving : undefined}
-                disabled={pending || current.plan.ready || a.id === "dash" || !!(a.id === "shake" && !current.shakeable ? "Nothing to shake off" : unavailable(current.plan.steps, current.plan.used, actionKind(a.id), ACTION_SECONDS[a.id] ?? 0, current.forbidden))}
-                className={`btn btn-xs h-auto flex-col py-1 ${a.id === "move" && moving ? "btn-primary" : ""}`}
+                aria-pressed={a.id === "move" ? walkingNow : a.id === "dash" ? dashingNow : undefined}
+                disabled={pending || current.plan.ready || !!blocked(a.id)}
+                className={`btn btn-xs h-auto flex-col py-1 ${(a.id === "move" && walkingNow) || (a.id === "dash" && dashingNow) ? "btn-primary" : ""}`}
                 onClick={() =>
-                  a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!moving))
+                  a.id === "move" ? (setTargetMode(null), setRefitting(false), setMoveMode(!walkingNow))
+                  : a.id === "dash" ? (setTargetMode(null), setRefitting(false), setMoveMode(!dashingNow, true))
                   : a.id === "refit" ? (setMoveMode(false), setRefitting(!refitting))
                   : TARGETED_ACTIONS.includes(a.id) ? (setMoveMode(false), setChoosing(a.id))
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))

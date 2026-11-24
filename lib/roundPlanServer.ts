@@ -216,6 +216,7 @@ export function planView(tokenId: number) {
     from: planEnd(p.plan, { col: p.tok.col, row: p.tok.row }),
     feetLeft: (t.left * p.walking) / 6,
     perSecond: p.walking / 6, // feet a second at walking pace
+    runPerSecond: p.running / 6, // and running (Dash); 0: can't run
     gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
     refits: refitOptions(tokenId, plannedEquipment(p)),
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)

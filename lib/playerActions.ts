@@ -5,7 +5,7 @@
  */
 export const PLAYER_ACTIONS = [
   { id: "move", label: "Move", hint: "walk", icon: "GiWalk", kind: "movement", desc: "Walk to a spot you click on the map, at your walking speed." },
-  { id: "dash", label: "Dash", hint: "run", icon: "GiRun", kind: "movement", desc: "Run: not in yet." },
+  { id: "dash", label: "Dash", hint: "run", icon: "GiRun", kind: "movement", desc: "Run to a spot you click on the map, at your running speed. It uses your action for the round." },
   { id: "evade", label: "Evade", icon: "GiRabbit", kind: "movement", desc: "Keep away from someone you pick, re-deciding each second, for the seconds you choose (or the rest of the round)." },
   { id: "pursue", label: "Pursue", icon: "GiHound", kind: "movement", desc: "Chase someone you pick, for the seconds you choose; stops once within 5 ft, or once what you plan next is in range." },
   { id: "follow", label: "Follow", icon: "GiFootprint", kind: "movement", desc: "Follow someone you pick, for the seconds you choose: toward them by the shortest way, but only as far as they move (the gap holds; when they stop, you stop)." },
