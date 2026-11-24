@@ -24,6 +24,8 @@ export interface CreaturePlan {
   player: string | null; // a player's character the GM is planning for (absent or AFK)
   plan: { steps: TimedStep[]; used: number; ready: boolean };
   runPerSecond?: number; // running pace (Dash); 0: can't run
+  doors?: { id: number; name: string; open: boolean; locked: boolean }[]; // Interact: doors within reach of where the plan leaves them
+  things?: { id: number; name: string }[]; // and levers / switches / objects
   gear: (GearAction & { source: string })[]; // its own, its gear's and its professions' actions
   refits: RefitOption[]; // what Refit could swap in (with the plan so far done)
   allegiance: Allegiance; // whose side it's on (actions aimed at friendlies or enemies)
@@ -41,6 +43,8 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const choosing = target && target.tokenId === (selected) ? target.action : null;
   const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, visible: creatures.find((c) => c.tokenId === selected)?.sees, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
   const moving = useMoveMode(), runMode = useRunMode();
+  const [using, setUsing] = useState(false); // Use: what's in hand or on the belt
+  const [interacting, setInteracting] = useState(false); // Interact: doors and levers within reach
   const walkingNow = moving && !runMode, dashingNow = moving && runMode;
   const [refitting, setRefitting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -94,6 +98,28 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               }}
             />
           )}
+          {using && (() => {
+            const items = current.gear.filter((g) => g.item && (g.item.where === "hand" || g.item.where === "belt"));
+            const pick = (g: (typeof items)[number]) => { setUsing(false); if (g.targeting?.count === "all" && !g.area && !g.self) run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })); else if (g.self) run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })); else { setMoveMode(false); setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }); } };
+            return items.length
+              ? <GearActions compact title="Use what? (in hand or on the belt)" gear={items} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, g.kind === "reaction" ? "reaction" : "action", g.seconds, current.forbidden)} onUse={pick} />
+              : <p className="text-xs opacity-70">Nothing in hand or on the belt to use. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUsing(false)}>Close</button></p>;
+          })()}
+          {interacting && (
+            <section className="space-y-1 text-xs" data-gm-interact>
+              <div className="font-semibold opacity-80">Within reach (where the plan leaves them): it happens after the round</div>
+              {(current.doors?.length || current.things?.length) ? (
+                <ul className="space-y-1">
+                  {(current.things ?? []).map((t) => (
+                    <li key={`t${t.id}`} className="flex items-center gap-2"><span className="flex-1">{t.name}</span><button type="button" className="btn btn-xs" disabled={pending} onClick={() => { setInteracting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "interact", thing: t.id })); }}>Use</button></li>
+                  ))}
+                  {(current.doors ?? []).map((d) => (
+                    <li key={d.id} className="flex items-center gap-2"><span className="flex-1">{d.name} <span className="opacity-60">({d.locked ? "locked" : d.open ? "open" : "closed"})</span></span>{!d.locked && <button type="button" className="btn btn-xs" disabled={pending} onClick={() => { setInteracting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "interact", door: d.id })); }}>{d.open ? "Close" : "Open"}</button>}</li>
+                  ))}
+                </ul>
+              ) : <p className="opacity-70">Nothing within reach. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setInteracting(false)}>Close</button></p>}
+            </section>
+          )}
           {refitting && (
             <RefitPicker options={current.refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", swap: { slot, item } })); }} />
           )}
@@ -123,6 +149,8 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
                       else if (r.spots?.length) { setHideSpots(r.spots, { tokenId: current.tokenId }); setError("Seen: click a blind spot on the map (green)."); }
                       else setError("Seen, and no cover within reach: they can't hide.");
                     }))
+                  : a.id === "use" ? (setMoveMode(false), setTargetMode(null), setInteracting(false), setUsing(!using))
+                  : a.id === "interact" ? (setMoveMode(false), setTargetMode(null), setUsing(false), setInteracting(!interacting))
                   : a.id === "refit" ? (setMoveMode(false), setRefitting(!refitting))
                   : TARGETED_ACTIONS.includes(a.id) ? (setMoveMode(false), setChoosing(a.id))
                   : run(() => gmPlanStep(current.tokenId, { kind: "action", action: a.id }))

@@ -41,6 +41,9 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
   if (step.kind === "action" && DEFERRED_ACTIONS.includes(step.action) && step.use === undefined) return DEFERRED_WHY;
+  // Nothing chosen: it would do nothing (the panels pick a door / lever, or an item, first).
+  if (step.kind === "action" && step.action === "interact" && step.door === undefined && step.thing === undefined) return "Pick a door or something within reach";
+  if (step.kind === "action" && step.action === "use" && step.use === undefined) return "Pick what to use";
   // Hide: seen (by an enemy they can see, from where the plan leaves them), they must first slip into a blind spot they
   // can reach in the time left (a move), and then hide in a hurry; with no blind spot in reach, they can't.
   if (step.kind === "action" && step.action === "hide" && !step.hurried) {
@@ -264,5 +267,14 @@ export function planView(tokenId: number) {
     sees: [...seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), tokenId)], // who they could aim at from where the plan has them
     forbidden: restrictionsOn(tokenId, p.tok.level_id).forbid, // what conditions stop them doing (Stunned: everything)
     shakeable: canShakeOff(tokenId, p.tok.level_id), // a condition on them they can spend their action fighting off
+    // Interact: doors and levers / switches / objects within reach of where the plan leaves them.
+    ...(() => {
+      const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), c = { x: from.col + 0.5, y: from.row + 0.5 };
+      const side = allegianceOf(listTokens(p.tok.level_id).find((t) => t.id === tokenId) ?? { character_id: null });
+      return {
+        doors: listStructures(p.tok.level_id).filter((s) => s.kind === "door" && distanceToDoor(c, s) <= REACH).map((s) => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open, locked: !!s.locked })),
+        things: interactablesNear(listMapTriggers(p.tok.level_id), tokenId, side, c, REACH),
+      };
+    })(),
   };
 }
