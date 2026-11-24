@@ -662,7 +662,7 @@ export function drawSessionOverlays(ctx: CanvasRenderingContext2D, state: MapSta
     for (const l of planTargets) {
       const a = l.at ? { x: x0 + (l.at.col + 0.5) * size, y: y0 + (l.at.row + 0.5) * size } : at(l.from), b = at(l.to);
       if (!a || !b) continue;
-      const colour = l.action === "attack" ? "239,68,68" : l.action === "pursue" ? "249,115,22" : l.action === "evade" ? "59,130,246" : "168,85,247";
+      const colour = l.action === "attack" ? "239,68,68" : l.action === "pursue" ? "249,115,22" : l.action === "evade" ? "59,130,246" : l.action === "follow" ? "34,197,94" : "168,85,247";
       ctx.save();
       ctx.strokeStyle = `rgba(${colour},0.9)`;
       ctx.lineWidth = 2.5 / k;

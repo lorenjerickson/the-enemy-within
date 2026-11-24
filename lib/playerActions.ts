@@ -8,6 +8,7 @@ export const PLAYER_ACTIONS = [
   { id: "dash", label: "Dash", hint: "run", icon: "GiRun", kind: "movement", desc: "Run: not in yet." },
   { id: "evade", label: "Evade", icon: "GiRabbit", kind: "movement", desc: "Keep away from someone you pick, re-deciding each second, for the seconds you choose (or the rest of the round)." },
   { id: "pursue", label: "Pursue", icon: "GiHound", kind: "movement", desc: "Chase someone you pick, for the seconds you choose; stops once within 5 ft, or once what you plan next is in range." },
+  { id: "follow", label: "Follow", icon: "GiFootprint", kind: "movement", desc: "Follow someone you pick, for the seconds you choose: toward them by the shortest way, but only as far as they move (the gap holds; when they stop, you stop)." },
   { id: "attack", label: "Attack", icon: "GiCrossedSwords", kind: "action", desc: "Strike someone with your main-hand weapon (or bare hands): an attack roll against their defense, then damage." },
   { id: "use", label: "Use", icon: "GiSwapBag", kind: "action", desc: "Use an item (no effect yet)." },
   { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something nearby: a door, a lever, an object (no effect yet)." },
@@ -41,14 +42,14 @@ export const SEARCH_DC = 14;
 export const SEARCH_RANGE = 2; // 10 ft
 
 /** Actions aimed at someone: the player picks a target when planning them. */
-export const TARGETED_ACTIONS: PlayerActionId[] = ["attack", "evade", "pursue"];
+export const TARGETED_ACTIONS: PlayerActionId[] = ["attack", "evade", "pursue", "follow"];
 
 /**
  * Evade and Pursue: movement that follows the target, re-decided every second, for as long as planned (the rest of
  * the round by default). Each stops early once the two are within 5 ft, or once its target is within range of the
  * next thing they planned to do to them (it starts straight away).
  */
-export const CHASE_ACTIONS: PlayerActionId[] = ["evade", "pursue"];
+export const CHASE_ACTIONS: PlayerActionId[] = ["evade", "pursue", "follow"]; // Follow doesn't stop within 5 ft: it just doesn't come closer
 
 /**
  * Actions that need their target within a range (grid squares; 1 = next to them). Declared on someone out of reach,

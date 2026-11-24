@@ -685,9 +685,9 @@ export function resolveMovement(
     return best ?? from;
   }
   /** One second of Evade / Pursue from `from` with the target at `them`: toward by the most direct route, or as far away as it can get. */
-  function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean): Pos {
+  function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean, cap = Infinity): Pos {
     const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
-    const b = budget.get(m.tokenId)! + perSecond;
+    const b = Math.min(budget.get(m.tokenId)! + perSecond, cap); // cap: Follow goes no further than its leader did
     // Spots someone else stands in now: a chaser goes around them rather than waiting behind them (anyone down is
     // no obstacle: they can be stepped over).
     const others = [...[...pos].filter(([id]) => id !== m.tokenId && !down.has(id)).map(([, p]) => p), ...bystanders.filter((x) => !down.has(x.tokenId)).map((x) => x.at)];
@@ -750,6 +750,7 @@ export function resolveMovement(
   }
 
   const closingIn = new Set<number>(); // who has been told they're closing in (logged once)
+  const followNow = new Set<number>(); // following someone this second (worked out after everyone else's move)
   const readied = new Set<Act>(); // reactions that are ready
   const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
   // For the players' story: what each was evidently up to, who last hit them, who last held them up.
@@ -763,11 +764,12 @@ export function resolveMovement(
   const intentOf = (m: Mover, sec: number, closing: Set<number>): Intent => {
     const c = chases.get(m.tokenId), t = sec - lag.get(m.tokenId)!;
     if (closing.has(m.tokenId) && closingFor.has(m.tokenId)) return { doing: "close", ...closingFor.get(m.tokenId)! };
-    if (c && t > c.start && !chaseOver.has(m.tokenId) && t - 1 < c.end) return { doing: c.action === "pursue" ? "chase" : "evade", target: c.target.id };
+    if (c && t > c.start && !chaseOver.has(m.tokenId) && t - 1 < c.end) return { doing: c.action === "evade" ? "evade" : "chase", target: c.target.id };
     return { doing: "move" };
   };
   const wasIn = new Map(lasting.map((l) => [l.id, insideOf(l)])); // who is in each lasting area (at the start: being there isn't coming in)
   for (let sec = 1; sec <= ROUND_SECONDS; sec++) {
+    followNow.clear();
     const logFrom = log.length;
     // The start of the round: saves against conditions rolled then.
     if (sec === 1) for (const [id, list] of [...afflicted]) for (const a of [...list]) if (a.condition.save_when === "start" && a.condition.save_attr && a.aura == null && !down.has(id)) endSave(id, a, sec);
@@ -835,6 +837,7 @@ export function resolveMovement(
             return [m.tokenId, here];
           }
           if (!them || down.has(c.target.id) || close(here, them)) return [m.tokenId, here];
+          if (c.action === "follow") { followNow.add(m.tokenId); return [m.tokenId, here]; } // worked out once their leader's move is known
           return [m.tokenId, chaseStep(m, here, them, c.action === "pursue")];
         }
         // A planned move: along its route, unless a body lies on the next spot (step around it) or they've been put off
@@ -852,6 +855,21 @@ export function resolveMovement(
         return [m.tokenId, next];
       })
     );
+    // Follow: toward whoever they follow by the shortest route, but only as far as that one moves this second (the
+    // gap holds; when they stop, so does the follower). Leaders first, so a follower of a follower keeps up.
+    const pendingFollow = new Set(followNow);
+    for (let pass = 0; pendingFollow.size && pass <= followNow.size; pass++) {
+      for (const id of [...pendingFollow]) {
+        const c = chases.get(id)!;
+        if (pendingFollow.has(c.target.id)) continue; // their leader is following someone too: after them
+        pendingFollow.delete(id);
+        const here = pos.get(id)!, was = where(c.target.id), now = proposed.get(c.target.id) ?? was;
+        if (!was || !now) continue;
+        const moved = gridless ? dist(was, now) : Math.max(Math.abs(now.col - was.col), Math.abs(now.row - was.row));
+        if (moved < 1e-6 || close(here, now)) continue;
+        proposed.set(id, chaseStep(order.find((o) => o.tokenId === id)!, here, now, true, moved));
+      }
+    }
     // Reconciliation, highest initiative first.
     const settled: { id: number; at: Pos }[] = [];
     for (const m of order) {
@@ -1206,7 +1224,7 @@ export function resolveMovement(
         continue;
       }
       const them = where(c.target.id);
-      if (them && (close(pos.get(id)!, them) || down.has(c.target.id))) {
+      if (them && ((c.action !== "follow" && close(pos.get(id)!, them)) || down.has(c.target.id))) { // Follow carries on next to them
         chaseOver.add(id);
         story.push({ sec, k: "chase", who: id, target: c.target.id, action: c.action, why: down.has(c.target.id) ? "down" : "close" });
         log.push(`${sec} s: ${m.name}'s ${c.action} ends: ${down.has(c.target.id) ? `${c.target.name} is down` : `within 5 ft of ${c.target.name}`}.`);

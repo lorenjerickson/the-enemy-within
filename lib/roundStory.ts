@@ -123,7 +123,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
       case "chase": {
         const them = name(e.target), turned = e.why === "range" && e.next !== undefined && e.next !== e.target;
         if (mine) {
-          const verb = e.action === "pursue" ? `You chase ${them}` : `You keep away from ${them}`;
+          const verb = e.action === "pursue" ? `You chase ${them}` : e.action === "follow" ? `You follow ${them}` : `You keep away from ${them}`;
           add(e.sec, turned ? `${verb}, then turn on ${e.next === me ? "yourself" : name(e.next!)} as they come within reach.`
             : e.why === "range" ? `${verb} until they're within reach.`
             : e.why === "close" ? `${verb}, ${e.action === "pursue" ? "catching up with them" : "but they catch up with you"}.`
@@ -131,8 +131,8 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         } else if (e.target === me) {
           add(e.sec, turned ? `${subj} breaks off coming after you and turns on ${e.next === me ? "you" : name(e.next!)}.`
             : e.action === "pursue" ? (e.why === "close" || e.why === "range" ? `${subj} comes after you and catches up.` : `${subj} comes after you.`)
-            : `${subj} keeps away from you.`);
-        } else if (e.next === me) add(e.sec, `${subj} breaks off ${e.action === "pursue" ? "chasing" : "keeping away from"} ${them} and turns on you.`);
+            : e.action === "follow" ? `${subj} follows you.` : `${subj} keeps away from you.`);
+        } else if (e.next === me) add(e.sec, `${subj} breaks off ${e.action === "pursue" ? "chasing" : e.action === "follow" ? "following" : "keeping away from"} ${them} and turns on you.`);
         break;
       }
       case "status": add(e.sec, `You're affected by ${e.source}.`); break;
@@ -198,7 +198,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "caught": add(e.sec, `${e.by === null ? e.name : `${n(e.by)}'s ${e.name}`} catches ${who}: ${e.outcome === "save" ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}.`); break;
       case "down": add(e.sec, `${who} goes down.`); break;
       case "chase": {
-        const v = e.action === "pursue" ? `chases ${n(e.target)}` : `keeps away from ${n(e.target)}`;
+        const v = e.action === "pursue" ? `chases ${n(e.target)}` : e.action === "follow" ? `follows ${n(e.target)}` : `keeps away from ${n(e.target)}`;
         add(e.sec, e.why === "range" && e.next !== undefined && e.next !== e.target ? `${who} ${v}, then turns on ${n(e.next)}.` : `${who} ${v}${e.why === "range" ? " until within reach" : e.why === "close" ? (e.action === "pursue" ? " and catches up" : " but is caught up with") : e.why === "down" ? " until they fall" : ""}.`);
         break;
       }
