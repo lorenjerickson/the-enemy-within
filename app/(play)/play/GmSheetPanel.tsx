@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import type { Sheet } from "@/lib/sheet";
 import CharacterSheet from "./CharacterSheet";
-import { gmApplyCondition, gmConditionCatalog, gmRemoveAffliction, gmSetAllegiance, gmSheet } from "./gmActions";
+import { gmApplyCondition, gmConditionCatalog, gmHiddenStealth, gmHide, gmRemoveAffliction, gmSetAllegiance, gmSheet } from "./gmActions";
 import { ALLEGIANCES } from "@/lib/sides";
 import { setSheetToken, useSheetToken } from "./sheetToken";
 import { useGmPlanToken } from "./gmPlanner";
@@ -64,6 +64,7 @@ export function GmSheet({ sheet, onChange, reload }: { sheet: Sheet; onChange: (
     <>
       <CharacterSheet sheet={sheet} manage={{ gm: true, onChanged: reload }} />
       <GmConditions sheet={sheet} reload={reload} />
+      <GmHide tokenId={sheet.tokenId} />
       <label className="mt-3 flex items-center gap-2 text-xs" data-allegiance>
         Side
         <select className="select select-xs w-auto" value={sheet.allegiance} onChange={(e) => { const a = e.target.value; onChange({ ...sheet, allegiance: a as typeof sheet.allegiance }); gmSetAllegiance(sheet.tokenId, a); }}>
@@ -86,5 +87,20 @@ export default function GmSheetPanel() {
       <button type="button" className="btn btn-ghost btn-xs absolute right-2 top-2" aria-label="Close sheet" onClick={() => setSheetToken(null)}>✕</button>
       <GmSheet sheet={sheet} onChange={setSheet} reload={reload} />
     </aside>
+  );
+}
+
+/** Hide (out of an encounter): the server rolls their Stealth (it fails if an enemy sees them), or reveals them. */
+function GmHide({ tokenId }: { tokenId: number }) {
+  const [stealth, setStealth] = useState<number | null>(null);
+  const [told, setTold] = useState<string | null>(null);
+  const [busy, start] = useTransition();
+  useEffect(() => { gmHiddenStealth(tokenId).then(setStealth); }, [tokenId, told]);
+  return (
+    <section className="mt-3 flex flex-wrap items-center gap-2 text-xs" data-gm-hide>
+      <span>{stealth !== null ? `Hidden (Stealth ${stealth})` : "Not hidden"}</span>
+      <button type="button" className="btn btn-xs" disabled={busy} onClick={() => start(async () => setTold((await gmHide(tokenId, stealth === null)).told))}>{stealth !== null ? "Reveal" : "Hide"}</button>
+      {told && <span className="opacity-70">{told}</span>}
+    </section>
   );
 }

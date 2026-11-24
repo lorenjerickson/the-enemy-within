@@ -4,10 +4,14 @@ import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
 import {
   setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea , clearStandingOrdersOn } from "@/lib/db";
+  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea , clearStandingOrdersOn, listHidden } from "@/lib/db";
+import { skillCheckFor } from "@/lib/creatureChanges";
+import { tokenWho } from "@/lib/combat";
+import type { Attributes } from "@/lib/attributes";
 import { getPendingRound, listEffectDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
 import { asCondition, describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
+import { settleHide, reveal as revealToken } from "./hiding";
 import { applyConditionNow, rollConditionSaveFor, rollOffFor, startRollOff, workOutRound } from "./workOutRound";
 import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
@@ -196,6 +200,27 @@ export async function gmSetAllegiance(tokenId: number, allegiance: string) {
   const t = listTokensById(Number(tokenId));
   if (t) syncAurasOn(t.level_id); // allies and enemies changed
   revalidatePath("/play");
+}
+
+/** Out of an encounter, the GM hides a token (one of theirs, say): the server rolls its Stealth; it fails if an enemy sees it. Or reveals it. */
+export async function gmHide(tokenId: number, hide: boolean): Promise<{ told: string }> {
+  await requireGm();
+  const t = listTokensById(Number(tokenId));
+  if (!t) return { told: "No such token" };
+  if (!hide) { revealToken(t.level_id, t.id, "the GM revealed them"); revalidatePath("/play"); return { told: "Revealed." }; }
+  if (getEncounter(t.level_id)) return { told: "In an encounter, plan Hide for the round instead" };
+  const who = tokenWho(t.id);
+  const total = rollSpec(skillCheckFor(t.id, "stealth", (who?.attributes ?? {}) as Attributes)).total;
+  const r = settleHide(t.level_id, t.id, total);
+  revalidatePath("/play");
+  return { told: r.hidden ? `Hidden (Stealth ${total}).` : "An enemy can see them: they can't hide." };
+}
+
+/** Whether a token is hidden (Hide), with its Stealth total. */
+export async function gmHiddenStealth(tokenId: number): Promise<number | null> {
+  await requireGm();
+  const t = listTokensById(Number(tokenId));
+  return t ? listHidden(t.level_id).get(t.id) ?? null : null;
 }
 
 /** The catalog effects that last a number of rounds, for putting one on a token by hand. */

@@ -790,3 +790,17 @@ export function drawSessionOverlays(ctx: CanvasRenderingContext2D, state: MapSta
     ctx.restore();
   }
 }
+
+/** Hide: the blind spots a player can pick, as soft green squares. */
+export function drawHideSpots(ctx: CanvasRenderingContext2D, state: MapState, cells: { col: number; row: number }[]) {
+  const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+  ctx.save();
+  ctx.fillStyle = "rgba(34,197,94,0.28)";
+  ctx.strokeStyle = "rgba(34,197,94,0.8)";
+  ctx.lineWidth = 1;
+  for (const c of cells) {
+    ctx.fillRect(x0 + c.col * size + 1, y0 + c.row * size + 1, size - 2, size - 2);
+    ctx.strokeRect(x0 + c.col * size + 1, y0 + c.row * size + 1, size - 2, size - 2);
+  }
+  ctx.restore();
+}

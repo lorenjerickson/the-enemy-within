@@ -13,9 +13,10 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { assistNow, freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
+import { assistNow, freeMove, hideAt, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
+import { setHideSpots, useHideSpots } from "../../../../(play)/play/hideMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
@@ -36,7 +37,7 @@ import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";
 import ControlsEditor from "./ControlsEditor";
 import ControlButtons from "./ControlButtons";
-import { contestBox, drawEditorAids, drawPings, drawSessionOverlays } from "./mapOverlays";
+import { contestBox, drawEditorAids, drawHideSpots, drawPings, drawSessionOverlays } from "./mapOverlays";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
@@ -565,6 +566,7 @@ export default function MapView({
   const lift = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null); // holding on a token to pick it up
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
+  const hideSpots = useHideSpots(); // Hide (seen, out of combat): blind spots to pick on the map
   const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
   // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
   const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
@@ -791,6 +793,20 @@ export default function MapView({
         const step = { kind: "action" as const, action: m.action, use: m.use, aim: { col: Math.round(gx * 20) / 20, row: Math.round(gy * 20) / 20 } };
         const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
         if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+      });
+      return;
+    }
+    if (hideSpots && e.button === 0) {
+      // Hide: a click on a blind spot walks them there and asks for the Stealth roll (with disadvantage).
+      const { gx, gy } = gridAt(e);
+      const cell = hideSpots.find((c) => Math.floor(gx) === c.col && Math.floor(gy) === c.row);
+      if (!cell) return;
+      setHideSpots(null);
+      const me = drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
+      startTransition(async () => {
+        const r = await hideAt(cell.col, cell.row);
+        if (r.route && me) { startWalks([{ tokenId: me.id, route: r.route }]); const end = r.route[r.route.length - 1]; changeTokens({ move: { id: me.id, col: end.x, row: end.y } }); }
+        if (r.error) setControlResult({ label: "Hide", ok: false, text: r.error });
       });
       return;
     }
@@ -1376,6 +1392,7 @@ export default function MapView({
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
       }
       drawSessionOverlays(ctx, state, k, { canvas, fogged, fogCanvas, fogWalls, replayFrame, scriptFx, readOnly, gmSel, pickEntity, pickIds, scriptPick, targetMode, aimAt, aimFrom, actingToken, targetCandidates, gridless, contest, planRoutes, planTargets, selectedTarget, drawnTokens, reach });
+      if (hideSpots) drawHideSpots(ctx, state, hideSpots); // Hide: blind spots to pick
       drawPings(ctx, state, pings, k); // on top of everything (even fog)
       drawEditorAids(ctx, state, k, {
         tile: selected === "tiles" ? drawnTiles.find((t) => t.id === selectedTileId) : undefined,
