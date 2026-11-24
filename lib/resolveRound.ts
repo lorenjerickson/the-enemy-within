@@ -174,6 +174,7 @@ export function resolveMovement(
 ) {
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
   const sideOf = (id: number) => fighters.get(id)?.allegiance ?? "hostile";
+  const hides: { tokenId: number; hurried: boolean }[] = []; // who hid this round (their Stealth rolled after it)
   const actedOn = new Set<number>(); // hidden ones who acted on someone this second (revealed at its end)
   const reveal = (id: number, sec: number, why: string) => {
     if (!hidden.delete(id)) return;
@@ -1062,6 +1063,20 @@ export function resolveMovement(
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
+      // Hide: out of sight of every enemy (as if hidden: walls, light) as it's done, they're hidden; their Stealth is rolled after the round.
+      if (step.action === "hide") {
+        const seer = [...fighters.keys()].find((o) => o !== m.tokenId && !down.has(o) && relation(sideOf(o), sideOf(m.tokenId)) !== "friendly" && spots(o, m.tokenId));
+        if (seer !== undefined) {
+          say(`${m.name} tries to hide, but ${nameOf(seer)} can see them.`);
+          story.push({ sec, k: "hide", who: m.tokenId, ok: false });
+          continue;
+        }
+        hidden.set(m.tokenId, 10); // until their Stealth is rolled (after the round)
+        hides.push({ tokenId: m.tokenId, hurried: !!step.hurried });
+        say(`${m.name} hides${step.hurried ? " in a hurry" : ""} (Stealth rolled after the round).`);
+        story.push({ sec, k: "hide", who: m.tokenId, ok: true });
+        continue;
+      }
       if ((step.target && step.target.id !== m.tokenId) || step.aim || (step.picks?.length ?? 0) > 0) actedOn.add(m.tokenId); // acting on someone: a hidden one is given away
       if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
       // Search: they're asked for the Investigation roll after the round, from here (help by then is spent on it).
@@ -1337,7 +1352,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })) };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

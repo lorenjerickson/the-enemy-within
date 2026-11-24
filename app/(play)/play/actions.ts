@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -201,7 +201,12 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
     logSessionEvent(`${me?.name ?? user.name} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
   }
-  if (a.kind === "hide") {
+  if (a.kind === "hide" && a.inRound) {
+    // Hidden already (in the round): the roll sets how hard they are to find, if they haven't been given away since.
+    success = listHidden(a.levelId).has(a.tokenId);
+    if (success) setHidden(a.tokenId, scored.total);
+    outcome = success ? "You're hidden." : "You were given away before you could settle in.";
+  } else if (a.kind === "hide") {
     const r = settleHide(a.levelId, a.tokenId, scored.total);
     success = r.hidden;
     outcome = r.told;

@@ -21,7 +21,8 @@ export type StoryEvent = { sec: number } & (
   | { k: "door"; who: number; name: string; open: boolean }
   | { k: "worked"; who: number; name: string }
   | { k: "assist"; who: number; target: number }
-  | { k: "spotted"; who: number } // a hidden one was given away // they helped someone (advantage on their next roll) // they worked a lever, switch or object // they opened (or closed) a door
+  | { k: "spotted"; who: number }
+  | { k: "hide"; who: number; ok: boolean } // they hid (or were seen trying) // a hidden one was given away // they helped someone (advantage on their next roll) // they worked a lever, switch or object // they opened (or closed) a door
   | { k: "link"; who: number; to: string } // they came onto a level link (and stopped there)
   | { k: "trap"; who: number; name: string; outcome: "hit" | "half" | "save"; hurt: number; dmg?: number; stops?: boolean } // they set off a trap (outcome: their save against it)
   | { k: "chase"; who: number; target: number; action: string; why: "range" | "close" | "down" | "time"; next?: number } // next: who they turned on
@@ -97,6 +98,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
       case "worked": if (mine) add(e.sec, `You work ${e.name}.`); break;
       case "assist": add(e.sec, mine ? `You help ${name(e.target)}.` : `${subj} helps you: your next roll has advantage.`); break;
       case "spotted": if (mine) add(e.sec, "You're no longer hidden."); break;
+      case "hide": if (mine) add(e.sec, e.ok ? "You slip out of sight." : "You try to hide, but you're seen."); break;
       case "refit": add(e.sec, e.from ? `You put away ${e.from} and take up ${e.to}.` : `You take up ${e.to}.`); break;
       case "interrupted": add(e.sec, `${e.by ? `${cap(name(e.by))}'s blow` : "The blow"} throws you off, and you can't ${deed(e.action)}.`); break;
       case "attack": {
@@ -207,6 +209,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "worked": add(e.sec, `${who} works ${e.name}.`); break;
       case "assist": add(e.sec, `${who} helps ${n(e.target)}.`); break;
       case "spotted": add(e.sec, `${who} is no longer hidden.`); break;
+      case "hide": add(e.sec, e.ok ? `${who} hides.` : `${who} tries to hide, but is seen.`); break;
       case "caught": add(e.sec, `${e.by === null ? e.name : `${n(e.by)}'s ${e.name}`} catches ${who}: ${e.outcome === "save" ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}.`); break;
       case "down": add(e.sec, `${who} goes down.`); break;
       case "chase": {

@@ -34,3 +34,12 @@ test("attacking from hiding (from afar) gives them away once it's done; until th
   const idle = resolve([mover(1, { col: 0, row: 0 }), mover(2, { col: 5, row: 0 })], { 1: hider(), 2: foe() }, { hidden });
   assert.deepEqual(idle.hiddenLeft, [{ tokenId: 1, stealth: 15 }]);
 });
+
+test("Hide in a round: out of every enemy's sight as it's done, they're hidden (Stealth after the round); in sight, it fails", () => {
+  const behind = resolve([mover(1, { col: 0, row: 4 }, [act("hide")]), mover(2, { col: 6, row: 0 })], { 1: hider(), 2: foe() }, { walls: [wall(-1, 2, 8, 2)] });
+  assert.deepEqual(behind.hides, [{ tokenId: 1, hurried: false }]);
+  assert.equal(behind.hiddenLeft.length, 1);
+  const open = resolve([mover(1, { col: 0, row: 0 }, [act("hide", { hurried: true })]), mover(2, { col: 6, row: 0 })], { 1: hider(), 2: foe() });
+  assert.deepEqual(open.hides, []);
+  assert.match(open.text, /T1 tries to hide, but T2 can see them/);
+});

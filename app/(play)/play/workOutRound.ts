@@ -15,6 +15,7 @@ import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
 import { saveRollFor, skillCheckFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
 import { SEARCH_DC } from "@/lib/playerActions";
+import type { Attributes } from "@/lib/attributes";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
@@ -130,6 +131,16 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   // Who is still hidden (Hide): revealed ones are no longer, new ones are.
   for (const id of listHidden(levelId).keys()) clearHidden(id);
   for (const h of result.hiddenLeft) setHidden(h.tokenId, h.stealth);
+  // Who hid this round and is still hidden: their Stealth now (players roll it; the server rolls for the GM's creatures).
+  for (const h of result.hides) {
+    if (!result.hiddenLeft.some((x) => x.tokenId === h.tokenId)) continue; // given away already
+    const t = tokens.find((x) => x.id === h.tokenId), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
+    const who = tokenWho(h.tokenId);
+    const base = skillCheckFor(h.tokenId, "stealth", (who?.attributes ?? {}) as Attributes);
+    const spec = { ...base, label: `Hide: ${base.label}${h.hurried ? " (in a hurry: disadvantage)" : ""}`, ...(h.hurried ? { mode: base.mode === "advantage" ? ("normal" as const) : ("disadvantage" as const) } : {}) };
+    if (t?.character_id && player) requestRoll(player, t.character_id, spec, { kind: "hide", levelId, tokenId: h.tokenId, inRound: true });
+    else setHidden(h.tokenId, rollSpec(spec).total);
+  }
   // Help (Assist) still to be used carries on; what was spent (or replaced) is gone.
   for (const a of listAssists(levelId)) clearAssist(a.tokenId);
   for (const a of result.assistsLeft) setAssist(a.tokenId, a.by, a.name);

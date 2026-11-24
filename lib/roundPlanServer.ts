@@ -10,6 +10,7 @@ import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
 import { movementBlockers } from "@/lib/visibility";
 import { REACH, distanceToDoor } from "../app/(play)/play/reach";
 import { interactablesNear } from "@/lib/triggers";
+import { hidingPlaces } from "../app/(play)/play/hiding";
 import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
@@ -25,7 +26,7 @@ export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 /** Their equipment as the plan so far leaves it (after any refit). */
 export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[]; door?: number; thing?: number } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[]; door?: number; thing?: number; cover?: { col: number; row: number }; hurried?: boolean } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -39,6 +40,21 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const run = step.kind === "move" && step.run ? p.running : undefined; // a Dash: at running speed
   if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
+  // Hide: seen (by an enemy they can see, from where the plan leaves them), they must first slip into a blind spot they
+  // can reach in the time left (a move), and then hide in a hurry; with no blind spot in reach, they can't.
+  if (step.kind === "action" && step.action === "hide" && !step.hurried) {
+    const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
+    const places = hidingPlaces(p.tok.level_id, p.tok.token_id, from, (timeline(p.plan, p.walking).left * p.walking) / 6);
+    if (step.cover) {
+      const spot = places.spots.find((c) => c.col === Math.round(Number(step.cover!.col)) && c.row === Math.round(Number(step.cover!.row)));
+      if (!spot) return "That isn't a blind spot you can reach in time";
+      const moved = addPlanStep(p, { kind: "move", col: spot.col, row: spot.row });
+      if (moved) return moved;
+      const fresh = tokenPlanner(p.tok.token_id);
+      return fresh ? addPlanStep(fresh, { kind: "action", action: "hide", hurried: true }) : "They can't plan now";
+    }
+    if (places.seen) return places.spots.length ? "You're seen: pick a blind spot on the map" : "You're seen, and there's no cover within reach";
+  }
   let add: PlanStep;
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
@@ -153,7 +169,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       if (relation(allegianceOf(tokens.find((x) => x.id === p.tok.token_id) ?? { character_id: null }), allegianceOf(t)) !== "friendly") return "Only someone on your side";
     }
     const first = picks && !aim ? picks[0] : undefined;
-    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}) };
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}), ...(step.action === "hide" && step.hurried ? { hurried: true } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking) ?? unavailable(p.plan, 0, stepKind(add), 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (why) return why;
