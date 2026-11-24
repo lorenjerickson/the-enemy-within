@@ -1,5 +1,5 @@
 import { formatModifier, modifier, type Attribute } from "@/lib/attributes";
-import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, listTokenStatuses, listAfflictions, getCondition, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, takeFromStack, listTokenStatuses, listAfflictions, getCondition, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { allegianceOf, type Allegiance } from "@/lib/sides";
 import { boostsOn, combineModes, critRange, d20Tweaks, settled, type ActionStatuses, type Status } from "@/lib/status";
@@ -206,6 +206,30 @@ export function saveRefit(tokenId: number, equipment: Equipment, swap?: Refit, b
     const c = getCharacter(t.character_id);
     if (c) { const { id: _id, creature_id, template_name: _t, ...rest } = c; saveCharacter(c.id, creature_id, { ...rest, equipment }); }
   } else db.prepare<[string, number]>("UPDATE map_tokens SET equipment = ? WHERE id = ?").run(JSON.stringify(equipment), tokenId);
+}
+
+/**
+ * An item's action was used: a consumable is used up, one from where it was (a belt's or pack's stack; in a hand, the
+ * hand is emptied). Anything else is kept. Returns whether one was used up.
+ */
+export function useUpItem(tokenId: number, item: NonNullable<GearAction["item"]>): boolean {
+  if (getItem(item.id)?.type !== "consumable") return false;
+  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t) return false;
+  if (item.where === "belt" || item.where === "pack") {
+    if (!t.character_id) return false;
+    const c = characterContainers(t.character_id).find((x) => x.container.id === item.container) ?? characterContainers(t.character_id).find((x) => x.stacks.some((s) => s.item.id === item.id));
+    const s = c?.stacks.find((x) => x.item.id === item.id);
+    if (!s) return false;
+    takeFromStack(s.id);
+    return true;
+  }
+  const equipment = { ...(tokenWho(tokenId)?.equipment ?? {}) };
+  const slot = (Object.keys(equipment) as EquipSlot[]).find((k) => equipment[k] === item.id);
+  if (!slot) return false;
+  equipment[slot] = null;
+  saveRefit(tokenId, equipment);
+  return true;
 }
 
 /** How long an action's effect lasts, in game minutes (a round is 6 s; rests count as 1 and 8 hours); 0 = instant. */

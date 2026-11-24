@@ -7,7 +7,7 @@ import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
 import { ContestedMove, SaveNeeded, resolveMovement, type Mover } from "@/lib/resolveRound";
 import { withSeed } from "@/lib/dice";
-import { attackRange, fightersOn, saveHp, saveRefit, tokenWho } from "@/lib/combat";
+import { attackRange, fightersOn, saveHp, saveRefit, tokenWho, useUpItem } from "@/lib/combat";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
@@ -104,6 +104,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
+  for (const u of result.itemsUsed) useUpItem(u.tokenId, u.item); // consumables used this round are gone
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it

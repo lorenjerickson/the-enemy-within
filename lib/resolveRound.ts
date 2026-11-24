@@ -170,6 +170,7 @@ export function resolveMovement(
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
 ) {
   const passes = new Set(auraPasses);
+  const itemsUsed: { tokenId: number; item: NonNullable<GearAction["item"]> }[] = []; // items whose actions were done (consumables are used up)
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
@@ -1022,6 +1023,7 @@ export function resolveMovement(
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
+      if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
       // An ability used on themselves (Case the Scene): its effects on them.
       if (step.action === "use" && step.use) {
         say(`${m.name} uses ${step.use.name}.`);
@@ -1260,7 +1262,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */
