@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { createUser, db, getOpenRollRequest, listAssists, placeCharacterToken, requestRoll, setAssist } from "@/lib/db";
+import { assistOpenRequest, createUser, db, getOpenRollRequest, listAssists, placeCharacterToken, requestRoll, setAssist } from "@/lib/db";
 
 const player = (username: string) => {
   createUser({ name: username, username, contact: "", role: "player" } as never, "pw");
   return db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get(username)!.id;
 };
-const p1 = player("p1"), p2 = player("p2");
+const p1 = player("p1"), p2 = player("p2"), p3 = player("p3");
 
 const spec = (mode: "normal" | "disadvantage" = "normal") => ({ label: "Investigation", parts: [{ dice: "1d20", value: 0 }], mode }) as never;
 
@@ -33,4 +33,15 @@ test("help cancels disadvantage; initiative doesn't use it up", () => {
   assert.equal(listAssists(lv).length, 1);
   requestRoll(p2, a, spec("disadvantage"), { kind: "search" } as never);
   assert.equal(getOpenRollRequest(p2)!.spec.mode, "normal");
+});
+
+test("help given while their roll is waiting (not rolled yet) applies to that roll", () => {
+  const lv = level(), c = character("C"), d = character("D");
+  const tc = placeCharacterToken(lv, c, 0, 0), td = placeCharacterToken(lv, d, 1, 0);
+  requestRoll(p3, c, spec(), { kind: "search" } as never);
+  setAssist(tc, td, "D");
+  assert.equal(assistOpenRequest(tc), true);
+  assert.equal(getOpenRollRequest(p3)!.spec.mode, "advantage");
+  assert.match(getOpenRollRequest(p3)!.spec.label, /helped by D/);
+  assert.deepEqual(listAssists(lv), []);
 });

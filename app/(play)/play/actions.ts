@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -95,9 +95,10 @@ export async function assistNow(targetId: number): Promise<{ error?: string; tol
   if (gap > 1.05) return { error: "Get within 5 ft of them" };
   const name = tokenLabels(me.level_id).get(t.id) ?? "them";
   setAssist(t.id, me.token_id, me.name);
-  logSessionEvent(`${me.name} helps ${name}: advantage on their next roll.`);
+  const now = assistOpenRequest(t.id); // a roll they're about to make (not rolled yet) gets it straight away
+  logSessionEvent(`${me.name} helps ${name}: advantage on ${now ? "the roll they're making" : "their next roll"}.`);
   revalidatePath("/play");
-  return { told: `You help ${name}: their next roll has advantage.` };
+  return { told: `You help ${name}: ${now ? "the roll they're making" : "their next roll"} has advantage.` };
 }
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */

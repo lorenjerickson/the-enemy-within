@@ -2774,6 +2774,23 @@ function withAssist(characterId: number, spec: RollSpec, action: RollAction): Ro
   return { ...spec, mode: spec.mode === "disadvantage" ? "normal" : "advantage", label: `${spec.label} (helped by ${help.by_name})` };
 }
 
+/**
+ * Help (Assist) given while the helped character has a roll waiting that isn't rolled yet (not initiative): it applies
+ * to that one (advantage, "helped by …") and is used up. Returns whether it did.
+ */
+export function assistOpenRequest(tokenId: number): boolean {
+  const r = db
+    .prepare<[number], { id: number; spec: string; action: string; character_id: number }>(
+      "SELECT r.id, r.spec, r.action, r.character_id FROM roll_requests r JOIN map_tokens t ON t.character_id = r.character_id WHERE t.id = ? AND r.done = 0 AND r.result IS NULL ORDER BY r.id DESC LIMIT 1"
+    )
+    .get(tokenId);
+  if (!r) return false;
+  const spec = withAssist(r.character_id, JSON.parse(r.spec) as RollSpec, JSON.parse(r.action) as RollAction);
+  if (spec.label === (JSON.parse(r.spec) as RollSpec).label) return false; // not helped (initiative)
+  db.prepare("UPDATE roll_requests SET spec = ? WHERE id = ?").run(JSON.stringify(spec), r.id);
+  return true;
+}
+
 export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
   spec = withAssist(characterId, spec, action);
   db.transaction(() => {
