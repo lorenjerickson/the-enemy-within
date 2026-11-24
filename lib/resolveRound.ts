@@ -10,7 +10,7 @@ import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
 import { ACTION_RANGE, CHASE_ACTIONS } from "@/lib/playerActions";
-import { DODGE_DC, ROUND_SECONDS, stepKind, timeline, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
+import { DODGE_DC, ROUND_SECONDS, stepKind, timeline, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
 
 /** How close a planned action needs its target: a gear action's own range, else the action's (attack = within reach). */
 /** How far an action reaches (squares): a gear action's own range, a plain Attack the mover's weapon's. */
@@ -190,7 +190,7 @@ export function resolveMovement(
   const thingsWorked: { tokenId: number; triggerId: number; sec: number }[] = []; // levers / objects worked (their triggers fire after the round)
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
   const itemsUsed: { tokenId: number; item: NonNullable<GearAction["item"]> }[] = []; // items whose actions were done (consumables are used up)
-  const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap: Refit }[] = []; // refits done, to keep
+  const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap?: Refit; put?: Put }[] = []; // refits done, to keep
   const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
   const story: StoryEvent[] = []; // the round as events, for each player's own account of it
@@ -1059,6 +1059,20 @@ export function resolveMovement(
         refits.push({ tokenId: m.tokenId, equipment, before, swap: step.swap });
         story.push({ sec, k: "refit", who: m.tokenId, from: step.swap.from?.name ?? null, to: step.swap.item.name });
         say(`${m.name} ${step.swap.from ? `swaps ${step.swap.from.name} for ${step.swap.item.name}` : `takes up ${step.swap.item.name}`} (${step.swap.slot}).`);
+        continue;
+      }
+      // Something put away (a bonus action): out of a slot (now empty: a weapon gone means fighting bare-handed) or out of a pack onto the belt.
+      if (step.put) {
+        const before = { ...(m.equipment ?? {}) };
+        const equipment = step.put.slot ? { ...before, [step.put.slot]: null } : before;
+        if (step.put.slot) {
+          m.equipment = equipment;
+          fighters.get(m.tokenId)?.wear?.(equipment);
+          if (step.put.slot === "main hand") m.attackRange = 1;
+        }
+        refits.push({ tokenId: m.tokenId, equipment, before, put: step.put });
+        story.push({ sec, k: "put", who: m.tokenId, item: step.put.item.name, from: step.put.from?.name ?? null, into: step.put.into.name });
+        say(`${m.name} ${step.put.from ? `takes ${step.put.item.name} out of ${step.put.from.name} and puts it on ${step.put.into.name}` : `puts away ${step.put.item.name} (into ${step.put.into.name})`}.`);
         continue;
       }
       // Hit while doing it (not in the second it finishes: blows landing together both count).

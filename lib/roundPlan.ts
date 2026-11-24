@@ -41,7 +41,7 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet per second); it uses the round's action
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string }; hurried?: boolean };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; put?: Put; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string }; hurried?: boolean };
 // hurried: a Hide after slipping into a blind spot while seen (its Stealth roll has disadvantage)
 // thing: Interact with a lever / switch / object (an interactable map trigger): it fires after the round
 // door: Interact with a door (opened or closed after the round; open: how it was when planned)
@@ -60,6 +60,23 @@ export interface Refit {
   reach?: number;
 }
 
+/**
+ * Refit putting one thing away (stowing it): from an equipment slot (left empty) or out of a pack, into a worn
+ * container (a belt, a pack). belt: the container is at the waist, so what's in it is at hand (Use) from then on.
+ */
+export interface Put {
+  item: { id: number; name: string };
+  slot?: EquipSlot; // out of this slot (left empty)…
+  from?: { id: number; name: string }; // …or out of this container (a pack)
+  into: { id: number; name: string };
+  belt: boolean;
+}
+
+/** Items the plan puts on their belt (at hand from then on): which, and into which container. */
+export function onBelt(plan: PlanStep[]): { id: number; name: string; container: number; containerName: string }[] {
+  return plan.flatMap((s) => (s.kind === "action" && s.put?.belt ? [{ id: s.put.item.id, name: s.put.item.name, container: s.put.into.id, containerName: s.put.into.name }] : []));
+}
+
 /** Dice a player threw for a step with the plan (in the order resolution rolls them: both d20s first). */
 export interface StepDice {
   hit?: number[];
@@ -73,9 +90,13 @@ export const DODGE_DC = 12;
 /** Equipment once the plan's refits have happened. */
 export function afterRefits(equipment: Equipment, plan: PlanStep[]): Equipment {
   const out = { ...equipment };
-  for (const s of plan) if (s.kind === "action" && s.swap) {
-    out[s.swap.slot] = s.swap.item.id;
-    if (s.swap.clears) out[s.swap.clears] = null;
+  for (const s of plan) {
+    if (s.kind !== "action") continue;
+    if (s.swap) {
+      out[s.swap.slot] = s.swap.item.id;
+      if (s.swap.clears) out[s.swap.clears] = null;
+    }
+    if (s.put?.slot) out[s.put.slot] = null; // put away: the slot's left empty
   }
   return out;
 }

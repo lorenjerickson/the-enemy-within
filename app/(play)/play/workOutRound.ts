@@ -107,7 +107,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
   for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
-  for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before); // the swap stays after the round
+  for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before, r.put); // the swap stays after the round
   for (const u of result.itemsUsed) useUpItem(u.tokenId, u.item); // consumables used this round are gone
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off

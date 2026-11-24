@@ -12,6 +12,7 @@ export type StoryEvent = { sec: number } & (
   | { k: "skip"; who: number; after?: "close" | "chase" | "evade"; target?: number | null }
   | { k: "dodge"; who: number; ok: boolean }
   | { k: "refit"; who: number; from: string | null; to: string }
+  | { k: "put"; who: number; item: string; from: string | null; into: string } // Refit putting something away (from: a pack; null: from a slot)
   | { k: "interrupted"; who: number; action: string; by?: number | null }
   | { k: "attack"; who: number; target: number; with: string | null; outcome: "hit" | "miss" | "reach" | "gone"; hurt?: number; dmg?: number; resist?: "resistant" | "vulnerable" | "immune"; crit?: boolean } // crit: a critical hit; hurt: share of their health; dmg: how much (told only to whoever took it)
   | { k: "area"; who: number; name: string }
@@ -100,6 +101,7 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
       case "spotted": if (mine) add(e.sec, "You're no longer hidden."); break;
       case "hide": if (mine) add(e.sec, e.ok ? "You slip out of sight." : "You try to hide, but you're seen."); break;
       case "refit": add(e.sec, e.from ? `You put away ${e.from} and take up ${e.to}.` : `You take up ${e.to}.`); break;
+      case "put": add(e.sec, e.from ? `You take ${e.item} out of your ${e.from} and put it on your ${e.into}.` : `You put ${e.item} away in your ${e.into}.`); break;
       case "interrupted": add(e.sec, `${e.by ? `${cap(name(e.by))}'s blow` : "The blow"} throws you off, and you can't ${deed(e.action)}.`); break;
       case "attack": {
         const weapon = e.with ? ` with ${e.with}` : "";
@@ -195,6 +197,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "skip": add(e.sec, `${who} holds position instead of moving on.`); break;
       case "dodge": add(e.sec, e.ok ? `${who} readies a dodge.` : `${who} fails to ready a dodge.`); break;
       case "refit": add(e.sec, `${who} ${e.from ? `swaps ${e.from} for ${e.to}` : `takes up ${e.to}`}.`); break;
+      case "put": add(e.sec, `${who} ${e.from ? `takes ${e.item} out of ${e.from} and puts it on ${e.into}` : `puts ${e.item} away`}.`); break;
       case "interrupted": add(e.sec, `${who} is thrown off by ${e.by ? `${n(e.by)}'s blow` : "a blow"} and can't ${does(e.action)}.`); break;
       case "attack": {
         const w = e.with ? ` with ${e.with}` : "", t = n(e.target);

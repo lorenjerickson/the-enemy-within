@@ -2,8 +2,8 @@ import { downTokens, listMapTriggers, setTokenTarget, getItem, listTokens, setPl
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";
-import { ROUND_SECONDS, afterRefits, cannotAdd, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Refit } from "@/lib/roundPlan";
-import { attackRange, gearActions, refitOptions, tokenWho } from "@/lib/combat";
+import { ROUND_SECONDS, afterRefits, cannotAdd, onBelt, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
+import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
@@ -25,15 +25,17 @@ export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
 /** Their equipment as the plan so far leaves it (after any refit). */
 export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
+/** Their gear actions as the plan so far leaves them: refits done, and what it put on their belt at hand. */
+const plannedGear = (p: Planner) => gearActions(p.tok.token_id, plannedEquipment(p), { onBelt: onBelt(p.plan) });
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[]; door?: number; thing?: number; cover?: { col: number; row: number }; hurried?: boolean } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; put?: { item: number; slot?: string; from?: number; into: number }; picks?: number[]; door?: number; thing?: number; cover?: { col: number; row: number }; hurried?: boolean } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (p.rolled) return "The dice are rolled: the plan is set";
   if (p.ready) return "Ready already; undo that to change the plan";
   // A condition stopping that kind of step (Stunned: anything; Restrained: moving).
-  const gearKind = step.kind === "action" && step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use))?.kind : undefined; // a gear reaction counts as the reaction
+  const gearKind = step.kind === "action" && step.use !== undefined ? plannedGear(p).find((g) => g.id === Number(step.use))?.kind : undefined; // a gear reaction counts as the reaction
   const kind = step.kind === "move" ? "movement" : step.use !== undefined ? (gearKind === "reaction" ? "reaction" : "action") : actionKind(step.action);
   const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) ?? (step.kind === "move" && step.run ? unavailable([], 0, "action", 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) : null);
   if (stopped) return stopped;
@@ -91,7 +93,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   } else {
     const name = step.target !== undefined ? tokenLabels(p.tok.level_id).get(Number(step.target)) : undefined;
     // A gear action must be one this token actually has (an equipped item's, a profession's, or a creature's own).
-    const use = step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use)) : undefined;
+    const use = step.use !== undefined ? plannedGear(p).find((g) => g.id === Number(step.use)) : undefined;
     if (step.use !== undefined && !use) return "That isn't one of their actions";
     // On themselves only when the action allows it (Healing Draught: themselves or others).
     if (step.target !== undefined && (!name || (Number(step.target) === p.tok.token_id && use?.targets !== "anyone"))) return "Pick someone else on this map";
@@ -132,8 +134,24 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       door = { id: d.id, name: d.name ?? `Door ${d.id}`, open: !!d.open };
     }
     // Refit: something they carry that fits the slot, as their gear will be by then.
-    let swap: Refit | undefined;
-    if (step.action === "refit") {
+    let swap: Refit | undefined, put: Put | undefined;
+    if (step.action === "refit" && step.put) {
+      // Put away: something equipped into a worn container with room, or one thing from a pack onto the belt.
+      const o = putOptions(p.tok.token_id, plannedEquipment(p), p.plan), r = step.put;
+      if (r.slot) {
+        const a = o.away.find((x) => x.slot === r.slot && x.item.id === Number(r.item));
+        if (!a) return "Nothing there to put away";
+        const into = a.into.find((c) => c.id === Number(r.into));
+        if (!into) return a.into.length ? "Pick a container with room" : "No room in anything you wear";
+        put = { item: a.item, slot: a.slot, into: { id: into.id, name: into.name }, belt: into.belt };
+      } else {
+        if (!o.belt) return "You're not wearing a belt";
+        const f = o.fromPacks.find((x) => x.item.id === Number(r.item) && x.from.id === Number(r.from));
+        if (!f) return "That isn't in your pack";
+        if (!f.room || o.belt.id !== Number(r.into)) return `No room on ${o.belt.name}`;
+        put = { item: f.item, from: f.from, into: o.belt, belt: true };
+      }
+    } else if (step.action === "refit") {
       const equipment = plannedEquipment(p);
       const option = refitOptions(p.tok.token_id, equipment).find((o) => o.slot === step.swap?.slot);
       const item = option?.items.find((i) => i.id === Number(step.swap?.item));
@@ -173,7 +191,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       if (relation(allegianceOf(tokens.find((x) => x.id === p.tok.token_id) ?? { character_id: null }), allegianceOf(t)) !== "friendly") return "Only someone on your side";
     }
     const first = picks && !aim ? picks[0] : undefined;
-    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}), ...(step.action === "hide" && step.hurried ? { hurried: true } : {}) };
+    add = { kind: "action", action: step.action, ...(seconds ? { seconds } : {}), ...(swap ? { swap } : {}), ...(put ? { put } : {}), ...(name && !aim ? { target: { id: Number(step.target), name } } : first ? { target: first } : {}), ...(use ? { use: gear as GearAction } : {}), ...(aim ? { aim } : {}), ...(picks ? { picks } : {}), ...(door ? { door } : {}), ...(thing ? { thing } : {}), ...(step.action === "hide" && step.hurried ? { hurried: true } : {}) };
   }
   const why = cannotAdd(p.plan, add, p.walking) ?? unavailable(p.plan, 0, stepKind(add), 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
   if (why) return why;
@@ -278,8 +296,9 @@ export function planView(tokenId: number) {
     feetLeft: t.left * p.walking,
     perSecond: p.walking, // feet a second at walking pace
     runPerSecond: p.running, // and running (Dash); 0: can't run
-    gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
+    gear: plannedGear(p), // their actions, with any refit planned so far done (and what it put on the belt)
     refits: refitOptions(tokenId, plannedEquipment(p)),
+    puts: putOptions(tokenId, plannedEquipment(p), p.plan), // what Refit could put away / bring onto the belt
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)
     sees: [...seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), tokenId)], // who they could aim at from where the plan has them
     forbidden: restrictionsOn(tokenId, p.tok.level_id).forbid, // what conditions stop them doing (Stunned: everything)

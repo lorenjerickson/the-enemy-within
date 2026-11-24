@@ -8,7 +8,7 @@ export type AttackRoll = { total: number; text: string; natural?: number; crit?:
 import type { Boost, RollGrant, RollMode } from "@/lib/actions";
 import type { ModifierTarget } from "@/lib/modifiers";
 import { saveTokenHealth, takeDamage, tokenHealth } from "@/lib/health";
-import type { GearAction, Refit } from "@/lib/roundPlan";
+import type { GearAction, PlanStep, Put, Refit } from "@/lib/roundPlan";
 import { rollDice } from "@/lib/dice";
 import type { EffectKind } from "@/lib/effects";
 import { rollChanges, sensesFrom, type Modifier, type Senses, type Trigger, type Condition, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
@@ -190,13 +190,65 @@ export function refitOptions(tokenId: number, equipment: Equipment) {
   });
 }
 
+/** What Refit could put away (stow): something equipped, into a worn container with room; or something in a pack, onto the belt. */
+export type PutOptions = {
+  away: { slot: EquipSlot; item: { id: number; name: string }; into: { id: number; name: string; belt: boolean }[] }[];
+  belt: { id: number; name: string } | null;
+  fromPacks: { item: { id: number; name: string }; from: { id: number; name: string }; room: boolean }[];
+};
+
+/**
+ * What Refit could put away, as the plan so far leaves things (its earlier puts take room, and take things out of
+ * packs). Only characters have containers.
+ */
+export function putOptions(tokenId: number, equipment: Equipment, plan: PlanStep[]): PutOptions {
+  const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
+  if (!t?.character_id) return { away: [], belt: null, fromPacks: [] };
+  const wornIds = new Set(Object.values(equipment).filter(Boolean));
+  const containers = characterContainers(t.character_id).filter((c) => wornIds.has(c.container.id)); // still worn by then
+  const puts = plan.flatMap((s) => (s.kind === "action" && s.put ? [s.put] : []));
+  // Room for one more of an item: a free slot (each put so far takes one), or a stack of it with room.
+  const room = (c: (typeof containers)[number], itemId: number, maxStack: number) => {
+    const into = puts.filter((p) => p.into.id === c.container.id);
+    return c.stacks.length + into.length < (c.container.capacity ?? 0) || c.stacks.some((s) => s.item.id === itemId && s.qty + into.filter((p) => p.item.id === itemId).length < Math.max(1, maxStack));
+  };
+  const away = (Object.entries(equipment) as [EquipSlot, number | null][]).flatMap(([slot, id]) => {
+    const item = id ? getItem(id) : undefined;
+    if (!item || slot === "container" || item.capacity) return []; // a container stays worn (empty it first, out of a round)
+    const into = containers.filter((c) => c.container.id !== item.id && room(c, item.id, item.max_stack ?? 1)).map((c) => ({ id: c.container.id, name: c.container.name, belt: c.slot === "waist" }));
+    return [{ slot, item: { id: item.id, name: item.name }, into }];
+  });
+  const beltC = containers.find((c) => c.slot === "waist");
+  const fromPacks = beltC
+    ? containers.filter((c) => c.slot !== "waist").flatMap((c) => {
+        const seen = new Set<number>();
+        return c.stacks.flatMap((s) => {
+          if (seen.has(s.item.id)) return [];
+          seen.add(s.item.id);
+          const have = c.stacks.filter((x) => x.item.id === s.item.id).reduce((n, x) => n + x.qty, 0);
+          const moved = puts.filter((p) => p.from?.id === c.container.id && p.item.id === s.item.id).length;
+          return have - moved > 0 ? [{ item: { id: s.item.id, name: s.item.name }, from: { id: c.container.id, name: c.container.name }, room: room(beltC, s.item.id, s.item.max_stack ?? 1) }] : [];
+        });
+      })
+    : [];
+  return { away, belt: beltC ? { id: beltC.container.id, name: beltC.container.name } : null, fromPacks };
+}
+
 /**
  * Keeps a refit after the round: in a character's equipment (the new item comes out of their container, and what it
  * replaced goes back into it), or on a creature token (not its template).
  */
-export function saveRefit(tokenId: number, equipment: Equipment, swap?: Refit, before?: Equipment): void {
+export function saveRefit(tokenId: number, equipment: Equipment, swap?: Refit, before?: Equipment, put?: Put): void {
   const t = db.prepare<[number], { character_id: number | null }>("SELECT character_id FROM map_tokens WHERE id = ?").get(tokenId);
   if (!t) return;
+  // Put away: out of a pack (one of its stack) or a slot (emptied below), into the container.
+  if (t.character_id && put) {
+    if (put.from) {
+      const s = characterContainers(t.character_id).find((c) => c.container.id === put.from!.id)?.stacks.find((x) => x.item.id === put.item.id);
+      if (s) takeFromStack(s.id);
+    }
+    addToContainer(t.character_id, put.into.id, put.item.id, 1);
+  }
   if (t.character_id && swap) {
     const from = takeCarried(t.character_id, swap.item.id) ?? characterContainers(t.character_id)[0]?.container.id;
     const out = [swap.from?.id, swap.clears ? before?.[swap.clears] : null].filter((x): x is number => !!x);
@@ -249,7 +301,7 @@ const lookOf = (type: string): EffectKind =>
  * first). An item's action says which item and where it is (Use; consumables are used up). Each carries what resolving
  * needs: time, range (squares), to-hit, damage, roll mode.
  */
-export function gearActions(tokenId: number, equipment?: Equipment, opts: { packs?: boolean } = {}): (GearAction & { source: string })[] {
+export function gearActions(tokenId: number, equipment?: Equipment, opts: { packs?: boolean; onBelt?: { id: number; name: string; container: number; containerName: string }[] } = {}): (GearAction & { source: string })[] {
   const t = db.prepare<[number], { character_id: number | null; creature_id: number | null }>("SELECT character_id, creature_id FROM map_tokens WHERE id = ?").get(tokenId);
   const who = tokenWho(tokenId);
   if (!t || !who) return [];
@@ -277,6 +329,12 @@ export function gearActions(tokenId: number, equipment?: Equipment, opts: { pack
       })
     : [];
   owned.push(...carried.filter((x) => !owned.some((o) => o.a.id === x.a.id)));
+  // Put on the belt earlier in the plan (Refit): at hand from then on.
+  for (const b of opts.onBelt ?? []) {
+    const item = getItem(b.id);
+    if (!item) continue;
+    for (const a of listActions({ item_id: item.id })) if (!owned.some((o) => o.a.id === a.id)) owned.push({ a, source: `${item.name}, on ${b.containerName}`, itemRange: item.range_ft, item: { id: item.id, where: "belt", container: b.container } });
+  }
   // An item's action with no range of its own (0) reaches as far as the item does.
   return owned.map(({ a, source, itemRange, item }) => ({
     ...(item ? { item } : {}),
