@@ -48,6 +48,7 @@ export interface SaveRequest {
   condition: string;
   attr: Attribute;
   dc: number;
+  helpedBy?: string; // helped (Assist) by then: they roll it with advantage (the help is spent on it)
 }
 export class SaveNeeded extends Error {
   constructor(public save: SaveRequest) {
@@ -213,7 +214,10 @@ export function resolveMovement(
       const n = (asked.get(base) ?? 0) + 1;
       asked.set(base, n);
       const key = n === 1 ? base : `${base}#${n}`;
-      if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: what, attr, dc });
+      // Helped by then: this is their next roll, so the help is spent on it (the same on every re-run of the round).
+      const help = helped.get(id);
+      helped.delete(id);
+      if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: what, attr, dc, ...(help ? { helpedBy: help.name } : {}) });
       return { total: decisions[key], text: "their roll" };
     }
     return fighters.get(id)?.save?.(attr, helpMode(id)) ?? { total: 0, text: "no save" };

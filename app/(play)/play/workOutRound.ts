@@ -87,7 +87,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
       setPendingRound(levelId, { seed, decisions, save: e.save });
       const t = tokens.find((x) => x.id === e.save.tokenId), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
       if (t?.character_id && player && !openConditionSaveRequest(t.id)) {
-        requestRoll(player, t.character_id, saveRollFor(t.id, e.save.attr, `${e.save.attr[0].toUpperCase()}${e.save.attr.slice(1)} save against ${e.save.condition} (DC ${e.save.dc})`), { kind: "conditionSave", levelId, tokenId: t.id, key: e.save.key });
+        requestRoll(player, t.character_id, helpedSpec(saveRollFor(t.id, e.save.attr, `${e.save.attr[0].toUpperCase()}${e.save.attr.slice(1)} save against ${e.save.condition} (DC ${e.save.dc})`), e.save.helpedBy), { kind: "conditionSave", levelId, tokenId: t.id, key: e.save.key });
       }
       return;
     }
@@ -209,13 +209,18 @@ export function recordConditionSave(levelId: number, key: string, total: number)
   workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: total });
 }
 
+/** A save a player rolls mid-round while helped (Assist): with advantage, saying who helped. */
+function helpedSpec(spec: RollSpec, by?: string): RollSpec {
+  return by ? { ...spec, mode: spec.mode === "disadvantage" ? "normal" : "advantage", label: `${spec.label} (helped by ${by})` } : spec;
+}
+
 /** The GM rolls the waiting condition save for its player (they're away, or slow). */
 export function rollConditionSaveFor(levelId: number) {
   const pending = getPendingRound(levelId);
   if (!pending?.save) return;
   const { tokenId, attr, condition, dc, key } = pending.save;
   const req = openConditionSaveRequest(tokenId);
-  const rolled = rollSpec(req?.spec ?? saveRollFor(tokenId, attr, `${attr} save against ${condition} (DC ${dc})`));
+  const rolled = rollSpec(req?.spec ?? helpedSpec(saveRollFor(tokenId, attr, `${attr} save against ${condition} (DC ${dc})`), pending.save.helpedBy));
   if (req) {
     saveRollResult(req.id, { ...rolled, outcome: `Rolled ${rolled.total} (rolled by the GM).`, success: rolled.total >= dc });
     closeRollRequest(req.id, req.player_id);

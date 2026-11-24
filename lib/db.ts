@@ -2767,7 +2767,7 @@ export function clearAssist(tokenId: number): void {
 
 /** A roll request for a character who was helped (Assist): advantage on it ("helped by …"), and the help is used up. Not initiative. */
 function withAssist(characterId: number, spec: RollSpec, action: RollAction): RollSpec {
-  if (action.kind === "initiative") return spec;
+  if (action.kind === "initiative" || action.kind === "conditionSave") return spec; // a save mid-round: the round counts help itself
   const help = db.prepare<[number], { token_id: number; by_name: string }>("SELECT a.token_id, a.by_name FROM assists a JOIN map_tokens t ON t.id = a.token_id WHERE t.character_id = ?").get(characterId);
   if (!help) return spec;
   clearAssist(help.token_id);
