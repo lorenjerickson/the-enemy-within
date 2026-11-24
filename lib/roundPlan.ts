@@ -37,7 +37,7 @@ export interface GearAction {
 export const dealsDamage = (g: GearAction | undefined) => !!g?.damage;
 
 export type PlanStep =
-  | { kind: "move"; to: { col: number; row: number }; feet: number }
+  | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet a round); it uses the round's action
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
   | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[] };
@@ -78,7 +78,10 @@ export function afterRefits(equipment: Equipment, plan: PlanStep[]): Equipment {
 
 /** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
 export function stepSeconds(step: PlanStep, walkingFeet: number): number {
-  if (step.kind === "move") return walkingFeet > 0 ? Math.round((step.feet / (walkingFeet / ROUND_SECONDS)) * 10) / 10 : Infinity;
+  if (step.kind === "move") {
+    const speed = step.run ?? walkingFeet; // a Dash goes at running speed
+    return speed > 0 ? Math.round((step.feet / (speed / ROUND_SECONDS)) * 10) / 10 : Infinity;
+  }
   return step.use?.seconds ?? ACTION_SECONDS[step.action] ?? 1;
 }
 
@@ -97,6 +100,9 @@ export function timeline(plan: PlanStep[], walkingFeet: number) {
 
 /** Why a step can't be added (or null if it can): it must fit in the round, and there's only one action. */
 /** A step's kind: movement, action (gear actions too), bonus action or reaction. */
+/** A Dash: a move at running speed, which takes the round's action (any number of Dash legs, but no other action). */
+export const isDash = (s: PlanStep) => s.kind === "move" && !!s.run;
+
 export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? (s.use.kind === "reaction" ? "reaction" : "action") : actionKind(s.action));
 
 /**
@@ -107,6 +113,7 @@ export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typ
   if (forbidden[kind]) return `${forbidden[kind]}: can't ${kind === "movement" ? "move" : kind === "action" ? "take actions" : kind === "bonus" ? "take bonus actions" : "react"}`;
   const left = ROUND_SECONDS - used;
   if (kind !== "movement" && plan.some((s) => stepKind(s) === kind)) return `You've already planned your ${kind === "bonus" ? "bonus action" : kind} this round`;
+  if (kind === "action" && plan.some(isDash)) return "You're dashing this round: that's your action";
   if (left <= 1e-9) return "No time left this round";
   if (seconds > left + 1e-9) return `Not enough time left (${+left.toFixed(1)} s)`;
   return null;
@@ -116,6 +123,8 @@ export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number)
   // One action, one bonus action and one reaction a round; movement (Move, Dash, Evade, Pursue) as time allows.
   const kind = stepKind;
   if (kind(step) === "action" && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round";
+  if (kind(step) === "action" && plan.some(isDash)) return "You're dashing this round: that's your action";
+  if (isDash(step) && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round: no Dash";
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
   if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";
   if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim) && step.use?.targeting?.count !== "all") return step.use?.area ? "Aim it on the map" : "Pick a target";

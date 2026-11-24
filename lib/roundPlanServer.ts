@@ -15,14 +15,15 @@ export function tokenPlanner(tokenId: number) {
   const tok = getTokenMover(tokenId);
   if (!tok || !getEncounter(tok.level_id)) return null;
   if (downTokens(tok.level_id).has(tok.token_id)) return null; // down: no planning until revived
-  return { tok, walking: speedOf(tok.token_id, tok.movement), ...getRoundPlan(tok.level_id, tok.token_id) }; // speed as boosted now
+  const running = Number((JSON.parse(String(tok.movement || "{}")) as { running?: number }).running) || 0; // Dash speed
+  return { tok, walking: speedOf(tok.token_id, tok.movement), running, ...getRoundPlan(tok.level_id, tok.token_id) }; // speed as boosted now
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
 /** Their equipment as the plan so far leaves it (after any refit). */
 export const plannedEquipment = (p: Planner) => afterRefits(tokenWho(p.tok.token_id)?.equipment ?? {}, p.plan);
 
-export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[] } | { kind: "move"; col: number; row: number };
+export type StepRequest = { kind: "action"; action: PlayerActionId; target?: number; use?: number; aim?: { col: number; row: number }; seconds?: number; swap?: { slot: string; item: number }; picks?: number[] } | { kind: "move"; col: number; row: number; run?: boolean }; // run: a Dash
 
 /** Adds a step: an action, or a move to a spot reachable from where the plan leaves them, in the time left. */
 export function addPlanStep(p: Planner, step: StepRequest): string | null {
@@ -31,13 +32,15 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   // A condition stopping that kind of step (Stunned: anything; Restrained: moving).
   const gearKind = step.kind === "action" && step.use !== undefined ? gearActions(p.tok.token_id, plannedEquipment(p)).find((g) => g.id === Number(step.use))?.kind : undefined; // a gear reaction counts as the reaction
   const kind = step.kind === "move" ? "movement" : step.use !== undefined ? (gearKind === "reaction" ? "reaction" : "action") : actionKind(step.action);
-  const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid);
+  const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) ?? (step.kind === "move" && step.run ? unavailable([], 0, "action", 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) : null);
   if (stopped) return stopped;
+  const run = step.kind === "move" && step.run ? p.running : undefined; // a Dash: at running speed
+  if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
   let add: PlanStep;
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
-    const feetLeft = (timeline(p.plan, p.walking).left * p.walking) / 6;
+    const feetLeft = (timeline(p.plan, p.walking).left * (run ?? p.walking)) / 6;
     const walls = movementBlockers(listStructures(p.tok.level_id));
     if (isGridlessLevel(p.tok.level_id)) {
       // Straight there, or by the shortest way round walls in the way (a move per leg).
@@ -47,7 +50,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       if (Math.hypot(to.col - from.col, to.row - from.row) < 0.1) return "Already there";
       const legs = path.slice(1).map((pt, i) => {
         const a = path[i], end = i === path.length - 2 ? to : { col: snapHeight(pt.x - 0.5), row: snapHeight(pt.y - 0.5) };
-        return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10 };
+        return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10, ...(run ? { run } : {}) };
       });
       if (legs.reduce((sum, l) => sum + l.feet, 0) > feetLeft + 0.05) return "Can't get there in time";
       let plan = p.plan;
@@ -61,7 +64,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     } else {
       const sq = reachableSquares(from, feetLeft / FEET_PER_SQUARE, walls).get(squareKey(Math.round(Number(step.col)), Math.round(Number(step.row))));
       if (!sq || !sq.steps) return "Can't get there in time";
-      add = { kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE };
+      add = { kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE, ...(run ? { run } : {}) };
     }
   } else {
     const name = step.target !== undefined ? tokenLabels(p.tok.level_id).get(Number(step.target)) : undefined;
