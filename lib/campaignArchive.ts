@@ -8,6 +8,7 @@ import path from "node:path";
 import { Unzip, UnzipInflate, zipSync, strToU8 } from "fflate";
 import { db, settleEffects } from "@/lib/db";
 import { IMAGE_DIR } from "@/lib/images";
+import "@/lib/scriptLibrary"; // its table, so it goes into (and comes out of) the archive
 
 export const ARCHIVE_FORMAT = "the-enemy-within/campaign/1";
 

@@ -9,6 +9,7 @@ const CAMPAIGN_NAV = [
   { href: "/campaign/creatures", label: "Creatures" },
   { href: "/campaign/professions", label: "Professions" },
   { href: "/campaign/effects", label: "Effects" },
+  { href: "/campaign/scripts", label: "Scripts" },
   { href: "/campaign/characters", label: "Characters" },
   { href: "/campaign/locations", label: "Locations" },
   { href: "/campaign/story", label: "Story" },
