@@ -1,5 +1,5 @@
 import { listPlayerCharacters, listPlayers, listPresentPlayers, sessionMembers } from "@/lib/db";
-import { playAs, setMember } from "./actions";
+import { setMember } from "./actions";
 
 /**
  * Every player, with the characters they play: here, not here yet, played by the GM (added while absent), or left out.
@@ -31,7 +31,6 @@ export default function PlayerPresence({ sessionId, manage = false }: { sessionI
                 ) : (
                   <>
                     {!here && status !== "gm" && plays.length > 0 && <form action={set("gm")}><button className="btn btn-xs" title="They're away: you play their character">Add (GM plays)</button></form>}
-                    {status === "gm" && <form action={playAs.bind(null, p.id)}><button className="btn btn-xs btn-info">Play as</button></form>}
                     <form action={set("removed")}><button className="btn btn-xs btn-ghost" title="Keep them out of this session">Remove</button></form>
                   </>
                 )}

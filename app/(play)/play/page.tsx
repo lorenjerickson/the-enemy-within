@@ -17,7 +17,6 @@ import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import CharacterSheet from "./CharacterSheet";
 import GmSheetPanel from "./GmSheetPanel";
-import GmPlanningMode from "./GmPlanningMode";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf } from "@/lib/sides";
@@ -28,7 +27,7 @@ import PlayerPresence from "../../(app)/sessions/PlayerPresence";
 import { playAs } from "../../(app)/sessions/actions";
 import PlanRollPrompt from "./PlanRollPrompt";
 import { planDice, planRolls, rolledTotal } from "@/lib/planRolls";
-import EncounterPanel, { planningData } from "./EncounterPanel";
+import EncounterPanel from "./EncounterPanel";
 import ContestModal from "./ContestModal";
 import SaveWaitModal from "./SaveWaitModal";
 import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories, listCharacterSightings } from "@/lib/db";
@@ -113,7 +112,6 @@ function GmView({ session }: { session: GameSession }) {
     );
   }
   const levels = listLevels(place.location_id);
-  // In an encounter: where each of the GM's creatures' plans leaves it, and the feet it can still move (for planning moves on the map).
   const enc = getEncounter(levelId!);
   const pending = enc ? getPendingRound(levelId!) : null;
   const contest = pending?.contest ?? null; // a contested move waiting on the GM's call
@@ -124,25 +122,14 @@ function GmView({ session }: { session: GameSession }) {
       return p ? [[t.id, p.name]] : [];
     })
   );
-  const gmPlans = Object.fromEntries(
-    (enc?.order ?? []).flatMap((o) => {
-      const v = planView(o.token_id);
-      return v ? [[o.token_id, { from: v.from, feetLeft: v.ready ? 0 : v.feetLeft, perSecond: v.perSecond, runPerSecond: v.runPerSecond }]] : [];
-    })
-  );
-  // Planning as a player's character: what that character has seen before stays shaded in (their fog of war).
-  const planExplored = Object.fromEntries(
-    listTokens(levelId!).filter((t) => t.character_id !== null && gmPlans[t.id]).map((t) => [t.id, listCharacterSightings(t.character_id!, levelId!)])
-  );
   return (
     <>
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
-      <GmPlanningMode {...planningData()} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
-      <LevelMap locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} gmPlans={gmPlans} planExplored={planExplored} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
+      <LevelMap switchable="all" locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />
     </>
   );
 }
@@ -256,7 +243,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       </fieldset>
       {place ? (
-        <LevelMap readOnly linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers, explored: creature !== null ? [] : listSightings(user.id, levelId!), move: me && !watching ? (plan ? { tokenId: me.token_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { tokenId: me.token_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) : null }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
+        <LevelMap readOnly switchable={real ? null : "side"} linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers, explored: creature !== null ? [] : listSightings(user.id, levelId!), move: me && !watching ? (plan ? { tokenId: me.token_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { tokenId: me.token_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) : null }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>

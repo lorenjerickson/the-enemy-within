@@ -56,7 +56,7 @@ export default async function Session({ params }: { params: Promise<{ id: string
       )}
       {lobby && (
         <div className="max-w-xl space-y-2">
-          <p className="opacity-80">Waiting for the players to join. They join from their home page. Add anyone who can't make it and you'll play their character (Play as… once the session begins).</p>
+          <p className="opacity-80">Waiting for the players to join. They join from their home page. Mark anyone who can't make it as GM plays: in the game, click their character's token to play as them.</p>
           <PlayerPresence sessionId={session.id} manage />
         </div>
       )}
