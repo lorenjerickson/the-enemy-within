@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import db, { getOpenGameSession, gmPlayedPlayers, type User, USER_COLUMNS, verifyPassword } from "@/lib/db";
+import db, { type User, USER_COLUMNS, verifyPassword } from "@/lib/db";
+import { formatActAs, parseActAs, resolveActor, type ActAs } from "@/lib/actor";
 
 const COOKIE = "session";
 
@@ -34,23 +35,20 @@ export async function loggedInUser(): Promise<User | undefined> {
 const ACT_AS = "act_as";
 
 /**
- * Who the app is for right now: the logged-in user, or, while the GM is playing an absent player in the running
- * session, that player (marked `playedBy`), so the GM sees and does everything as them.
+ * Who the app is for right now: the logged-in user; or, while the GM acts as someone in the running session, that
+ * absent player (playedBy), a present player they're watching (playedBy + watching), or the GM playing a creature
+ * token (actingToken). See resolveActor.
  */
 export async function currentUser(): Promise<User | undefined> {
   const user = await loggedInUser();
   if (user?.role !== "gm") return user;
-  const actAs = Number((await cookies()).get(ACT_AS)?.value);
-  const session = actAs ? getOpenGameSession() : undefined;
-  if (!session || !gmPlayedPlayers(session.id).includes(actAs)) return user;
-  const player = db.prepare<[number], User>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ? AND role = 'player'`).get(actAs);
-  return player ? { ...player, playedBy: user.id } : user;
+  return resolveActor(user, parseActAs((await cookies()).get(ACT_AS)?.value));
 }
 
-/** The GM starts playing one of the absent players they added to the session (null: back to being the GM). */
-export async function setActingAs(playerId: number | null): Promise<void> {
+/** The GM acts as a token (a creature, or a player's character), a player, or (null) goes back to being the GM. */
+export async function setActingAs(who: ActAs | null): Promise<void> {
   const jar = await cookies();
-  if (playerId) jar.set(ACT_AS, String(playerId), { httpOnly: true, sameSite: "lax", path: "/" });
+  if (who) jar.set(ACT_AS, formatActAs(who), { httpOnly: true, sameSite: "lax", path: "/" });
   else jar.delete(ACT_AS);
 }
 

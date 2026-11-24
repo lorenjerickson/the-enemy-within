@@ -79,9 +79,19 @@ export async function setMember(sessionId: number, userId: number, status: "gm" 
   revalidatePath("/play");
 }
 
+/**
+ * In the game, the GM acts as a token (null: back to being the GM): a creature they play, an absent player's character
+ * (they play that player), or a present player's (they watch: see what that player sees, do nothing).
+ */
+export async function actAs(tokenId: number | null) {
+  await requireGm();
+  await setActingAs(tokenId ? { token: Number(tokenId) } : null);
+  redirect("/play");
+}
+
 /** The GM plays as an absent player they added (everything as them, until they switch back). */
 export async function playAs(playerId: number | null) {
   await requireGm();
-  await setActingAs(playerId ? Number(playerId) : null);
+  await setActingAs(playerId ? { player: Number(playerId) } : null);
   redirect(getOpenGameSession()?.began_at ? "/play" : "/lobby");
 }

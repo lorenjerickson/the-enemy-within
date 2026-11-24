@@ -453,6 +453,8 @@ export interface User {
   role: Role;
   must_change_password: 0 | 1;
   playedBy?: number; // set when the GM is playing this (absent) player: the GM's user id
+  watching?: boolean; // the GM only watching this (present) player: they see what the player sees, and can't do anything
+  actingToken?: number; // the GM playing one of their own tokens (a creature): its token
 }
 
 export function hashPassword(password: string): string {
