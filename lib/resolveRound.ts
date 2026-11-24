@@ -174,6 +174,12 @@ export function resolveMovement(
 ) {
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
   const sideOf = (id: number) => fighters.get(id)?.allegiance ?? "hostile";
+  const actedOn = new Set<number>(); // hidden ones who acted on someone this second (revealed at its end)
+  const reveal = (id: number, sec: number, why: string) => {
+    if (!hidden.delete(id)) return;
+    log.push(`${sec} s: ${nameOf(id)} is no longer hidden (${why}).`);
+    story.push({ sec, k: "spotted", who: id });
+  };
   const hiddenFrom = (viewer: number, target: number) => hidden.has(target) && relation(sideOf(viewer), sideOf(target)) !== "friendly";
   const helped = new Map(assists); // as the round goes: help given (Assist), spent on their next d20 roll
   /** Their next d20 roll (an attack, a save, Dodge's check): advantage if they've been helped, and the help is spent. */
@@ -371,9 +377,15 @@ export function resolveMovement(
   const sensesNow = (id: number): Senses => sensesFrom([...(fighters.get(id)?.senseMods ?? []), ...(afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition))]); // every source at once (best darkvision, then caps; shortest blindness)
 
   /** Whether `viewer` can see `target` now: not invisible to them, within 5 ft if they're blind, and lit or within their darkvision. */
-  const sightOf = (viewer: number, target: number) => {
+  const sightOf = (viewer: number, target: number) => !hiddenFrom(viewer, target) && sightRaw(viewer, target); // hidden from them (Hide): no
+  /** The same, as if nobody were hidden (could they spot them?), with walls and closed doors in the way counting too. */
+  const spots = (viewer: number, target: number) => {
+    const pv = where(viewer), pt = where(target);
+    if (!pv || !pt || effectWalls.some((w) => crosses({ x: pv.col + 0.5, y: pv.row + 0.5 }, { x: pt.col + 0.5, y: pt.row + 0.5 }, w))) return false;
+    return sightRaw(viewer, target);
+  };
+  const sightRaw = (viewer: number, target: number) => {
     const sv = sensesNow(viewer), st = sensesNow(target), pv = where(viewer), pt = where(target);
-    if (hiddenFrom(viewer, target)) return false; // hidden from them (Hide)
     if (!seesThem(sv, st)) return false;
     if (!pv || !pt) return true;
     const d = Math.hypot(pv.col - pt.col, pv.row - pt.row);
@@ -968,6 +980,15 @@ export function resolveMovement(
     trapsFor("enter", sec, (t, id) => { const from = before.get(id), to = pos.get(id); return !!from && !!to && !unmoved(from, to) && entersTrap(t.area, centreOf(from), centreOf(to)); });
     triggersFor("enter", sec, (t, id) => { const from = before.get(id), to = pos.get(id); return !!from && !!to && !unmoved(from, to) && entersTrap(t.area, centreOf(from), centreOf(to)); });
     linksFor(sec, before);
+    // Hidden ones given away: moving into an enemy's view, or an enemy right next to them.
+    for (const [id] of [...hidden]) {
+      if (down.has(id) || !where(id)) continue;
+      const enemies = [...fighters.keys()].filter((o) => o !== id && !down.has(o) && relation(sideOf(o), sideOf(id)) !== "friendly");
+      const moved = !!before.get(id) && !unmoved(before.get(id)!, pos.get(id)!);
+      const near = enemies.find((o) => where(o) && close(where(o)!, where(id)!));
+      const seer = moved ? enemies.find((o) => spots(o, id)) : undefined;
+      if (near !== undefined || seer !== undefined) reveal(id, sec, near !== undefined ? `${nameOf(near)} is right next to them` : `${nameOf(seer!)} sees them move`);
+    }
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
     syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,
       (target, c, source) => afflict(target, c, source, sec, source), (target, a) => release(target, a, "left", sec));
@@ -1041,6 +1062,7 @@ export function resolveMovement(
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
+      if ((step.target && step.target.id !== m.tokenId) || step.aim || (step.picks?.length ?? 0) > 0) actedOn.add(m.tokenId); // acting on someone: a hidden one is given away
       if (step.use?.item) itemsUsed.push({ tokenId: m.tokenId, item: step.use.item }); // an item's action, done: a consumable is used up after the round
       // Search: they're asked for the Investigation roll after the round, from here (help by then is spent on it).
       if (step.action === "search") {
@@ -1260,6 +1282,9 @@ export function resolveMovement(
         didAttack(m.tokenId, sec);
       }
     }
+    // Acting on someone (an attack, an ability or item on someone else, Assist) gives a hidden one away, once it's done.
+    for (const id of actedOn) if (hidden.has(id)) reveal(id, sec, "they acted");
+    actedOn.clear();
     // Evade / Pursue end: within range of what's planned next, within 5 ft, the target down, or their time up.
     for (const [id, c] of chases) {
       if (chaseOver.has(id) || down.has(id) || sec - lag.get(id)! <= c.start + 1e-9) continue;

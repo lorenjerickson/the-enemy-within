@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -26,6 +26,7 @@ import { fireTrigger } from "./mapTriggers";
 import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { moveFollowers, walkRoute } from "./walk";
+import { reveal } from "./hiding";
 import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll } from "@/lib/rolls";
@@ -95,6 +96,7 @@ export async function assistNow(targetId: number): Promise<{ error?: string; tol
   if (gap > 1.05) return { error: "Get within 5 ft of them" };
   const name = tokenLabels(me.level_id).get(t.id) ?? "them";
   setAssist(t.id, me.token_id, me.name);
+  reveal(me.level_id, me.token_id, "helped someone"); // acting on someone gives a hidden one away
   const now = assistOpenRequest(t.id); // a roll they're about to make (not rolled yet) gets it straight away
   logSessionEvent(`${me.name} helps ${name}: advantage on ${now ? "the roll they're making" : "their next roll"}.`);
   revalidatePath("/play");
@@ -146,7 +148,13 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
     // Traps in range they beat the find DC of (each trap has its own).
     const traps = me ? listTraps(me.level_id).filter((t) => !t.found && scored.total >= t.find_dc && distanceToTrap(t.area, { x: me.col + 0.5, y: me.row + 0.5 }) <= SEARCH_RANGE + 0.5) : [];
     for (const t of traps) setTrapFound(t.id, true);
-    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`)];
+    // Anyone hiding from them within 10 ft whose Stealth they beat (Hide).
+    const tokens = me ? listTokens(me.level_id) : [], mine = me && tokens.find((t) => t.id === me.token_id), hiddenNow = me ? listHidden(me.level_id) : new Map<number, number>();
+    const hiders = me && mine ? tokens.filter((t) => hiddenNow.has(t.id) && scored.total > hiddenNow.get(t.id)! && relation(allegianceOf(mine), allegianceOf(t)) !== "friendly" && Math.hypot(t.col - me.col, t.row - me.row) <= SEARCH_RANGE + 0.5) : [];
+    for (const h of hiders) reveal(me!.level_id, h.id, `found by ${me!.name}'s search`);
+    const labelsNow = me ? tokenLabels(me.level_id) : new Map<number, string>();
+    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
+    if (hiders.length) success = true;
     if (traps.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
@@ -390,6 +398,7 @@ export async function useItemNow(actionId: number, targetId?: number): Promise<{
   land(me.token_id, g.statuses?.self?.conditions ?? []);
   land(target, g.statuses?.target?.conditions ?? []);
   const usedUp = useUpItem(me.token_id, g.item);
+  if (target !== me.token_id) reveal(me.level_id, me.token_id, `used ${g.name} on someone`); // acting on someone gives a hidden one away
   const line = `${me.name} uses ${g.name}${target !== me.token_id ? ` on ${labels.get(target)}` : ""}: ${told.join("; ") || "no effect"}${usedUp ? " (used up)" : ""}`;
   logSessionEvent(line);
   revalidatePath("/play");

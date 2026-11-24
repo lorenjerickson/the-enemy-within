@@ -21,7 +21,7 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
-import { clearAssist, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
+import { clearAssist, clearHidden, setHidden, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -127,6 +127,9 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     const t = listMapTriggers(levelId).find((x) => x.id === f.triggerId);
     if (t) fireTrigger(levelId, t, f.tokenId);
   }
+  // Who is still hidden (Hide): revealed ones are no longer, new ones are.
+  for (const id of listHidden(levelId).keys()) clearHidden(id);
+  for (const h of result.hiddenLeft) setHidden(h.tokenId, h.stealth);
   // Help (Assist) still to be used carries on; what was spent (or replaced) is gone.
   for (const a of listAssists(levelId)) clearAssist(a.tokenId);
   for (const a of result.assistsLeft) setAssist(a.tokenId, a.by, a.name);

@@ -1,5 +1,6 @@
 import { downTokens, getEncounter, isGridlessLevel, listStandingOrdersOn, listStructures, listTokens, moveToken, setLinkPrompt } from "@/lib/db";
 import { standingRoute, walkLength } from "@/lib/standing";
+import { revealAfterStep } from "./hiding";
 import { movementBlockers } from "@/lib/visibility";
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
@@ -32,6 +33,7 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
     const from = walked[walked.length - 1];
     moveToken(tokenId, step.x, step.y); // also remembers what they saw from here
     walked.push(step);
+    told.push(...revealAfterStep(levelId, tokenId)); // hidden ones given away (moving into view, or right next to an enemy)
     const sprung = trapsOnStep(levelId, tokenId, from, step);
     told.push(...sprung.map((t) => t.player));
     if (sprung.some((t) => t.stops)) { stopped = true; break; }

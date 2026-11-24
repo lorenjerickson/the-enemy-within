@@ -20,7 +20,7 @@ export function litOn(levelId: number): (p: { col: number; row: number }) => boo
  * the invisible only if they see invisible things; with `unseenToo`, anyone in their line of sight counts: someone in
  * the dark or invisible can still be aimed at, with disadvantage, by guessing).
  */
-export function seenFrom(levelId: number, at: { col: number; row: number }, self?: number, opts: { unseenToo?: boolean } = {}): Set<number> {
+export function seenFrom(levelId: number, at: { col: number; row: number }, self?: number, opts: { unseenToo?: boolean; ignoreHidden?: boolean } = {}): Set<number> {
   const me = self !== undefined ? sensesOf(self, levelId) : undefined;
   const walls = blockingSegments(listStructures(levelId)), from = { x: at.col + 0.5, y: at.row + 0.5 };
   const seen = visibilityPolygon(from, me?.blind ? me.blindRange : SIGHT, walls);
@@ -32,7 +32,7 @@ export function seenFrom(levelId: number, at: { col: number; row: number }, self
       .filter((t) => {
         const p = { x: t.col + 0.5, y: t.row + 0.5 };
         if (t.id === self || !insidePolygon(p, seen)) return false;
-        if (side && hidden.has(t.id) && relation(side, allegianceOf(t)) !== "friendly") return false; // hidden from them (not even a guess)
+        if (side && !opts.ignoreHidden && hidden.has(t.id) && relation(side, allegianceOf(t)) !== "friendly") return false; // hidden from them (not even a guess)
         if (!me) return true;
         if (opts.unseenToo) return true; // there, if unseen (in the dark, or invisible): a guess
         if (!me.blind && !brightEnough(from, p, me.darkvision, illumination, lights, walls)) return false; // too dark to make out
