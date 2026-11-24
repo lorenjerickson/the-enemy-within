@@ -90,8 +90,8 @@ function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: number, 
       // A natural 20 (or within a wider critical range) always hits, a critical; a natural 1 always misses.
       return { total: d + might + w + extra, text: `${text} ${formatModifier(might)}${w ? ` ${formatModifier(w)} ${use?.name ?? weapon?.name}` : ""}${plus(extra, "boost")}`, natural, crit: natural >= critRange(f.statuses), fumble: natural === 1 };
     },
-    save: (attr) => {
-      const [d, text] = d20(combineModes("normal", f.statuses, `save:${attr}`), d20Tweaks(f.statuses, [`save:${attr}`]));
+    save: (attr, more: RollMode[] = []) => {
+      const [d, text] = d20(combineModes("normal", f.statuses, `save:${attr}`, more), d20Tweaks(f.statuses, [`save:${attr}`]));
       const m = mod(attr), extra = boosted(f.statuses, "save") + boosted(f.statuses, `save:${attr}`); // Bless +1d4, rolled each time
       return { total: d + m + extra, text: `${text} ${formatModifier(m)}${plus(extra, "boost")}` };
     },

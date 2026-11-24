@@ -27,7 +27,7 @@ export function fighter(o: { hp?: number; hit?: number; nat?: number; def?: numb
     },
     defense: () => ({ total: o.def ?? 12, text: "fixed" }),
     damage: (_use, crit) => ({ total: (o.dmg ?? 5) * (crit ? 2 : 1), text: "fixed" }),
-    save: () => ({ total: o.save ?? 10, text: "fixed" }),
+    save: (_attr: unknown, more: string[] = []) => ({ total: (o.save ?? 10) + (more.includes("advantage") ? 100 : 0), text: more.includes("advantage") ? "advantage" : "fixed" }), // advantage shows as +100
     ...extra,
     attacks,
   };

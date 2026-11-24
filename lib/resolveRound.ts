@@ -130,7 +130,7 @@ export interface Combatant {
   statuses?: Status[]; // what actions left on them; a status added this round counts straight away
   defense: () => { total: number; text: string };
   damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
-  save?: (attr: Attribute) => { total: number; text: string };
+  save?: (attr: Attribute, more?: RollMode[]) => { total: number; text: string }; // more: advantage / disadvantage from the moment (Assist)
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
   maxHp?: number; // for how bad a wound sounds in the players' story
   allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
@@ -170,8 +170,9 @@ export function resolveMovement(
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
   assists: Map<number, { by: number; name: string }> = new Map(), // who has been helped (Assist): advantage on their next attack roll
 ) {
-  const helped = new Map(assists); // as the round goes: help given (Assist), and spent on an attack
-  const helpUsed = new Set<number>(); // spent this second (taken off at its end)
+  const helped = new Map(assists); // as the round goes: help given (Assist), spent on their next d20 roll
+  /** Their next d20 roll (an attack, a save, Dodge's check): advantage if they've been helped, and the help is spent. */
+  const helpMode = (id: number): RollMode[] => (helped.delete(id) ? ["advantage"] : []);
   const passes = new Set(auraPasses);
   const thingsWorked: { tokenId: number; triggerId: number; sec: number }[] = []; // levers / objects worked (their triggers fire after the round)
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
@@ -215,7 +216,7 @@ export function resolveMovement(
       if (decisions[key] === undefined) throw new SaveNeeded({ sec, key, tokenId: id, name: nameOf(id), condition: what, attr, dc });
       return { total: decisions[key], text: "their roll" };
     }
-    return fighters.get(id)?.save?.(attr) ?? { total: 0, text: "no save" };
+    return fighters.get(id)?.save?.(attr, helpMode(id)) ?? { total: 0, text: "no save" };
   };
   const saveAgainst = (id: number, attr: Attribute, dc: number, key: string, what: string, sec: number): number => saveRoll(id, attr, dc, key, what, sec).total;
   /** A save to end a condition, rolled by its player (the round waits) or the server. */
@@ -371,8 +372,7 @@ export function resolveMovement(
   };
   /** Advantage / disadvantage from not being seen: attacking someone you can't see, attacking someone who can't see you. */
   const unseen = (attacker: number, target: number): RollMode[] => {
-    if (helped.has(attacker)) helpUsed.add(attacker); // helped (Assist): advantage on this attack, then it's spent
-    return [...(!sightOf(attacker, target) ? (["disadvantage"] as const) : []), ...(!sightOf(target, attacker) ? (["advantage"] as const) : []), ...(helped.has(attacker) ? (["advantage"] as const) : [])];
+    return [...(!sightOf(attacker, target) ? (["disadvantage"] as const) : []), ...(!sightOf(target, attacker) ? (["advantage"] as const) : []), ...helpMode(attacker)]; // helped (Assist): advantage, then spent
   };
   /** A creature's triggers: its own (and its gear's), and those of conditions on it. */
   const triggersOf = (id: number) => [
@@ -982,7 +982,7 @@ export function resolveMovement(
           continue;
         }
         // d20 + agility (their own dice, if they rolled with the plan) against DODGE_DC.
-        const f = fighters.get(m.tokenId), check = f?.save ? usingDice(a.step.dice?.check, () => f.save!("agility")) : undefined;
+        const f = fighters.get(m.tokenId), check = f?.save ? usingDice(a.step.dice?.check, () => f.save!("agility", helpMode(m.tokenId))) : undefined;
         if (check && check.total < DODGE_DC) {
           story.push({ sec, k: "dodge", who: m.tokenId, ok: false });
           log.push(`${sec} s: ${m.name} tries to dodge but isn't quick enough (${check.total}: ${check.text} vs DC ${DODGE_DC}).`);
@@ -1241,8 +1241,6 @@ export function resolveMovement(
         didAttack(m.tokenId, sec);
       }
     }
-    for (const id of helpUsed) helped.delete(id); // help spent on an attack this second
-    helpUsed.clear();
     // Evade / Pursue end: within range of what's planned next, within 5 ft, the target down, or their time up.
     for (const [id, c] of chases) {
       if (chaseOver.has(id) || down.has(id) || sec - lag.get(id)! <= c.start + 1e-9) continue;
