@@ -170,7 +170,11 @@ export function resolveMovement(
   triggers: MapTrigger[] = [], // the GM's map triggers: noted the second they fire (their outcomes happen after the round), stopping the mover at once
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
   assists: Map<number, { by: number; name: string }> = new Map(), // who has been helped (Assist): advantage on their next attack roll
+  hiddenAtStart: Map<number, number> = new Map(), // who is hidden (Hide), with their Stealth totals: unseen by anyone not on their side
 ) {
+  const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
+  const sideOf = (id: number) => fighters.get(id)?.allegiance ?? "hostile";
+  const hiddenFrom = (viewer: number, target: number) => hidden.has(target) && relation(sideOf(viewer), sideOf(target)) !== "friendly";
   const helped = new Map(assists); // as the round goes: help given (Assist), spent on their next d20 roll
   /** Their next d20 roll (an attack, a save, Dodge's check): advantage if they've been helped, and the help is spent. */
   const helpMode = (id: number): RollMode[] => (helped.delete(id) ? ["advantage"] : []);
@@ -369,6 +373,7 @@ export function resolveMovement(
   /** Whether `viewer` can see `target` now: not invisible to them, within 5 ft if they're blind, and lit or within their darkvision. */
   const sightOf = (viewer: number, target: number) => {
     const sv = sensesNow(viewer), st = sensesNow(target), pv = where(viewer), pt = where(target);
+    if (hiddenFrom(viewer, target)) return false; // hidden from them (Hide)
     if (!seesThem(sv, st)) return false;
     if (!pv || !pt) return true;
     const d = Math.hypot(pv.col - pt.col, pv.row - pt.row);
@@ -1307,7 +1312,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })) };
+  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })) };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

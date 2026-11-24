@@ -38,6 +38,7 @@ export interface MapState {
   showWalls: boolean; // wall lines: GM only, and only while not hidden (they're still walls either way)
   tokens: MapToken[];
   down: Set<number>; // tokens at 0 health: drawn with a skull
+  hidden?: Set<number>; // hidden tokens (Hide): faded, with a dashed ring (the GM's map)
   lifted?: number | null; // the token the GM has picked up to move: drawn raised, with a shadow
   tokenImages: Map<string, HTMLImageElement>;
   positional: PositionalSound[];
@@ -542,6 +543,7 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
         const dw = (side.naturalWidth / side.naturalHeight) * dh;
         ctx.drawImage(side, r.x + (r.w - dw) / 2, r.y + r.h - dh, dw, dh);
         if (state.down.has(t.id)) drawSkull(ctx, cx, r.y + r.h - dh / 2, rad);
+        if (state.hidden?.has(t.id)) drawHiddenMark(ctx, cx, r.y + r.h - dh / 2, rad);
         continue;
       }
       ctx.save();
@@ -565,6 +567,7 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
       }
       ctx.restore();
       if (state.down.has(t.id)) drawSkull(ctx, cx, cy, rad);
+      if (state.hidden?.has(t.id)) drawHiddenMark(ctx, cx, cy, rad);
     }
   },
   map: (state) => (ctx, w, h) => {
@@ -593,3 +596,17 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
     ctx.restore();
   },
 };
+
+/** A hidden token (Hide), on the GM's map: faded under a dark wash, with a dashed ring. */
+function drawHiddenMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(17,24,39,0.45)";
+  ctx.fill();
+  ctx.setLineDash([rad / 3, rad / 4]);
+  ctx.lineWidth = Math.max(2, rad / 8);
+  ctx.strokeStyle = "#a3a3a3";
+  ctx.stroke();
+  ctx.restore();
+}

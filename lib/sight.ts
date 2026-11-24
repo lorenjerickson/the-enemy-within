@@ -1,4 +1,5 @@
-import { getIllumination, listLights, listStructures, listTokens } from "@/lib/db";
+import { getIllumination, listHidden, listLights, listStructures, listTokens } from "@/lib/db";
+import { allegianceOf, relation } from "@/lib/sides";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import { seesThem } from "@/lib/conditions";
 import { sensesOf } from "@/lib/creatureChanges";
@@ -14,7 +15,7 @@ export function litOn(levelId: number): (p: { col: number; row: number }) => boo
 }
 
 /**
- * The tokens on a level that someone at `at` could see (walls and closed doors block sight), not counting `self`.
+ * The tokens on a level that someone at `at` could see (never someone hidden from their side: Hide) (walls and closed doors block sight), not counting `self`.
  * With `self`: their senses count (blind: only within 5 ft; in the dark: only what's lit or within their darkvision;
  * the invisible only if they see invisible things; with `unseenToo`, anyone in their line of sight counts: someone in
  * the dark or invisible can still be aimed at, with disadvantage, by guessing).
@@ -24,11 +25,14 @@ export function seenFrom(levelId: number, at: { col: number; row: number }, self
   const walls = blockingSegments(listStructures(levelId)), from = { x: at.col + 0.5, y: at.row + 0.5 };
   const seen = visibilityPolygon(from, me?.blind ? me.blindRange : SIGHT, walls);
   const illumination = getIllumination(levelId), lights = listLights(levelId);
+  const tokens = listTokens(levelId), hidden = listHidden(levelId);
+  const mine = self !== undefined ? tokens.find((t) => t.id === self) : undefined, side = mine ? allegianceOf(mine) : undefined;
   return new Set(
-    listTokens(levelId)
+    tokens
       .filter((t) => {
         const p = { x: t.col + 0.5, y: t.row + 0.5 };
         if (t.id === self || !insidePolygon(p, seen)) return false;
+        if (side && hidden.has(t.id) && relation(side, allegianceOf(t)) !== "friendly") return false; // hidden from them (not even a guess)
         if (!me) return true;
         if (opts.unseenToo) return true; // there, if unseen (in the dark, or invisible): a guess
         if (!me.blind && !brightEnough(from, p, me.darkvision, illumination, lights, walls)) return false; // too dark to make out

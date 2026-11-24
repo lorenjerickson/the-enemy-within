@@ -21,7 +21,7 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
-import { clearAssist, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
+import { clearAssist, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
@@ -81,7 +81,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }]))));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }])), listHidden(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.

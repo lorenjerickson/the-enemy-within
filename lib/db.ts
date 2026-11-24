@@ -2743,6 +2743,27 @@ type RollRequestRow = { id: number; player_id: number; character_id: number; spe
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
 
 /** Asks a player to roll; replaces any roll they haven't made yet (and puts away one they rolled but left open). */
+// Hide: a token hidden from everyone not on its side, with its Stealth total (what a Search has to beat). Kept until revealed.
+db.exec(`CREATE TABLE IF NOT EXISTS token_hidden (
+  token_id INTEGER PRIMARY KEY,
+  stealth INTEGER NOT NULL
+)`);
+
+export function setHidden(tokenId: number, stealth: number): void {
+  db.prepare("INSERT OR REPLACE INTO token_hidden (token_id, stealth) VALUES (?, ?)").run(tokenId, Math.round(stealth));
+}
+
+export function clearHidden(tokenId: number): void {
+  db.prepare("DELETE FROM token_hidden WHERE token_id = ?").run(tokenId);
+}
+
+/** Hidden tokens on a level, with their Stealth totals. */
+export function listHidden(levelId: number): Map<number, number> {
+  return new Map(
+    db.prepare<[number], { token_id: number; stealth: number }>("SELECT h.token_id, h.stealth FROM token_hidden h JOIN map_tokens t ON t.id = h.token_id WHERE t.level_id = ?").all(levelId).map((r) => [r.token_id, r.stealth])
+  );
+}
+
 // Assist: whoever was helped has advantage on their next roll (one help at a time; a new one replaces it). Kept until used.
 db.exec(`CREATE TABLE IF NOT EXISTS assists (
   token_id INTEGER PRIMARY KEY,

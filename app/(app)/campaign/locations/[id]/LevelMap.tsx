@@ -1,7 +1,8 @@
 import { listDiscoveries } from "@/lib/story";
 import { playerReplay } from "@/lib/replayView";
 import { blockingSegments } from "@/lib/visibility";
-import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, listTraps, listMapTriggers, listEffectDefs, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas } from "@/lib/db";
+import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlayers, getReplay, listSecrets, listTraps, listMapTriggers, listEffectDefs, getPartyPlacement, getPartyStart, listEffects, listCharacters, listControls, listLights, listNotes, listAmbientSounds, listPositionalSounds, listAssets, listCreatures, listStructures, listTiles, listTokens, type MapLevel, listLastingAreas, listHidden } from "@/lib/db";
+import { allegianceOf, relation } from "@/lib/sides";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
 import { sensesOf } from "@/lib/creatureChanges";
@@ -53,13 +54,16 @@ export default function LevelMap({
   // character of theirs sees only what's around it.
   const all = listTokens(level.id);
   const seeInvisible = !gm && mine.some((id) => sensesOf(id, level.id).seeInvisible);
-  const tokens = gm || seeInvisible ? all : all.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
+  // Hidden tokens (Hide) only for those on their side (and the GM, who sees them marked).
+  const hidden = listHidden(level.id), mySide = allegianceOf(all.find((t) => mine.includes(t.id)) ?? { character_id: 1 });
+  const unhidden = gm ? all : all.filter((t) => !hidden.has(t.id) || mine.includes(t.id) || relation(mySide, allegianceOf(t)) === "friendly");
+  const tokens = gm || seeInvisible ? unhidden : unhidden.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
   const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null && sensesOf(t.id, level.id).blind).map((t) => [t.character_id!, sensesOf(t.id, level.id).blindRange]));
   const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.character_id!, dv]] : []; }));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   return (
-    <MapView linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView hiddenTokens={gm ? [...hidden.keys()] : []} linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={listLastingAreas(level.id)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}

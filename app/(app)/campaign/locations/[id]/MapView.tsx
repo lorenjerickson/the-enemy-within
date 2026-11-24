@@ -86,6 +86,7 @@ export default function MapView({
   selectedTarget = null,
   planExplored,
   downTokens = [],
+  hiddenTokens = [],
   lasting = [],
   gmPlans,
   secrets,
@@ -131,6 +132,7 @@ export default function MapView({
   selectedTarget?: number | null; // a player's selected target (kept from round to round): marked; clicking another token changes it
   planExplored?: Record<number, Point[]>; // GM planning as a character: where it has stood (what it's seen stays shaded in)
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
+  hiddenTokens?: number[]; // hidden tokens (Hide), drawn faded with a dashed ring (GM only: others don't get them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
@@ -590,6 +592,7 @@ export default function MapView({
     tiles: drawnTiles, tileImages: loadedTileImages, structures: shownStructures,
     showWalls: !readOnly && !optimisticHideWalls,
     // Down tokens get a skull; during playback, as of the second shown.
+    hidden: new Set(hiddenTokens),
     down: new Set(replayFrame ? [...replayFrame.down, ...downTokens.filter((id) => !(replay && id in replay.start))] : downTokens),
     lifted: draggingToken?.id ?? null,
     // The GM sees the whole map fully lit; darkness and fog are for players.
