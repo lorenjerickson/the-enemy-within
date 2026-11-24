@@ -27,7 +27,6 @@ import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { walkRoute, walkWithFollowers } from "./walk";
 import { hidingPlaces, reveal, settleHide } from "./hiding";
-import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";

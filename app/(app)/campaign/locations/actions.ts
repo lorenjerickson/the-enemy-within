@@ -9,7 +9,6 @@ import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, s
 import { walkWithFollowers } from "../../../(play)/play/walk";
 import { speedFps } from "@/lib/creatureChanges";
 import { revealAfterStep } from "../../../(play)/play/hiding";
-import { walkLength } from "@/lib/standing";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES } from "@/lib/aoe";
