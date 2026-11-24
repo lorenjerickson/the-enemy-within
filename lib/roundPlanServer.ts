@@ -18,7 +18,7 @@ export function tokenPlanner(tokenId: number) {
   const tok = getTokenMover(tokenId);
   if (!tok || !getEncounter(tok.level_id)) return null;
   if (downTokens(tok.level_id).has(tok.token_id)) return null; // down: no planning until revived
-  const running = Number((JSON.parse(String(tok.movement || "{}")) as { running?: number }).running) || 0; // Dash speed
+  const running = speedOf(tok.token_id, tok.movement, "running"); // Dash speed
   return { tok, walking: speedOf(tok.token_id, tok.movement), running, ...getRoundPlan(tok.level_id, tok.token_id) }; // speed as boosted now
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;

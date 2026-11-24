@@ -1,3 +1,4 @@
+import { asSpeed, ftPerSec } from "@/lib/speed";
 import type { Affliction, Condition, Duration, Effect, Lifecycle, Modifier } from "@/lib/conditions";
 import { BUILTIN_CONDITIONS, BUILTIN_EFFECTS, BUILTIN_PIECES } from "@/lib/builtinConditions";
 import { DEFAULT_LIFECYCLE, asCondition, reapplied } from "@/lib/conditions";
@@ -11,7 +12,7 @@ import type { TargetCount, TargetWho } from "@/lib/sides";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { CREATURE_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
+import { CREATURE_TYPES, MOVEMENT_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
 import { areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
 import type { Trap, TrapArea } from "@/lib/traps";
@@ -599,8 +600,11 @@ const parseCreature = (row: CreatureRow): Creature => ({
   ...row,
   attributes: JSON.parse(row.attributes),
   equipment: JSON.parse(row.equipment),
-  movement: JSON.parse(row.movement),
+  movement: movementOf(JSON.parse(row.movement)),
 });
+
+/** Stored movement as speeds (an old plain number: feet per round). */
+const movementOf = (raw: Record<string, unknown>): Movement => Object.fromEntries(MOVEMENT_TYPES.map((m) => [m, asSpeed(raw?.[m] ?? 0)])) as Movement;
 
 export function listCreatures(): Creature[] {
   return db.prepare<[], CreatureRow>(`SELECT ${CREATURE_COLUMNS} FROM creatures ORDER BY name`).all().map(parseCreature);
@@ -2539,6 +2543,19 @@ export function settleEffects(): void {
   migrateConditions();
   seedBuiltinEffects();
   seedCatalogEffects();
+  settleSpeeds();
+}
+
+/** Old speeds (plain numbers, feet per round) become distance over time: feet per second (30 → 5 ft/s). Idempotent. */
+export function settleSpeeds(): void {
+  for (const table of ["creatures", "characters"] as const) {
+    for (const r of db.prepare<[], { id: number; movement: string }>(`SELECT id, movement FROM ${table}`).all()) {
+      const raw = JSON.parse(r.movement || "{}") as Record<string, unknown>;
+      if (!Object.values(raw).some((v) => typeof v === "number")) continue;
+      const next = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, typeof v === "number" ? ftPerSec(Math.round((v / 6) * 100) / 100) : v]));
+      db.prepare(`UPDATE ${table} SET movement = ? WHERE id = ?`).run(JSON.stringify(next), r.id);
+    }
+  }
 }
 
 // Strain: points on a creature's attributes (each −1 to it, never below half), left by conditions; they outlast them

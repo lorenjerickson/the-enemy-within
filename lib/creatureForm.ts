@@ -1,3 +1,4 @@
+import { asSpeed } from "@/lib/speed";
 import { CREATURE_TYPES, EQUIP_SLOTS, listItems, type Creature, type CreatureType, type Equipment } from "@/lib/db";
 import { imageFromForm } from "@/lib/images";
 import { isDiceFormula } from "@/lib/itemTypes";
@@ -24,7 +25,7 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
   }
 
   const movement = Object.fromEntries(
-    MOVEMENT_TYPES.map((m) => [m, Math.max(0, Number(formData.get(`move:${m}`)) || 0)])
+    MOVEMENT_TYPES.map((m) => [m, asSpeed(Math.max(0, Number(formData.get(`move:${m}`)) || 0))]) // feet per round (units come with the form)
   ) as Movement;
 
   const items = new Map(listItems().map((i) => [i.id, i]));

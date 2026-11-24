@@ -1,3 +1,4 @@
+import { asSpeed, feetPerSecond } from "@/lib/speed";
 /**
  * Everything that changes a creature's numbers right now, in one place, so every roll and every speed sees the same
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
@@ -143,11 +144,15 @@ export function speedFactor(tokenId: number): number {
 }
 
 /** A token's speed (feet a round) of one kind, with what changes it (boosts, then multipliers); never below 0. */
-export function speedOf(tokenId: number, movement: string | Record<string, number>, type: MovementType = "walking"): number {
-  const base = (typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0;
+export function speedOf(tokenId: number, movement: string | Record<string, unknown>, type: MovementType = "walking"): number {
+  // In feet per round for now (boosts are still in feet per round); speedFps for feet per second.
+  const base = feetPerSecond(asSpeed((typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0)) * 6;
   const changes = changesOn(tokenId);
-  return Math.max(0, Math.floor(settled(base + steadyBoost(changes, `movement:${type}`), changes, `movement:${type}`).value * speedFactor(tokenId)));
+  return Math.max(0, Math.round(settled(base + steadyBoost(changes, `movement:${type}`), changes, `movement:${type}`).value * speedFactor(tokenId) * 100) / 100);
 }
+
+/** A token's speed now (boosts, conditions), in feet per second. */
+export const speedFps = (tokenId: number, movement: string | Record<string, unknown>, type: MovementType = "walking") => speedOf(tokenId, movement, type) / 6;
 
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 

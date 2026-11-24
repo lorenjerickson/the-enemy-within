@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { CREATURE_TYPES, MOVEMENT_TYPES } from "@/lib/creatureTypes";
+import { asSpeed, feetPerSecond } from "@/lib/speed";
 import { DICE_PATTERN } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
 import AttributesInput from "./AttributesInput";
@@ -58,12 +59,12 @@ export default function CreatureForm({
           <input name="height" type="number" min="0.05" max="50" step="0.05" required placeholder="Height (m)" defaultValue={initial?.height ?? 1.8} className="input w-full" /></label>
       </div>
       <fieldset className="fieldset">
-        <legend className="fieldset-legend">Maximum movement range (metres, 0 = none)</legend>
+        <legend className="fieldset-legend">Speed (feet per round, 0 = none)</legend>
         <div className="grid grid-cols-7 gap-2">
           {MOVEMENT_TYPES.map((m) => (
             <label key={m} className="floating-label">
               <span>{capitalize(m)}</span>
-              <input name={`move:${m}`} type="number" min="0" step="any" placeholder={capitalize(m)} defaultValue={initial?.movement?.[m] ?? 0} className="input" />
+              <input name={`move:${m}`} type="number" min="0" step="any" placeholder={capitalize(m)} defaultValue={Math.round(feetPerSecond(asSpeed(initial?.movement?.[m] ?? 0)) * 6 * 100) / 100} className="input" />
             </label>
           ))}
         </div>
