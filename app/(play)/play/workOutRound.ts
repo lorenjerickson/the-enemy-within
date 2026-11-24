@@ -13,7 +13,7 @@ import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
 import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
-import { saveRollFor, skillCheckFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
+import { saveRollFor, skillCheckFor, speedFps, effectiveMaxHp } from "@/lib/creatureChanges";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { allegianceOf, relation } from "@/lib/sides";
 import { reveal as revealHidden } from "./hiding";
@@ -72,7 +72,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
       initiative: initiative.get(t.id) ?? -1000, // hasn't rolled: loses every tie
       start: { col: t.col, row: t.row },
       plan: getRoundPlan(levelId, t.id).plan,
-      walking: speedOf(t.id, getTokenMover(t.id)?.movement ?? "{}"),
+      fps: speedFps(t.id, getTokenMover(t.id)?.movement ?? "{}"),
       attackRange: attackRange(t.id),
       equipment: tokenWho(t.id)?.equipment ?? {},
     }));

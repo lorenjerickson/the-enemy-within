@@ -145,7 +145,7 @@ export function speedFactor(tokenId: number): number {
 
 /** A token's speed (feet a round) of one kind, with what changes it (boosts, then multipliers); never below 0. */
 export function speedOf(tokenId: number, movement: string | Record<string, unknown>, type: MovementType = "walking"): number {
-  // In feet per round for now (boosts are still in feet per round); speedFps for feet per second.
+  // Feet a round (6 s): boosts are still in feet per round until they carry units. Use speedFps (feet per second).
   const base = feetPerSecond(asSpeed((typeof movement === "string" ? JSON.parse(movement || "{}") : movement)[type] ?? 0)) * 6;
   const changes = changesOn(tokenId);
   return Math.max(0, Math.round(settled(base + steadyBoost(changes, `movement:${type}`), changes, `movement:${type}`).value * speedFactor(tokenId) * 100) / 100);

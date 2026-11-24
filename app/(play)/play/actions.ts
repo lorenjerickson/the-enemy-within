@@ -3,10 +3,10 @@
 import { applyConditionNow, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
-import { saveRollFor, skillCheckFor, speedOf } from "@/lib/creatureChanges";
+import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db";
 import { seenFrom } from "@/lib/sight";
-import { planEnd, timeline } from "@/lib/roundPlan";
+import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
@@ -113,7 +113,7 @@ export async function startHide(): Promise<{ error?: string; seen?: boolean; spo
   const me = getPlayerToken(user.id);
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
-  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedOf(me.token_id, me.movement));
+  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
   if (!places.seen) askStealth(user.id, me, false);
   revalidatePath("/play");
   return places;
@@ -126,7 +126,7 @@ export async function hideAt(col: number, row: number): Promise<{ error?: string
   const me = getPlayerToken(user.id);
   if (!me) return { error: "You're not on the map yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
-  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedOf(me.token_id, me.movement));
+  const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
   const goal = places.spots.find((c) => c.col === Math.round(Number(col)) && c.row === Math.round(Number(row)));
   if (!goal) return { error: "That isn't a blind spot you can reach" };
   const squares = squareRoute({ col: Math.round(me.col), row: Math.round(me.row) }, goal, movementBlockers(listStructures(me.level_id)), () => true);
@@ -282,7 +282,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   if (!me) return { error: "You're not on the map yet" };
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
-  const left = Math.max(0, speedOf(me.token_id, me.movement) - me.moved);
+  const left = Math.max(0, speedFps(me.token_id, me.movement) * ROUND_SECONDS - me.moved); // feet left this round
   const walls = movementBlockers(listStructures(me.level_id));
   let feet: number;
   if (isGridlessLevel(me.level_id)) {
@@ -461,7 +461,7 @@ export async function hidePlanOptions(): Promise<{ error?: string; seen?: boolea
   const user = await requireUser();
   const p = planner(user.id);
   if (!p) return { error: "Not in an encounter" };
-  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), (timeline(p.plan, p.walking).left * p.walking) / 6);
+  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), timeline(p.plan, p.walking).left * p.walking);
 }
 
 /** The player's character's planner in a running encounter. */

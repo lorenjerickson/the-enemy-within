@@ -31,7 +31,8 @@ import EncounterPanel, { planningData } from "./EncounterPanel";
 import ContestModal from "./ContestModal";
 import SaveWaitModal from "./SaveWaitModal";
 import { getPendingRound, getCharacterPlayer, getTokenTarget, getRoundStories, listCharacterSightings } from "@/lib/db";
-import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
+import { canShakeOff, restrictionsOn, speedFps } from "@/lib/creatureChanges";
+import { ROUND_SECONDS } from "@/lib/roundPlan";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, planEnd, timeline } from "@/lib/roundPlan";
@@ -153,8 +154,8 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   // Locked doors within reach of their character.
   const me = getPlayerToken(user.id);
   // In an encounter: their round plan (laid out in time) and where it leaves them.
-  const walking: number = me ? speedOf(me.token_id, me.movement) : 0; // as boosted now
-  const running: number = me ? speedOf(me.token_id, me.movement, "running") : 0; // Dash speed (as boosted now)
+  const walking: number = me ? speedFps(me.token_id, me.movement) : 0; // walking speed, feet per second, as boosted now
+  const running: number = me ? speedFps(me.token_id, me.movement, "running") : 0; // Dash speed, feet per second (as boosted now)
   const isDown = !!me && downTokens(me.level_id).has(me.token_id); // down: sits out planning until revived
   const rp = me && !isDown && getEncounter(me.level_id) ? getRoundPlan(me.level_id, me.token_id) : null;
   // Who they can see (to pick who to attack): other tokens in their line of sight.
@@ -218,7 +219,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -239,7 +240,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
       <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
       {place ? (
-        <LevelMap readOnly linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: (plan.left * walking) / 6, free: false, from: plan.from, perSecond: walking / 6, runPerSecond: running / 6 } : { characterId: me.character_id, feet: Math.max(0, walking - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
+        <LevelMap readOnly linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { characterId: me.character_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>

@@ -68,7 +68,7 @@ export interface Mover {
   initiative: number; // tie breaker only; not rolled yet = lowest
   start: Pos;
   plan: PlanStep[];
-  walking: number; // feet per round
+  fps: number; // walking speed, feet per second
   attackRange?: number; // squares a plain Attack reaches (their main-hand weapon's range); 1 = within reach
   equipment?: Partial<Record<EquipSlot, number | null>>; // what they wear (refits change it mid-round)
 }
@@ -77,7 +77,7 @@ export interface Mover {
 function planner(m: Mover, walls: Segment[], gridless: boolean): (t: number) => Pos {
   const legs: { start: number; end: number; points: Pos[] }[] = [];
   let at = m.start;
-  for (const s of timeline(m.plan, m.walking).steps) {
+  for (const s of timeline(m.plan, m.fps).steps) {
     if (s.step.kind !== "move") continue;
     const to = s.step.to;
     let points: Pos[];
@@ -671,7 +671,7 @@ export function resolveMovement(
   const acts = new Map<number, Act[]>(
     order.map((m) => [
       m.tokenId,
-      timeline(m.plan, m.walking).steps.flatMap((s) => (s.step.kind === "action" ? [{ start: s.start, end: s.end, step: s.step }] : [])),
+      timeline(m.plan, m.fps).steps.flatMap((s) => (s.step.kind === "action" ? [{ start: s.start, end: s.end, step: s.step }] : [])),
     ])
   );
   const finished = new Set<Act>();
@@ -689,7 +689,7 @@ export function resolveMovement(
   // Evade / Pursue: from when each starts (in its own plan time), its target, and whether it's over (within 5 ft).
   const chases = new Map<number, { start: number; end: number; action: string; target: { id: number; name: string } }>();
   for (const m of order) {
-    for (const s of timeline(m.plan, m.walking).steps) {
+    for (const s of timeline(m.plan, m.fps).steps) {
       if (s.step.kind === "action" && CHASE_ACTIONS.includes(s.step.action) && s.step.target) chases.set(m.tokenId, { start: s.start, end: s.end, action: s.step.action, target: s.step.target });
     }
   }
@@ -703,7 +703,7 @@ export function resolveMovement(
    * spot clear of bodies and walls that gets closest.
    */
   function detourStep(m: Mover, from: Pos, to: Pos): Pos {
-    const step = m.walking / FEET_PER_SQUARE / ROUND_SECONDS, d = dist(from, to);
+    const step = m.fps / FEET_PER_SQUARE, d = dist(from, to);
     if (d < 1e-6 || step <= 0) return from;
     const bodies = [...down].flatMap((id) => (id === m.tokenId ? [] : where(id) ?? []));
     const len = Math.min(step, d), heading = Math.atan2(to.row - from.row, to.col - from.col);
@@ -718,7 +718,7 @@ export function resolveMovement(
   }
   /** One second of Evade / Pursue from `from` with the target at `them`: toward by the most direct route, or as far away as it can get. */
   function chaseStep(m: Mover, from: Pos, them: Pos, pursue: boolean, cap = Infinity): Pos {
-    const perSecond = m.walking / FEET_PER_SQUARE / ROUND_SECONDS; // 30 ft speed → 1 square a second
+    const perSecond = m.fps / FEET_PER_SQUARE; // 5 ft/s → 1 square a second
     const b = Math.min(budget.get(m.tokenId)! + perSecond, cap); // cap: Follow goes no further than its leader did
     // Spots someone else stands in now: a chaser goes around them rather than waiting behind them (anyone down is
     // no obstacle: they can be stepped over).

@@ -222,7 +222,7 @@ export async function gmHidePlanOptions(tokenId: number): Promise<{ error?: stri
   await requireGm();
   const p = tokenPlanner(Number(tokenId));
   if (!p) return { error: "They can't plan now" };
-  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), (timeline(p.plan, p.walking).left * p.walking) / 6);
+  return hidingPlaces(p.tok.level_id, p.tok.token_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), timeline(p.plan, p.walking).left * p.walking);
 }
 
 /** Whether a token is hidden (Hide), with its Stealth total. */

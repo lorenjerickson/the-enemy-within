@@ -9,30 +9,30 @@ const act = (action: PlayerActionId, extra: Partial<ActionStep> = {}): PlanStep 
 const rat = { id: 2, name: "Rat" };
 const gear = (g: Partial<GearAction> = {}): GearAction => ({ id: 1, name: "Bite", seconds: 2, range: 1, attack: "+3", damage: "1d6", roll: "normal", ...g });
 
-test("moving at walking speed: 30 ft a round is 5 ft a second", () => {
-  assert.equal(stepSeconds(move(1, 0, 5), 30), 1);
-  assert.equal(stepSeconds(move(3, 0, 15), 30), 3);
+test("moving at walking speed: 5 ft a second (30 ft a round)", () => {
+  assert.equal(stepSeconds(move(1, 0, 5), 5), 1);
+  assert.equal(stepSeconds(move(3, 0, 15), 5), 3);
   assert.equal(stepSeconds(move(1, 0, 5), 0), Infinity);
 });
 
 test("actions take their default seconds; gear actions their own", () => {
-  assert.equal(stepSeconds(act("attack"), 30), 2);
-  assert.equal(stepSeconds(act("dodge"), 30), 1);
-  assert.equal(stepSeconds(act("attack", { use: gear({ seconds: 3 }) }), 30), 3);
+  assert.equal(stepSeconds(act("attack"), 5), 2);
+  assert.equal(stepSeconds(act("dodge"), 5), 1);
+  assert.equal(stepSeconds(act("attack", { use: gear({ seconds: 3 }) }), 5), 3);
 });
 
 test("timeline lays steps end to end", () => {
-  const t = timeline([move(2, 0, 10), act("attack", { target: rat })], 30);
+  const t = timeline([move(2, 0, 10), act("attack", { target: rat })], 5);
   assert.deepEqual(t.steps.map((s) => [s.start, s.end]), [[0, 2], [2, 4]]);
   assert.equal(t.used, 4);
   assert.equal(t.left, 2);
 });
 
 test("a chase with no seconds set runs the rest of the round", () => {
-  const t = timeline([move(1, 0, 5), act("pursue", { target: rat })], 30);
+  const t = timeline([move(1, 0, 5), act("pursue", { target: rat })], 5);
   assert.equal(t.steps[1].end, ROUND_SECONDS);
   assert.equal(t.left, 0);
-  assert.equal(timeline([act("evade", { target: rat, seconds: 2 })], 30).used, 2);
+  assert.equal(timeline([act("evade", { target: rat, seconds: 2 })], 5).used, 2);
 });
 
 test("stepKind sorts movement, actions, bonus actions and reactions", () => {
@@ -47,25 +47,25 @@ test("stepKind sorts movement, actions, bonus actions and reactions", () => {
 
 test("cannotAdd: one action, bonus action and reaction a round", () => {
   const plan = [act("attack", { target: rat })];
-  assert.match(cannotAdd(plan, act("attack", { target: rat }), 30)!, /already planned your action/);
-  assert.equal(cannotAdd(plan, act("dodge"), 30), null);
-  assert.match(cannotAdd([act("dodge")], act("dodge"), 30)!, /reaction/);
-  assert.match(cannotAdd([act("refit")], act("refit"), 30)!, /bonus action/);
+  assert.match(cannotAdd(plan, act("attack", { target: rat }), 5)!, /already planned your action/);
+  assert.equal(cannotAdd(plan, act("dodge"), 5), null);
+  assert.match(cannotAdd([act("dodge")], act("dodge"), 5)!, /reaction/);
+  assert.match(cannotAdd([act("refit")], act("refit"), 5)!, /bonus action/);
 });
 
 test("cannotAdd: targeted actions need a target (or an aim, or 'all')", () => {
-  assert.equal(cannotAdd([], act("attack"), 30), "Pick a target");
+  assert.equal(cannotAdd([], act("attack"), 5), "Pick a target");
   const area = gear({ area: { shape: "circle", ft: 10, dc: 12, save: "agility", half: true } });
-  assert.equal(cannotAdd([], act("attack", { use: area }), 30), "Aim it on the map");
-  assert.equal(cannotAdd([], act("attack", { use: area, aim: { col: 3, row: 3 } }), 30), null);
-  assert.equal(cannotAdd([], act("attack", { use: gear({ targeting: { who: "enemy", count: "all", n: 0 } }) }), 30), null);
+  assert.equal(cannotAdd([], act("attack", { use: area }), 5), "Aim it on the map");
+  assert.equal(cannotAdd([], act("attack", { use: area, aim: { col: 3, row: 3 } }), 5), null);
+  assert.equal(cannotAdd([], act("attack", { use: gear({ targeting: { who: "enemy", count: "all", n: 0 } }) }), 5), null);
 });
 
 test("cannotAdd: everything must fit the six seconds", () => {
   const plan = [move(5, 0, 25)]; // 5 s
-  assert.match(cannotAdd(plan, act("attack", { target: rat }), 30)!, /doesn't fit/);
-  assert.equal(cannotAdd(plan, act("dodge"), 30), null);
-  assert.match(cannotAdd([move(6, 0, 30)], act("pursue", { target: rat }), 30)!, /No time left/);
+  assert.match(cannotAdd(plan, act("attack", { target: rat }), 5)!, /doesn't fit/);
+  assert.equal(cannotAdd(plan, act("dodge"), 5), null);
+  assert.match(cannotAdd([move(6, 0, 30)], act("pursue", { target: rat }), 5)!, /No time left/);
 });
 
 test("unavailable greys out buttons with a reason", () => {

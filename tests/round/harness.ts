@@ -33,7 +33,7 @@ export function fighter(o: { hp?: number; hit?: number; nat?: number; def?: numb
   };
 }
 
-export const mover = (tokenId: number, start: Pos, plan: PlanStep[] = [], o: Partial<Mover> = {}): Mover => ({ tokenId, name: `T${tokenId}`, initiative: 20 - tokenId, start, plan, walking: 30, ...o });
+export const mover = (tokenId: number, start: Pos, plan: PlanStep[] = [], o: Partial<Mover> = {}): Mover => ({ tokenId, name: `T${tokenId}`, initiative: 20 - tokenId, start, plan, fps: 5, ...o });
 export const move = (col: number, row: number, feet = 5): PlanStep => ({ kind: "move", to: { col, row }, feet });
 export const act = (action: PlayerActionId, extra: Partial<Extract<PlanStep, { kind: "action" }>> = {}): PlanStep => ({ kind: "action", action, ...extra });
 export const attack = (id: number, extra: Partial<Extract<PlanStep, { kind: "action" }>> = {}) => act("attack", { target: { id, name: `T${id}` }, ...extra });

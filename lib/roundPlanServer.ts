@@ -11,15 +11,15 @@ import { movementBlockers } from "@/lib/visibility";
 import { REACH, distanceToDoor } from "../app/(play)/play/reach";
 import { interactablesNear } from "@/lib/triggers";
 import { hidingPlaces } from "../app/(play)/play/hiding";
-import { canShakeOff, restrictionsOn, speedOf } from "@/lib/creatureChanges";
+import { canShakeOff, restrictionsOn, speedFps } from "@/lib/creatureChanges";
 
 /** Round planning for one token (a player's character or a GM creature), shared by players' and the GM's actions. */
 export function tokenPlanner(tokenId: number) {
   const tok = getTokenMover(tokenId);
   if (!tok || !getEncounter(tok.level_id)) return null;
   if (downTokens(tok.level_id).has(tok.token_id)) return null; // down: no planning until revived
-  const running = speedOf(tok.token_id, tok.movement, "running"); // Dash speed
-  return { tok, walking: speedOf(tok.token_id, tok.movement), running, ...getRoundPlan(tok.level_id, tok.token_id) }; // speed as boosted now
+  const running = speedFps(tok.token_id, tok.movement, "running"); // Dash speed, feet per second
+  return { tok, walking: speedFps(tok.token_id, tok.movement), running, ...getRoundPlan(tok.level_id, tok.token_id) }; // walking speed (feet per second) as boosted now
 }
 export type Planner = NonNullable<ReturnType<typeof tokenPlanner>>;
 
@@ -48,7 +48,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   // can reach in the time left (a move), and then hide in a hurry; with no blind spot in reach, they can't.
   if (step.kind === "action" && step.action === "hide" && !step.hurried) {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
-    const places = hidingPlaces(p.tok.level_id, p.tok.token_id, from, (timeline(p.plan, p.walking).left * p.walking) / 6);
+    const places = hidingPlaces(p.tok.level_id, p.tok.token_id, from, timeline(p.plan, p.walking).left * p.walking);
     if (step.cover) {
       const spot = places.spots.find((c) => c.col === Math.round(Number(step.cover!.col)) && c.row === Math.round(Number(step.cover!.row)));
       if (!spot) return "That isn't a blind spot you can reach in time";
@@ -62,7 +62,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   let add: PlanStep;
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
-    const feetLeft = (timeline(p.plan, p.walking).left * (run ?? p.walking)) / 6;
+    const feetLeft = timeline(p.plan, p.walking).left * (run ?? p.walking);
     const walls = movementBlockers(listStructures(p.tok.level_id));
     if (isGridlessLevel(p.tok.level_id)) {
       // Straight there, or by the shortest way round walls in the way (a move per leg).
@@ -219,7 +219,7 @@ function remeasure(p: Planner, from: { col: number; row: number }, to: { col: nu
       return { kind: "move" as const, to: end, feet: Math.round(Math.hypot(pt.x - a.x, pt.y - a.y) * FEET_PER_SQUARE * 10) / 10 };
     });
   }
-  const sq = reachableSquares(from, (p.walking * 2) / FEET_PER_SQUARE, walls).get(squareKey(to.col, to.row)); // anything further won't fit the round anyway
+  const sq = reachableSquares(from, (p.walking * ROUND_SECONDS * 2) / FEET_PER_SQUARE, walls).get(squareKey(to.col, to.row)); // anything further won't fit the round anyway
   return sq?.steps ? [{ kind: "move", to: { col: sq.col, row: sq.row }, feet: sq.steps * FEET_PER_SQUARE }] : null;
 }
 
@@ -258,9 +258,9 @@ export function planView(tokenId: number) {
     ready: p.ready,
     rolled: p.rolled,
     from: planEnd(p.plan, { col: p.tok.col, row: p.tok.row }),
-    feetLeft: (t.left * p.walking) / 6,
-    perSecond: p.walking / 6, // feet a second at walking pace
-    runPerSecond: p.running / 6, // and running (Dash); 0: can't run
+    feetLeft: t.left * p.walking,
+    perSecond: p.walking, // feet a second at walking pace
+    runPerSecond: p.running, // and running (Dash); 0: can't run
     gear: gearActions(tokenId, plannedEquipment(p)), // their actions, with any refit planned so far done
     refits: refitOptions(tokenId, plannedEquipment(p)),
     attackRange: attackRange(tokenId, plannedEquipment(p)), // squares a plain Attack reaches (after any refit)

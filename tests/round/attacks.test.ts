@@ -125,7 +125,7 @@ test("an ability without damage takes effect on a target in range, and fails out
   assert.match(near.text, /T1 uses Mesmerize on T2/);
   assert.deepEqual(near.statuses.map((s) => s.tokenId), [2]);
   assert.equal(caster.attacks.length, 0, "no attack roll");
-  const far = resolve([mover(1, { col: 0, row: 0 }, [attack(2, { use: mesmerize })], { walking: 0 }), mover(2, { col: 6, row: 0 })], { 1: fighter(), 2: fighter() });
+  const far = resolve([mover(1, { col: 0, row: 0 }, [attack(2, { use: mesmerize })], { fps: 0 }), mover(2, { col: 6, row: 0 })], { 1: fighter(), 2: fighter() });
   assert.match(far.text, /fails: out of range/);
   assert.deepEqual(far.statuses, []);
 });

@@ -38,7 +38,7 @@ export interface GearAction {
 export const dealsDamage = (g: GearAction | undefined) => !!g?.damage;
 
 export type PlanStep =
-  | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet a round); it uses the round's action
+  | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet per second); it uses the round's action
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
   | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string }; hurried?: boolean };
@@ -80,23 +80,23 @@ export function afterRefits(equipment: Equipment, plan: PlanStep[]): Equipment {
   return out;
 }
 
-/** Seconds a step takes: moving at walking speed covers speed / 6 feet a second (30 ft → 5 ft/s). */
-export function stepSeconds(step: PlanStep, walkingFeet: number): number {
+/** Seconds a step takes: a move at their walking speed (feet per second), or a Dash at its running speed. */
+export function stepSeconds(step: PlanStep, walkFps: number): number {
   if (step.kind === "move") {
-    const speed = step.run ?? walkingFeet; // a Dash goes at running speed
-    return speed > 0 ? Math.round((step.feet / (speed / ROUND_SECONDS)) * 10) / 10 : Infinity;
+    const speed = step.run ?? walkFps; // a Dash goes at running speed
+    return speed > 0 ? Math.round((step.feet / speed) * 10) / 10 : Infinity;
   }
   return step.use?.seconds ?? ACTION_SECONDS[step.action] ?? 1;
 }
 
 /** The plan laid out in time: when each step starts and ends, and the seconds used. */
-export function timeline(plan: PlanStep[], walkingFeet: number) {
+export function timeline(plan: PlanStep[], walkFps: number) {
   let t = 0;
   const steps = plan.map((step) => {
     const start = t;
     // Evade / Pursue run for their seconds, or the rest of the round (stopping early within 5 ft of the target,
     // or once the next action's target is within its range).
-    t += step.kind === "action" && CHASE_ACTIONS.includes(step.action) ? (step.seconds ?? Math.max(0, ROUND_SECONDS - t)) : stepSeconds(step, walkingFeet);
+    t += step.kind === "action" && CHASE_ACTIONS.includes(step.action) ? (step.seconds ?? Math.max(0, ROUND_SECONDS - t)) : stepSeconds(step, walkFps);
     return { step, start, end: t };
   });
   return { steps, used: t, left: Math.max(0, ROUND_SECONDS - t) };
@@ -123,7 +123,7 @@ export function unavailable(plan: PlanStep[], used: number, kind: ReturnType<typ
   return null;
 }
 
-export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number): string | null {
+export function cannotAdd(plan: PlanStep[], step: PlanStep, walkFps: number): string | null {
   // One action, one bonus action and one reaction a round; movement (Move, Dash, Evade, Pursue) as time allows.
   const kind = stepKind;
   if (kind(step) === "action" && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round";
@@ -132,8 +132,8 @@ export function cannotAdd(plan: PlanStep[], step: PlanStep, walkingFeet: number)
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
   if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";
   if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim) && step.use?.targeting?.count !== "all") return step.use?.area ? "Aim it on the map" : "Pick a target";
-  if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkingFeet).left <= 0) return "No time left this round";
-  if (timeline([...plan, step], walkingFeet).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
+  if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkFps).left <= 0) return "No time left this round";
+  if (timeline([...plan, step], walkFps).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;
 }
 
