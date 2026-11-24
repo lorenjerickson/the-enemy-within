@@ -1438,6 +1438,30 @@ export function listStandingOrdersOn(targetId: number): { tokenId: number; mode:
     .map((r) => ({ tokenId: r.token_id, mode: r.mode }));
 }
 
+// Walks out of encounters (free moves, followers), so every map on the level plays them, not just the walker's.
+// Kept a few seconds: a map polls each second and only plays what's fresh.
+db.exec(`CREATE TABLE IF NOT EXISTS token_walks (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  route TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  at INTEGER NOT NULL
+)`);
+
+/** Records a walk (route: token corners, start first) by `userId` (0: nobody's own screen played it). */
+export function addTokenWalk(levelId: number, tokenId: number, route: { x: number; y: number }[], userId: number): void {
+  db.prepare("DELETE FROM token_walks WHERE at < ?").run(Date.now() - 60_000);
+  db.prepare("INSERT INTO token_walks (level_id, token_id, route, user_id, at) VALUES (?, ?, ?, ?, ?)").run(levelId, tokenId, JSON.stringify(route), userId, Date.now());
+}
+
+export function listTokenWalks(levelId: number, afterId: number): { id: number; token_id: number; route: { x: number; y: number }[]; user_id: number }[] {
+  return db
+    .prepare<[number, number, number], { id: number; token_id: number; route: string; user_id: number }>("SELECT id, token_id, route, user_id FROM token_walks WHERE level_id = ? AND id > ? AND at > ? ORDER BY id")
+    .all(levelId, afterId, Date.now() - 5_000)
+    .map((r) => ({ ...r, route: JSON.parse(r.route) }));
+}
+
 // A level link a token came onto in a round: its player is asked (before planning again) whether to take it;
 // `back` is where they stepped from (where "Stay" puts them).
 db.exec(`CREATE TABLE IF NOT EXISTS link_prompts (

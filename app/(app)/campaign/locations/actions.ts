@@ -5,7 +5,7 @@ import { syncAurasOn } from "@/lib/auraSync";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
-import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, listTokens, setStructureEnds, splitStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, listTokens, addTokenWalk, setStructureEnds, splitStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
 import { moveFollowers } from "../../../(play)/play/walk";
 import { walkLength } from "@/lib/standing";
 import { audioFromForm, imageFromForm } from "@/lib/images";
@@ -249,7 +249,7 @@ export async function moveTokenTo(locationId: number, id: number, col: number, r
   moveToken(id, across(levelId, col), settle(levelId, across(levelId, col), row));
   syncAurasOn(levelId); // moved into (or out of) an aura
   const now = listTokens(levelId).find((t) => t.id === id);
-  if (was && now) moveFollowers(levelId, id, walkLength([{ x: was.col, y: was.row }, { x: now.col, y: now.row }], isGridlessLevel(levelId))); // out of encounters: those following / pursuing / evading it
+  if (was && now) for (const w of moveFollowers(levelId, id, walkLength([{ x: was.col, y: was.row }, { x: now.col, y: now.row }], isGridlessLevel(levelId)))) addTokenWalk(levelId, w.tokenId, w.route, 0); // out of encounters: those following / pursuing / evading it (every map plays their walks)
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }

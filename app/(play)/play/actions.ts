@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -139,6 +139,13 @@ export async function pingsSince(levelId: number, afterId: number): Promise<(Pin
   return listPings(Number(levelId), Number(afterId)).map((p) => ({ ...p, mine: p.user_id === user.id }));
 }
 
+/** Walks out of encounters on a level since the last one this map saw (polled each second, with pings): `mine` ones
+ * this screen already played. */
+export async function walksSince(levelId: number, afterId: number) {
+  const user = await requireUser();
+  return listTokenWalks(Number(levelId), Number(afterId)).map((w) => ({ id: w.id, tokenId: w.token_id, route: w.route, mine: w.user_id === user.id }));
+}
+
 /** Effects scripts played on a level since the last one this map saw (polled each second, with pings). */
 export async function fxSince(levelId: number, afterId: number) {
   await requireUser();
@@ -227,6 +234,7 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   clearStandingOrder(me.token_id); // moving on their own ends following / pursuing / evading
   const { walked, stopped, told, link } = walkRoute(me.level_id, me.token_id, route);
   const followers = walked.length > 1 ? moveFollowers(me.level_id, me.token_id, walkLength(walked, isGridlessLevel(me.level_id))) : []; // those following / pursuing / evading them
+  for (const w of [{ tokenId: me.token_id, route: walked }, ...followers]) if (w.route.length > 1) addTokenWalk(me.level_id, w.tokenId, w.route, user.id); // everyone else's map plays them
   revalidatePath("/play");
   return { route: walked, stopped, followers, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
 }

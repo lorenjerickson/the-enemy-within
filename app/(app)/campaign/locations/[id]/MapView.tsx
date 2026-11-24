@@ -13,7 +13,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink } from "../../../../(play)/play/actions";
+import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode } from "../../../../(play)/play/moveMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
@@ -334,6 +334,7 @@ export default function MapView({
   // Pings (in a session): press and hold to point at a spot; everyone's pings are fetched every second.
   const [pings, setPings] = useState<{ key: string; x: number; y: number; name: string; gm: boolean; at: number }[]>([]);
   const lastPingId = useRef(0);
+  const lastWalkId = useRef(0);
   const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   // One-off effects played by scripts: each is drawn for FX_MS from its start.
   const [scriptFx, setScriptFx] = useState<{ id: number; starts: number; fx: Fx }[]>([]);
@@ -347,6 +348,12 @@ export default function MapView({
       if (moreFx.length) {
         lastFxId.current = moreFx[moreFx.length - 1].id;
         setScriptFx((fs) => [...fs.filter((f) => Date.now() < f.starts + FX_MS), ...moreFx.filter((f) => Date.now() < f.starts + FX_MS)]);
+      }
+      // Walks out of encounters recorded by other maps (or the GM dragging someone others follow).
+      const moreWalks = await walksSince(levelId, lastWalkId.current).catch(() => []);
+      if (moreWalks.length) {
+        lastWalkId.current = moreWalks[moreWalks.length - 1].id;
+        startWalks(moreWalks.filter((w) => !w.mine));
       }
       const fresh = await pingsSince(levelId, lastPingId.current).catch(() => []);
       if (!fresh.length) return;
@@ -485,9 +492,14 @@ export default function MapView({
   }, [reachFromKey, wallsKey, gridless]); // eslint-disable-line react-hooks/exhaustive-deps
   const reach = reachAt && reachArea ? { ...reachAt, ...reachArea } : null;
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
-  const [walking, setWalking] = useState<{ id: number; route: Point[]; started: number } | null>(null);
+  // Several at once: a walker and those following them, or anyone's walk another map recorded.
+  const [walks, setWalks] = useState<Record<number, { route: Point[]; started: number }>>({});
+  const startWalks = (ws: { tokenId: number; route: Point[] }[]) => {
+    const now = performance.now();
+    setWalks((cur) => ({ ...cur, ...Object.fromEntries(ws.filter((w) => w.route.length > 1).map((w) => [w.tokenId, { route: w.route, started: now }])) }));
+  };
   const WALK_MS = 140; // per square (or per unit on gridless maps)
-  const walkAt = (w: NonNullable<typeof walking>): Point => {
+  const walkAt = (w: { route: Point[]; started: number }): Point => {
     const lengths = w.route.slice(1).map((p, i) => Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y));
     let d = (performance.now() - w.started) / WALK_MS;
     for (let i = 0; i < lengths.length; i++) {
@@ -499,13 +511,17 @@ export default function MapView({
     }
     return w.route[w.route.length - 1];
   };
-  const walkDone = (w: NonNullable<typeof walking>) =>
+  const walkDone = (w: { route: Point[]; started: number }) =>
     performance.now() - w.started >= WALK_MS * w.route.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y), 0);
   useEffect(() => {
-    if (!walking) return;
-    const t = setInterval(() => (walkDone(walking) ? setWalking(null) : setFlickerTick((n) => n + 1)), 16);
+    if (!Object.keys(walks).length) return;
+    const t = setInterval(() => {
+      const left = Object.entries(walks).filter(([, w]) => !walkDone(w));
+      if (left.length < Object.keys(walks).length) setWalks(Object.fromEntries(left));
+      else setFlickerTick((n) => n + 1);
+    }, 16);
     return () => clearInterval(t);
-  }, [walking]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [walks]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Free movement: a click anywhere they've seen walks them there; the server finds the route and may stop it early. */
   function walkFree(gx: number, gy: number) {
     const m = fog?.move, t = m && drawnTokens.find((x) => x.character_id === m.characterId);
@@ -516,7 +532,7 @@ export default function MapView({
       if (r.error) return setControlResult({ label: "Move", ok: false, text: r.error });
       if (!r.route || r.route.length < 2) return;
       const end = r.route[r.route.length - 1];
-      setWalking({ id: t.id, route: r.route, started: performance.now() });
+      startWalks([{ tokenId: t.id, route: r.route }, ...(r.followers ?? [])]);
       changeTokens({ move: { id: t.id, col: end.x, row: end.y } });
       if (r.link) setLevelPrompt({ id: r.link.id, to: r.link.to, back: r.route[r.route.length - 2] });
       if (r.trap) setControlResult({ label: "Trap", ok: false, text: r.trap });
@@ -574,8 +590,9 @@ export default function MapView({
     lifted: draggingToken?.id ?? null,
     // The GM sees the whole map fully lit; darkness and fog are for players.
     tokens: (fogged ? fogged.tokens : drawnTokens).map((t) => {
-      if (walking?.id !== t.id) return t;
-      const at = walkAt(walking);
+      const w = walks[t.id];
+      if (!w) return t;
+      const at = walkAt(w);
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, traps: optimisticTraps, triggers: readOnly ? [] : optimisticTriggers,
