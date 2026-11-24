@@ -11,18 +11,16 @@ import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
-import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
-import { trapsOnStep, trapsWhereStopped } from "./traps";
-import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
 import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
-import { arrivalSpot, inLink, linkEntered } from "@/lib/levelLinks";
+import { arrivalSpot, inLink } from "@/lib/levelLinks";
+import { walkRoute } from "./walk";
 import type { Attributes } from "@/lib/attributes";
 import { scoreRoll } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
@@ -226,38 +224,7 @@ export async function freeMove(gx: number, gy: number): Promise<{ route?: Point[
   }
 
   clearStandingOrder(me.token_id); // moving on their own ends following / pursuing / evading
-  const walked: Point[] = [route[0]];
-  let stopped = false;
-  let link: { id: number; to: string } | undefined; // a level link they stepped onto: they're asked whether to take it
-  const links = listStructures(me.level_id);
-  const told: string[] = []; // traps they set off (theirs to know)
-  for (const step of route.slice(1)) {
-    const from = walked[walked.length - 1];
-    moveToken(me.token_id, step.x, step.y); // also remembers what they saw from here
-    walked.push(step);
-    const sprung = trapsOnStep(me.level_id, me.token_id, from, step);
-    told.push(...sprung.map((t) => t.player));
-    if (sprung.some((t) => t.stops)) { stopped = true; break; }
-    const fired = triggersOnStep(me.level_id, me.token_id, from, step); // map triggers: the player learns only what they do to them
-    for (const f of fired) told.push(...(f.told.get(me.token_id) ?? []));
-    if (fired.some((f) => f.stops)) { stopped = true; break; }
-    if (fireTriggers().length) {
-      stopped = true; // the player isn't told which trigger (that's the GM's script)
-      break;
-    }
-    const onto = linkEntered(links, from, step);
-    if (onto) {
-      stopped = true;
-      link = { id: onto.id, to: links.find((l) => l.id === onto.id)?.target_name ?? "another level" };
-      break;
-    }
-  }
-  if (!stopped && walked.length > 1) {
-    const end = walked[walked.length - 1];
-    told.push(...trapsWhereStopped(me.level_id, me.token_id, end).map((t) => t.player)); // ending a move in one
-    for (const f of triggersWhereStopped(me.level_id, me.token_id, end)) told.push(...(f.told.get(me.token_id) ?? []));
-  }
-  syncAurasOn(me.level_id); // walked into (or out of) an aura
+  const { walked, stopped, told, link } = walkRoute(me.level_id, me.token_id, route);
   revalidatePath("/play");
   return { route: walked, stopped, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
 }
