@@ -9,6 +9,7 @@ import { useGmPlanToken } from "./gmPlanner";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots } from "./hideMode";
 import RoundPlanView, { type TimedStep } from "./RoundPlanView";
+import { matchesAction } from "./actionSearch";
 import TargetPicker from "./TargetPicker";
 import GearActions, { gearTargetMode } from "./GearActions";
 import { setTargetMode, useTargetMode } from "./targetMode";
@@ -44,6 +45,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
   const setChoosing = (action: PlayerActionId | null) => setTargetMode(action ? { action, tokenId: selected, visible: creatures.find((c) => c.tokenId === selected)?.sees, ...(action === "attack" ? { range: creatures.find((c) => c.tokenId === selected)?.attackRange ?? 1 } : {}) } : null);
   const moving = useMoveMode(), runMode = useRunMode();
   const [using, setUsing] = useState(false); // Use: what's in hand or on the belt
+  const [query, setQuery] = useState(""); // the action search
   const [interacting, setInteracting] = useState(false); // Interact: doors and levers within reach
   const walkingNow = moving && !runMode, dashingNow = moving && runMode;
   const [refitting, setRefitting] = useState(false);
@@ -127,9 +129,11 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
             <RefitPicker options={current.refits} onCancel={() => setRefitting(false)} onPick={(slot, item) => { setRefitting(false); run(() => gmPlanStep(current.tokenId, { kind: "action", action: "refit", swap: { slot, item } })); }} />
           )}
           {/* The same actions players have, grouped by kind: Move draws its reach so a map click plans the move; Dash isn't in yet. */}
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find an action…" aria-label="Find an action" className="input input-sm w-full" data-action-search />
           {ACTION_GROUPS.map(([kind, title]) => {
-            const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
-            if (!group.length && !current.gear.some((g) => (g.kind ?? "action") === kind)) return null;
+            const group = PLAYER_ACTIONS.filter((a) => a.kind === kind && matchesAction(query, a.label, a.desc));
+            const shownGear = current.gear.filter((g) => matchesAction(query, g.name, g.source, g.description));
+            if (!group.length && !shownGear.some((g) => (g.kind ?? "action") === kind)) return null;
             return (
               <section key={kind} className="space-y-1" data-action-group={kind}>
                 <div className="text-xs font-semibold opacity-80">{title}</div>
@@ -168,7 +172,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {(kind === "action" || kind === "reaction") && <GearActions compact gear={current.gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
+                {(kind === "action" || kind === "reaction") && <GearActions compact gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

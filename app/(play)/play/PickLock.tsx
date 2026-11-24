@@ -9,6 +9,7 @@ import { unavailable, ACTION_SECONDS, type GearAction } from "@/lib/roundPlan";
 import GameIcon from "../../(app)/campaign/locations/[id]/GameIcon";
 import RoundPlanView from "./RoundPlanView";
 import PlanCountdown from "./PlanCountdown";
+import { matchesAction } from "./actionSearch";
 import TargetPicker from "./TargetPicker";
 import RoundScrubber from "./RoundScrubber";
 import RoundHistory from "./RoundHistory";
@@ -78,6 +79,8 @@ export default function PickLock({
   const [using, setUsing] = useState(false); // Use: picking which item (in hand or on a belt) to use
   const [usingOn, setUsingOn] = useState<(typeof gear)[number] | null>(null); // out of combat: an item picked, now who on
   const [told, setTold] = useState<string | null>(null);
+  const [query, setQuery] = useState(""); // the action search
+  const shownGear = gear.filter((g) => matchesAction(query, g.name, g.source, g.description));
   const [interacting, setInteracting] = useState(false);
   const hideSpots = useHideSpots();
   const [noCover, setNoCover] = useState(false); // Hide: seen, and no blind spot within reach // Interact: what's within reach (doors) // what an item used out of combat did
@@ -284,10 +287,12 @@ export default function PickLock({
         </div>
       )}
       <RoundHistory rounds={history} />
-      {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions. */}
+      {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions; the search narrows them. */}
+      <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find an action…" aria-label="Find an action" className="input input-sm w-full" data-action-search />
+      {query && !PLAYER_ACTIONS.some((a) => matchesAction(query, a.label, a.desc)) && !shownGear.length && <p className="text-xs opacity-70">No action matches “{query}”.</p>}
       {ACTION_GROUPS.map(([kind, title]) => {
-        const group = PLAYER_ACTIONS.filter((a) => a.kind === kind);
-        if (!group.length && !gear.some((g) => (g.kind ?? "action") === kind)) return null;
+        const group = PLAYER_ACTIONS.filter((a) => a.kind === kind && matchesAction(query, a.label, a.desc));
+        if (!group.length && !shownGear.some((g) => (g.kind ?? "action") === kind)) return null;
         return (
           <section key={kind} className="space-y-1" data-action-group={kind}>
             <div className="text-xs font-semibold opacity-80">{title}</div>
@@ -319,7 +324,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {(kind === "action" || kind === "reaction") && <GearActions gear={gear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={useGear} />}
+            {(kind === "action" || kind === "reaction") && <GearActions gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={useGear} />}
           </section>
         );
       })}
