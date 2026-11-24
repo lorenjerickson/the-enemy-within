@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
 import { addCreatureToken, addStructure, clearHidden, listHidden, moveToken, placeCharacterToken, setHidden } from "@/lib/db";
 import { hidingPlaces, revealAfterStep, settleHide } from "../../app/(play)/play/hiding";
+import { searchFor } from "../../app/(play)/play/workOutRound";
 import { seenFrom } from "@/lib/sight";
 
 test("someone hidden is unseen by those not on their side (not even as a guess), seen by their own side", () => {
@@ -50,4 +51,15 @@ test("the Stealth roll: hidden with that total, unless any enemy (known or not) 
   moveToken(guard, 2, 2); // now on his side
   assert.equal(settleHide(lv, milo, 16).hidden, false);
   assert.equal(listHidden(lv).has(milo), false);
+});
+
+test("a creature's Search (server-rolled) finds someone hiding from it within 10 ft whose Stealth it beats", () => {
+  const lv = level("Cellar");
+  const milo = placeCharacterToken(lv, character("Milo"), 1, 0), far = placeCharacterToken(lv, character("Far"), 9, 0);
+  const rat = addCreatureToken(lv, creature("Rat"), 0, 0);
+  setHidden(milo, -50); // any roll beats it
+  setHidden(far, -50); // too far away
+  searchFor(lv, rat, { col: 0, row: 0 });
+  assert.equal(listHidden(lv).has(milo), false);
+  assert.equal(listHidden(lv).has(far), true);
 });

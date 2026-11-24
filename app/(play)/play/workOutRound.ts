@@ -14,7 +14,9 @@ import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, save
 import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
 import { saveRollFor, skillCheckFor, speedOf, effectiveMaxHp } from "@/lib/creatureChanges";
-import { SEARCH_DC } from "@/lib/playerActions";
+import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
+import { allegianceOf, relation } from "@/lib/sides";
+import { reveal as revealHidden } from "./hiding";
 import type { Attributes } from "@/lib/attributes";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
@@ -148,6 +150,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const s of result.searches) {
     const t = tokens.find((x) => x.id === s.tokenId), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
     const c = t?.character_id ? getCharacter(t.character_id) : undefined;
+    if (t && !player) { searchFor(levelId, t.id, s.at, s.helpedBy); continue; } // the GM's: the server rolls it
     if (!t || !c || !player) continue;
     const spec = skillCheckFor(t.id, "investigation", c.attributes);
     requestRoll(player, c.id, helpedSpec({ ...spec, label: `Search: ${spec.label}` }, s.helpedBy), { kind: "search", dc: SEARCH_DC, at: s.at });
@@ -230,6 +233,20 @@ export function recordConditionSave(levelId: number, key: string, total: number)
   if (!pending?.save || pending.save.key !== key) return;
   logSessionEvent(`${pending.save.name} rolls ${total} to resist ${pending.save.condition} (DC ${pending.save.dc}).`);
   workOutRound(levelId, pending.seed, { ...pending.decisions, [key]: total });
+}
+
+/**
+ * A Search by one of the GM's tokens (a creature, or a character with no player), after the round: the server rolls
+ * Investigation (advantage if helped) and finds anyone hiding from it within 10 ft whose Stealth it beats.
+ */
+export function searchFor(levelId: number, tokenId: number, at: { col: number; row: number }, helpedBy?: string) {
+  const total = rollSpec(helpedSpec(skillCheckFor(tokenId, "investigation", (tokenWho(tokenId)?.attributes ?? {}) as Attributes), helpedBy)).total;
+  const tokens = listTokens(levelId), me = tokens.find((t) => t.id === tokenId), hidden = listHidden(levelId);
+  if (!me) return;
+  const found = tokens.filter((t) => hidden.has(t.id) && total > hidden.get(t.id)! && relation(allegianceOf(me), allegianceOf(t)) !== "friendly" && Math.hypot(t.col - at.col, t.row - at.row) <= SEARCH_RANGE + 0.5);
+  const labels = tokenLabels(levelId);
+  for (const f of found) revealHidden(levelId, f.id, `found by ${labels.get(tokenId)}'s search`);
+  logSessionEvent(`${labels.get(tokenId) ?? "Someone"} searched (Investigation ${total})${found.length ? `: found ${found.map((f) => labels.get(f.id)).join(", ")}` : ": nothing"}.`);
 }
 
 /** A save a player rolls mid-round while helped (Assist): with advantage, saying who helped. */
