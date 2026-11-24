@@ -25,7 +25,7 @@ import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
 import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
-import { moveFollowers, walkRoute } from "./walk";
+import { walkRoute, walkWithFollowers } from "./walk";
 import { hidingPlaces, reveal, settleHide } from "./hiding";
 import { walkLength } from "@/lib/standing";
 import type { Attributes } from "@/lib/attributes";
@@ -262,7 +262,7 @@ export async function pingsSince(levelId: number, afterId: number): Promise<(Pin
  * this screen already played. */
 export async function walksSince(levelId: number, afterId: number) {
   const user = await requireUser();
-  return listTokenWalks(Number(levelId), Number(afterId)).map((w) => ({ id: w.id, tokenId: w.token_id, route: w.route, fps: w.fps, mine: w.user_id === user.id }));
+  return listTokenWalks(Number(levelId), Number(afterId)).map((w) => ({ id: w.id, tokenId: w.token_id, route: w.route, fps: w.fps, ...(w.times ? { times: w.times } : {}), mine: w.user_id === user.id }));
 }
 
 /** Effects scripts played on a level since the last one this map saw (polled each second, with pings). */
@@ -309,7 +309,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
  * by the shortest route, without spending movement. It walks step by step and stops early where a map event
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
-export async function freeMove(gx: number, gy: number, run = false): Promise<{ route?: Point[]; fps?: number; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[]; fps: number }[] }> {
+export async function freeMove(gx: number, gy: number, run = false): Promise<{ route?: Point[]; fps?: number; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[]; times: number[] }[] }> {
   const user = await requireUser();
   if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
   const me = getPlayerToken(user.id);
@@ -353,9 +353,11 @@ export async function freeMove(gx: number, gy: number, run = false): Promise<{ r
   }
 
   clearStandingOrder(me.token_id); // moving on their own ends following / pursuing / evading
-  const { walked, stopped, told, link } = walkRoute(me.level_id, me.token_id, route);
-  const followers = walked.length > 1 ? moveFollowers(me.level_id, me.token_id, walkLength(walked, isGridlessLevel(me.level_id))) : []; // those following / pursuing / evading them
-  for (const w of [{ tokenId: me.token_id, route: walked, fps }, ...followers]) if (w.route.length > 1) addTokenWalk(me.level_id, w.tokenId, w.route, user.id, w.fps); // everyone else's map plays them, in real time
+  // They walk, and those following / pursuing / evading them move alongside, second by second at their own speeds.
+  const { leader, walks } = walkWithFollowers(me.level_id, me.token_id, route, fps);
+  const { walked, stopped, told, link } = leader;
+  for (const w of walks) addTokenWalk(me.level_id, w.tokenId, w.route, user.id, fps, w.times); // everyone else's map plays them, in real time
+  const followers = walks.filter((w) => w.tokenId !== me.token_id);
   revalidatePath("/play");
   return { route: walked, fps, stopped, followers, ...(told.length ? { trap: told.join(" ") } : {}), ...(link ? { link } : {}) };
 }

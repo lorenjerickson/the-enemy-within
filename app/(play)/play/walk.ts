@@ -1,5 +1,5 @@
 import { getTokenMover, downTokens, getEncounter, isGridlessLevel, listStandingOrdersOn, listStructures, listTokens, moveToken, setLinkPrompt } from "@/lib/db";
-import { standingRoute, walkLength } from "@/lib/standing";
+import { pointAlong, routeTimes, standingRoute, truncateRoute, walkLength, type StandingMode } from "@/lib/standing";
 import { revealAfterStep } from "./hiding";
 import { speedFps } from "@/lib/creatureChanges";
 import { movementBlockers } from "@/lib/visibility";
@@ -61,28 +61,66 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
   return { walked, stopped, told, ...(link ? { link } : {}) };
 }
 
+/** A walk to play back: its route (corners, start first) and the seconds from the start at each point (real time). */
+export interface TimedWalk {
+  tokenId: number;
+  route: Point[];
+  times: number[];
+}
+
 /**
- * Out of an encounter, after a token has moved `moved` (walkLength): whoever follows, pursues or evades it walks
- * (walkRoute: traps, triggers and level links as for anyone walking), then those following them, and so on (each
- * token once). A follower who comes onto a level link is asked whether to take it. Returns the walks, to play back.
+ * Out of an encounter: a token walks `route` at `fps` feet per second (or, with `walked`, has already got there, as
+ * when the GM drags it), and everyone with a standing order on it, then on them and so on, moves alongside it second
+ * by second at their own walking speed: Follow toward them as far as they went that second, Pursue as fast as they
+ * can until next to them, Evade away as far as they went (each never faster than their own speed). Every step goes
+ * through walkRoute (traps, triggers, level links). Returns the leader's walk and every walk with its timing.
  */
-export function moveFollowers(levelId: number, leaderId: number, moved: number, done = new Set<number>()): { tokenId: number; route: Point[]; fps: number }[] {
-  if (getEncounter(levelId)) return [];
-  done.add(leaderId);
-  const tokens = listTokens(levelId), leader = tokens.find((t) => t.id === leaderId);
-  if (!leader) return [];
-  const walls = movementBlockers(listStructures(levelId)), gridless = isGridlessLevel(levelId), down = downTokens(levelId);
-  const walks: { tokenId: number; route: Point[]; fps: number }[] = [];
-  for (const o of listStandingOrdersOn(leaderId)) {
-    const t = tokens.find((x) => x.id === o.tokenId);
-    if (!t || done.has(t.id) || down.has(t.id)) continue;
-    done.add(t.id);
-    const route = standingRoute(o.mode, { x: t.col, y: t.row }, { x: leader.col, y: leader.row }, moved, walls, gridless);
-    if (route.length < 2) continue;
-    const w = walkRoute(levelId, t.id, route);
-    if (w.link) { const back = w.walked[w.walked.length - 2]; setLinkPrompt(t.id, w.link.id, { col: back.x, row: back.y }); }
-    walks.push({ tokenId: t.id, route: w.walked, fps: speedFps(t.id, getTokenMover(t.id)?.movement ?? "{}") || 5 }); // at their own walking speed
-    walks.push(...moveFollowers(levelId, t.id, walkLength(w.walked, gridless), done));
+export function walkWithFollowers(levelId: number, leaderId: number, route: Point[], fps: number, walked?: Point[]): { leader: Walk; walks: TimedWalk[] } {
+  const gridless = isGridlessLevel(levelId);
+  const leader: Walk = walked ? { walked, stopped: false, told: [] } : walkRoute(levelId, leaderId, route);
+  const path = leader.walked, speed = Math.max(0.01, fps);
+  const walks: TimedWalk[] = path.length > 1 ? [{ tokenId: leaderId, route: path, times: routeTimes(path, speed, gridless) }] : [];
+  if (getEncounter(levelId) || path.length < 2) return { leader, walks };
+  const tokens = listTokens(levelId), down = downTokens(levelId), walls = movementBlockers(listStructures(levelId));
+  // Who moves, in order: those on the leader first, then those on them (each once).
+  const order: { id: number; target: number; mode: StandingMode; units: number }[] = [];
+  const done = new Set([leaderId]);
+  for (let i = -1; i < order.length; i++) {
+    const on = i < 0 ? leaderId : order[i].id;
+    for (const o of listStandingOrdersOn(on)) {
+      if (done.has(o.tokenId) || down.has(o.tokenId) || !tokens.some((t) => t.id === o.tokenId)) continue;
+      done.add(o.tokenId);
+      order.push({ id: o.tokenId, target: on, mode: o.mode, units: (speedFps(o.tokenId, getTokenMover(o.tokenId)?.movement ?? "{}") || 0) / 5 });
+    }
   }
-  return walks;
+  const pos = new Map<number, Point>(tokens.map((t) => [t.id, { x: t.col, y: t.row }]));
+  const trail = new Map(order.map((f) => [f.id, { route: [pos.get(f.id)!], times: [0] }]));
+  const bank = new Map(order.map((f) => [f.id, 0])), stopped = new Set<number>();
+  const length = walkLength(path, gridless), seconds = Math.ceil((length * 5) / speed - 1e-9);
+  const gap = (a: Point, b: Point) => (gridless ? Math.hypot(a.x - b.x, a.y - b.y) : Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)));
+  pos.set(leaderId, path[0]);
+  for (let sec = 1; sec <= seconds; sec++) {
+    const before = new Map(pos);
+    pos.set(leaderId, pointAlong(path, Math.min(length, (speed * sec) / 5), gridless));
+    for (const f of order) {
+      if (stopped.has(f.id)) continue;
+      const here = pos.get(f.id)!, was = before.get(f.target)!, now = pos.get(f.target)!;
+      const budget = bank.get(f.id)! + f.units, moved = gap(was, now);
+      const cap = f.mode === "pursue" ? budget : Math.min(moved, budget);
+      let r = standingRoute(f.mode, here, now, f.mode === "pursue" ? budget : moved, walls, gridless);
+      r = truncateRoute(r, cap, gridless);
+      const used = walkLength(r, gridless);
+      bank.set(f.id, gridless ? 0 : Math.max(0, budget - used) % 1); // only a part square carries over (7 ft/s: a square, a square, then two)
+      if (r.length < 2) continue;
+      const w = walkRoute(levelId, f.id, r);
+      if (w.link) { const back = w.walked[w.walked.length - 2]; setLinkPrompt(f.id, w.link.id, { col: back.x, row: back.y }); }
+      if (w.stopped) stopped.add(f.id);
+      const t = trail.get(f.id)!, steps = w.walked.slice(1), len = walkLength(w.walked, gridless) || 1;
+      let so = 0;
+      steps.forEach((p, i) => { so += walkLength([w.walked[i], p], gridless); t.route.push(p); t.times.push(sec - 1 + so / len); });
+      pos.set(f.id, w.walked[w.walked.length - 1]);
+    }
+  }
+  for (const f of order) { const t = trail.get(f.id)!; if (t.route.length > 1) walks.push({ tokenId: f.id, ...t }); }
+  return { leader, walks };
 }

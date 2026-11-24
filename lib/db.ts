@@ -1454,18 +1454,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS token_walks (
 )`);
 
 addColumn("token_walks", "fps", "REAL NOT NULL DEFAULT 5"); // how fast it went (feet per second): played back in real time
+addColumn("token_walks", "times", "TEXT"); // or seconds from the start at each point (walking alongside someone: their pace varies)
 
 /** Records a walk (route: token corners, start first) at `fps` feet per second, by `userId` (0: nobody's own screen played it). */
-export function addTokenWalk(levelId: number, tokenId: number, route: { x: number; y: number }[], userId: number, fps = 5): void {
+export function addTokenWalk(levelId: number, tokenId: number, route: { x: number; y: number }[], userId: number, fps = 5, times?: number[]): void {
   db.prepare("DELETE FROM token_walks WHERE at < ?").run(Date.now() - 60_000);
-  db.prepare("INSERT INTO token_walks (level_id, token_id, route, user_id, at, fps) VALUES (?, ?, ?, ?, ?, ?)").run(levelId, tokenId, JSON.stringify(route), userId, Date.now(), fps);
+  db.prepare("INSERT INTO token_walks (level_id, token_id, route, user_id, at, fps, times) VALUES (?, ?, ?, ?, ?, ?, ?)").run(levelId, tokenId, JSON.stringify(route), userId, Date.now(), fps, times ? JSON.stringify(times) : null);
 }
 
-export function listTokenWalks(levelId: number, afterId: number): { id: number; token_id: number; route: { x: number; y: number }[]; user_id: number; fps: number }[] {
+export function listTokenWalks(levelId: number, afterId: number): { id: number; token_id: number; route: { x: number; y: number }[]; user_id: number; fps: number; times: number[] | null }[] {
   return db
-    .prepare<[number, number, number], { id: number; token_id: number; route: string; user_id: number; fps: number }>("SELECT id, token_id, route, user_id, fps FROM token_walks WHERE level_id = ? AND id > ? AND at > ? ORDER BY id")
+    .prepare<[number, number, number], { id: number; token_id: number; route: string; user_id: number; fps: number; times: string | null }>("SELECT id, token_id, route, user_id, fps, times FROM token_walks WHERE level_id = ? AND id > ? AND at > ? ORDER BY id")
     .all(levelId, afterId, Date.now() - 5_000)
-    .map((r) => ({ ...r, route: JSON.parse(r.route) }));
+    .map((r) => ({ ...r, route: JSON.parse(r.route), times: r.times ? JSON.parse(r.times) : null }));
 }
 
 // A level link a token came onto in a round: its player is asked (before planning again) whether to take it;

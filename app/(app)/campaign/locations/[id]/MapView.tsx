@@ -499,14 +499,19 @@ export default function MapView({
   const reach = reachAt && reachArea ? { ...reachAt, ...reachArea } : null;
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   // Several at once: a walker and those following them, or anyone's walk another map recorded.
-  const [walks, setWalks] = useState<Record<number, { route: Point[]; started: number; fps: number }>>({});
-  const startWalks = (ws: { tokenId: number; route: Point[]; fps?: number }[]) => {
+  const [walks, setWalks] = useState<Record<number, { route: Point[]; started: number; fps: number; times?: number[] }>>({});
+  const startWalks = (ws: { tokenId: number; route: Point[]; fps?: number; times?: number[] }[]) => {
     const now = performance.now();
-    setWalks((cur) => ({ ...cur, ...Object.fromEntries(ws.filter((w) => w.route.length > 1).map((w) => [w.tokenId, { route: w.route, started: now, fps: w.fps && w.fps > 0 ? w.fps : 5 }])) }));
+    setWalks((cur) => ({ ...cur, ...Object.fromEntries(ws.filter((w) => w.route.length > 1).map((w) => [w.tokenId, { route: w.route, started: now, fps: w.fps && w.fps > 0 ? w.fps : 5, ...(w.times ? { times: w.times } : {}) }])) }));
   };
   // Real time: a square (or gridless unit, 5 ft) takes 5 ÷ their speed (feet per second) seconds.
   const unitMs = (w: { fps: number }) => (1000 * FEET_PER_SQUARE) / w.fps;
-  const walkAt = (w: { route: Point[]; started: number; fps: number }): Point => {
+  const walkAt = (w: { route: Point[]; started: number; fps: number; times?: number[] }): Point => {
+    if (w.times) { // timed per point (walking alongside someone): where they are by now, in real time
+      const e = (performance.now() - w.started) / 1000, t = w.times;
+      for (let i = 1; i < t.length; i++) if (e < t[i]) { const f = (e - t[i - 1]) / Math.max(1e-6, t[i] - t[i - 1]), a = w.route[i - 1], b = w.route[i]; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }; }
+      return w.route[w.route.length - 1];
+    }
     const lengths = w.route.slice(1).map((p, i) => Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y));
     let d = (performance.now() - w.started) / unitMs(w);
     for (let i = 0; i < lengths.length; i++) {
@@ -518,8 +523,8 @@ export default function MapView({
     }
     return w.route[w.route.length - 1];
   };
-  const walkDone = (w: { route: Point[]; started: number; fps: number }) =>
-    performance.now() - w.started >= unitMs(w) * w.route.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y), 0);
+  const walkDone = (w: { route: Point[]; started: number; fps: number; times?: number[] }) =>
+    w.times ? performance.now() - w.started >= w.times[w.times.length - 1] * 1000 : performance.now() - w.started >= unitMs(w) * w.route.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - w.route[i].x, p.y - w.route[i].y), 0);
   useEffect(() => {
     if (!Object.keys(walks).length) return;
     const t = setInterval(() => {

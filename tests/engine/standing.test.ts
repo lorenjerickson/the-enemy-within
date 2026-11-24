@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { standingRoute, walkLength } from "@/lib/standing";
+import { pointAlong, routeTimes, standingRoute, truncateRoute, walkLength } from "@/lib/standing";
 import type { Segment } from "@/lib/visibility";
 
 const wall = (x1: number, y1: number, x2: number, y2: number): Segment => ({ a: { x: x1, y: y1 }, b: { x: x2, y: y2 } });
@@ -32,4 +32,14 @@ test("evade: as far away as the distance they went allows", () => {
 test("gridless follow keeps to the distance they went", () => {
   const r = standingRoute("follow", { x: 0, y: 0 }, { x: 10, y: 0 }, 3, [], true);
   assert.ok(Math.abs(end(r).x - 3) < 0.06 && end(r).y === 0, JSON.stringify(end(r)));
+});
+
+test("along a route: the square (or point) so far along, a route cut short, and the time at each point", () => {
+  const r = [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 2 }];
+  assert.deepEqual(pointAlong(r, 2, false), { x: 2, y: 0 });
+  assert.deepEqual(pointAlong(r, 5, false), { x: 4, y: 1 });
+  assert.deepEqual(pointAlong(r, 99, false), { x: 4, y: 2 });
+  assert.deepEqual(truncateRoute([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }], 2, false), [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }]);
+  assert.deepEqual(truncateRoute([{ x: 0, y: 0 }, { x: 10, y: 0 }], 2.5, true), [{ x: 0, y: 0 }, { x: 2.5, y: 0 }]);
+  assert.deepEqual(routeTimes([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 3, y: 0 }], 10, false), [0, 0.5, 1.5], "10 ft/s: half a second a square");
 });

@@ -75,3 +75,38 @@ export function standingRoute(mode: StandingMode, from: Point, them: Point, move
   const at = route.findIndex((p, i) => i > 0 && near(p, them, gridless));
   return at >= 0 ? route.slice(0, at + 1) : route.filter((p) => !(Math.abs(p.x - them.x) < 0.5 && Math.abs(p.y - them.y) < 0.5));
 }
+
+/** The point `units` along a route (corners), or its end. */
+export function pointAlong(route: Point[], units: number, gridless: boolean): Point {
+  let left = units;
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1], b = route[i], d = gridless ? Math.hypot(b.x - a.x, b.y - a.y) : Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    if (left <= d + 1e-9) {
+      const f = d ? left / d : 1;
+      return gridless ? { x: Math.round((a.x + (b.x - a.x) * f) * 20) / 20, y: Math.round((a.y + (b.y - a.y) * f) * 20) / 20 } : { x: Math.round(a.x + (b.x - a.x) * f), y: Math.round(a.y + (b.y - a.y) * f) }; // the square that far along
+    }
+    left -= d;
+  }
+  return route[route.length - 1];
+}
+
+/** A route cut to at most `units` long (whole squares on a grid; on gridless maps, partway along the last leg). */
+export function truncateRoute(route: Point[], units: number, gridless: boolean): Point[] {
+  if (!gridless) return route.slice(0, Math.max(0, Math.floor(units + 1e-9)) + 1);
+  const out = [route[0]];
+  let left = units;
+  for (let i = 1; i < route.length && left > 1e-6; i++) {
+    const a = route[i - 1], b = route[i], d = Math.hypot(b.x - a.x, b.y - a.y);
+    if (d <= left + 1e-9) { out.push(b); left -= d; continue; }
+    out.push({ x: Math.round((a.x + ((b.x - a.x) * left) / d) * 20) / 20, y: Math.round((a.y + ((b.y - a.y) * left) / d) * 20) / 20 });
+    break;
+  }
+  return out;
+}
+
+/** Seconds from the start at each point of a route walked at `fps` feet per second (a unit is 5 ft). */
+export function routeTimes(route: Point[], fps: number, gridless: boolean, from = 0): number[] {
+  const times = [from];
+  for (let i = 1; i < route.length; i++) times.push(times[i - 1] + (walkLength([route[i - 1], route[i]], gridless) * 5) / Math.max(0.01, fps));
+  return times;
+}
