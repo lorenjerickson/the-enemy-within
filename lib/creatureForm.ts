@@ -25,7 +25,7 @@ export async function parseCreatureForm(formData: FormData): Promise<Omit<Creatu
   }
 
   const movement = Object.fromEntries(
-    MOVEMENT_TYPES.map((m) => [m, asSpeed(Math.max(0, Number(formData.get(`move:${m}`)) || 0))]) // feet per round (units come with the form)
+    MOVEMENT_TYPES.map((m) => [m, asSpeed({ value: Math.max(0, Number(formData.get(`move:${m}`)) || 0), dist: formData.get(`move:${m}:dist`) ?? "ft", per: formData.get(`move:${m}:per`) ?? "s" })])
   ) as Movement;
 
   const items = new Map(listItems().map((i) => [i.id, i]));

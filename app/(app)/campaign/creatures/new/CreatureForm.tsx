@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { CREATURE_TYPES, MOVEMENT_TYPES } from "@/lib/creatureTypes";
-import { asSpeed, feetPerSecond } from "@/lib/speed";
+import { DISTANCE_UNITS, TIME_UNITS, asSpeed } from "@/lib/speed";
 import { DICE_PATTERN } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
 import AttributesInput from "./AttributesInput";
@@ -59,14 +59,24 @@ export default function CreatureForm({
           <input name="height" type="number" min="0.05" max="50" step="0.05" required placeholder="Height (m)" defaultValue={initial?.height ?? 1.8} className="input w-full" /></label>
       </div>
       <fieldset className="fieldset">
-        <legend className="fieldset-legend">Speed (feet per round, 0 = none)</legend>
-        <div className="grid grid-cols-7 gap-2">
-          {MOVEMENT_TYPES.map((m) => (
-            <label key={m} className="floating-label">
-              <span>{capitalize(m)}</span>
-              <input name={`move:${m}`} type="number" min="0" step="any" placeholder={capitalize(m)} defaultValue={Math.round(feetPerSecond(asSpeed(initial?.movement?.[m] ?? 0)) * 6 * 100) / 100} className="input" />
-            </label>
-          ))}
+        <legend className="fieldset-legend">Speed: distance over time, in any units (0 = can&apos;t move that way)</legend>
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {MOVEMENT_TYPES.map((m) => {
+            const s = asSpeed(initial?.movement?.[m] ?? 0);
+            return (
+              <div key={m} className="flex items-center gap-1" data-speed={m}>
+                <span className="w-20 text-sm">{capitalize(m)}</span>
+                <input name={`move:${m}`} type="number" min="0" step="any" aria-label={`${capitalize(m)} speed`} defaultValue={Math.round(s.value * 100) / 100} className="input input-sm w-24" />
+                <select name={`move:${m}:dist`} aria-label={`${capitalize(m)} distance unit`} defaultValue={s.dist} className="select select-sm w-20">
+                  {DISTANCE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <span className="opacity-60">per</span>
+                <select name={`move:${m}:per`} aria-label={`${capitalize(m)} time unit`} defaultValue={s.per} className="select select-sm w-24">
+                  {TIME_UNITS.map((u) => <option key={u} value={u}>{u === "s" ? "second" : u === "h" ? "hour" : u === "min" ? "minute" : "round (6 s)"}</option>)}
+                </select>
+              </div>
+            );
+          })}
         </div>
       </fieldset>
       <AttributesInput initial={initial?.attributes} />

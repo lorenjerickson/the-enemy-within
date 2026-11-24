@@ -48,6 +48,12 @@ export default function CharacterSheet({ sheet, manage }: { sheet: Sheet; manage
           ) : null}
         </div>
       </div>
+      {sheet.speeds.length > 0 && (
+        <p className="text-xs" data-sheet-speeds>
+          <span className="font-semibold opacity-80">Speed: </span>
+          {sheet.speeds.map((s) => `${s.type[0].toUpperCase()}${s.type.slice(1)} ${s.text}`).join(" · ")}
+        </p>
+      )}
       <section className="space-y-1">
         <div className="text-xs font-semibold opacity-80">Active effects</div>
         {sheet.effects.length ? (

@@ -1,3 +1,5 @@
+import { asSpeed, feetPerSecond, formatSpeed } from "@/lib/speed";
+import { MOVEMENT_TYPES } from "@/lib/creatureTypes";
 import { characterContainers, characterPlayers, db, getGameTime, getItem, getStrain, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
 import { describeCondition } from "@/lib/conditions";
 import { effectText } from "@/lib/effectGrammar";
@@ -24,6 +26,7 @@ export interface Sheet {
   containers: { id: number; slot: EquipSlot; name: string; capacity: number; stacks: { id: number; name: string; qty: number; slots: EquipSlot[] }[] }[];
   characterId: number | null; // for changing what they carry (characters only)
   slots: EquipSlot[]; // their slots (to equip into)
+  speeds: { type: string; text: string }[]; // how fast they move each way they can, as entered ("Running 70 mph")
 }
 
 const timeLeft = (minutes: number) => (minutes < 1 ? `${Math.max(1, Math.round(minutes * 10))} round${Math.round(minutes * 10) === 1 ? "" : "s"}` : minutes < 60 ? `${Math.round(minutes)} min` : `${Math.round(minutes / 60)} h`);
@@ -37,6 +40,7 @@ export function sheetFor(tokenId: number): Sheet | null {
   const now = getGameTime();
   return {
     tokenId: t.id,
+    speeds: MOVEMENT_TYPES.filter((m) => feetPerSecond(asSpeed(who.movement?.[m] ?? 0)) > 0).map((m) => ({ type: m, text: formatSpeed(asSpeed(who.movement[m])) })),
     name: tokenLabels(t.level_id).get(t.id) ?? who.name,
     kind: t.character_id ? "character" : "creature",
     player: t.character_id ? characterPlayers().get(t.character_id) ?? null : null,
