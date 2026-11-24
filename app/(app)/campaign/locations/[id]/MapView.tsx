@@ -13,7 +13,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
-import { freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
+import { assistNow, freeMove, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
@@ -803,6 +803,10 @@ export default function MapView({
         return;
       }
       setTargetMode(null);
+      if (m.now) { // out of an encounter: it happens now (Assist)
+        startTransition(async () => { const r = await assistNow(hit.id); setControlResult({ label: "Assist", ok: !r.error, text: r.error ?? r.told ?? "" }); });
+        return;
+      }
       startTransition(async () => {
         const step = { kind: "action" as const, action: m.action, target: hit.id, ...(m.use !== undefined ? { use: m.use } : {}), ...(m.seconds ? { seconds: m.seconds } : {}) };
         const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);

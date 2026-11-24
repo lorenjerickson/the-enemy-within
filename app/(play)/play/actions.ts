@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setDoorOpen, listMapTriggers, setAssist, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -23,7 +23,7 @@ import { listTraps, setTrapFound } from "@/lib/db";
 import { distanceToTrap } from "@/lib/traps";
 import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
-import { allegianceOf } from "@/lib/sides";
+import { allegianceOf, relation } from "@/lib/sides";
 import { arrivalSpot, inLink } from "@/lib/levelLinks";
 import { moveFollowers, walkRoute } from "./walk";
 import { walkLength } from "@/lib/standing";
@@ -77,6 +77,27 @@ export async function interactThing(triggerId: number): Promise<{ error?: string
   const fired = fireTrigger(me.level_id, t, me.token_id);
   revalidatePath("/play");
   return { told: [`You work ${t.name}.`, ...(fired.told.get(me.token_id) ?? [])].join(" ") };
+}
+
+/** Assist, out of an encounter: the player helps someone on their side within 5 ft whom they can see: advantage on that one's next roll. */
+export async function assistNow(targetId: number): Promise<{ error?: string; told?: string }> {
+  const user = await requireUser();
+  if (user.role !== "player" || !getOpenGameSession()?.began_at) return { error: "Only during a session" };
+  const me = getPlayerToken(user.id);
+  if (!me) return { error: "You're not on the map yet" };
+  if (getEncounter(me.level_id)) return { error: "In an encounter, plan it for the round instead" };
+  const tokens = listTokens(me.level_id), t = tokens.find((x) => x.id === Number(targetId));
+  if (!t || t.id === me.token_id) return { error: "Pick someone else" };
+  const mine = tokens.find((x) => x.id === me.token_id);
+  if (relation(allegianceOf(mine ?? { character_id: me.character_id }), allegianceOf(t)) !== "friendly") return { error: "Only someone on your side" };
+  if (!seenFrom(me.level_id, { col: me.col, row: me.row }, me.token_id).has(t.id)) return { error: "You can't see them" };
+  const gap = isGridlessLevel(me.level_id) ? Math.hypot(t.col - me.col, t.row - me.row) : Math.max(Math.abs(t.col - me.col), Math.abs(t.row - me.row));
+  if (gap > 1.05) return { error: "Get within 5 ft of them" };
+  const name = tokenLabels(me.level_id).get(t.id) ?? "them";
+  setAssist(t.id, me.token_id, me.name);
+  logSessionEvent(`${me.name} helps ${name}: advantage on their next roll.`);
+  revalidatePath("/play");
+  return { told: `You help ${name}: their next roll has advantage.` };
 }
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */

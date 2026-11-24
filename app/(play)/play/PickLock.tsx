@@ -96,7 +96,7 @@ export default function PickLock({
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
   const spent = (id: PlayerActionId) => (plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || CHASE_ACTIONS.includes(id)); // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
@@ -118,6 +118,7 @@ export default function PickLock({
     if (id === "search") return run(search);
     if (id === "use") { setTold(null); setUsingOn(null); return setUsing(!using); }
     if (id === "interact") return setInteracting(!interacting);
+    if (id === "assist") return setTargetMode(target?.action === "assist" ? null : { action: "assist", tokenId: null, now: true, range: 1, targeting: { who: "friendly", count: "one", n: 1 }, visible: targets.map((t) => t.id) });
     if (CHASE_ACTIONS.includes(id)) return setOrdering(ordering === id ? null : (id as "follow" | "pursue" | "evade"));
   };
   const hint = (id: PlayerActionId, base: string) =>
@@ -127,6 +128,7 @@ export default function PickLock({
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
     : id === "interact" ? "Interact with something within reach: open or close a door, pick a lock"
+    : id === "assist" ? "Assist someone on your side within 5 ft: click them on the map (advantage on their next roll)"
     : id === "follow" ? "Follow someone: whenever they move, you go after them as far as they went"
     : id === "pursue" ? "Pursue someone: whenever they move, you go after them until within 5 ft"
     : id === "evade" ? "Evade someone: whenever they move, you move away as far as they moved"
@@ -150,6 +152,9 @@ export default function PickLock({
     <div className="space-y-3 text-sm">
       {scrubber}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
+      {!plan && target?.now && (
+        <p className="text-xs" data-assist-pick>Click who to help on the map (someone on your side, within 5 ft). <button type="button" className="btn btn-ghost btn-xs" onClick={() => setTargetMode(null)}>Cancel</button></p>
+      )}
       {interacting && (
         <section className="space-y-1" data-interact>
           <div className="text-xs font-semibold opacity-80">{plan ? "Within reach (where your plan leaves you): it happens after the round" : "Within reach"}</div>

@@ -2743,7 +2743,39 @@ type RollRequestRow = { id: number; player_id: number; character_id: number; spe
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
 
 /** Asks a player to roll; replaces any roll they haven't made yet (and puts away one they rolled but left open). */
+// Assist: whoever was helped has advantage on their next roll (one help at a time; a new one replaces it). Kept until used.
+db.exec(`CREATE TABLE IF NOT EXISTS assists (
+  token_id INTEGER PRIMARY KEY,
+  by_token INTEGER NOT NULL,
+  by_name TEXT NOT NULL
+)`);
+
+export function setAssist(tokenId: number, byToken: number, byName: string): void {
+  db.prepare("INSERT OR REPLACE INTO assists (token_id, by_token, by_name) VALUES (?, ?, ?)").run(tokenId, byToken, byName);
+}
+
+export function listAssists(levelId: number): { tokenId: number; byToken: number; byName: string }[] {
+  return db
+    .prepare<[number], { token_id: number; by_token: number; by_name: string }>("SELECT a.token_id, a.by_token, a.by_name FROM assists a JOIN map_tokens t ON t.id = a.token_id WHERE t.level_id = ?")
+    .all(levelId)
+    .map((r) => ({ tokenId: r.token_id, byToken: r.by_token, byName: r.by_name }));
+}
+
+export function clearAssist(tokenId: number): void {
+  db.prepare("DELETE FROM assists WHERE token_id = ?").run(tokenId);
+}
+
+/** A roll request for a character who was helped (Assist): advantage on it ("helped by …"), and the help is used up. Not initiative. */
+function withAssist(characterId: number, spec: RollSpec, action: RollAction): RollSpec {
+  if (action.kind === "initiative") return spec;
+  const help = db.prepare<[number], { token_id: number; by_name: string }>("SELECT a.token_id, a.by_name FROM assists a JOIN map_tokens t ON t.id = a.token_id WHERE t.character_id = ?").get(characterId);
+  if (!help) return spec;
+  clearAssist(help.token_id);
+  return { ...spec, mode: spec.mode === "disadvantage" ? "normal" : "advantage", label: `${spec.label} (helped by ${help.by_name})` };
+}
+
 export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
+  spec = withAssist(characterId, spec, action);
   db.transaction(() => {
     db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ?").run(playerId);
     db.prepare("INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ?, ?)").run(playerId, characterId, JSON.stringify(spec), JSON.stringify(action));
