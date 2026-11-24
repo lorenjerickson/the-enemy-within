@@ -146,7 +146,7 @@ export default function MapView({
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
   linkPrompt?: { id: number; to: string; back: Point } | null; // from the server: a level link their character reached in a round
-  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
+  fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { tokenId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
   dockInitial?: string | null; // the dock tool open at first
@@ -455,18 +455,18 @@ export default function MapView({
   // Whose eyes the fog is seen through, and from where: what they see now is worked out again only when one of
   // them moves (or the walls, their sight or the planned spot change), not on every frame of a replay or effect.
   const fogCentre = (t: { col: number; row: number }) => ({ x: t.col + 0.5, y: t.row + 0.5 });
-  const fogOwn = !fogOn ? [] : planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => t.character_id !== null && fog!.viewers.includes(t.character_id));
+  const fogOwn = !fogOn ? [] : planningAs !== null ? drawnTokens.filter((t) => t.id === planningAs) : drawnTokens.filter((t) => fog!.viewers.includes(t.id));
   const fogPlanEnd = planningAs !== null ? gmPlans?.[planningAs]?.from : undefined;
-  const fogEyes = fogOwn.map((t) => ({ at: fogCentre(fogPlanEnd ?? t), range: (t.character_id !== null && fog?.sight?.[t.character_id]) || SIGHT })); // blind: only what's around them
+  const fogEyes = fogOwn.map((t) => ({ at: fogCentre(fogPlanEnd ?? t), range: fog?.sight?.[t.id] || SIGHT })); // blind: only what's around them
   const eyesKey = JSON.stringify(fogEyes);
   const fogVisible = useMemo(() => fogEyes.map((e) => visibilityPolygon(e.at, e.range, fogWalls)), [eyesKey, fogWalls]); // eslint-disable-line react-hooks/exhaustive-deps
   const fogged = useMemo(() => {
     if (!fogOn) return null;
     const centre = fogCentre, own = fogOwn, planEndAt = fogPlanEnd, visible = fogVisible;
-    const blindOf = (t: MapToken) => t.character_id !== null && !!fog?.sight?.[t.character_id];
+    const blindOf = (t: MapToken) => !!fog?.sight?.[t.id];
     // In the dark (overall light below DARK_BELOW), they see only what's lit or within their darkvision.
     const dark = shownIllumination < DARK_BELOW && planningAs === null;
-    const viewers = own.map((t) => ({ at: centre(planEndAt ?? t), dv: (t.character_id !== null && fog?.darkvision?.[t.character_id]) || 0, blind: blindOf(t) }));
+    const viewers = own.map((t) => ({ at: centre(planEndAt ?? t), dv: fog?.darkvision?.[t.id] || 0, blind: blindOf(t) }));
     // Only tokens they can see are shown (and their own, always).
     const tokens = drawnTokens.filter((t) => own.includes(t) || viewers.some((v, i) => insidePolygon(centre(t), visible[i]) && (!dark || v.blind || brightEnough(v.at, centre(t), v.dv, shownIllumination, optimisticLights, fogWalls))));
     return { visible, explored, tokens, dark, viewers };
@@ -481,7 +481,7 @@ export default function MapView({
     // A Dash: as far as running for the seconds left goes (feet left at walking pace ÷ walking pace = seconds left).
     const m = walkM && runOn && walkM.perSecond && walkM.runPerSecond ? { ...walkM, feet: (walkM.feet / walkM.perSecond) * walkM.runPerSecond, perSecond: walkM.runPerSecond } : walkM;
     if (!m || m.free || mapImage.perspective === "portrait") return null; // free movement has no overlay
-    const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
+    const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.id === fog?.move?.tokenId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
     return { from: { col: t.col, row: t.row }, feet: m.feet, perSecond: m.perSecond ?? 0, at: t, token };
@@ -539,7 +539,7 @@ export default function MapView({
   }, [walks]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Free movement: a click anywhere they've seen walks them there; the server finds the route and may stop it early. */
   function walkFree(gx: number, gy: number) {
-    const m = fog?.move, t = m && drawnTokens.find((x) => x.character_id === m.characterId);
+    const m = fog?.move, t = m && drawnTokens.find((x) => x.id === m.tokenId);
     if (!t || !fogged) return;
     if (![...fogged.visible, ...fogged.explored].some((poly) => insidePolygon({ x: gx, y: gy }, poly))) return;
     startTransition(async () => {
@@ -576,7 +576,7 @@ export default function MapView({
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const hidePick = useHidePick(), hideSpots = hidePick?.spots ?? null; // Hide (seen): blind spots to pick on the map
-  const actingToken = targetMode ? (targetMode.tokenId ?? drawnTokens.find((t) => t.character_id === fog?.move?.characterId)?.id) : undefined;
+  const actingToken = targetMode ? (targetMode.tokenId ?? fog?.move?.tokenId) : undefined;
   // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
   const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
   const fitsTarget = (t: { id: number; allegiance: string | null; character_id: number | null }) =>
@@ -820,7 +820,7 @@ export default function MapView({
         });
         return;
       }
-      const me = drawnTokens.find((x) => x.character_id === fog?.move?.characterId);
+      const me = drawnTokens.find((x) => x.id === fog?.move?.tokenId);
       startTransition(async () => {
         const r = await hideAt(cell.col, cell.row);
         if (r.route && me) { startWalks([{ tokenId: me.id, route: r.route }]); const end = r.route[r.route.length - 1]; changeTokens({ move: { id: me.id, col: end.x, row: end.y } }); }
@@ -877,7 +877,7 @@ export default function MapView({
     // A player in an encounter clicking someone else they can see (not moving or picking a target): their selected target.
     if (readOnly && fog?.move && !fog.move.free && !moveOn && !targetMode && e.button === 0) {
       const { gx, gy } = gridAt(e);
-      const hit = [...(fogged ? fogged.tokens : drawnTokens)].reverse().find((t) => t.character_id !== fog.move!.characterId && gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
+      const hit = [...(fogged ? fogged.tokens : drawnTokens)].reverse().find((t) => t.id !== fog.move!.tokenId && gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
       if (hit) tokenPress.current = { x: e.clientX, y: e.clientY, id: hit.id };
     }
     // Press and hold (without moving) to ping: players anywhere, the GM when no layer editor is open.
@@ -1816,7 +1816,7 @@ export default function MapView({
                   const r = await takeLevelLink(levelPrompt.id, go, levelPrompt.back);
                   setLevelPrompt(null);
                   if (r.error) setControlResult({ label: "Move", ok: false, text: r.error });
-                  else if (!go) { const t = drawnTokens.find((x) => x.character_id === fog?.move?.characterId); if (t) changeTokens({ move: { id: t.id, col: levelPrompt.back.x, row: levelPrompt.back.y } }); }
+                  else if (!go) { const t = drawnTokens.find((x) => x.id === fog?.move?.tokenId); if (t) changeTokens({ move: { id: t.id, col: levelPrompt.back.x, row: levelPrompt.back.y } }); }
                 })}>{label}</button>
               ))}
             </div>

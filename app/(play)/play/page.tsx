@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
+import { getTokenActor, type ActorToken, getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -50,7 +50,7 @@ export default async function Play() {
   const session = getOpenGameSession();
   if (!session?.began_at) redirect(user.role === "gm" ? (session ? `/sessions/${session.id}` : "/sessions") : "/lobby");
   if (user.role === "player" && isRemovedFrom(session.id, user.id)) redirect("/lobby"); // the GM left them out
-  return user.role === "gm" ? <GmView session={session} /> : <PlayerView session={session} user={user} />;
+  return user.role === "gm" && !user.actingToken ? <GmView session={session} /> : <PlayerView session={session} user={user} />;
 }
 
 /** Shown in place of the map when there's none to show yet. */
@@ -147,13 +147,20 @@ function GmView({ session }: { session: GameSession }) {
   );
 }
 
+/**
+ * What an actor on the map sees and does: a player's own character; or the GM acting as someone (an absent player
+ * they play, a present player they only watch, or a creature of theirs, which sees through its own eyes).
+ */
 function PlayerView({ session, user }: { session: GameSession; user: User }) {
-  if (!user.playedBy) markPresent(session.id, user.id); // the GM playing them doesn't make them present
-  const levelId = getPlayerTokenLevelId(user.id);
+  const real = user.role === "player" && !user.playedBy; // the player themselves (the GM acting as them doesn't make them present)
+  if (real) markPresent(session.id, user.id);
+  const creature = user.role === "gm" ? user.actingToken ?? null : null; // the GM playing a creature: its token
+  const me: ActorToken | undefined = creature !== null ? getTokenActor(creature) : getPlayerToken(user.id);
+  const levelId = creature !== null ? me?.level_id : getPlayerTokenLevelId(user.id);
   const place = levelId === undefined ? undefined : getLevelPlace(levelId);
-  const roll = getOpenRollRequest(user.id); // a roll they're being asked to make
-  // Locked doors within reach of their character.
-  const me = getPlayerToken(user.id);
+  const roll = creature !== null ? undefined : getOpenRollRequest(user.id); // a roll they're being asked to make (a creature's roll themselves)
+  const watching = !!user.watching; // the GM watching a present player: everything shown, nothing can be done
+  const gmHere = !!user.playedBy || creature !== null; // the GM: their controls on the sheet
   // In an encounter: their round plan (laid out in time) and where it leaves them.
   const walking: number = me ? speedFps(me.token_id, me.movement) : 0; // walking speed, feet per second, as boosted now
   const running: number = me ? speedFps(me.token_id, me.movement, "running") : 0; // Dash speed, feet per second (as boosted now)
@@ -185,7 +192,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   const replay = me ? getReplay(me.level_id) : null;
   const roundHistory = me && getEncounter(me.level_id) ? (() => {
     const labels = tokenLabels(me.level_id);
-    const mine = listTokens(me.level_id).filter((t) => t.character_id !== null && listPlayerCharacters(user.id).some((c) => c.id === t.character_id)).map((t) => t.id);
+    const mine = creature !== null ? [creature] : listTokens(me.level_id).filter((t) => t.character_id !== null && listPlayerCharacters(user.id).some((c) => c.id === t.character_id)).map((t) => t.id);
     const stories = getRoundStories(me.level_id);
     if (replay && !stories.some((r) => r.round === replay.round)) stories.push({ round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [] }); // resolved before rounds were kept
     return stories.map((r) => ({ round: r.round, showAt: r.showAt, lines: [...playerStory(r.story, mine, (id) => labels.get(id) ?? "someone").values()].flat() }));
@@ -201,26 +208,29 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   const interactables = me
     ? interactablesNear(listMapTriggers(me.level_id), me.token_id, allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }), plan ? { x: plan.from.col + 0.5, y: plan.from.row + 0.5 } : { x: me.col + 0.5, y: me.row + 0.5 }, REACH)
     : [];
-  const tools: DockTool[] = [
+  // Whose eyes the map is seen through: a player's characters on this map, or the creature the GM plays.
+  const viewers = creature !== null ? [creature] : levelId === undefined ? [] : listTokens(levelId).filter((t) => t.character_id !== null && listPlayerCharacters(user.id).some((c) => c.id === t.character_id)).map((t) => t.id);
+  const allTools: DockTool[] = [
     {
       id: "me",
-      label: user.name,
+      label: creature !== null ? (me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : "Creature") : user.name,
       icon: "user",
       content: (
         <div className="space-y-2 text-sm">
           <p>Session {session.number}</p>
           {place && <p className="opacity-70">{place.location} › {place.level}</p>}
           {/* Their character sheet(s): art (click for the full picture), health, effects, equipment and what they carry. */}
-          {listPlayerCharacters(user.id).map((c) => {
+          {creature !== null && (() => { const sheet = sheetFor(creature); return sheet ? <CharacterSheet sheet={sheet} manage={{ gm: true, locked: null }} /> : null; })()}
+          {(creature !== null ? [] : listPlayerCharacters(user.id)).map((c) => {
             const t = levelId === undefined ? undefined : listTokens(levelId).find((x) => x.character_id === c.id);
             const sheet = t && sheetFor(t.id);
-            return sheet ? <CharacterSheet key={c.id} sheet={sheet} manage={{ gm: false, locked: levelId !== undefined && getEncounter(levelId) ? "In an encounter, swap gear with Refit (a bonus action)." : null }} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
+            return sheet ? <CharacterSheet key={c.id} sheet={sheet} manage={{ gm: gmHere, locked: gmHere ? null : levelId !== undefined && getEncounter(levelId) ? "In an encounter, swap gear with Refit (a bonus action)." : null }} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
           })}
-          {user.playedBy ? <SwitchPlayers session={session} user={user} /> : <Link href="/" className="btn btn-sm">Leave</Link>}
+          {real ? <Link href="/" className="btn btn-sm">Leave</Link> : <SwitchPlayers session={session} user={user} />}
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock planClock={me && rp ? (() => { const c = planClock(me.level_id); return c?.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock planClock={me && rp ? (() => { const c = planClock(me.level_id); return c && c.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -234,14 +244,19 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       ),
     },
   ];
+  // A creature keeps no journal. Watching: every control in their panels is shown but can't be used.
+  const tools = allTools.filter((t) => creature === null || t.id !== "journal").map((t) => (watching ? { ...t, content: <fieldset disabled className="contents" data-watching>{t.content}</fieldset> } : t));
   return (
     <>
-      <AutoRefresh checkIn={checkIn} />
-      {user.playedBy && <ActingAs session={session} user={user} />}
-      {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
-      <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
+      <AutoRefresh checkIn={real ? checkIn : undefined} />
+      {!real && <ActingAs session={session} user={user} name={creature !== null && me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : user.name} />}
+      {/* Watching: their prompts show as they see them, but can't be rolled. */}
+      <fieldset disabled={watching} className="contents">
+        {rp && <PlanRollPrompt rolls={diceRolls} rolled={rp.rolled} />}
+        <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
+      </fieldset>
       {place ? (
-        <LevelMap readOnly linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers: listPlayerCharacters(user.id).map((c) => c.id), explored: listSightings(user.id, levelId!), move: me && (plan ? { characterId: me.character_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { characterId: me.character_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
+        <LevelMap readOnly linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers, explored: creature !== null ? [] : listSightings(user.id, levelId!), move: me && !watching ? (plan ? { tokenId: me.token_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { tokenId: me.token_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) : null }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />
       ) : (
         <>
           <NoMap><span data-waiting-placement>The session has begun. The GM is placing you on the map…</span></NoMap>
@@ -252,11 +267,11 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   );
 }
 
-/** The GM playing an absent player: whose screen this is, the others they play, and back to the GM (also: click another's token). */
-function ActingAs({ session, user }: { session: GameSession; user: User }) {
+/** The GM acting as someone (playing an absent player or a creature, or watching a present player): who, the absent players they could switch to, and back to the GM (or click another token). */
+function ActingAs({ session, user, name }: { session: GameSession; user: User; name: string }) {
   return (
-    <div data-acting-as className="fixed left-1/2 top-2 z-50 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-box bg-info/90 px-3 py-1 text-sm text-info-content shadow">
-      <span>Playing as <b>{user.name}</b></span>
+    <div data-acting-as className={`fixed left-1/2 top-2 z-50 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-box px-3 py-1 text-sm shadow ${user.watching ? "bg-warning/90 text-warning-content" : "bg-info/90 text-info-content"}`}>
+      <span>{user.watching ? <>Watching <b>{name}</b> (they&apos;re playing: look, don&apos;t touch)</> : <>Playing as <b>{name}</b></>}</span>
       <SwitchPlayers session={session} user={user} />
     </div>
   );

@@ -39,7 +39,7 @@ export default function LevelMap({
   selectedTarget?: number | null; // a player's selected target (player only)
   planExplored?: Record<number, { x: number; y: number }[]>; // GM planning as a character: where it has stood (its fog of war)
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number; runPerSecond?: number }>; // GM planning creatures' rounds
-  fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { characterId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // a player's fog of war (and movement: left, and whether it's free)
+  fog?: { viewers: number[]; explored: { x: number; y: number }[]; move?: { tokenId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // a player's fog of war (and movement: left, and whether it's free)
   dock?: { side: "left" | "right"; tools: DockTool[]; initial?: string | null; opposite?: { tools: DockTool[]; initial?: string | null } }; // in a session: full screen, with this dock
 }) {
   // A player's view gets nothing GM-only (notes, controls, scripts, sounds, the creature list).
@@ -48,7 +48,7 @@ export default function LevelMap({
   // about anyone they didn't deal with). The raw events never reach a browser.
   const raw = getReplay(level.id);
   const labels = tokenLabels(level.id);
-  const mine = gm ? [] : listTokens(level.id).filter((t) => t.character_id !== null && (fog?.viewers ?? []).includes(t.character_id)).map((t) => t.id);
+  const mine = gm ? [] : listTokens(level.id).filter((t) => (fog?.viewers ?? []).includes(t.id)).map((t) => t.id); // fog.viewers: the tokens they see through (their characters, or a creature the GM plays)
   const replay = raw && (gm ? { ...raw, story: undefined } : playerReplay(raw, mine, (id) => labels.get(id) ?? "someone", blockingSegments(listStructures(level.id))));
   const start = getPartyStart();
   // Senses: a player doesn't get invisible tokens (unless one of their characters sees invisible things), and a blind
@@ -59,8 +59,8 @@ export default function LevelMap({
   const hidden = listHidden(level.id), mySide = allegianceOf(all.find((t) => mine.includes(t.id)) ?? { character_id: 1 });
   const unhidden = gm ? all : all.filter((t) => !hidden.has(t.id) || mine.includes(t.id) || relation(mySide, allegianceOf(t)) === "friendly");
   const tokens = gm || seeInvisible ? unhidden : unhidden.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
-  const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null && sensesOf(t.id, level.id).blind).map((t) => [t.character_id!, sensesOf(t.id, level.id).blindRange]));
-  const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && t.character_id !== null).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.character_id!, dv]] : []; }));
+  const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && sensesOf(t.id, level.id).blind).map((t) => [t.id, sensesOf(t.id, level.id).blindRange]));
+  const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id)).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.id, dv]] : []; }));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);
   const placement = getPartyPlacement();
   // In a session: tokens of the absent players the GM plays (not the one being played now): a click switches to them.
