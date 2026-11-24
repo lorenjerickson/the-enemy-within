@@ -216,7 +216,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
             const sheet = t && sheetFor(t.id);
             return sheet ? <CharacterSheet key={c.id} sheet={sheet} manage={{ gm: false, locked: levelId !== undefined && getEncounter(levelId) ? "In an encounter, swap gear with Refit (a bonus action)." : null }} /> : <p key={c.id} className="font-semibold">{c.name} <span className="font-normal opacity-60">(not on the map)</span></p>;
           })}
-          <Link href="/" className="btn btn-sm">Leave</Link>
+          {user.playedBy ? <SwitchPlayers session={session} user={user} /> : <Link href="/" className="btn btn-sm">Leave</Link>}
         </div>
       ),
     },
@@ -252,14 +252,23 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
   );
 }
 
-/** The GM playing an absent player: whose screen this is, the others they play, and back to the GM. */
+/** The GM playing an absent player: whose screen this is, the others they play, and back to the GM (also: click another's token). */
 function ActingAs({ session, user }: { session: GameSession; user: User }) {
+  return (
+    <div data-acting-as className="fixed left-1/2 top-2 z-50 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-box bg-info/90 px-3 py-1 text-sm text-info-content shadow">
+      <span>Playing as <b>{user.name}</b></span>
+      <SwitchPlayers session={session} user={user} />
+    </div>
+  );
+}
+
+/** Switch to another absent player the GM plays, or back to the GM. */
+function SwitchPlayers({ session, user }: { session: GameSession; user: User }) {
   const others = listPlayers().filter((p) => p.id !== user.id && gmPlayedPlayers(session.id).includes(p.id));
   return (
-    <div data-acting-as className="fixed left-1/2 top-2 z-40 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-box bg-info/90 px-3 py-1 text-sm text-info-content shadow">
-      <span>Playing as <b>{user.name}</b></span>
+    <div className="flex flex-wrap items-center gap-1" data-switch-players>
       {others.map((p) => (
-        <form key={p.id} action={playAs.bind(null, p.id)}><button className="btn btn-xs">{p.name}</button></form>
+        <form key={p.id} action={playAs.bind(null, p.id)}><button className="btn btn-xs">Play as {p.name}</button></form>
       ))}
       <form action={playAs.bind(null, null)}><button className="btn btn-xs btn-neutral">Back to GM</button></form>
     </div>
