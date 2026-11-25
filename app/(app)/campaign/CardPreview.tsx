@@ -38,10 +38,14 @@ export default function CardPreview({ conditions }: { conditions: Condition[] })
     const form = ref.current?.closest("form");
     if (!form) return;
     const byId = new Map(conditions.map((c) => [c.id, c]));
-    const update = () => setTimeout(() => setLines(gearSummary(gearOf(readForm(new FormData(form)), (id) => byId.get(id)))), 0); // after chips settle
+    // Only a changed card is set: the card is inside the form, so redrawing it must not set off the watch again.
+    const update = () => { const next = gearSummary(gearOf(readForm(new FormData(form)), (id) => byId.get(id))); setLines((l) => (l.join("\n") === next.join("\n") ? l : next)); };
     update();
-    for (const e of ["input", "change", "click"]) form.addEventListener(e, update);
-    return () => { for (const e of ["input", "change", "click"]) form.removeEventListener(e, update); };
+    // Typing and ticking fire input / change; effect chips add and remove hidden inputs, which only a DOM watch sees.
+    for (const e of ["input", "change"]) form.addEventListener(e, update);
+    const chips = new MutationObserver(update);
+    chips.observe(form, { childList: true, subtree: true });
+    return () => { for (const e of ["input", "change"]) form.removeEventListener(e, update); chips.disconnect(); };
   }, [conditions]);
   const [lead, ...rest] = lines;
   return (
