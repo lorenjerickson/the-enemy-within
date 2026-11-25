@@ -61,6 +61,7 @@ export interface Agreed {
   roll: ImproviseRoll | null;
   success: ImproviseOutcome;
   failure?: ImproviseOutcome;
+  go?: boolean; // a template to place: the GM has gone ahead with where it was put (then the roll)
 }
 
 export interface Improvisation {
@@ -111,6 +112,19 @@ export function agreeImprovisation(id: number, agreed: Agreed): void {
 
 /** Its template is put down (by the player, or moved by the GM). */
 export const setImprovisePlaced = (id: number, at: { x: number; y: number }): void => void db.prepare("UPDATE improvisations SET placed = ? WHERE id = ?").run(JSON.stringify({ x: at.x, y: at.y }), id);
+
+/** The GM goes ahead with where its template was put. */
+export function goAheadImprovisation(id: number): void {
+  const i = getImprovisation(id);
+  if (i?.agreed) db.prepare("UPDATE improvisations SET details = ? WHERE id = ?").run(JSON.stringify({ ...i.agreed, go: true }), id);
+}
+
+/** Whether it's waiting on its template: to be placed, or for the GM to go ahead with it. */
+export const waitingOnTemplate = (i: Improvisation) => !!templateOf(i) && (!i.placed || !i.agreed?.go);
+
+/** Settled improvisations on a level not yet played out (the GM's list: placing, going ahead). */
+export const listAgreedImprovisations = (levelId: number): Improvisation[] =>
+  db.prepare<[number], Row>(`SELECT ${COLS} FROM improvisations WHERE level_id = ? AND status = 'agreed' ORDER BY id`).all(levelId).map((r) => parse(r)!);
 
 /** The player's roll came in (kept; its outcome is shown when it plays out). */
 export const setImproviseRolled = (id: number, rolled: { total: number; natural: number }): void => void db.prepare("UPDATE improvisations SET rolled = ? WHERE id = ?").run(JSON.stringify(rolled), id);

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { setPlaceMode } from "./placeMode";
+import type { Template } from "@/lib/improvise";
 import { cancelImprovise, improvise, hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots, useHideSpots } from "./hideMode";
@@ -49,7 +51,7 @@ export default function PickLock({
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   improvising?: string | null; // their improvisation waiting on the GM (its line of intent)
-  agreed?: { name: string; terms: string; waitingRoll: boolean; planned: boolean } | null; // settled with the GM, not yet played out
+  agreed?: { name: string; terms: string; waitingRoll: boolean; planned: boolean; template: { id: number; template: Template; from: { x: number; y: number }; placed: boolean } | null } | null; // settled with the GM, not yet played out
   puts?: PutOptions; // what Refit could put away, or bring out of a pack onto the belt
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
@@ -299,7 +301,12 @@ export default function PickLock({
       {agreed && (
         <div className="rounded-box bg-success/15 p-2 text-xs" data-improvise-agreed>
           <span className="font-semibold">Agreed:</span> {agreed.name} ({agreed.terms}).{" "}
-          {agreed.waitingRoll ? "Roll for it (your dice prompt)." : plan ? (agreed.planned ? "It's in your plan." : <button type="button" className="btn btn-primary btn-xs" disabled={pending || plan.ready} onClick={() => run(() => planStep({ kind: "action", action: "improvise" }))}>Add to plan</button>) : null}
+          {agreed.template ? (
+            <>
+              {agreed.template.placed ? "Placed: waiting for the GM to go ahead. " : "Place it on the map: it follows your pointer; click to put it down. "}
+              <button type="button" className="btn btn-primary btn-xs" onClick={() => setPlaceMode({ id: agreed.template!.id, template: agreed.template!.template, from: agreed.template!.from, gm: false })}>{agreed.template.placed ? "Move it" : "Place it"}</button>
+            </>
+          ) : agreed.waitingRoll ? "Roll for it (your dice prompt)." : plan ? (agreed.planned ? "It's in your plan." : <button type="button" className="btn btn-primary btn-xs" disabled={pending || plan.ready} onClick={() => run(() => planStep({ kind: "action", action: "improvise" }))}>Add to plan</button>) : null}
         </div>
       )}
       {improvising ? (

@@ -6,7 +6,7 @@ import { addLastingArea, getGameTime, getLastingArea, spreadFire, getCharacterPl
 import { saveRollFor, skillCheckFor } from "@/lib/creatureChanges";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import type { Attributes } from "@/lib/attributes";
-import { finishImprovisation, getImprovisation, needsPlacing, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
+import { finishImprovisation, getImprovisation, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { fireTrigger } from "./mapTriggers";
@@ -88,7 +88,7 @@ export function startImprovisation(id: number): Map<number, string[]> {
   const i = getImprovisation(id);
   if (!i?.agreed) return new Map();
   const inRound = !!getEncounter(i.level_id);
-  if (needsPlacing(i)) return new Map(); // its template first: the player places it (then this again)
+  if (waitingOnTemplate(i)) return new Map(); // its template first: the player places it, the GM goes ahead (then this again)
   const spec = rollSpecFor(i);
   if (spec) {
     const t = listTokens(i.level_id).find((x) => x.id === i.token_id), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;

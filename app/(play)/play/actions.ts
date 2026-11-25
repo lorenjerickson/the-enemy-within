@@ -33,7 +33,7 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
-import { askImprovise, dropImprovisation, openImprovisation, seenImprovisationResult } from "@/lib/improvise";
+import { agreedImprovisation, askImprovise, dropImprovisation, openImprovisation, seenImprovisationResult, setImprovisePlaced, templateOf } from "@/lib/improvise";
 import { improvisationRolled } from "./improvising";
 import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
 import { inArea, type LastingArea } from "@/lib/aoe";
@@ -603,4 +603,16 @@ export async function seenImprovise(id: number): Promise<void> {
   await requireUser();
   seenImprovisationResult(Number(id));
   revalidatePath("/play");
+}
+
+/** Puts their improvisation's template down where they clicked (again, until the GM goes ahead). */
+export async function placeImprovise(x: number, y: number): Promise<{ error?: string }> {
+  const { me, error } = await acting();
+  if (error) return { error };
+  const i = me ? agreedImprovisation(me.token_id) : undefined;
+  if (!i || !templateOf(i)) return { error: "Nothing to place" };
+  if (i.agreed?.go) return { error: "The GM has gone ahead with it" };
+  setImprovisePlaced(i.id, { x: Number(x), y: Number(y) });
+  revalidatePath("/play");
+  return {};
 }

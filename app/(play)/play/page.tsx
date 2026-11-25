@@ -24,7 +24,7 @@ import { listLights, listEffects, listSecrets, listTraps, listEffectDefs } from 
 import { listDiscoveries } from "@/lib/story";
 import { listLibraryScripts } from "@/lib/scriptLibrary";
 import type { PlanStep } from "@/lib/roundPlan";
-import { agreedImprovisation, improvisationResult, listOpenImprovisations, openImprovisation } from "@/lib/improvise";
+import { agreedImprovisation, improvisationResult, listAgreedImprovisations, listOpenImprovisations, openImprovisation, templateOf, waitingOnTemplate } from "@/lib/improvise";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
@@ -136,7 +136,12 @@ function GmView({ session }: { session: GameSession }) {
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
-      <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} choices={improviseChoices(levelId!)} />
+      <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} choices={improviseChoices(levelId!)}
+        agreed={listAgreedImprovisations(levelId!).map((i) => {
+          const t = templateOf(i), me = listTokens(levelId!).find((x) => x.id === i.token_id);
+          const state = t && !i.placed ? "waiting for them to place it" : t && !i.agreed?.go ? "placed: move it or go ahead" : i.agreed?.roll && !i.rolled ? "waiting for their roll" : "ready to plan or play out";
+          return { id: i.id, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone", name: i.agreed?.name ?? "", state, template: t && me && !i.agreed?.go && i.placed ? { template: t, from: { x: me.col + 0.5, y: me.row + 0.5 } } : null };
+        })} />
       <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
@@ -314,10 +319,12 @@ function agreedView(tokenId: number, plan: PlanStep[]) {
   const i = agreedImprovisation(tokenId), a = i?.agreed;
   if (!i || !a) return null;
   const roll = a.roll ? `${a.roll.type === "check" ? a.roll.skill : `${a.roll.attribute} ${a.roll.type}`} roll` : "no roll";
+  const t = templateOf(i), me = listTokens(i.level_id).find((x) => x.id === tokenId);
   return {
     name: a.name,
     terms: `${a.cost === "free" ? "costs nothing" : a.cost === "bonus" ? "your bonus action" : "your action"}, ${a.seconds} s, ${roll}`,
-    waitingRoll: !!a.roll && !i.rolled,
+    template: t && me && !a.go ? { id: i.id, template: t, from: { x: me.col + 0.5, y: me.row + 0.5 }, placed: !!i.placed } : null,
+    waitingRoll: !!a.roll && !i.rolled && !waitingOnTemplate(i),
     planned: plan.some((s) => s.kind === "action" && s.improv?.id === i.id),
   };
 }

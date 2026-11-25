@@ -1,5 +1,5 @@
 "use server";
-import { agreeImprovisation, dropImprovisation, getImprovisation, type Agreed } from "@/lib/improvise";
+import { agreeImprovisation, dropImprovisation, getImprovisation, goAheadImprovisation, setImprovisePlaced, type Agreed } from "@/lib/improvise";
 import { checkScript } from "@/lib/script";
 import { startImprovisation } from "./improvising";
 
@@ -280,4 +280,19 @@ export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<
   startImprovisation(Number(id)); // its roll asked for (or, out of combat with none, it plays out now)
   revalidatePath("/play");
   return {};
+}
+
+/** The GM moves an improvisation's template (adjusting where the player put it). */
+export async function gmPlaceImprovise(id: number, x: number, y: number): Promise<void> {
+  await requireGm();
+  setImprovisePlaced(Number(id), { x: Number(x), y: Number(y) });
+  revalidatePath("/play");
+}
+
+/** The GM goes ahead with where the template was put: its roll is asked for (out of combat with no roll, it plays out now). */
+export async function gmGoAheadImprovise(id: number): Promise<void> {
+  await requireGm();
+  goAheadImprovisation(Number(id));
+  startImprovisation(Number(id));
+  revalidatePath("/play");
 }

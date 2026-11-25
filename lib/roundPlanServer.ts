@@ -3,7 +3,7 @@ import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, onBelt, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
-import { agreedImprovisation } from "@/lib/improvise";
+import { agreedImprovisation, waitingOnTemplate } from "@/lib/improvise";
 import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
@@ -44,6 +44,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (step.kind === "action" && step.action === "improvise") {
     const i = agreedImprovisation(p.tok.token_id);
     if (!i?.agreed) return "Nothing agreed with the GM yet";
+    if (waitingOnTemplate(i)) return i.placed ? "Waiting for the GM to go ahead" : "Place it on the map first";
     if (i.agreed.roll && !i.rolled) return "Roll for it first";
     if (p.plan.some((s) => s.kind === "action" && s.improv?.id === i.id)) return "It's in the plan already";
     const add: PlanStep = { kind: "action", action: "improvise", improv: { id: i.id, name: i.agreed.name, seconds: i.agreed.seconds, cost: i.agreed.cost } };

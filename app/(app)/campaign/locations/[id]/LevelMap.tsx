@@ -6,6 +6,7 @@ import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlaye
 import { allegianceOf, relation } from "@/lib/sides";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
+import { listAgreedImprovisations, templateOf } from "@/lib/improvise";
 import { FOG_SIGHT_FT, inFog } from "@/lib/db";
 import { blindRangeOf } from "@/lib/conditions";
 import { playersSee } from "@/lib/aoe";
@@ -75,7 +76,7 @@ export default function LevelMap({
   // present one); from inside someone's view, anyone else on that one's side (others there are targets, as for players).
   const switchTo = switchable === "all" ? all.map((t) => t.id) : switchable === "side" ? all.filter((t) => !mine.includes(t.id) && tokens.some((x) => x.id === t.id) && relation(mySide, allegianceOf(t)) === "friendly").map((t) => t.id) : [];
   return (
-    <MapView gameNow={getGameTime()} switchTo={switchTo} hiddenTokens={gm ? [...hidden.keys()] : []} linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={gm ? listLastingAreas(level.id) : listLastingAreas(level.id).filter(playersSee)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
+    <MapView templates={templatesOn(level.id, gm ? null : mine)} gameNow={getGameTime()} switchTo={switchTo} hiddenTokens={gm ? [...hidden.keys()] : []} linkPrompt={linkPrompt} downTokens={[...downTokens(level.id)]} lasting={gm ? listLastingAreas(level.id) : listLastingAreas(level.id).filter(playersSee)} planTargets={planTargets} planRoutes={planRoutes} contest={contest} selectedTarget={selectedTarget} planExplored={planExplored} replay={replay} replayName={gm ? replayName : null} gmPlans={gmPlans} fog={fog && { ...fog, sight, darkvision }} triggers={gm ? listMapTriggers(level.id) : []} traps={gm ? listTraps(level.id) : listTraps(level.id).filter((t) => t.found).map((t) => ({ ...t, damage: null, damage_type: "", save_attr: "", effects: [], sprung: [], find_dc: 0 }))} trapEffects={gm ? listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })) : []} secrets={gm ? listSecrets(level.id) : listSecrets(level.id).filter((s) => s.revealed).map((s) => ({ ...s, discovery_id: null }))} discoveries={gm ? listDiscoveries().map(({ id, title, text, found }) => ({ id, title, text, found })) : []} hideWalls={!!level.hide_walls} readOnly={readOnly} dockSide={dock?.side} dockTools={dock?.tools} dockInitial={dock?.initial} dockOpposite={dock?.opposite} key={level.id} locationId={locationId} levelId={level.id} hidden={level.hidden} background={level.background} mapImage={level.mapImage} grid={level.grid} templateColors={level.templateColors}
       tileAssets={gm ? listAssets({ type: "image", usage: "tile" }) : []}
       tiles={listTiles(level.id)}
       structures={listStructures(level.id)}
@@ -103,4 +104,14 @@ export default function LevelMap({
       otherLevels={levels.filter((l) => l.id !== level.id).map(({ id, name }) => ({ id, name }))}
     />
   );
+}
+
+/** Improvisations' templates put down on this level (the GM's: all; a player's: their own), with where each comes from. */
+function templatesOn(levelId: number, mine: number[] | null) {
+  const tokens = listTokens(levelId);
+  return listAgreedImprovisations(levelId).flatMap((i) => {
+    const t = templateOf(i), me = tokens.find((x) => x.id === i.token_id);
+    if (!t || !i.placed || !me || (mine && !mine.includes(i.token_id))) return [];
+    return [{ id: i.id, template: t, at: i.placed, from: { x: me.col + 0.5, y: me.row + 0.5 } }];
+  });
 }

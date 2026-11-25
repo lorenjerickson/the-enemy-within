@@ -108,3 +108,22 @@ test("place an area: the template where it was put (a line from the improviser);
   const slick = listLastingAreas(lv).find((l) => l.name === "Oil slick")!;
   assert.deepEqual([slick.area.shape, slick.area.origin, slick.flammable], ["rect", { x: 4, y: 4 }, true]);
 });
+
+test("a template to place: nothing (no roll, no outcome) until it's placed and the GM goes ahead", async () => {
+  const { setImprovisePlaced, goAheadImprovisation, waitingOnTemplate } = await import("@/lib/improvise");
+  const { startImprovisation } = await import("@/app/(play)/play/improvising");
+  const { listLastingAreas } = await import("@/lib/db");
+  const lv = level(), tok = placeCharacterToken(lv, character("Sol"), 0, 0);
+  const id = askImprovise(lv, tok, "spill the lamp oil");
+  agreeImprovisation(id, { name: "Spill oil", cost: "action", seconds: 2, roll: null, success: { kind: "area", template: { shape: "circle", ft: 5 }, settings: { name: "Lamp oil", look: "oil", damage: null, dc: 12, save: "agility", half: true, fires: ["inside"], minutes: 0 } } });
+  startImprovisation(id);
+  assert.equal(getImprovisation(id)!.status, "agreed", "not placed yet");
+  setImprovisePlaced(id, { x: 3, y: 3 });
+  assert.equal(waitingOnTemplate(getImprovisation(id)!), true, "placed, but the GM hasn't gone ahead");
+  startImprovisation(id);
+  assert.equal(getImprovisation(id)!.status, "agreed");
+  goAheadImprovisation(id);
+  startImprovisation(id);
+  assert.equal(getImprovisation(id)!.status, "done");
+  assert.ok(listLastingAreas(lv).some((l) => l.name === "Lamp oil"));
+});

@@ -792,6 +792,25 @@ export function drawSessionOverlays(ctx: CanvasRenderingContext2D, state: MapSta
 }
 
 /** Hide: the blind spots a player can pick, as soft green squares. */
+/** Improvisations' templates: where they were put (dashed), and the one being placed (following the cursor, solid). */
+export function drawTemplates(ctx: CanvasRenderingContext2D, state: MapState, areas: { poly: { x: number; y: number }[]; moving: boolean }[]) {
+  const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
+  ctx.save();
+  for (const a of areas) {
+    if (!a.poly.length) continue;
+    ctx.beginPath();
+    a.poly.forEach((p, i) => (i ? ctx.lineTo(x0 + p.x * size, y0 + p.y * size) : ctx.moveTo(x0 + p.x * size, y0 + p.y * size)));
+    ctx.closePath();
+    ctx.fillStyle = a.moving ? "rgba(251,146,60,0.3)" : "rgba(251,146,60,0.15)";
+    ctx.strokeStyle = "rgba(251,146,60,0.95)";
+    ctx.lineWidth = Math.max(1, size * 0.05);
+    ctx.setLineDash(a.moving ? [] : [size * 0.15, size * 0.1]);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawHideSpots(ctx: CanvasRenderingContext2D, state: MapState, cells: { col: number; row: number }[]) {
   const { x0, y0, size } = gridOrigin(state, SCENE.w, SCENE.h);
   ctx.save();

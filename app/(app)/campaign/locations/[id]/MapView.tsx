@@ -20,7 +20,7 @@ import { setHideSpots, useHidePick } from "../../../../(play)/play/hideMode";
 import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanner";
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
-import { caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
+import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
 import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { setSheetToken } from "../../../../(play)/play/sheetToken";
 import { actAs } from "../../../sessions/actions";
@@ -34,12 +34,16 @@ import TriggersEditor from "./TriggersEditor";
 import type { MapTrigger } from "@/lib/triggers";
 import { trapFromDrag, type TrapShape } from "./trapDraw";
 import AreasEditor from "./AreasEditor";
+import { setPlaceMode, usePlaceMode } from "../../../../(play)/play/placeMode";
+import { placeImprovise } from "../../../../(play)/play/actions";
+import { gmPlaceImprovise } from "../../../../(play)/play/gmActions";
+import { templateArea, type Template } from "@/lib/improvise";
 import type { Trap } from "@/lib/traps";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";
 import ControlsEditor from "./ControlsEditor";
 import ControlButtons from "./ControlButtons";
-import { contestBox, drawEditorAids, drawHideSpots, drawPings, drawSessionOverlays } from "./mapOverlays";
+import { contestBox, drawEditorAids, drawHideSpots, drawTemplates, drawPings, drawSessionOverlays } from "./mapOverlays";
 import TokensEditor, { type TokenCreature } from "./TokensEditor";
 import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
@@ -106,7 +110,9 @@ export default function MapView({
   dockOpposite,
   switchTo = [],
   gameNow = 0,
+  templates = [],
 }: {
+  templates?: { id: number; template: Template; at: { x: number; y: number }; from: { x: number; y: number } }[]; // improvisations' templates put down
   gameNow?: number; // game time now (minutes): how long the GM's areas have left
   switchTo?: number[]; // the GM in a session: tokens a click switches to acting as (their view)
   locationId: number;
@@ -579,6 +585,8 @@ export default function MapView({
   // Picking a target by clicking a token: everyone shown except the one acting (players see only who's in sight).
   const targetMode = useTargetMode();
   const hidePick = useHidePick(), hideSpots = hidePick?.spots ?? null; // Hide (seen): blind spots to pick on the map
+  const placingTemplate = usePlaceMode(); // placing an improvisation's template: it follows the cursor
+  const [placeAt, setPlaceAt] = useState<{ x: number; y: number } | null>(null);
   const actingToken = targetMode ? (targetMode.tokenId ?? fog?.move?.tokenId) : undefined;
   // Only the kind it's for (friendlies / enemies, as the one acting sees them), and in an aimed area only those there.
   const actorSide = allegianceOf(drawnTokens.find((t) => t.id === actingToken) ?? { character_id: null });
@@ -805,6 +813,17 @@ export default function MapView({
         const step = { kind: "action" as const, action: m.action, use: m.use, aim: { col: Math.round(gx * 20) / 20, row: Math.round(gy * 20) / 20 } };
         const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
         if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+      });
+      return;
+    }
+    if (placingTemplate && e.button === 0) {
+      // An improvisation's template: a click puts it down here.
+      const { gx, gy } = gridAt(e), m = placingTemplate;
+      setPlaceMode(null);
+      setPlaceAt(null);
+      startTransition(async () => {
+        if (m.gm) await gmPlaceImprovise(m.id, gx, gy);
+        else { const r = await placeImprovise(gx, gy); if (r.error) setControlResult({ label: "Improvise", ok: false, text: r.error }); }
       });
       return;
     }
@@ -1107,6 +1126,7 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (placingTemplate) { const { gx, gy } = gridAt(e); setPlaceAt({ x: gx, y: gy }); }
     if (linkDrag) {
       const at = linkPointAt(e);
       if (at.x !== linkDrag.end.x || at.y !== linkDrag.end.y) setLinkDrag({ ...linkDrag, end: at });
@@ -1430,6 +1450,11 @@ export default function MapView({
       }
       drawSessionOverlays(ctx, state, k, { canvas, fogged, fogCanvas, fogWalls, replayFrame, scriptFx, readOnly, gmSel, pickEntity, pickIds, scriptPick, targetMode, aimAt, aimFrom, actingToken, targetCandidates, gridless, contest, planRoutes, planTargets, selectedTarget, drawnTokens, reach });
       if (hideSpots) drawHideSpots(ctx, state, hideSpots); // Hide: blind spots to pick
+      // Improvisations' templates: where they were put, and the one following the cursor.
+      if (templates.length || placingTemplate) drawTemplates(ctx, state, [
+        ...templates.filter((t) => !placingTemplate || t.id !== placingTemplate.id).map((t) => ({ poly: areaPolygon(templateArea(t.template, t.at, t.from)), moving: false })),
+        ...(placingTemplate && placeAt ? [{ poly: areaPolygon(templateArea(placingTemplate.template, placeAt, placingTemplate.from)), moving: true }] : []),
+      ]);
       drawPings(ctx, state, pings, k); // on top of everything (even fog)
       drawEditorAids(ctx, state, k, {
         tile: selected === "tiles" ? drawnTiles.find((t) => t.id === selectedTileId) : undefined,
