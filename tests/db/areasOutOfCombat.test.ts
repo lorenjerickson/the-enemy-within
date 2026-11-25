@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addEffect, addLastingArea, createUser, spreadFire, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addEffect, addLastingArea, createUser, listHazards, spreadFire, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
 import { catchInArea } from "@/app/(play)/play/areas";
+import { fireTrigger } from "@/app/(play)/play/mapTriggers";
 import { UNTIL_REMOVED, areaFromDrawn, inArea, playersSee, type LastingArea } from "@/lib/aoe";
 
 const wall = (o: Partial<Omit<LastingArea, "id">> = {}): Omit<LastingArea, "id"> => ({
@@ -141,4 +142,19 @@ test("out of a round: a fire map effect (or a fire area) touching a flammable ar
   assert.equal(lit.name, "Oil slick (burning)");
   assert.equal(lit.damageType, "fire");
   assert.ok(lit.ends < UNTIL_REMOVED && lit.ends > getGameTime());
+});
+
+test("a trigger outcome sets an area off (it catches whoever is in it now) or switches it off and on (the lever and the trap door)", () => {
+  const lv = level();
+  const pit = addLastingArea(lv, { name: "Trap door", look: "fog", area: areaFromDrawn({ shape: "rect", x: 4, y: 0, w: 2, h: 2 }), damage: "5", dc: 40, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["leave"], drawn: true, visibility: "hidden" });
+  const tok = placeCharacterToken(lv, character("Max", { health: "20" }), 4, 0);
+  const lever = (to: "on" | "off" | "set off") => fireTrigger(lv, { id: 0, name: "Lever", area: { shape: "rect", x: 0, y: 0, w: 1, h: 1 }, springs: [], who: "", often: "always", outcomes: [{ kind: "area", area: pit, to }], sprung: [] }, null);
+  const f = lever("set off");
+  assert.equal(tokenHealth(tok)!.current, 15, "it caught them where they stood");
+  assert.ok(f.told.get(tok)?.some((t) => /Trap door/.test(t)));
+  lever("off");
+  assert.equal(listHazards(lv).some((l) => l.id === pit), false, "off: it does nothing");
+  assert.equal(listLastingAreas(lv).filter(playersSee).length, 0);
+  lever("on");
+  assert.equal(tokenHealth(tok)!.current, 10, "switched on: catches whoever is in it");
 });

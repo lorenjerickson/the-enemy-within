@@ -4,7 +4,7 @@ import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { AREA_FIRES, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
-import { removeArea, saveAreaSettings, setAreaAlight } from "../actions";
+import { removeArea, saveAreaSettings, setAreaAlight, switchArea } from "../actions";
 import type { TrapShape } from "./trapDraw";
 
 const SHAPES: [TrapShape, string, string][] = [
@@ -100,7 +100,8 @@ export default function AreasEditor({ locationId, shape, onShape, areas, effects
             <li key={`${a.id}:${JSON.stringify(a)}`} data-area={a.id}>
               <details>
                 <summary className="flex cursor-pointer items-center gap-2">
-                  <span className="flex-1"><span className="font-medium">{a.name}</span> <span className="opacity-60">{a.damage ? `${a.damage} ${a.damageType ?? ""}`.trimEnd() : "no damage"}{a.ends >= UNTIL_REMOVED ? "" : " · runs out"}{a.visibility === "gm" ? " · GM only" : a.visibility === "hidden" ? (a.found ? " · found" : " · hidden") : ""}{a.sound ? " · ♪" : ""}{a.drawn ? "" : " · from an action"}</span></span>
+                  <span className="flex-1"><span className="font-medium">{a.name}</span> <span className="opacity-60">{a.damage ? `${a.damage} ${a.damageType ?? ""}`.trimEnd() : "no damage"}{a.ends >= UNTIL_REMOVED ? "" : " · runs out"}{a.visibility === "gm" ? " · GM only" : a.visibility === "hidden" ? (a.found ? " · found" : " · hidden") : ""}{a.sound ? " · ♪" : ""}{a.off ? " · off" : ""}{a.drawn ? "" : " · from an action"}</span></span>
+                  <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); switchArea(locationId, a.id, !!a.off); }} data-switch-area={a.id}>{a.off ? "Switch on" : "Switch off"}</button>
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); removeArea(locationId, a.id); }} data-remove-area={a.id}>Remove</button>
                 </summary>
                 <AreaSettings locationId={locationId} area={a} effects={effects} now={now} sounds={sounds} />

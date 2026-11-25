@@ -21,9 +21,10 @@ export interface TriggerThings {
   secret: { id: number; name: string }[];
   trap: { id: number; name: string }[];
   discovery: { id: number; name: string }[];
+  area: { id: number; name: string }[];
 }
 type Pickable = keyof TriggerThings;
-const PICKS: Pickable[] = ["door", "light", "effect", "secret", "trap", "discovery"];
+const PICKS: Pickable[] = ["door", "light", "effect", "secret", "trap", "discovery", "area"];
 
 /** Adding one outcome: what kind, which thing, and (doors, lights, effects) what happens to it. */
 function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; scripts?: string[]; onAdd: (o: TriggerOutcome) => void }) {
@@ -38,7 +39,7 @@ function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; sc
     const n = Number(id);
     const o: TriggerOutcome =
       kind === "door" ? { kind, door: n, to: to as "open" } : kind === "light" ? { kind, light: n, on: on === "on" } : kind === "effect" ? { kind, effect: n, on: on === "on" }
-      : kind === "secret" ? { kind, secret: n } : kind === "discovery" ? { kind, discovery: n } : kind === "trap" ? { kind, trap: n } : kind === "stop" ? { kind } : { kind, script };
+      : kind === "secret" ? { kind, secret: n } : kind === "discovery" ? { kind, discovery: n } : kind === "trap" ? { kind, trap: n } : kind === "area" ? { kind, area: n, to: (["on", "off", "set off"].includes(to) ? to : "set off") as "on" } : kind === "stop" ? { kind } : { kind, script };
     onAdd(o);
     setId("");
     setScript("");
@@ -56,6 +57,7 @@ function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; sc
           </select>
         )}
         {(PICKS as string[]).includes(kind) && !list.length && <span className="text-xs opacity-60">none on this level yet</span>}
+        {kind === "area" && <select className="select select-xs w-auto" value={["on", "off", "set off"].includes(to) ? to : "set off"} onChange={(e) => setTo(e.target.value)}>{["set off", "on", "off"].map((v) => <option key={v} value={v}>{v === "set off" ? "set it off" : `switch ${v}`}</option>)}</select>}
         {kind === "door" && <select className="select select-xs w-auto" value={to} onChange={(e) => setTo(e.target.value)}>{["open", "close", "lock", "unlock"].map((v) => <option key={v} value={v}>{v}</option>)}</select>}
         {(kind === "light" || kind === "effect") && <select className="select select-xs w-auto" value={on} onChange={(e) => setOn(e.target.value)}><option value="on">on</option><option value="off">off</option></select>}
         <button type="button" className="btn btn-xs" disabled={!ready} onClick={add}>Add</button>

@@ -2282,7 +2282,7 @@ export function listHazards(levelId: number): LastingArea[] {
     area: { shape: "circle", origin: { x: e.x! + e.w! / 2, y: e.y! + e.h! / 2 }, dir: 0, size: Math.min(e.w!, e.h!) / 2 },
     fires: ["inside"], lingers: true, buildUp: 1, decay: 2, drawn: true,
   }));
-  return [...listLastingAreas(levelId), ...fires];
+  return [...listLastingAreas(levelId).filter((l) => !l.off), ...fires];
 }
 
 /** One lasting area (or none, gone or run out). */
@@ -2308,6 +2308,14 @@ export function spreadFire(levelId: number): void {
     if (!lit.length) return;
     igniteAreas([...new Set(lit)]);
   }
+}
+
+/** A lasting area switched on or off (a trigger, the GM). */
+export function setLastingAreaOff(id: number, off: boolean): void {
+  const a = getLastingArea(id);
+  if (!a) return;
+  const { id: _id, level_id: _l, ...rest } = a;
+  updateLastingArea(id, { ...rest, off: off || undefined });
 }
 
 /** A hidden lasting area is found (players see it from now on). */

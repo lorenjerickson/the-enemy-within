@@ -58,6 +58,7 @@ export interface LastingArea {
   findDc?: number; // hidden: a Search beating this within 10 ft finds it
   found?: boolean; // hidden: found (players see it now)
   sound?: number; // an audio asset that loops on the GM's screen while it's on (crackling fire)
+  off?: boolean; // switched off (by the GM, a trigger): does nothing and isn't shown until switched on
   flammable?: boolean; // fire reaching it (a fire area touching it, fire damage landing in it) sets it burning (ignite)
 }
 
@@ -81,7 +82,7 @@ export const isFire = (l: Pick<LastingArea, "damageType" | "look">) => l.damageT
 export const caughtFire = (areas: LastingArea[], fire: AreaAt) => areas.filter((l) => l.flammable && areasOverlap(l.area, fire)).map((l) => l.id);
 
 /** Whether players see a lasting area (hidden ones once found; GM-only ones never). */
-export const playersSee = (l: LastingArea) => (l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found);
+export const playersSee = (l: LastingArea) => !l.off && ((l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found));
 
 /** A lasting area that lasts until the GM removes it: its end, far off in game time. */
 export const UNTIL_REMOVED = 1e9;

@@ -12,6 +12,9 @@ import type { Point } from "@/lib/visibility";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { setOffTrap } from "./traps";
+import { catchInArea } from "./areas";
+import { getLastingArea, setLastingAreaOff, spreadFire } from "@/lib/db";
+import { inArea } from "@/lib/aoe";
 
 export interface Fired {
   trigger: MapTrigger;
@@ -35,7 +38,13 @@ export function fireTrigger(levelId: number, t: MapTrigger, tokenId: number | nu
       const d = listSecrets(levelId).find((s) => s.id === o.secret)?.discovery_id;
       if (d) revealDiscovery(d);
     } else if (o.kind === "discovery") revealDiscovery(o.discovery);
-    else if (o.kind === "trap") for (const s of setOffTrap(levelId, o.trap)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
+    else if (o.kind === "area") {
+      // On or off; on, or set off: it catches whoever is in it now.
+      if (o.to !== "set off") setLastingAreaOff(o.area, o.to === "off");
+      const l = o.to === "off" ? undefined : getLastingArea(o.area);
+      if (l && !l.off) for (const tok of listTokens(levelId)) if (inArea(l.area, { x: tok.col + 0.5, y: tok.row + 0.5 })) told.set(tok.id, [...(told.get(tok.id) ?? []), catchInArea(levelId, l, tok.id)]);
+      spreadFire(levelId);
+    } else if (o.kind === "trap") for (const s of setOffTrap(levelId, o.trap)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
     else if (o.kind === "script") {
       try { runGameScript(o.script, levelId); } catch (e) {
         if (!(e instanceof ScriptError)) throw e;

@@ -1592,6 +1592,7 @@ export default function MapView({
                   secret: optimisticSecrets.map((x) => ({ id: x.id, name: x.name })),
                   trap: optimisticTraps.map((x) => ({ id: x.id, name: x.name })),
                   discovery: discoveries.map((x) => ({ id: x.id, name: x.title })),
+                  area: lasting.map((x) => ({ id: x.id, name: x.name })),
                 }}
                 shape={trapShape}
                 onShape={setTrapShape}

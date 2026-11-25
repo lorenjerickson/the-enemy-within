@@ -11,8 +11,9 @@ import { speedFps } from "@/lib/creatureChanges";
 import { revealAfterStep } from "../../../(play)/play/hiding";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
-import { AREA_FIRES, UNTIL_REMOVED, areaFromDrawn, type AreaFires } from "@/lib/aoe";
-import { db, addLastingArea, getCondition, getGameTime, getLastingArea, igniteAreas, removeLastingArea, spreadFire, updateLastingArea } from "@/lib/db";
+import { AREA_FIRES, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires } from "@/lib/aoe";
+import { db, addLastingArea, getCondition, getGameTime, getLastingArea, igniteAreas, removeLastingArea, setLastingAreaOff, spreadFire, updateLastingArea } from "@/lib/db";
+import { catchInArea } from "../../../(play)/play/areas";
 import { lookOf } from "@/lib/combat";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
@@ -682,6 +683,21 @@ export async function setAreaAlight(locationId: number, id: number) {
   if (!a) return;
   igniteAreas([a.id]);
   spreadFire(a.level_id);
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM switches an area on (it catches whoever is in it, as if they'd just come in) or off (it does nothing, and isn't shown). */
+export async function switchArea(locationId: number, id: number, on: boolean) {
+  await requireGm();
+  const a = getLastingArea(Number(id));
+  if (!a) return;
+  setLastingAreaOff(a.id, !on);
+  if (on) {
+    const l = getLastingArea(a.id)!;
+    for (const t of listTokens(a.level_id)) if (inArea(l.area, { x: t.col + 0.5, y: t.row + 0.5 })) catchInArea(a.level_id, l, t.id);
+    spreadFire(a.level_id);
+  }
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
