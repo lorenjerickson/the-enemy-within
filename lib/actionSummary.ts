@@ -1,6 +1,7 @@
 import { describeStatus, type ActionStatuses } from "@/lib/status";
 import { describeCondition, lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { describeTargeting } from "@/lib/sides";
+import { NO_SAVE_DC } from "@/lib/aoe";
 import type { GearAction } from "@/lib/roundPlan";
 
 const lasting = (minutes: number) => (minutes <= 0.1 ? "until the end of the round" : minutes < 1 ? `for ${Math.round(minutes * 10)} rounds` : minutes < 60 ? `for ${minutes} minute${minutes === 1 ? "" : "s"}` : `for ${Math.round(minutes / 60)} hour${minutes === 60 ? "" : "s"}`);
@@ -18,8 +19,11 @@ export function conditionInWords(c: Condition): string {
   const parts = effects.replace(/ \((attribute|skill)\)/g, "").replace(/ on their /g, " on ").replace(/([+-]\d+) ([a-z]+)/g, (_, n, w) => `${n} ${cap(w)}`).split(", ").filter(Boolean);
   const how = parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   const time = more.find((m) => /^\d+ rounds?$/.test(m));
-  const rest = more.filter((m) => m !== time);
-  return [how + (time ? ` for ${time}` : ""), ...rest].filter(Boolean).join("; ");
+  // Its save as it lands: "unless they make a Fortitude save (DC 12)" (halves: it lasts half as long on a success).
+  const rest = more.filter((m) => m !== time).map((m) => m.replace(/^(\w+) DC (\d+) when applied (negates|halves it)$/, (_, attr, dc, how) => how === "negates" ? `unless they make ${an(attr)} save (DC ${dc})` : `half as long on ${an(attr)} save (DC ${dc})`));
+  const save = rest.filter((m) => m.startsWith("unless ") || m.startsWith("half as long"));
+  const other = rest.filter((m) => !save.includes(m));
+  return [[how + (time ? ` for ${time}` : ""), ...other].filter(Boolean).join("; "), ...save].filter(Boolean).join(", ");
 }
 
 /** What a status does to `on` ("you", "the target", "them", "one creature"), as verb phrases: heals, harms, conditions put on, boosts. */
@@ -59,9 +63,14 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     const save = `${an(cap(g.area.save))} save (DC ${g.area.dc})`;
     const theirs = does(st?.target, "them", minutes);
     const many = !!t && t.count !== "one";
+    if (g.area.dc >= NO_SAVE_DC) { // an area only decides who is caught
+      if (dmg) out.push(`${caught} in it ${many ? "take" : "takes"} ${dmg}.`);
+      if (theirs.length) out.push(dmg ? `It also ${list(theirs)}.` : `${cap(list(theirs))}.`.replace(/ them\b/g, ` ${caught.toLowerCase()} in it`));
+    } else {
     if (dmg) out.push(`${caught} in it ${many ? "make" : "makes"} ${save} or ${many ? "take" : "takes"} ${dmg}${g.area.half ? ", half on a success" : ""}.`);
     else out.push(`${caught} in it ${t && t.count !== "one" ? "make" : "makes"} ${save}${theirs.length ? `; on a failure it ${list(theirs)}` : ""}.`);
     if (dmg && theirs.length) out.push(`A failed save also ${list(theirs)}.`);
+    }
     if (g.area.minutes) out.push(`The area stays ${lasting(g.area.minutes)}, catching whoever is in it.`);
   } else if (g.self) {
     out.push(mine.length ? `${cap(list(mine))}.` : "Used on yourself.");

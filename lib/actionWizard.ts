@@ -1,6 +1,7 @@
 // Client-safe: the action editor's interview. One question at a time; which comes next depends on the answers so far.
 // Answers turn into the action's saved fields and back (so an existing action opens with the interview filled in).
 import type { Boost } from "@/lib/actions";
+import { NO_SAVE_DC } from "@/lib/aoe";
 import type { ActionFields } from "@/lib/actionCard";
 import type { ModifierTarget } from "@/lib/modifiers";
 
@@ -42,7 +43,7 @@ export interface Answers {
 
 export type Question =
   | "name" | "type" | "who" | "targetWho" | "count" | "range" | "shape" | "areaSize" | "lasts"
-  | "affects" | "damage" | "avoid" | "defend" | "heal" | "aid" | "duration" | "effects";
+  | "affects" | "damage" | "toHit" | "defend" | "heal" | "aid" | "duration" | "effects";
 
 /** The questions, in order, for these answers (answering one can add or remove the ones after it). */
 export function questions(a: Answers): Question[] {
@@ -53,7 +54,8 @@ export function questions(a: Answers): Question[] {
     if (a.who === "area") q.push("shape", "areaSize", "lasts");
   }
   q.push("affects");
-  if (a.affects.includes("attack")) q.push("damage", "avoid");
+  // An area only decides who is caught: its damage always lands (saves belong to the effects it applies).
+  if (a.affects.includes("attack")) q.push("damage", ...(a.who === "area" && a.type !== "reaction" ? [] : (["toHit"] as const)));
   if (a.affects.includes("defend")) q.push("defend");
   if (a.affects.includes("heal")) q.push("heal");
   if (a.affects.includes("aid")) q.push("aid");
@@ -88,7 +90,7 @@ export function fieldsFromAnswers(a: Answers): ActionFields {
     duration_amount: a.durationAmount, duration_unit: a.durationUnit,
     range_ft: isSelf(a) || (area && a.shape !== "circle") ? 0 : a.rangeFt,
     area_shape: area ? a.shape : "", area_ft: area ? a.areaFt : 0,
-    save_attr: a.saveAttr, save_dc: a.saveDc, save_half: a.saveHalf ? 1 : 0,
+    save_attr: a.saveAttr, save_dc: area ? NO_SAVE_DC : a.saveDc, save_half: area ? 0 : a.saveHalf ? 1 : 0,
     area_lasts: area && a.lasts ? 1 : 0, area_fires: a.keep.area_fires,
     target_who: isSelf(a) ? "" : a.targetWho, target_count: several ? a.count : "one", target_n: several ? a.n : 1,
     targets: isSelf(a) ? "self" : a.targetWho === "enemy" || attack ? "others" : "anyone",

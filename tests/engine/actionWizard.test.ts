@@ -15,7 +15,7 @@ test("a new action starts with name, type, who and how it affects them", () => {
 test("the questions branch on the answers", () => {
   assert.deepEqual(questions(answer({ who: "self" })), ["name", "type", "who", "affects"]);
   assert.deepEqual(questions(answer({ who: "several" })), ["name", "type", "who", "targetWho", "count", "range", "affects"]);
-  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "areaSize", "lasts", "affects", "damage", "avoid", "duration"]);
+  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "areaSize", "lasts", "affects", "damage", "duration"]);
   assert.deepEqual(questions(answer({ type: "reaction", affects: ["effect"] })), ["name", "type", "affects", "effects"]);
   assert.deepEqual(questions(answer({ affects: ["defend", "heal", "aid"] })), ["name", "type", "who", "targetWho", "range", "affects", "defend", "heal", "aid", "duration"]);
 });
@@ -24,7 +24,8 @@ test("answers make the action the card describes", () => {
   assert.equal(card(answer({ affects: ["attack"], damage: "1d8", damageType: "bludgeoning" })),
     "On a successful attack roll, strikes one creature within 5 feet for 1d8 bludgeoning damage. Takes 2 seconds.");
   assert.equal(card(answer({ who: "area", shape: "circle", areaFt: 20, rangeFt: 150, affects: ["attack"], damage: "8d6", damageType: "fire", saveDc: 15 })),
-    "Fills a 20-foot radius up to 150 feet away. Everyone in it makes an Agility save (DC 15) or takes 8d6 fire damage, half on a success. Takes 2 seconds.");
+    "Fills a 20-foot radius up to 150 feet away. Everyone in it takes 8d6 fire damage. Takes 2 seconds.");
+  assert.deepEqual(questions(answer({ affects: ["attack"] })).slice(-2), ["damage", "toHit"]);
   assert.equal(card(answer({ affects: ["heal"], heal: "2d4" })), "Heals one target creature within 5 feet for 2d4, no roll needed. Takes 2 seconds.");
   assert.match(card(answer({ affects: ["defend"], defend: "2", durationAmount: 1, durationUnit: "round", targetWho: "friendly", rangeFt: 30 })), /^Gives one friendly within 30 feet \+2 defense/);
   assert.equal(card(answer({ type: "reaction", affects: ["effect"], effects: [7] })), "As a reaction: applies Effect 7 to you. Takes 2 seconds.");
@@ -33,7 +34,7 @@ test("answers make the action the card describes", () => {
 test("an action opens with the answers it was saved from", () => {
   const cases: Partial<Answers>[] = [
     { name: "Aimed shot", affects: ["attack", "effect"], damage: "1d8", damageType: "piercing", attackBonus: "2", rangeFt: 60, targetWho: "enemy", effects: [3] },
-    { name: "Fireball", who: "area", shape: "circle", areaFt: 20, rangeFt: 150, affects: ["attack"], damage: "8d6", damageType: "fire", saveDc: 15, lasts: true, durationAmount: 3, durationUnit: "round" },
+    { name: "Fireball", who: "area", shape: "circle", areaFt: 20, rangeFt: 150, affects: ["attack"], damage: "8d6", damageType: "fire", lasts: true, durationAmount: 3, durationUnit: "round" },
     { name: "Inspire", who: "several", count: "upto", n: 3, targetWho: "friendly", rangeFt: 30, affects: ["defend", "aid"], aidTarget: "skill:persuasion", aid: "1d4", defend: "1", durationAmount: 1, durationUnit: "minute" },
     { name: "Shield", type: "reaction", affects: ["effect"], effects: [9], seconds: 1 },
     { name: "Second wind", type: "bonus", who: "self", affects: ["heal"], heal: "1d10" },

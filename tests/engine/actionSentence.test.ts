@@ -63,3 +63,16 @@ test("bonus and free actions say so", () => {
   assert.equal(actionSentence(g), "As a bonus action: heals you for 1d10. Takes 2 seconds.");
   assert.match(actionSentence({ ...g, kind: "free" }), /^As a free action: /);
 });
+
+test("an effect's own save reads plainly (a spider's bite)", () => {
+  const poisoned = { name: "Poisoned", id: 12, rounds: 3, duration: "rounds", apply_save_attr: "fortitude", apply_save_dc: 12, apply_save_outcome: "negates",
+    effects: [{ id: 12, name: "Poisoned", description: "", modifiers: [{ kind: "roll", roll: "attack", mode: "disadvantage" }] }] };
+  const g = { ...base, name: "Bite", damage: "1d4", damageType: "piercing", statuses: { minutes: 0.1, target: status({ conditions: [poisoned] }) } };
+  assert.match(actionSentence(g), /A hit also applies Poisoned \(disadvantage on attack rolls for 3 rounds, unless they make a Fortitude save \(DC 12\)\) to the target\./);
+});
+
+test("an area's damage always lands; its effects carry the saves", () => {
+  const g = { ...base, name: "Fireball", range: 30, damage: "1d10", damageType: "fire", area: { shape: "circle" as const, ft: 20, dc: 99, save: "agility" as const, half: false },
+    statuses: { minutes: 0.1, target: status({ conditions: [{ name: "Burning", id: 4, effects: [] }] }) } };
+  assert.equal(actionSentence(g), "Fills a 20-foot radius up to 150 feet away. Everyone in it takes 1d10 fire damage. It also applies Burning to them. Takes 2 seconds.");
+});

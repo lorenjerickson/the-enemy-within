@@ -5,6 +5,17 @@ import { gearOf, type ActionFields } from "@/lib/actionCard";
 import { gearSummary } from "@/lib/actionSummary";
 import { answersFromAction, fieldsFromAnswers, questions, type ActionType, type Answers, type Question } from "@/lib/actionWizard";
 import type { Condition } from "@/lib/conditions";
+import { DAMAGE_TYPES } from "@/lib/actions";
+import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
+import { AFFECTS, type Affect } from "@/lib/actionWizard";
+
+const AFFECT_LABELS: Record<Affect, [string, string]> = {
+  attack: ["Attack", "Deals damage"],
+  defend: ["Defend", "Raises their defense for a while"],
+  heal: ["Heal", "Gives back health"],
+  aid: ["Aid", "A bonus to a skill, attribute or roll for a while"],
+  effect: ["Apply an effect", "Poisoned, Bleeding, Shielded… from the catalog"],
+};
 
 const TYPES: [ActionType, string, string][] = [
   ["action", "Action", "The round's one action."],
@@ -70,7 +81,12 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
   const byId = useMemo(() => new Map(conditions.map((c) => [c.id, c])), [conditions]);
   const card = gearSummary(gearOf(fields, (id) => byId.get(id)));
   const last = i === qs.length - 1;
-  const ok = at !== "name" || !!a.name.trim();
+  const compact = (v: string) => v.toLowerCase().replace(/\s/g, "");
+  const ok = at === "name" ? !!a.name.trim()
+    : at === "affects" ? a.affects.length > 0
+    : at === "damage" ? isDiceFormula(compact(a.damage))
+    : at === "toHit" ? !a.attackBonus || isModifierFormula(compact(a.attackBonus))
+    : true;
 
   return (
     <form action={action} className="mt-2 space-y-3 rounded-box bg-base-200 p-3" data-action-interview>
@@ -174,13 +190,45 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
             <Choices value={a.lasts ? "yes" : "no"} options={[["no", "No", "It happens once."], ["yes", "Yes", "It lingers, catching whoever is in it each round (you'll say how long)."]]} onPick={(v) => set({ lasts: v === "yes" })} />
           </>
         )}
-        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
+        {at === "affects" && (
+          <>
+            <div className="text-sm font-semibold">How does it affect {a.who === "self" || a.type === "reaction" ? "you" : "them"}? (pick any)</div>
+            <div className="grid gap-1 sm:grid-cols-2">
+              {AFFECTS.map((x) => (
+                <label key={x} className={`flex cursor-pointer gap-2 rounded-box border p-2 text-sm ${a.affects.includes(x) ? "border-primary" : "border-base-300"}`}>
+                  <input type="checkbox" className="checkbox checkbox-sm" checked={a.affects.includes(x)} onChange={(e) => set({ affects: AFFECTS.filter((y) => (y === x ? e.target.checked : a.affects.includes(y))) })} />
+                  <span><span className="font-medium">{AFFECT_LABELS[x][0]}</span><span className="block text-xs opacity-70">{AFFECT_LABELS[x][1]}</span></span>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+        {at === "damage" && (
+          <>
+            <div className="text-sm font-semibold">How much damage, and of what type?</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <input autoFocus value={a.damage} onChange={(e) => set({ damage: e.target.value })} placeholder="e.g. 1d8 or 2d6+1" className={`input input-sm w-32 ${a.damage && !ok ? "input-error" : ""}`} />
+              <select value={a.damageType} onChange={(e) => set({ damageType: e.target.value as Answers["damageType"] })} className="select select-sm w-auto">
+                <option value="">no type</option>
+                {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {a.who === "area" && <p className="text-xs opacity-60">Everyone caught takes it: an area has no save. A save belongs to an effect it applies (pick one under Apply an effect).</p>}
+          </>
+        )}
+        {at === "toHit" && (
+          <>
+            <div className="text-sm font-semibold">It needs a successful attack roll. Any bonus to hit?</div>
+            <input autoFocus value={a.attackBonus} onChange={(e) => set({ attackBonus: e.target.value })} placeholder="none, or e.g. +2 or 1d4" className={`input input-sm w-40 ${!ok ? "input-error" : ""}`} />
+          </>
+        )}
+        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts", "affects", "damage", "toHit"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
       </div>
       <HiddenFields f={fields} />
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => setAt(qs[i - 1])}>Back</button>
         {!last && <button type="button" className="btn btn-sm" disabled={!ok} onClick={() => setAt(qs[i + 1])}>Next</button>}
-        <button className={`btn btn-sm ${last ? "btn-primary" : "btn-ghost"}`} disabled={!a.name.trim()}>Save action</button>
+        <button className={`btn btn-sm ${last ? "btn-primary" : "btn-ghost"}`} disabled={!a.name.trim() || !ok}>Save action</button>
       </div>
     </form>
   );
