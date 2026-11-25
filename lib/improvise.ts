@@ -5,6 +5,7 @@
  */
 import { db } from "@/lib/db";
 import type { TriggerOutcome } from "@/lib/triggers";
+import type { AreaAt, LastingArea } from "@/lib/aoe";
 
 db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
   id INTEGER PRIMARY KEY,
@@ -15,6 +16,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
   details TEXT -- JSON: what was agreed
 )`);
 try { db.exec("ALTER TABLE improvisations ADD COLUMN rolled TEXT"); } catch { /* there already */ }
+try { db.exec("ALTER TABLE improvisations ADD COLUMN placed TEXT"); } catch { /* there already */ } // where its template was put
 try { db.exec("ALTER TABLE improvisations ADD COLUMN result TEXT"); } catch { /* there already */ } // what the improviser was told when it played out (until they've seen it)
 
 /**
@@ -26,7 +28,27 @@ export type ImproviseOutcome =
   | { kind: "narrative"; text: string }
   | { kind: "script"; script: string }
   | { kind: "map"; outcomes: TriggerOutcome[] }
-  | { kind: "effect"; effect: number; on: "self" | "target"; target?: number };
+  | { kind: "effect"; effect: number; on: "self" | "target"; target?: number }
+  | { kind: "area"; template: Template; settings: AreaSettings }; // place an area: the player places the template, the GM can move it
+
+/** An area template the GM sizes: a circle (radius ft), a rectangle (width × height ft), or a line from the improviser (length ft, 5 ft wide). */
+export type Template = { shape: "circle"; ft: number } | { shape: "rect"; ft: number; ft2: number } | { shape: "line"; ft: number };
+/** What a placed area does: as the GM's Areas settings (name, look, damage, save, effects, timings, lingering, flammable, who sees it), lasting `minutes` (0: until removed). */
+export type AreaSettings = Omit<LastingArea, "id" | "area" | "ends" | "conditions"> & { minutes: number; effectIds?: number[] }; // effectIds: catalogue effects put on whoever fails its save
+
+/** The template on the map where it was put (grid units: a circle's or rectangle's middle; a line runs from `from` toward it). */
+export function templateArea(t: Template, at: { x: number; y: number }, from: { x: number; y: number }): AreaAt {
+  const size = t.ft / 5;
+  if (t.shape === "circle") return { shape: "circle", origin: at, dir: 0, size };
+  if (t.shape === "rect") { const w = t.ft / 5, h = t.ft2 / 5; return { shape: "rect", origin: at, dir: 0, size: Math.max(w, h) / 2, w, h }; }
+  return { shape: "line", origin: from, dir: Math.atan2(at.y - from.y, at.x - from.x), size };
+}
+
+/** A critical failure: the system's d8 shifts where it lands to one of the eight compass points (1 = north, clockwise), by the template's own size. */
+export function shifted(at: { x: number; y: number }, t: Template, d8: number): { x: number; y: number } {
+  const angle = ((Math.max(1, Math.min(8, d8)) - 1) * Math.PI) / 4, dist = t.ft / 5;
+  return { x: at.x + Math.sin(angle) * dist, y: at.y - Math.cos(angle) * dist };
+}
 
 /** The roll an improvisation needs, if any: a skill check, a save or a plain ability roll, against a DC. */
 export type ImproviseRoll = { type: "check"; skill: string; dc: number } | { type: "save" | "ability"; attribute: string; dc: number };
@@ -49,12 +71,18 @@ export interface Improvisation {
   status: "asked" | "agreed" | "done" | "dropped"; // asked: waiting on the GM; agreed: settled (to roll, plan or do)
   agreed?: Agreed;
   rolled?: { total: number; natural: number }; // the player's roll (its outcome isn't shown to them until it plays out)
+  placed?: { x: number; y: number }; // where the player put its template (the GM may move it)
 }
 
-const COLS = "id, level_id, token_id, intent, status, details, rolled";
-type Row = { id: number; level_id: number; token_id: number; intent: string; status: Improvisation["status"]; details: string | null; rolled: string | null };
+/** Whether its template still needs placing (an area outcome on success or failure, not yet put down). */
+export const needsPlacing = (i: Improvisation) => !i.placed && [i.agreed?.success, i.agreed?.failure].some((o) => o?.kind === "area");
+/** The template to place (the success one, else the failure one). */
+export const templateOf = (i: Improvisation): Template | undefined => [i.agreed?.success, i.agreed?.failure].find((o): o is Extract<ImproviseOutcome, { kind: "area" }> => o?.kind === "area")?.template;
+
+const COLS = "id, level_id, token_id, intent, status, details, rolled, placed";
+type Row = { id: number; level_id: number; token_id: number; intent: string; status: Improvisation["status"]; details: string | null; rolled: string | null; placed: string | null };
 const parse = (r: Row | undefined): Improvisation | undefined =>
-  r && { id: r.id, level_id: r.level_id, token_id: r.token_id, intent: r.intent, status: r.status, ...(r.details ? { agreed: JSON.parse(r.details) as Agreed } : {}), ...(r.rolled ? { rolled: JSON.parse(r.rolled) } : {}) };
+  r && { id: r.id, level_id: r.level_id, token_id: r.token_id, intent: r.intent, status: r.status, ...(r.details ? { agreed: JSON.parse(r.details) as Agreed } : {}), ...(r.rolled ? { rolled: JSON.parse(r.rolled) } : {}), ...(r.placed ? { placed: JSON.parse(r.placed) } : {}) };
 
 /** Whether a roll succeeded (a natural 1 never does; it's a critical failure). */
 export const rollSucceeds = (roll: ImproviseRoll | null, rolled?: { total: number; natural: number }) => !roll || (!!rolled && rolled.natural !== 1 && rolled.total >= roll.dc);
@@ -78,8 +106,11 @@ export function agreeImprovisation(id: number, agreed: Agreed): void {
   const i = getImprovisation(id);
   if (!i) return;
   db.prepare("UPDATE improvisations SET status = 'dropped' WHERE token_id = ? AND status = 'agreed' AND id != ?").run(i.token_id, id);
-  db.prepare("UPDATE improvisations SET status = 'agreed', details = ?, rolled = NULL WHERE id = ?").run(JSON.stringify(agreed), id);
+  db.prepare("UPDATE improvisations SET status = 'agreed', details = ?, rolled = NULL, placed = NULL WHERE id = ?").run(JSON.stringify(agreed), id);
 }
+
+/** Its template is put down (by the player, or moved by the GM). */
+export const setImprovisePlaced = (id: number, at: { x: number; y: number }): void => void db.prepare("UPDATE improvisations SET placed = ? WHERE id = ?").run(JSON.stringify({ x: at.x, y: at.y }), id);
 
 /** The player's roll came in (kept; its outcome is shown when it plays out). */
 export const setImproviseRolled = (id: number, rolled: { total: number; natural: number }): void => void db.prepare("UPDATE improvisations SET rolled = ? WHERE id = ?").run(JSON.stringify(rolled), id);

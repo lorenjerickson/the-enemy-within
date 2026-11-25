@@ -90,3 +90,21 @@ test("in a round: an agreed (and rolled) improvisation goes into the plan as one
   assert.deepEqual(r.improvised.map((x) => x.id), [id]);
   assert.match(playImprovisation(getImprovisation(id)!).get(me)!.join(" "), /Tip the table: it works\. It crashes over\./);
 });
+
+test("place an area: the template where it was put (a line from the improviser); a critical failure shifts it to a compass point by its size", async () => {
+  const { templateArea, shifted, setImprovisePlaced, needsPlacing } = await import("@/lib/improvise");
+  const { listLastingAreas } = await import("@/lib/db");
+  assert.deepEqual(templateArea({ shape: "circle", ft: 10 }, { x: 5, y: 5 }, { x: 0, y: 0 }), { shape: "circle", origin: { x: 5, y: 5 }, dir: 0, size: 2 });
+  assert.equal(templateArea({ shape: "line", ft: 15 }, { x: 3, y: 0.5 }, { x: 0.5, y: 0.5 }).dir, 0);
+  const n = shifted({ x: 5, y: 5 }, { shape: "circle", ft: 10 }, 1), e = shifted({ x: 5, y: 5 }, { shape: "circle", ft: 10 }, 3);
+  assert.deepEqual([+n.x.toFixed(6), +n.y.toFixed(6)], [5, 3], "1: north, 10 ft");
+  assert.deepEqual([+e.x.toFixed(6), +e.y.toFixed(6)], [7, 5], "3: east");
+  const lv = level(), tok = placeCharacterToken(lv, character("Rue"), 0, 0);
+  const id = askImprovise(lv, tok, "tip the oil barrel");
+  agreeImprovisation(id, { name: "Tip the barrel", cost: "action", seconds: 2, roll: null, success: { kind: "area", template: { shape: "rect", ft: 10, ft2: 10 }, settings: { name: "Oil slick", look: "oil", damage: null, dc: 12, save: "agility", half: true, fires: ["inside"], flammable: true, minutes: 0 } } });
+  assert.equal(needsPlacing(getImprovisation(id)!), true);
+  setImprovisePlaced(id, { x: 4, y: 4 });
+  playImprovisation(getImprovisation(id)!);
+  const slick = listLastingAreas(lv).find((l) => l.name === "Oil slick")!;
+  assert.deepEqual([slick.area.shape, slick.area.origin, slick.flammable], ["rect", { x: 4, y: 4 }, true]);
+});

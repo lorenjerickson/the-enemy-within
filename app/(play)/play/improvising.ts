@@ -2,18 +2,21 @@
  * An improvisation playing out (out of combat when the GM accepts it; in a round when its planned step finishes): its
  * roll decides success or failure, and the matching outcome happens. What the improviser (and anyone it lands on) is told.
  */
-import { getCharacterPlayer, getCondition, getEncounter, getTokenActor, listTokens, logSessionEvent, requestRoll, tokenLabels } from "@/lib/db";
+import { addLastingArea, getGameTime, getLastingArea, spreadFire, getCharacterPlayer, getCondition, getEncounter, getTokenActor, listTokens, logSessionEvent, requestRoll, tokenLabels } from "@/lib/db";
 import { saveRollFor, skillCheckFor } from "@/lib/creatureChanges";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import type { Attributes } from "@/lib/attributes";
-import { finishImprovisation, getImprovisation, rollSucceeds, setImproviseRolled, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
+import { finishImprovisation, getImprovisation, needsPlacing, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { fireTrigger } from "./mapTriggers";
+import { catchInArea } from "./areas";
+import { UNTIL_REMOVED, inArea } from "@/lib/aoe";
+import { rollDice } from "@/lib/dice";
 import { applyConditionNow } from "./workOutRound";
 
 /** One outcome, now, by `tokenId` (the improviser). What each token is told. */
-export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: number, name: string): Map<number, string[]> {
+export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: number, name: string, placed?: { x: number; y: number }, crit = false): Map<number, string[]> {
   const told = new Map<number, string[]>(), tell = (id: number, s: string) => told.set(id, [...(told.get(id) ?? []), s]);
   if (o.kind === "narrative") { if (o.text.trim()) tell(tokenId, o.text.trim()); }
   else if (o.kind === "script") {
@@ -24,6 +27,25 @@ export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: numbe
   } else if (o.kind === "map") {
     const f = fireTrigger(levelId, { id: 0, name, area: { shape: "rect", x: 0, y: 0, w: 0, h: 0 }, springs: [], who: "", often: "always", outcomes: o.outcomes, sprung: [] }, null);
     for (const [id, lines] of f.told) for (const l of lines) tell(id, l);
+  } else if (o.kind === "area") {
+    // Place an area: where it was put (a critical failure: the d8 shifts it to a compass point, by its own size).
+    const me = listTokens(levelId).find((t) => t.id === tokenId), from = me ? { x: me.col + 0.5, y: me.row + 0.5 } : { x: 0, y: 0 };
+    let at = placed ?? from;
+    if (crit) {
+      const d8 = Math.max(1, rollDice("1d8"));
+      at = shifted(at, o.template, d8);
+      tell(tokenId, `It goes astray, to the ${["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"][d8 - 1]}.`);
+    }
+    const { minutes, effectIds, ...s } = o.settings;
+    const id = addLastingArea(levelId, {
+      ...s, name: s.name || name, area: templateArea(o.template, at, from), drawn: true,
+      conditions: (effectIds ?? []).flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }),
+      ends: minutes > 0 ? Math.round((getGameTime() + minutes) * 1e6) / 1e6 : UNTIL_REMOVED,
+    });
+    // Like an area switched on: whoever is in it now is caught (coming in), and fire spreads.
+    const l = getLastingArea(id);
+    if (l && (l.fires ?? []).some((f) => f !== "leave")) for (const t of listTokens(levelId)) if (inArea(l.area, { x: t.col + 0.5, y: t.row + 0.5 })) tell(t.id, catchInArea(levelId, l, t.id));
+    spreadFire(levelId);
   } else if (o.kind === "effect") {
     const c = getCondition(o.effect), on = o.on === "self" ? tokenId : o.target;
     if (c && on !== undefined && listTokens(levelId).some((t) => t.id === on)) {
@@ -41,7 +63,7 @@ export function playImprovisation(i: Improvisation): Map<number, string[]> {
   const ok = rollSucceeds(a.roll, i.rolled);
   const verdict = !a.roll ? "" : ok ? "it works" : i.rolled?.natural === 1 ? "it goes badly wrong" : "it doesn't work";
   const o = ok ? a.success : a.failure;
-  const told = o ? playOutcome(i.level_id, o, i.token_id, a.name) : new Map<number, string[]>();
+  const told = o ? playOutcome(i.level_id, o, i.token_id, a.name, i.placed, !!a.roll && i.rolled?.natural === 1) : new Map<number, string[]>();
   if (verdict) told.set(i.token_id, [`${a.name}: ${verdict}.`, ...(told.get(i.token_id) ?? [])]);
   finishImprovisation(i.id, (told.get(i.token_id) ?? []).join(" "));
   logSessionEvent(`💡 ${tokenLabels(i.level_id).get(i.token_id) ?? "Someone"}: ${a.name}${a.roll ? ` (${i.rolled?.total ?? "no roll"} vs DC ${a.roll.dc}: ${ok ? "success" : "failure"})` : ""}.`);
@@ -66,6 +88,7 @@ export function startImprovisation(id: number): Map<number, string[]> {
   const i = getImprovisation(id);
   if (!i?.agreed) return new Map();
   const inRound = !!getEncounter(i.level_id);
+  if (needsPlacing(i)) return new Map(); // its template first: the player places it (then this again)
   const spec = rollSpecFor(i);
   if (spec) {
     const t = listTokens(i.level_id).find((x) => x.id === i.token_id), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
