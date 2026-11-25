@@ -6,6 +6,8 @@ import { type PlanTarget, tokenLabels, downTokens, getCharacterPlayer, listPlaye
 import { allegianceOf, relation } from "@/lib/sides";
 import { scriptNames } from "@/lib/scriptNames";
 import MapView from "./MapView";
+import { FOG_SIGHT_FT, inFog } from "@/lib/db";
+import { blindRangeOf } from "@/lib/conditions";
 import { playersSee } from "@/lib/aoe";
 import { sensesOf } from "@/lib/creatureChanges";
 import type { Contest } from "@/lib/resolveRound";
@@ -61,7 +63,10 @@ export default function LevelMap({
   // Hidden tokens (Hide) only for those on their side (and the GM, who sees them marked).
   const hidden = listHidden(level.id), mySide = allegianceOf(all.find((t) => mine.includes(t.id)) ?? { character_id: 1 });
   const unhidden = gm ? all : all.filter((t) => !hidden.has(t.id) || mine.includes(t.id) || relation(mySide, allegianceOf(t)) === "friendly");
-  const tokens = gm || seeInvisible ? unhidden : unhidden.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
+  const sensed = gm || seeInvisible ? unhidden : unhidden.filter((t) => mine.includes(t.id) || !sensesOf(t.id, level.id).invisible);
+  // Fog: someone in it is lost to sight beyond 15 ft (from every one of theirs).
+  const fogReach = blindRangeOf(FOG_SIGHT_FT);
+  const tokens = gm ? sensed : sensed.filter((t) => mine.includes(t.id) || !inFog(level.id, { x: t.col + 0.5, y: t.row + 0.5 }) || all.some((m) => mine.includes(m.id) && Math.hypot(m.col - t.col, m.row - t.row) <= fogReach));
   const sight = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id) && sensesOf(t.id, level.id).blind).map((t) => [t.id, sensesOf(t.id, level.id).blindRange]));
   const darkvision = gm ? undefined : Object.fromEntries(all.filter((t) => mine.includes(t.id)).flatMap((t) => { const dv = sensesOf(t.id, level.id).darkvision; return dv ? [[t.id, dv]] : []; }));
   const players = new Map(gm ? listPlayers().map((u) => [u.id, u.name]) : []);

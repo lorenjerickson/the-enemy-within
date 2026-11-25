@@ -1,3 +1,5 @@
+import { FOG_SIGHT_FT, inFog } from "@/lib/db";
+import { blindRangeOf } from "@/lib/conditions";
 import { getIllumination, listHidden, listLights, listStructures, listTokens } from "@/lib/db";
 import { allegianceOf, relation } from "@/lib/sides";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
@@ -33,6 +35,7 @@ export function seenFrom(levelId: number, at: { col: number; row: number }, self
         const p = { x: t.col + 0.5, y: t.row + 0.5 };
         if (t.id === self || !insidePolygon(p, seen)) return false;
         if (side && !opts.ignoreHidden && hidden.has(t.id) && relation(side, allegianceOf(t)) !== "friendly") return false; // hidden from them (not even a guess)
+        if (inFog(levelId, p) && Math.hypot(p.x - from.x, p.y - from.y) > blindRangeOf(FOG_SIGHT_FT)) return false; // in fog: lost to sight beyond 15 ft
         if (!me) return true;
         if (opts.unseenToo) return true; // there, if unseen (in the dark, or invisible): a guess
         if (!me.blind && !brightEnough(from, p, me.darkvision, illumination, lights, walls)) return false; // too dark to make out

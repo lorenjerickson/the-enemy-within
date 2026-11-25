@@ -2258,6 +2258,19 @@ export function saveExposures(levelId: number, all: Exposures): void {
   db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
 }
 
+/** How far anyone sees in fog (feet): fog map effects are Obscured (the areas design, Q7). */
+export const FOG_SIGHT_FT = 15;
+
+/** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on. */
+export function inFog(levelId: number, p: { x: number; y: number }): boolean {
+  return listEffects(levelId).some((e) => {
+    if (!e.enabled || e.kind !== "fog") return false;
+    if (e.x === null || e.y === null || e.w === null || e.h === null) return true; // the whole map
+    const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+    return ((p.x - cx) / (e.w / 2)) ** 2 + ((p.y - cy) / (e.h / 2)) ** 2 <= 1;
+  });
+}
+
 /**
  * Every area that does something on a level: its lasting areas, and placed fire map effects (switched on), which burn
  * whoever is in them like a lingering fire area (1d6 fire each interval, no save, +1 while inside, −2 after; the

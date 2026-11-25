@@ -6,7 +6,8 @@ import { asSpeed, feetPerSecond, speedChangeFtPerRound } from "@/lib/speed";
  */
 import { getStrain } from "@/lib/db";
 import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
-import { sensesFrom, type Senses } from "@/lib/conditions";
+import { blindRangeOf, sensesFrom, type Senses } from "@/lib/conditions";
+import { FOG_SIGHT_FT, inFog } from "@/lib/db";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import { combineModes, d20Tweaks, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
@@ -57,7 +58,11 @@ export const resistanceTo = (r: Record<string, Resist[]>, type: string) => combi
 /** What a token can see, and whether it can be seen, now: its standing effects and the conditions on it. */
 export function sensesOf(tokenId: number, levelId?: number): Senses {
   const level = levelId ?? db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_tokens WHERE id = ?").get(tokenId)?.level_id;
-  return sensesFrom([...standingEffects(tokenId).flatMap((e) => e.modifiers), ...(level !== undefined ? (listAfflictions(level).get(tokenId) ?? []).flatMap((a) => modifiersOf(a.condition)) : [])]);
+  const s = sensesFrom([...standingEffects(tokenId).flatMap((e) => e.modifiers), ...(level !== undefined ? (listAfflictions(level).get(tokenId) ?? []).flatMap((a) => modifiersOf(a.condition)) : [])]);
+  // In fog: they see no further than 15 ft (as a blind creature perceives, at that range).
+  const t = level !== undefined ? db.prepare<[number], { col: number; row: number }>("SELECT col, row FROM map_tokens WHERE id = ?").get(tokenId) : undefined;
+  if (t && level !== undefined && inFog(level, { x: t.col + 0.5, y: t.row + 0.5 })) return { ...s, blind: true, blindRange: Math.min(s.blind ? s.blindRange : Infinity, blindRangeOf(FOG_SIGHT_FT)) };
+  return s;
 }
 
 /** What a token can't do now (conditions on it, its standing effects), and why. */
