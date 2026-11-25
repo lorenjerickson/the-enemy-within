@@ -181,7 +181,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
               <span className="text-sm opacity-70">{summary(a, new Map(effects.map((c) => [c.id, c.name])))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} />
+            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} itemOwned={"item_id" in owner} />
             <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
               <ActionForm owner={owner} initial={a} effects={effects} />
             </details>
@@ -193,7 +193,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} />
+        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} itemOwned={"item_id" in owner} />
         <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
           <ActionForm owner={owner} effects={effects} />
         </details>

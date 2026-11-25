@@ -13,6 +13,29 @@ const TYPES: [ActionType, string, string][] = [
   ["free", "Free", "Costs only its time: as many as fit in the round."],
 ];
 
+const WHO: [Answers["who"], string, string][] = [
+  ["self", "Yourself", "Only whoever uses it."],
+  ["one", "One creature", "Picked on the map."],
+  ["several", "Several creatures", "A number of them, each picked."],
+  ["area", "Everyone in an area", "A shape on the map: whoever is in it."],
+];
+
+/** A row of choices, one picked (radio cards). */
+function Choices<T extends string>({ value, options, onPick }: { value: T; options: [T, string, string?][]; onPick: (v: T) => void }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-2">
+      {options.map(([v, label, about]) => (
+        <label key={v} className={`flex cursor-pointer gap-2 rounded-box border p-2 text-sm ${value === v ? "border-primary" : "border-base-300"}`}>
+          <input type="radio" className="radio radio-sm" checked={value === v} onChange={() => onPick(v)} />
+          <span><span className="font-medium">{label}</span>{about && <span className="block text-xs opacity-70">{about}</span>}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+const num = (v: string, min: number, d: number) => Math.max(min, Number(v) || d);
+
 /** The saved fields as the form posts them (the server action reads these names). */
 function HiddenFields({ f }: { f: ActionFields }) {
   const plain: [string, string | number | null | undefined][] = [
@@ -37,7 +60,7 @@ function HiddenFields({ f }: { f: ActionFields }) {
 }
 
 /** One question at a time, the player's card on top filling in as it's answered; Save at the end. */
-export default function ActionInterview({ action, initial, conditions }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[] }) {
+export default function ActionInterview({ action, initial, conditions, itemOwned }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; itemOwned?: boolean }) {
   const [a, setA] = useState<Answers>(() => answersFromAction(initial));
   const [at, setAt] = useState<Question>("name");
   const set = (p: Partial<Answers>) => setA((x) => ({ ...x, ...p }));
@@ -83,7 +106,75 @@ export default function ActionInterview({ action, initial, conditions }: { actio
             </label>
           </>
         )}
-        {at !== "name" && at !== "type" && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
+        {at === "who" && (
+          <>
+            <div className="text-sm font-semibold">Who does it apply to?</div>
+            <Choices value={a.who} options={WHO} onPick={(who) => set({ who })} />
+          </>
+        )}
+        {at === "targetWho" && (
+          <>
+            <div className="text-sm font-semibold">Which creatures can be picked?</div>
+            <Choices value={a.targetWho} options={[["", "Anyone"], ["enemy", "Enemies"], ["friendly", "Friends"]]} onPick={(targetWho) => set({ targetWho })} />
+          </>
+        )}
+        {at === "count" && (
+          <>
+            <div className="text-sm font-semibold">How many?</div>
+            <div className="flex items-center gap-2 text-sm">
+              <select value={a.count} onChange={(e) => set({ count: e.target.value as Answers["count"] })} className="select select-sm w-auto">
+                <option value="exactly">Exactly</option>
+                <option value="upto">Up to</option>
+              </select>
+              <input type="number" min="2" value={a.n} onChange={(e) => set({ n: Math.round(num(e.target.value, 2, 2)) })} className="input input-sm w-20" />
+              creatures
+            </div>
+          </>
+        )}
+        {at === "range" && (
+          <>
+            <div className="text-sm font-semibold">How far away can they be?</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              {itemOwned && (
+                <label className="flex items-center gap-1"><input type="checkbox" className="checkbox checkbox-sm" checked={a.rangeFt === 0} onChange={(e) => set({ rangeFt: e.target.checked ? 0 : 5 })} /> As far as the item reaches</label>
+              )}
+              {!(itemOwned && a.rangeFt === 0) && (
+                <>
+                  <input type="number" min="5" step="5" value={a.rangeFt || 5} onChange={(e) => set({ rangeFt: num(e.target.value, 5, 5) })} className="input input-sm w-24" /> feet
+                  <span className="text-xs opacity-60">(5 = within reach)</span>
+                </>
+              )}
+            </div>
+          </>
+        )}
+        {at === "shape" && (
+          <>
+            <div className="text-sm font-semibold">What shape is the area?</div>
+            <Choices value={a.shape} options={[["circle", "Circle", "Aimed at a spot"], ["cone", "Cone", "Spreading out from you"], ["line", "Line", "Straight out from you"]]} onPick={(shape) => set({ shape })} />
+          </>
+        )}
+        {at === "areaSize" && (
+          <>
+            <div className="text-sm font-semibold">How big is it{a.shape === "circle" ? ", and how far away can it be aimed" : ""}?</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <input type="number" min="5" step="5" value={a.areaFt} onChange={(e) => set({ areaFt: num(e.target.value, 5, 10) })} className="input input-sm w-24" />
+              feet {a.shape === "circle" ? "radius" : "long"}
+              {a.shape === "circle" && (
+                <>
+                  <span className="ml-2">aimed up to</span>
+                  <input type="number" min="0" step="5" value={a.rangeFt} onChange={(e) => set({ rangeFt: num(e.target.value, 0, 0) })} className="input input-sm w-24" /> feet away
+                </>
+              )}
+            </div>
+          </>
+        )}
+        {at === "lasts" && (
+          <>
+            <div className="text-sm font-semibold">Does the area stay on the map after this round?</div>
+            <Choices value={a.lasts ? "yes" : "no"} options={[["no", "No", "It happens once."], ["yes", "Yes", "It lingers, catching whoever is in it each round (you'll say how long)."]]} onPick={(v) => set({ lasts: v === "yes" })} />
+          </>
+        )}
+        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
       </div>
       <HiddenFields f={fields} />
       <div className="flex items-center gap-2">
