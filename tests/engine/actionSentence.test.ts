@@ -57,3 +57,9 @@ test("settings that don't apply stay off the card", async () => {
   assert.equal(card, "Applies Mesmerized to one creature within 30 feet, no roll needed. Takes 2 seconds.");
   assert.doesNotMatch(card, /DC|to hit|advantage|fire|hour|Agility/);
 });
+
+test("bonus and free actions say so", () => {
+  const g = { ...base, name: "Second wind", self: true, kind: "bonus" as const, statuses: { minutes: 0.1, self: status({ boosts: [{ target: "health", value: "+1d10" }] }) } };
+  assert.equal(actionSentence(g), "As a bonus action: heals you for 1d10. Takes 2 seconds.");
+  assert.match(actionSentence({ ...g, kind: "free" }), /^As a free action: /);
+});

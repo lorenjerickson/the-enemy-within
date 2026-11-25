@@ -95,6 +95,8 @@ function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?:
         Planned as
         <select name="kind" defaultValue={initial?.kind ?? "action"} className="select select-sm w-auto" data-action-kind>
           <option value="action">the round's action</option>
+          <option value="bonus">the round's bonus action</option>
+          <option value="free">free (costs only its time)</option>
           <option value="reaction">the round's reaction (on themselves: the effects it gives them do the reacting)</option>
         </select>
       </label>

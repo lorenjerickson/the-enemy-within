@@ -237,7 +237,7 @@ export default function PickLock({
       )}
       {plan && using && (
         usableItems.length
-          ? <GearActions title="Use what? (in hand or on your belt)" gear={usableItems} enabled={!plan.ready && onMap && !dice?.rolled} blocked={(g) => unavailable(plan.steps, plan.used, g.kind === "reaction" ? "reaction" : "action", g.seconds, forbidden)} onUse={useGear} />
+          ? <GearActions title="Use what? (in hand or on your belt)" gear={usableItems} enabled={!plan.ready && onMap && !dice?.rolled} blocked={(g) => unavailable(plan.steps, plan.used, g.kind ?? "action", g.seconds, forbidden)} onUse={useGear} />
           : <p className="text-xs opacity-70" data-use-none>Nothing in hand or on your belt to use. (Refit brings something out of a pack.) <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUsing(false)}>Close</button></p>
       )}
       {!plan && standing && (
@@ -361,7 +361,7 @@ export default function PickLock({
           </li>
         ))}
       </ul>
-            {(kind === "action" || kind === "reaction") && <GearActions gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={useGear} />}
+            {kind !== "movement" && <GearActions gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!!plan && !plan.ready && onMap && !dice?.rolled} blocked={(g) => (plan ? unavailable(plan.steps, plan.used, kind, g.seconds, forbidden) : null)} onUse={useGear} />}
           </section>
         );
       })}

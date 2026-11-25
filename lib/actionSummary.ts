@@ -77,7 +77,8 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
   if (mine.length && !g.self) out.push(`It also ${list(mine)}.`);
   out.push(`Takes ${seconds(g.seconds)}.`);
   const text = out.join(" ");
-  return g.kind === "reaction" ? `As a reaction: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
+  const as = g.kind === "reaction" ? "a reaction" : g.kind === "bonus" ? "a bonus action" : g.kind === "free" ? "a free action" : "";
+  return as ? `As ${as}: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
 }
 
 /** The card's lines (one paragraph: the sentence already explains every effect it names). */

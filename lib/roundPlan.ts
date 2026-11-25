@@ -31,7 +31,7 @@ export interface GearAction {
   targeting?: Targeting; // friendlies / enemies; one, exactly N, up to N or all (in range, or in its area)
   description?: string; // what it is, in the GM's words
   damageType?: string; // acid, fire…
-  kind?: "action" | "reaction"; // a reaction: planned as the round's reaction, on themselves (it readies conditions whose triggers react)
+  kind?: "action" | "bonus" | "reaction" | "free"; // planned as that kind (none: an action). A reaction: planned as the round's reaction, on themselves (it readies conditions whose triggers react)
 }
 
 /** A gear action that does damage (an attack roll and a damage roll); one that doesn't just takes effect. */
@@ -128,7 +128,7 @@ export function timeline(plan: PlanStep[], walkFps: number) {
 /** A Dash: a move at running speed, which takes the round's action (any number of Dash legs, but no other action). */
 export const isDash = (s: PlanStep) => s.kind === "move" && !!s.run;
 
-export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.improv ? s.improv.cost : s.use ? (s.use.kind === "reaction" ? "reaction" : "action") : actionKind(s.action)); // an improvisation costs what the GM said
+export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.improv ? s.improv.cost : s.use ? (s.use.kind ?? "action") : actionKind(s.action)); // an improvisation costs what the GM said
 
 /**
  * Why something of this kind, taking these seconds, can't be added to the plan now (for greying out its button), or

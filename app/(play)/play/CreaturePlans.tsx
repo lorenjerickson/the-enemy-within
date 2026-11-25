@@ -109,7 +109,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
             const items = current.gear.filter((g) => g.item && (g.item.where === "hand" || g.item.where === "belt"));
             const pick = (g: (typeof items)[number]) => { setUsing(false); if (g.targeting?.count === "all" && !g.area && !g.self) run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })); else if (g.self) run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })); else { setMoveMode(false); setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees }); } };
             return items.length
-              ? <GearActions compact title="Use what? (in hand or on the belt)" gear={items} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, g.kind === "reaction" ? "reaction" : "action", g.seconds, current.forbidden)} onUse={pick} />
+              ? <GearActions compact title="Use what? (in hand or on the belt)" gear={items} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, g.kind ?? "action", g.seconds, current.forbidden)} onUse={pick} />
               : <p className="text-xs opacity-70">Nothing in hand or on the belt to use. <button type="button" className="btn btn-ghost btn-xs" onClick={() => setUsing(false)}>Close</button></p>;
           })()}
           {interacting && (
@@ -174,7 +174,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {(kind === "action" || kind === "reaction") && <GearActions compact gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
+                {kind !== "movement" && <GearActions compact gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

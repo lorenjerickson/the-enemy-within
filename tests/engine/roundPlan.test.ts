@@ -43,6 +43,17 @@ test("stepKind sorts movement, actions, bonus actions and reactions", () => {
   assert.equal(stepKind(act("pursue")), "movement");
   assert.equal(stepKind(act("use", { use: gear({ kind: "reaction" }) })), "reaction");
   assert.equal(stepKind(act("use", { use: gear() })), "action");
+  assert.equal(stepKind(act("use", { use: gear({ kind: "bonus" }) })), "bonus");
+  assert.equal(stepKind(act("use", { use: gear({ kind: "free" }) })), "free");
+});
+
+test("a bonus gear action takes the bonus action; free ones only take time", () => {
+  const quick = act("use", { use: gear({ kind: "bonus", seconds: 1 }) });
+  assert.equal(cannotAdd([act("attack", { target: rat })], quick, 5), null);
+  assert.match(cannotAdd([quick], quick, 5)!, /already planned your bonus action/);
+  const free = act("use", { use: gear({ kind: "free", seconds: 1 }) });
+  assert.equal(cannotAdd([act("attack", { target: rat }), quick, free], free, 5), null);
+  assert.equal(unavailable([free], 1, "free", 1), null);
 });
 
 test("cannotAdd: one action, bonus action and reaction a round", () => {
