@@ -12,7 +12,7 @@ const once = (c: Condition) => !lingers(c) && modifiersOf(c).length > 0;
 const an = (w: string) => (/^[aeiou]/i.test(w) ? `an ${w}` : `a ${w}`);
 const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
-/** What a status does to `on` ("you", "them", "one creature"), as verb phrases: heals, harms, conditions put on, boosts. */
+/** What a status does to `on` ("you", "the target", "them", "one creature"), as verb phrases: heals, harms, conditions put on, boosts. */
 function does(s: ActionStatuses["self"], on: string, minutes: number): string[] {
   if (!s) return [];
   const out: string[] = [];
@@ -29,7 +29,7 @@ function does(s: ActionStatuses["self"], on: string, minutes: number): string[] 
     }
   }
   const named = conds.filter((c) => !once(c)).map((c) => c.name);
-  if (named.length) out.push(`puts ${list(named)} on ${on}`);
+  if (named.length) out.push(`applies ${list(named)} to ${on}`);
   return out;
 }
 
@@ -56,7 +56,7 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
   } else if (dmg) {
     const bonus = [g.attack ? (/^[+-]/.test(g.attack) ? g.attack : `+${g.attack}`) : "", g.roll !== "normal" ? `with ${g.roll}` : ""].filter(Boolean).join(", ");
     out.push(`On a successful attack roll${bonus ? ` (${bonus})` : ""}, strikes ${who} ${feet(g.range)} for ${dmg}.`);
-    const theirs = does(st?.target, "them", minutes);
+    const theirs = does(st?.target, "the target", minutes);
     if (theirs.length) out.push(`A hit also ${list(theirs)}.`);
   } else {
     const theirs = does(st?.target, who, minutes);

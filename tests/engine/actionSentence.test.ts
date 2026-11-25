@@ -10,7 +10,7 @@ const cond = (name: string) => ({ name, effects: [] }) as never;
 test("an attack reads as a strike, with what a hit leaves", () => {
   const g = { ...base, name: "Aimed shot", range: 12, attack: "2", damage: "1d8", damageType: "piercing",
     targeting: { who: "enemy" as const, count: "one" as const, n: 1 }, statuses: { minutes: 1, target: status({ conditions: [cond("Bleeding")] }) } };
-  assert.equal(actionSentence(g), "On a successful attack roll (+2), strikes one enemy within 60 feet for 1d8 piercing damage. A hit also puts Bleeding on them. Takes 2 seconds.");
+  assert.equal(actionSentence(g), "On a successful attack roll (+2), strikes one enemy within 60 feet for 1d8 piercing damage. A hit also applies Bleeding to the target. Takes 2 seconds.");
   assert.equal(gearSummary(g)[0], actionSentence(g));
 });
 
@@ -21,7 +21,7 @@ test("an area reads as who it hits, the save and the damage", () => {
 
 test("a condition with no damage says there's no roll", () => {
   const g = { ...base, name: "Mesmerize", range: 6, statuses: { minutes: 1, target: status({ conditions: [cond("Mesmerized")] }) } };
-  assert.equal(actionSentence(g), "Puts Mesmerized on one creature within 30 feet, no roll needed. Takes 2 seconds.");
+  assert.equal(actionSentence(g), "Applies Mesmerized to one creature within 30 feet, no roll needed. Takes 2 seconds.");
 });
 
 test("healing on yourself or others", () => {
@@ -36,5 +36,5 @@ test("a plain melee attack reads in one sentence", () => {
 
 test("a reaction on yourself", () => {
   const g = { ...base, name: "Shield", self: true, kind: "reaction" as const, statuses: { minutes: 0.1, self: status({ conditions: [cond("Shielded")] }) } };
-  assert.equal(actionSentence(g), "As a reaction: puts Shielded on you. Takes 2 seconds.");
+  assert.equal(actionSentence(g), "As a reaction: applies Shielded to you. Takes 2 seconds.");
 });
