@@ -4,7 +4,7 @@
  * position comes from a hash of i and the current time. Effects have no hard edges: everything fades out
  * towards the edge of its area.
  */
-export const EFFECT_KINDS = ["rain", "snow", "wind", "fog", "clouds", "fire", "lightning"] as const;
+export const EFFECT_KINDS = ["rain", "snow", "wind", "fog", "clouds", "fire", "lightning", "poison", "acid", "necrotic", "radiant", "psychic", "force", "oil"] as const;
 export type EffectKind = (typeof EFFECT_KINDS)[number];
 
 export const EFFECT_LABELS: Record<EffectKind, string> = {
@@ -15,6 +15,20 @@ export const EFFECT_LABELS: Record<EffectKind, string> = {
   clouds: "Clouds",
   fire: "Fire",
   lightning: "Lightning",
+  poison: "Poison vapour",
+  acid: "Acid pool",
+  necrotic: "Necrotic gloom",
+  radiant: "Radiant glow",
+  psychic: "Psychic ripples",
+  force: "Force shimmer",
+  oil: "Oil sheen",
+};
+
+/** The colour an area of this look is tinted with (under its animation). */
+export const LOOK_TINT: Partial<Record<EffectKind, string>> = {
+  fire: "rgba(234,88,12,0.18)", poison: "rgba(101,163,13,0.2)", acid: "rgba(190,242,100,0.22)", necrotic: "rgba(46,16,101,0.3)",
+  radiant: "rgba(253,224,71,0.16)", psychic: "rgba(236,72,153,0.14)", force: "rgba(96,165,250,0.14)", oil: "rgba(28,25,23,0.45)",
+  snow: "rgba(186,230,253,0.18)", lightning: "rgba(165,180,252,0.14)",
 };
 
 /**
@@ -108,6 +122,63 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       ctx.beginPath();
       ctx.moveTo(px, py);
       ctx.quadraticCurveTo(px + len / 2, py - unit * 0.25, px + len, py);
+      ctx.stroke();
+    }
+  } else if (kind === "poison" || kind === "necrotic") {
+    // Vapour: low puffs drifting (poison a sickly green, rising a little; necrotic dark violet, sinking).
+    const [r0, g0, b0] = kind === "poison" ? [132, 204, 22] : [59, 7, 100];
+    if (kind === "necrotic") ctx.globalCompositeOperation = "multiply";
+    for (let i = 0; i < count(12, 28); i++) {
+      const r = unit * (1.2 + 1.6 * rnd(i + 0.5));
+      const drift = (kind === "poison" ? -1 : 1) * mod(t * unit * 0.12 + rnd(i + 0.9) * h, h);
+      const px = x + mod(rnd(i) * w + t * unit * (0.1 + 0.15 * rnd(i + 0.3)), w + 2 * r) - r;
+      const py = y + mod(rnd(i + 0.7) * h + drift, h);
+      const f = (0.18 + 0.22 * k) * fade(px, py);
+      if (f <= 0) continue;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, `rgba(${r0},${g0},${b0},${f})`);
+      g.addColorStop(1, `rgba(${r0},${g0},${b0},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(px - r, py - r, 2 * r, 2 * r);
+    }
+  } else if (kind === "acid" || kind === "oil") {
+    // A pool: bubbles that swell and pop (acid hissing yellow-green; oil slow, dark, with a rainbow glint).
+    const life = kind === "acid" ? 1.2 : 3.5;
+    for (let i = 0; i < count(25, 60); i++) {
+      const phase = mod(t / life + rnd(i + 0.2), 1);
+      const px = x + rnd(i) * w, py = y + rnd(i + 0.6) * h;
+      const a = fade(px, py);
+      if (a <= 0) continue;
+      const r = unit * (0.05 + 0.18 * rnd(i + 0.4)) * phase + 1;
+      ctx.strokeStyle = kind === "acid" ? `rgba(217,249,157,${0.7 * a * (1 - phase)})` : `hsla(${Math.round(mod(t * 40 + i * 37, 360))},70%,60%,${0.35 * a * (1 - phase)})`;
+      ctx.lineWidth = Math.max(1, unit * 0.03);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (kind === "radiant") {
+    // Golden motes rising, twinkling.
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < count(30, 90); i++) {
+      const phase = mod(t / 2.5 + rnd(i), 1);
+      const px = x + rnd(i + 0.3) * w + Math.sin(t * 2 + i) * unit * 0.1, py = y + h - phase * h;
+      const a = fade(px, py) * Math.sin(phase * Math.PI) * (0.6 + 0.4 * Math.sin(t * 9 + i));
+      if (a <= 0) continue;
+      ctx.fillStyle = `rgba(254,240,138,${0.8 * a})`;
+      ctx.beginPath();
+      ctx.arc(px, py, unit * 0.06 + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (kind === "psychic" || kind === "force") {
+    // Rings spreading from the middle and fading (psychic pink and uneven; force blue and even).
+    const cx = x + w / 2, cy = y + h / 2, n = 4;
+    for (let i = 0; i < n; i++) {
+      const phase = mod(t / 2.2 + i / n, 1);
+      const wobble = kind === "psychic" ? 1 + 0.08 * Math.sin(t * 5 + i * 2) : 1;
+      ctx.strokeStyle = kind === "psychic" ? `rgba(244,114,182,${0.6 * (1 - phase) * (0.5 + 0.5 * k)})` : `rgba(147,197,253,${0.55 * (1 - phase) * (0.5 + 0.5 * k)})`;
+      ctx.lineWidth = Math.max(1.5, unit * 0.06);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, (w / 2) * phase * wobble, (h / 2) * phase, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
   } else if (kind === "fog" || kind === "clouds") {

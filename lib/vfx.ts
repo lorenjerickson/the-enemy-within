@@ -3,7 +3,7 @@
  * The server records what happened (Fx, in a replay frame); the map draws it here, by how far through its second it is.
  */
 import { areaPolygon, type AreaAt, type LastingArea } from "@/lib/aoe";
-import { drawEffect } from "@/lib/effects";
+import { LOOK_TINT, drawEffect } from "@/lib/effects";
 
 /** An attack, as played back: who at whom, how it looked, and how it went. */
 export interface AttackFx {
@@ -183,7 +183,7 @@ export function drawLasting(ctx: CanvasRenderingContext2D, l: Pick<LastingArea, 
   ctx.beginPath();
   pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
   ctx.closePath();
-  ctx.fillStyle = l.look === "fire" ? "rgba(234,88,12,0.18)" : "rgba(148,163,184,0.18)";
+  ctx.fillStyle = LOOK_TINT[l.look] ?? "rgba(148,163,184,0.18)";
   ctx.fill();
   ctx.clip();
   drawEffect(ctx, l.look, box, 0.8, t, cell);

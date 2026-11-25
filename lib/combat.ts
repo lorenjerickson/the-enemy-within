@@ -292,7 +292,9 @@ function durationMinutes(amount: number, unit: string): number {
 
 /** How a lasting area looks, from its damage type. */
 export const lookOf = (type: string): EffectKind =>
-  type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind" : "fog";
+  type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind"
+  : type === "poison" ? "poison" : type === "acid" ? "acid" : type === "necrotic" ? "necrotic" : type === "radiant" ? "radiant"
+  : type === "psychic" ? "psychic" : type === "force" ? "force" : "fog";
 
 /**
  * Actions a token can take from its gear: those of every equipped item, whatever it is (a weapon's Cleave, a tool's
