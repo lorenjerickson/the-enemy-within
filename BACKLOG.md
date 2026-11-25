@@ -33,6 +33,21 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
 - **O.** **Rework the action definition form** (Loren, 2026-11-25; next priority once the areas KISS steps are done). The action editor is confusing and suits attacks, not other actions: to-hit, damage and the area's save sit at the top for everything; area, lasting, timing and duration controls are always shown with a long paragraph explaining them; range, targets and "can be used on" are spread out; "Attack fields are optional" is the only hint for non-attacks. Likely shape: pick what kind of action it is first (an attack, an area, an effect on someone, on yourself…) and show only the fields that kind uses, in plain sentences, with the lasting-area part reusing the GM's Areas settings.
 - **P.** **Areas: the rest of the full design** (low priority; Loren, 2026-11-25). What the lean pass left out of the first build order (claude/areas-design.md sections 2–5), to do only as play needs it: one shape type for every area (lasting areas, traps, triggers, map effects) and one catch test; migrating traps, triggers, lasting areas and map effects into one areas table (section 4), safe to re-run, with old archives converted; traps and trigger zones read from areas (walks, then rounds); one Areas layer replacing the Traps and Triggers layers, with presets (Trap, Trigger, Hazard, Weather); triggers as their own things wired to areas, with their own visibility and Search DC, one trigger setting off several areas (2.9); auras as areas following their creature (walls blocking, a look, any shape); traps building exposure and getting looks and sounds; traits Impassable, Deep (swimming speed) and Frozen, with the cold / fire interactions; fog in Hide's blind spots and mid-round sight changes; off conditions on scripts (`game.areas` in scripts); lingering harm counting game time passing out of combat (not only walks); "Save as an action" for an improvisation; a plain-failure template landing where the GM picks; single-target fire (a thrown torch) lighting flammable areas; switched-off areas hidden on the GM's map too; more than one open roll prompt per player.
 - **Q.** **Saves belong to effects, not areas or traps** (Loren, 2026-11-25). An area or a trap only decides who is caught; what happens to them is the cause's damage (unavoidable) plus its effects, and each effect carries its own save ("when applied", in the catalog). A fireball: 1d10 fire to everyone in it, plus Burning with its own Agility save. The action interview (O) already makes area actions with no area save. Still to do: traps and lasting areas drop their own save (DC, half on a save) in their editors and in play; existing traps, lasting areas and older area actions with a save converted (their save moved onto an effect, or dropped with the GM's say-so).
+- **R.** **Playtest notes** (Loren, 2026-11-25). Each its own small fix or check:
+  - R1. The Web action should cause no damage, only immobilize.
+  - R2. Check that sounds play correctly in each browser session.
+  - R3. Clicking a previous round's target again deselects it.
+  - R4. Targets that die in a round are deselected automatically.
+  - R5. Check that Dodge really works.
+  - R6. A trap set off out of a player's sight shows no set-off marker to them (any lasting effect it left is still seen).
+  - R7. During a round replay: a large banner, and players can't use the planning panel.
+  - R8. Check that weapon range overlays really work.
+  - R9. An action that pursues to get in range moves only so far that enough time is left to do the action.
+  - R10. A planned move's length can be changed by click-dragging the end of its overlay.
+  - R11. Attack bonuses are shown in action descriptions.
+  - R12. Players can change their target at any time; targets from previous rounds don't carry over.
+  - R13. Check level transitions (they don't seem to work).
+  - R14. A token shows its player's name on hover.
 
 Earlier:
 
