@@ -1,5 +1,5 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { caughtBy, describeArea, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, caughtBy, describeArea, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
@@ -553,7 +553,7 @@ export function resolveMovement(
       const p = where(id);
       if (id === except || down.has(id) || !p || (!anywhere && !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls)) || (only && !only(id))) continue; // anywhere: those `only` names (leaving it)
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
-      const s = f.save ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" };
+      const s = f.save && spec.dc < NO_SAVE_DC ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" }; // no save: it always lands
       const saved = s.total >= spec.dc;
       const all = total + (bonus?.(id) ?? 0); // lingering: plus the build-up so far
       const t = takenBy(id, saved ? (spec.half ? Math.floor(all / 2) : 0) : all, type);

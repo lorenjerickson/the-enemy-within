@@ -33,7 +33,7 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
-import { getLastingArea, listLastingAreas, setLastingAreaFound } from "@/lib/db";
+import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
 import { inArea, type LastingArea } from "@/lib/aoe";
 
 /** Whether a Search from `p` reaches an area: within 10 ft of it (inside it, or near its middle or edge). */
@@ -265,7 +265,7 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
   }
   if (a.kind === "areaSave") {
     // A lasting area they walked into (out of combat): it lands now, with their save.
-    const l = getLastingArea(a.areaId);
+    const l = getLastingArea(a.areaId) ?? listHazards(a.levelId).find((x) => x.id === a.areaId);
     success = !!l && scored.total >= l.dc;
     outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying, scored.total) : "It's gone.";
   }

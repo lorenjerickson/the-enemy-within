@@ -1,5 +1,5 @@
 import { inArea } from "@/lib/aoe";
-import { getExposures, saveExposures, setLastingAreaFound,
+import { listHazards, getExposures, saveExposures, setLastingAreaFound,
   addLastingArea, addTokenStatus, clearRoundPlans, closeRollRequest, closeRollOffRequests, downTokens, getCharacterPlayer, getEncounter, getEncounterWaiting,
   getGameTime, getPendingRound, getRoundPlan, getTokenMover, isGridlessLevel, listLastingAreas, listStructures, listTokens, logSessionEvent, moveToken,
   openRollOffRequest, requestRoll, saveEncounter, saveRollResult, setGameTime, setLastRoundLog, setPendingRound, setReplay, tokenLabels,
@@ -80,7 +80,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const bystanders = tokens.filter((t) => !taking.has(t.id)).map((t) => ({ tokenId: t.id, name: labels.get(t.id) ?? t.name, at: { col: t.col, row: t.row } }));
   const fighters = fightersOn(levelId);
   const startDown = [...downTokens(levelId)]; // before the round (for the replay's opening frame)
-  const lasting = listLastingAreas(levelId);
+  const lasting = listHazards(levelId); // lasting areas, and fire map effects (they burn)
   // Players' characters roll their own saves against conditions (the round waits for them).
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;

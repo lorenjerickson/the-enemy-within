@@ -4,10 +4,10 @@
  * work lasting areas out in round resolution instead. A player's character rolls its own save (it's asked, and the
  * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
-import { setLastingAreaFound, getCharacterPlayer, getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
+import { setLastingAreaFound, getCharacterPlayer, getExposures, leaveAreaAfflictions, listHazards, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
 import { saveRollFor } from "@/lib/creatureChanges";
 import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
-import { caughtBy, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, caughtBy, type LastingArea } from "@/lib/aoe";
 import { fightersOn } from "@/lib/combat";
 import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
@@ -22,7 +22,7 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
   const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
   setLastingAreaFound(l.id); // hidden: walking into it finds it
   // A player's character rolls its own save: asked now, settled when the roll comes in (this again, with its total).
-  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && tok?.character_id ? getCharacterPlayer(tok.character_id) : null;
+  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && l.dc < NO_SAVE_DC && tok?.character_id ? getCharacterPlayer(tok.character_id) : null; // no save: nothing to roll
   if (player && tok?.character_id) {
     requestRoll(player, tok.character_id, saveRollFor(tokenId, l.save, `${l.name}: ${l.save} save (DC ${l.dc})`), { kind: "areaSave", levelId, areaId: l.id, tokenId, ...(leaving ? { leaving } : {}), ...(staying ? { staying } : {}) });
     return `You ${doing[1]} ${l.name}! Roll your ${l.save} save.`;
@@ -31,7 +31,7 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
   const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
   const f = fightersOn(levelId).get(tokenId);
-  const save = saveTotal !== undefined ? { total: saveTotal } : f ? f.save(l.save) : null;
+  const save = saveTotal !== undefined ? { total: saveTotal } : f && l.dc < NO_SAVE_DC ? f.save(l.save) : null;
   const saved = !!save && save.total >= l.dc;
   const gm: string[] = [save ? `${l.save} ${save.total} vs DC ${l.dc}${saved ? " (saved)" : ""}` : ""].filter(Boolean), you: string[] = [];
   const h = tokenHealth(tokenId);
@@ -67,7 +67,7 @@ export function stepsInto(l: LastingArea, from: Point, to: Point, walls: Segment
  */
 export function areasOnStep(levelId: number, tokenId: number, from: Point, to: Point): string[] {
   const walls = movementBlockers(listStructures(levelId)), told: string[] = [];
-  for (const l of listLastingAreas(levelId)) {
+  for (const l of listHazards(levelId)) {
     const fires = l.fires ?? ["end"];
     if (stepsInto(l, from, to, walls)) {
       if (fires.some((f) => f !== "leave")) told.push(catchInArea(levelId, l, tokenId));
@@ -87,7 +87,7 @@ export function areasOnStep(levelId: number, tokenId: number, from: Point, to: P
 export function exposureTick(levelId: number, tokenId: number, at: Point): string[] {
   const all = getExposures(levelId), list = all.get(tokenId);
   if (!list?.length) return [];
-  const walls = movementBlockers(listStructures(levelId)), areas = listLastingAreas(levelId), told: string[] = [];
+  const walls = movementBlockers(listStructures(levelId)), areas = listHazards(levelId), told: string[] = [];
   for (const e of [...list]) {
     const inIt = areas.find((l) => l.lingers && harmOf(l) === e.kind && caughtBy(l.area, centre(at), walls));
     if (inIt) { told.push(catchInArea(levelId, inIt, tokenId, false, true)); continue; } // still in it: it lands again, built up

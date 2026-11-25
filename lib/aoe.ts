@@ -66,6 +66,9 @@ export const playersSee = (l: LastingArea) => (l.visibility ?? "shown") === "sho
 /** A lasting area that lasts until the GM removes it: its end, far off in game time. */
 export const UNTIL_REMOVED = 1e9;
 
+/** An area DC this high means it has no save: it always lands (a fire map effect). */
+export const NO_SAVE_DC = 99;
+
 /** An area placed on the map: a circle centred where it's aimed; a cone or line from the actor towards the aim; a rectangle the GM draws (origin: its centre). */
 export interface AreaAt {
   shape: AreaShape | "rect";

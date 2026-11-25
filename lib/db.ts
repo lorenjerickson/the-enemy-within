@@ -14,7 +14,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, MOVEMENT_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
-import { areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
 import type { Exposure, Exposures } from "@/lib/exposure";
 import type { Trap, TrapArea } from "@/lib/traps";
 import type { MapTrigger } from "@/lib/triggers";
@@ -2256,6 +2256,20 @@ export function getExposures(levelId: number): Exposures {
 export function saveExposures(levelId: number, all: Exposures): void {
   const data = [...all].filter(([, l]) => l.length);
   db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
+}
+
+/**
+ * Every area that does something on a level: its lasting areas, and placed fire map effects (switched on), which burn
+ * whoever is in them like a lingering fire area (1d6 fire each interval, no save, +1 while inside, −2 after; the
+ * areas design, Q7). A fire effect's area is the circle inside its rectangle; its id is the effect's, negated.
+ */
+export function listHazards(levelId: number): LastingArea[] {
+  const fires = listEffects(levelId).filter((e) => e.enabled && e.kind === "fire" && e.x !== null && e.y !== null && e.w !== null && e.h !== null).map((e): LastingArea => ({
+    id: -e.id, name: e.name || "Fire", look: "fire", damage: "1d6", damageType: "fire", dc: NO_SAVE_DC, save: "agility", half: false, ends: 1e9,
+    area: { shape: "circle", origin: { x: e.x! + e.w! / 2, y: e.y! + e.h! / 2 }, dir: 0, size: Math.min(e.w!, e.h!) / 2 },
+    fires: ["inside"], lingers: true, buildUp: 1, decay: 2, drawn: true,
+  }));
+  return [...listLastingAreas(levelId), ...fires];
 }
 
 /** One lasting area (or none, gone or run out). */
