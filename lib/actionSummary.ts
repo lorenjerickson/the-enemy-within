@@ -38,7 +38,8 @@ function does(s: ActionStatuses["self"], on: string, minutes: number): string[] 
       else out.push(`${describeCondition(c)} (${on})`);
     }
   }
-  const named = conds.filter((c) => !once(c)).map((c) => c.name);
+  // A condition that stays reads by name, with what it does right after it.
+  const named = conds.filter((c) => !once(c)).map((c) => { const w = conditionInWords(c); return w ? `${c.name} (${w})` : c.name; });
   if (named.length) out.push(`applies ${list(named)} to ${on}`);
   return out;
 }
@@ -73,9 +74,6 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     out.push(theirs.length ? `${cap(list(theirs))}, no roll needed.` : `Used on ${who} ${feet(g.range)}.`);
   }
   if (mine.length && !g.self) out.push(`It also ${list(mine)}.`);
-  // Each condition the card names, said once in plain words.
-  const named = [...(st?.target?.conditions ?? []), ...(st?.self?.conditions ?? [])].filter((c, i, all) => !once(c) && all.findIndex((x) => x.id === c.id) === i);
-  for (const c of named) { const w = conditionInWords(c); if (w) out.push(`${c.name}: ${w}.`); }
   out.push(`Takes ${seconds(g.seconds)}.`);
   const text = out.join(" ");
   return g.kind === "reaction" ? `As a reaction: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
