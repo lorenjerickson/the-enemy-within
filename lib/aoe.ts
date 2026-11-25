@@ -23,9 +23,13 @@ export interface AreaSpec {
   fires?: AreaFires[]; // lasting: when it catches someone in it (default: the end of each round)
 }
 
-/** When a lasting area catches someone: as they come into it, at the start of a round in it, at the end of one. Once a round each, at most. */
-export type AreaFires = "enter" | "start" | "end";
-export const AREA_FIRES: [AreaFires, string][] = [["enter", "comes into it"], ["start", "starts a round in it"], ["end", "ends a round in it"]];
+/**
+ * When a lasting area catches someone: as they come into it, at the start of a round in it, at the end of one, while
+ * they stay in it (coming in and at the end of each round; its effects last only while they're in it), as they leave
+ * it. Once a round each, at most (leaving counts on its own).
+ */
+export type AreaFires = "enter" | "start" | "end" | "inside" | "leave";
+export const AREA_FIRES: [AreaFires, string][] = [["enter", "comes into it"], ["start", "starts a round in it"], ["end", "ends a round in it"], ["inside", "stays in it (its effects only while inside)"], ["leave", "leaves it"]];
 export const areaFires = (s: string | null | undefined): AreaFires[] => {
   const f = (s ?? "").split(",").filter((x): x is AreaFires => AREA_FIRES.some(([k]) => k === x));
   return f.length ? f : ["end"];

@@ -4,7 +4,7 @@
  * work lasting areas out in round resolution instead. Saves are rolled by the server for now (players rolling their
  * own: the areas design, build step 5).
  */
-import { listLastingAreas, listStructures, listTokens, logSessionEvent } from "@/lib/db";
+import { leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent } from "@/lib/db";
 import { caughtBy, type LastingArea } from "@/lib/aoe";
 import { fightersOn } from "@/lib/combat";
 import { rollDice } from "@/lib/dice";
@@ -16,7 +16,8 @@ import { applyConditionNow } from "./workOutRound";
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
 /** A lasting area catches a token: the save, the damage (half or none on a success), effects on a failed save. Returns what they're told. */
-export function catchInArea(levelId: number, l: LastingArea, tokenId: number): string {
+export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false): string {
+  const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
   const f = fightersOn(levelId).get(tokenId);
   const save = f ? f.save(l.save) : null;
@@ -33,12 +34,12 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number): s
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
   if (!saved) for (const c of l.conditions ?? []) {
-    const happened = applyConditionNow(levelId, tokenId, c);
+    const happened = applyConditionNow(levelId, tokenId, c, whileIn ? l.id : undefined);
     gm.push(`${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
-  logSessionEvent(`${name} walks into ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
-  return `You walk into ${l.name}! ${you.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
+  logSessionEvent(`${name} ${leaving ? "leaves" : "walks into"} ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
+  return `You ${leaving ? "leave" : "walk into"} ${l.name}! ${you.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
 }
 
 /** Whether a step (token corners) comes into the area: outside where it starts, inside where it ends or halfway (a thin wall of fire stepped across). */
@@ -47,8 +48,22 @@ export function stepsInto(l: LastingArea, from: Point, to: Point, walls: Segment
   return !caughtBy(l.area, a, walls) && (caughtBy(l.area, b, walls) || caughtBy(l.area, mid, walls));
 }
 
-/** The lasting areas a walk step comes into, each catching the walker; what they're told. */
+/**
+ * What a walk step does with lasting areas: coming into one catches the walker (unless it only catches those leaving
+ * it); leaving one takes off what it put on them while inside, and catches them if it catches those leaving. What
+ * they're told.
+ */
 export function areasOnStep(levelId: number, tokenId: number, from: Point, to: Point): string[] {
-  const walls = movementBlockers(listStructures(levelId));
-  return listLastingAreas(levelId).filter((l) => stepsInto(l, from, to, walls)).map((l) => catchInArea(levelId, l, tokenId));
+  const walls = movementBlockers(listStructures(levelId)), told: string[] = [];
+  for (const l of listLastingAreas(levelId)) {
+    const fires = l.fires ?? ["end"];
+    if (stepsInto(l, from, to, walls)) {
+      if (fires.some((f) => f !== "leave")) told.push(catchInArea(levelId, l, tokenId));
+    } else if (caughtBy(l.area, centre(from), walls) && !caughtBy(l.area, centre(to), walls)) {
+      const off = leaveAreaAfflictions(levelId, tokenId, l.id);
+      if (off.length) told.push(`Out of ${l.name}, you're no longer ${off.map((n) => n.toLowerCase()).join(" or ")}.`);
+      if (fires.includes("leave")) told.push(catchInArea(levelId, l, tokenId, true));
+    }
+  }
+  return told;
 }

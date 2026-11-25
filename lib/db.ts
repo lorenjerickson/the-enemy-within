@@ -2633,6 +2633,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (
 
 addColumn("token_afflictions", "saved", "INTEGER NOT NULL DEFAULT 0"); // successful saves so far
 addColumn("token_afflictions", "aura", "INTEGER"); // given by this token's aura (while within it)
+addColumn("token_afflictions", "area", "INTEGER"); // given by this lasting area (while in it)
 
 // Creatures that passed the save against an aura's condition as they came within it: safe until they leave.
 db.exec(`CREATE TABLE IF NOT EXISTS aura_passes (
@@ -2663,8 +2664,8 @@ const keptCondition = (json: string): Condition => {
 /** The conditions on a level's tokens, by token id. */
 export function listAfflictions(levelId: number): Map<number, Affliction[]> {
   const out = new Map<number, Affliction[]>();
-  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null; saved: number; aura: number | null }>("SELECT id, token_id, effect, rounds_left, by_token, saved, aura FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
-    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token, saved: r.saved, ...(r.aura != null ? { aura: r.aura } : {}) }]);
+  for (const r of db.prepare<[number], { id: number; token_id: number; effect: string; rounds_left: number; by_token: number | null; saved: number; aura: number | null; area: number | null }>("SELECT id, token_id, effect, rounds_left, by_token, saved, aura, area FROM token_afflictions WHERE level_id = ? ORDER BY id").all(levelId)) {
+    out.set(r.token_id, [...(out.get(r.token_id) ?? []), { id: r.id, condition: keptCondition(r.effect), left: r.rounds_left, by: r.by_token, saved: r.saved, ...(r.aura != null ? { aura: r.aura } : {}), ...(r.area != null ? { area: r.area } : {}) }]);
   }
   return out;
 }
@@ -2673,14 +2674,31 @@ export function listAfflictions(levelId: number): Map<number, Affliction[]> {
 export function saveAfflictions(levelId: number, all: Map<number, Affliction[]>): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM token_afflictions WHERE level_id = ?").run(levelId);
-    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token, saved, aura) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by, a.saved ?? 0, a.aura ?? null);
+    const insert = db.prepare("INSERT INTO token_afflictions (level_id, token_id, effect_id, effect, rounds_left, by_token, saved, aura, area) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const [tokenId, list] of all) for (const a of list) if (a.left > 0) insert.run(levelId, tokenId, a.condition.id, JSON.stringify(a.condition), a.left, a.by, a.saved ?? 0, a.aura ?? null, a.area ?? null);
   })();
 }
 
+/** Takes off what an area put on a token while it was in it (it has left); returns the names taken off. */
+export function leaveAreaAfflictions(levelId: number, tokenId: number, area: number): string[] {
+  const all = listAfflictions(levelId), list = all.get(tokenId) ?? [];
+  const gone = list.filter((a) => a.area === area);
+  if (!gone.length) return [];
+  all.set(tokenId, list.filter((a) => a.area !== area));
+  saveAfflictions(levelId, all);
+  return gone.map((a) => a.condition.name);
+}
+
 /** Puts a condition on a token (again: by its re-application rule); returns whether anything changed. */
-export function addAffliction(levelId: number, tokenId: number, condition: Condition, by: number | null): boolean {
+export function addAffliction(levelId: number, tokenId: number, condition: Condition, by: number | null, area?: number): boolean {
   const all = listAfflictions(levelId);
+  if (area != null) { // while in this area: once (no rounds); it comes off as they leave
+    const list = all.get(tokenId) ?? [];
+    if (list.some((a) => a.area === area && a.condition.id === condition.id)) return false;
+    all.set(tokenId, [...list, { condition, left: 1, by, area }]);
+    saveAfflictions(levelId, all);
+    return true;
+  }
   const r = reapplied(all.get(tokenId) ?? [], condition, condition.rounds, by);
   if (!r.applied) return false;
   all.set(tokenId, r.list);

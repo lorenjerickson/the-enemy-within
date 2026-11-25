@@ -272,7 +272,7 @@ export function rollConditionSaveFor(levelId: number) {
  * A condition put on by hand (the GM's sheet), out of a round: its instant parts happen now (healing, damage,
  * temporary health) and, if there's more to it, it stays on them. Returns what happened, for the log.
  */
-export function applyConditionNow(levelId: number, tokenId: number, c: Condition): string[] {
+export function applyConditionNow(levelId: number, tokenId: number, c: Condition, area?: number): string[] {
   const out: string[] = [];
   const h = tokenHealth(tokenId);
   if (h) {
@@ -288,6 +288,6 @@ export function applyConditionNow(levelId: number, tokenId: number, c: Condition
     }
     if (next.current !== h.current || next.temporary !== h.temporary) saveTokenHealth(tokenId, next);
   }
-  if (lingers(c) && !addAffliction(levelId, tokenId, c, null)) out.push(`already ${c.name.toLowerCase()}: no change`);
+  if (lingers(c) && !addAffliction(levelId, tokenId, c, null, area)) out.push(`already ${c.name.toLowerCase()}: no change`); // area: while in it
   return out;
 }

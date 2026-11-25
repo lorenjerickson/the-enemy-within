@@ -209,7 +209,11 @@ export interface Affliction {
   by: number | null;
   saved?: number; // successful saves so far (when it takes more than one)
   aura?: number; // given by this creature's aura: lasts while they're within it (no rounds, no saves to end it)
+  area?: number; // given by this lasting area (its id) while they stay in it: ends as they leave (no rounds, no saves to end it)
 }
+
+/** Lasts while they're within something (an aura, an area), not for rounds: no ticking down, no saves to end it. */
+export const whileWithin = (a: Affliction) => a.aura != null || a.area != null;
 
 export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) => e.modifiers);
 
@@ -219,7 +223,7 @@ export const modifiersOf = (c: Condition): Modifier[] => c.effects.flatMap((e) =
  * over) or ignore (no change). `applied` says whether anything changed.
  */
 export function reapplied(list: Affliction[], c: Condition, rounds: number, by: number | null): { list: Affliction[]; applied: boolean } {
-  const same = list.filter((a) => a.condition.id === c.id && a.aura == null), fresh: Affliction = { condition: c, left: rounds, by };
+  const same = list.filter((a) => a.condition.id === c.id && !whileWithin(a)), fresh: Affliction = { condition: c, left: rounds, by };
   if (!same.length) return { list: [...list, fresh], applied: true };
   if (c.reapply === "ignore") return { list, applied: false };
   if (c.reapply === "stack") {

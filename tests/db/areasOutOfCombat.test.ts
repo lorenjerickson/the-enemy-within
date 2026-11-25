@@ -52,3 +52,22 @@ test("areas the GM draws: a rectangle, circle or line drawn as on the Traps laye
   walkRoute(lv, tok, row(1, 0, 3));
   assert.equal(tokenHealth(tok)!.current, 16);
 });
+
+test("out of combat: a 'stays in it' area's effects come off as they walk out; a 'leaves it' area catches them leaving, not coming in", () => {
+  const lv = level();
+  const slippery = getCondition(saveEffectDef(null, { name: "Slippery", description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 5 }))!;
+  addLastingArea(lv, { name: "Oil slick", look: "fog", area: areaFromDrawn({ shape: "rect", x: 2, y: 0, w: 2, h: 3 }), damage: null, dc: 40, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["inside"], conditions: [slippery], drawn: true });
+  const tok = placeCharacterToken(lv, character("Finn", { health: "20" }), 0, 1);
+  walkRoute(lv, tok, row(1, 0, 2));
+  assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Slippery" && a.area != null), "in it: slippery");
+  const w = walkRoute(lv, tok, row(1, 2, 5));
+  assert.ok(!listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Slippery"), "out of it: not");
+  assert.ok(w.told.some((t) => /Out of Oil slick, you're no longer slippery/.test(t)), w.told.join(" | "));
+  const lv2 = level();
+  addLastingArea(lv2, { name: "Thorns", look: "fog", area: areaFromDrawn({ shape: "rect", x: 2, y: 0, w: 2, h: 3 }), damage: "4", dc: 40, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["leave"], drawn: true });
+  const t2 = placeCharacterToken(lv2, character("Gil", { health: "20" }), 0, 1);
+  walkRoute(lv2, t2, row(1, 0, 2));
+  assert.equal(tokenHealth(t2)!.current, 20, "coming in: nothing");
+  walkRoute(lv2, t2, row(1, 2, 5));
+  assert.equal(tokenHealth(t2)!.current, 16, "leaving: caught");
+});

@@ -111,3 +111,18 @@ test("a player's character rolls their own area save: the round waits for it, th
   const r = resolve(movers(), fighters(), { rollers: [2], decisions: { [key]: 17 } });
   assert.equal(r.hp.get(2), 16, "their 17 saved: half");
 });
+
+test("'stays in it' areas: their effects last only while inside (off as they leave); 'leaves it' areas catch whoever leaves", () => {
+  const slippery = condition(11, "Slippery", [{ kind: "speed", factor: 0.5 }], { rounds: 5 });
+  const through = [mover(2, { col: 2, row: 5 }, [{ kind: "move", to: { col: 5, row: 5 }, feet: 15 }, { kind: "move", to: { col: 9, row: 5 }, feet: 20 }])];
+  const slick = lastingAt(5, 5, { name: "Oil slick", damage: null, fires: ["inside"], conditions: [slippery] });
+  const r = resolve(through, { 2: fighter({ save: 5 }) }, { lasting: [slick] });
+  assert.match(r.text, /T2 is affected by Slippery/);
+  assert.match(r.text, /T2 is out of Oil slick: no longer slippery/);
+  assert.ok(!r.afflictions.get(2)?.some((a) => a.condition.name === "Slippery"), "off once out");
+  const stay = resolve([mover(2, { col: 5, row: 5 })], { 2: fighter({ save: 5 }) }, { lasting: [slick] });
+  assert.ok(stay.afflictions.get(2)?.some((a) => a.condition.name === "Slippery" && a.area === 1), "still in it: still slippery, while inside");
+  const out = resolve(through, { 2: fighter({ save: 5 }) }, { lasting: [lastingAt(5, 5, { name: "Thorns", fires: ["leave"] })] });
+  assert.equal(out.hp.get(2), 16);
+  assert.match(out.text, /Thorns catches T2 leaving it/);
+});

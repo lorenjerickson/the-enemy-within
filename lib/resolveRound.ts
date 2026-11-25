@@ -4,7 +4,7 @@ import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
-import { savePct } from "@/lib/conditions";
+import { savePct, whileWithin } from "@/lib/conditions";
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
@@ -238,7 +238,7 @@ export function resolveMovement(
   /** A save to end a condition, rolled by its player (the round waits) or the server. */
   const endRoll: SaveRoll = (id, attr, dc, what, sec) => saveRoll(id, attr, dc, `end:${sec}:${what}:${id}`, `${what} (to shake it off)`, sec);
   /** Puts a condition on someone mid-round (`aura`: from that creature's aura, while they're within it); false if they resist it or nothing changes. */
-  const afflict = (id: number, c: Condition, by: number | null, sec: number, aura?: number): boolean => {
+  const afflict = (id: number, c: Condition, by: number | null, sec: number, aura?: number, area?: number): boolean => {
     // A save as it lands: a player rolls their own (the round waits for it), the server rolls for the GM's creatures.
     let rounds = c.rounds;
     if (c.apply_save_attr) {
@@ -293,7 +293,7 @@ export function resolveMovement(
     }
     if (!lingers(c)) return false; // nothing more to it
     // Concentration: a caster keeps up one concentration condition at a time; a different one ends the old.
-    if (c.concentration && by !== null && aura == null) {
+    if (c.concentration && by !== null && aura == null && area == null) {
       const old = keptUpBy(by).filter((k) => k.a.condition.id !== c.id);
       if (old.length) {
         log.push(`${sec} s: ${nameOf(by)} turns their concentration to ${c.name}: ${[...new Set(old.map((k) => k.a.condition.name))].join(", ")} ends.`);
@@ -309,7 +309,10 @@ export function resolveMovement(
       f.limits = restrictionsOf(modifiersOf(c), c.name, by, { forbid: { ...was.forbid }, autofail: [...was.autofail], spare: [...was.spare] });
     }
     if (aura != null) afflicted.set(id, [...(afflicted.get(id) ?? []), auraAffliction(c, aura)]);
-    else {
+    else if (area != null) { // while in that area: once, no rounds; it comes off as they leave
+      if ((afflicted.get(id) ?? []).some((a) => a.area === area && a.condition.id === c.id)) return false;
+      afflicted.set(id, [...(afflicted.get(id) ?? []), { condition: c, left: 1, by, area }]);
+    } else {
       const r = reapplied(afflicted.get(id) ?? [], c, rounds, by); // refresh, stack or ignore (the condition says)
       if (!r.applied) {
         log.push(`${sec} s: ${nameOf(id)} is already ${c.name.toLowerCase()}: no change.`);
@@ -336,7 +339,7 @@ export function resolveMovement(
       if (f.extras) f.extras = { dealing: f.extras.dealing.filter((x) => x.name !== c.name), taking: f.extras.taking.filter((x) => x.name !== c.name) };
     }
     if (why === "trigger") log.push(`${sec} s: ${nameOf(id)}'s ${c.name} is spent.`);
-    if (why === "left") log.push(`${sec} s: ${nameOf(id)} is out of ${nameOf(a.aura ?? -1)}'s aura: no longer ${c.name.toLowerCase()}.`);
+    if (why === "left") log.push(a.area != null ? `${sec} s: ${nameOf(id)} is out of ${lasting.find((l) => l.id === a.area)?.name ?? "the area"}: no longer ${c.name.toLowerCase()}.` : `${sec} s: ${nameOf(id)} is out of ${nameOf(a.aura ?? -1)}'s aura: no longer ${c.name.toLowerCase()}.`);
     if (why === "damage" || why === "attack") log.push(`${sec} s: ${nameOf(id)} is no longer ${c.name.toLowerCase()} (${why === "damage" ? "hurt" : "they attacked"}).`);
     story.push({ sec, k: "effectEnds", who: id, name: c.name, why });
   };
@@ -349,7 +352,7 @@ export function resolveMovement(
   /** Hurt: conditions that end when hurt end; those saved against when hurt get their save (not `except`, the one hurting them). */
   const wasHurt = (id: number, sec: number, amount: number, except?: number, by: number | null = null) => {
     for (const a of [...(afflicted.get(id) ?? [])]) {
-      if (a.condition.id === except || a.aura != null) continue;
+      if (a.condition.id === except || whileWithin(a)) continue;
       if (a.condition.ends_on_damage) release(id, a, "damage", sec);
       else if (a.condition.save_when === "damaged" && !down.has(id)) endSave(id, a, sec);
     }
@@ -357,7 +360,7 @@ export function resolveMovement(
     onDamaged(id, sec, by); // "when you take damage" triggers
   };
   /** Everything a caster keeps up by concentrating (their concentration conditions on anyone). */
-  const keptUpBy = (caster: number) => [...afflicted].flatMap(([id, list]) => list.filter((a) => a.by === caster && a.condition.concentration && a.aura == null).map((a) => ({ id, a })));
+  const keptUpBy = (caster: number) => [...afflicted].flatMap(([id, list]) => list.filter((a) => a.by === caster && a.condition.concentration && !whileWithin(a)).map((a) => ({ id, a })));
   /** Their concentration breaks: everything they kept up ends, on everyone. */
   const breakConcentration = (caster: number, sec: number, why: string) => {
     const kept = keptUpBy(caster);
@@ -517,7 +520,7 @@ export function resolveMovement(
   };
   /** Attacked someone: conditions that end when they attack end (invisibility). */
   const didAttack = (id: number, sec: number) => {
-    for (const a of [...(afflicted.get(id) ?? [])]) if (a.condition.ends_on_attack && a.aura == null) release(id, a, "attack", sec);
+    for (const a of [...(afflicted.get(id) ?? [])]) if (a.condition.ends_on_attack && !whileWithin(a)) release(id, a, "attack", sec);
   };
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
   const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null) => {
@@ -540,11 +543,11 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
   };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
-  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean, type?: string): AreaHit[] => {
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean, type?: string, anywhere = false): AreaHit[] => {
     const hits: AreaHit[] = [];
     for (const id of [...fighters.keys()]) {
       const p = where(id);
-      if (id === except || down.has(id) || !p || !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls) || (only && !only(id))) continue;
+      if (id === except || down.has(id) || !p || (!anywhere && !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls)) || (only && !only(id))) continue; // anywhere: those `only` names (leaving it)
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
       const s = f.save ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" };
       const saved = s.total >= spec.dc;
@@ -577,15 +580,17 @@ export function resolveMovement(
    * puts its conditions on them too.
    */
   const areaCatch = (l: LastingArea, sec: number, when: AreaFires, fx: Fx[], only?: Set<number>) => {
-    if (!(l.fires ?? ["end"]).includes(when)) return;
+    const fires = l.fires ?? ["end"], inside = fires.includes("inside"); // staying in it: caught coming in, and at the end of each round
+    if (!fires.includes(when) && !(inside && (when === "enter" || when === "end"))) return;
+    const key = (id: number) => `${l.id}:${id}${when === "leave" ? ":leave" : ""}`;
     const total = l.damage ? rollDice(l.damage) : 0, before = log.length;
-    const hits = catchIn(l.area, l, total, -1, sec, l.name, (id) => !caughtIn.has(`${l.id}:${id}`) && (!only || only.has(id)));
+    const hits = catchIn(l.area, l, total, -1, sec, l.name, (id) => !caughtIn.has(key(id)) && (!only || only.has(id)), l.damageType, when === "leave");
     if (!hits.length) return;
-    const how = when === "enter" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} coming into it` : when === "start" ? "catches whoever starts the round in it" : "lingers";
+    const how = when === "enter" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} coming into it` : when === "leave" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} leaving it` : when === "start" ? "catches whoever starts the round in it" : "lingers";
     log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage, ${l.save} save DC ${l.dc}.`);
     for (const h of hits) {
-      caughtIn.add(`${l.id}:${h.id}`);
-      if (h.outcome === "hit") for (const c of l.conditions ?? []) afflict(h.id, c, l.by ?? null, sec);
+      caughtIn.add(key(h.id));
+      if (h.outcome === "hit") for (const c of l.conditions ?? []) afflict(h.id, c, l.by ?? null, sec, undefined, inside && when !== "leave" ? l.id : undefined);
     }
     fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
   };
@@ -978,8 +983,11 @@ export function resolveMovement(
     // Lasting areas that catch whoever comes into them (a fire wall): those in one now who weren't a second ago.
     for (const l of lasting) {
       const now = insideOf(l), was = wasIn.get(l.id) ?? new Set<number>();
-      const entering = new Set([...now].filter((id) => !was.has(id)));
+      const entering = new Set([...now].filter((id) => !was.has(id))), leaving = new Set([...was].filter((id) => !now.has(id)));
       if (entering.size) areaCatch(l, sec, "enter", fx, entering);
+      // Leaving it: what it put on them while inside comes off; an area that catches whoever leaves it does.
+      for (const id of leaving) for (const a of [...(afflicted.get(id) ?? [])]) if (a.area === l.id) release(id, a, "left", sec);
+      if (leaving.size) areaCatch(l, sec, "leave", fx, leaving);
       wasIn.set(l.id, now);
     }
     // Traps that spring on whoever comes into one this second (stepping onto it, through it, across a tripwire).
@@ -1140,7 +1148,7 @@ export function resolveMovement(
       }
       // Shake off: their action spent fighting off conditions that allow it (a save against each).
       if (step.action === "shake") {
-        const list = (afflicted.get(m.tokenId) ?? []).filter((a) => a.condition.save_action && a.condition.save_attr && a.aura == null);
+        const list = (afflicted.get(m.tokenId) ?? []).filter((a) => a.condition.save_action && a.condition.save_attr && !whileWithin(a));
         if (!list.length) say(`${m.name} has nothing to shake off.`);
         for (const a of list) endSave(m.tokenId, a, sec);
         continue;
@@ -1441,7 +1449,7 @@ export function tickAfflictions(
           }
         }
       }
-      if (a.aura != null) { // from an aura: lasts while they're within it (no rounds, no saves)
+      if (whileWithin(a)) { // from an aura or an area: lasts while they're within it (no rounds, no saves)
         keep.push(a);
         continue;
       }
@@ -1463,7 +1471,7 @@ export function tickAfflictions(
     }
     // Hurt by a condition's damage: others that end when hurt end; those saved against when hurt get their save.
     const stays = hurtBy.size ? keep.filter((a) => {
-      if (hurtBy.has(a.condition.id) || a.aura != null) return true;
+      if (hurtBy.has(a.condition.id) || whileWithin(a)) return true;
       if (a.condition.ends_on_damage) {
         at(`${nameOf(id)} is no longer ${a.condition.name.toLowerCase()} (hurt).`);
         story?.push({ sec, k: "effectEnds", who: id, name: a.condition.name, why: "damage" });
