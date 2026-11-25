@@ -34,6 +34,7 @@ import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
 import { askImprovise, dropImprovisation, openImprovisation } from "@/lib/improvise";
+import { improvisationRolled } from "./improvising";
 import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
 import { inArea, type LastingArea } from "@/lib/aoe";
 
@@ -215,7 +216,7 @@ export async function submitRoll(requestId: number, thrown: number[][]): Promise
  * What a check came to (pick a lock, Search, Hide, initiative): settles it and says how it went. Rolled by a player
  * (their dice) or for a creature the GM plays (automatically). me: whoever made it.
  */
-function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, scored: { total: number }): { success: boolean; outcome: string } {
+function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, scored: { total: number; parts?: { dice: number[] }[] }): { success: boolean; outcome: string } {
   let success = false, outcome = "";
   if (a.kind === "pickLock") {
     const door = getDoor(a.doorId);
@@ -263,6 +264,11 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     const r = settleHide(a.levelId, a.tokenId, scored.total);
     success = r.hidden;
     outcome = r.told;
+  }
+  if (a.kind === "improvise") {
+    // An improvisation's roll: kept; whether it worked shows when it plays out (out of combat: now).
+    success = true;
+    outcome = improvisationRolled(a.id, { total: scored.total, natural: scored.parts?.[0]?.dice[0] ?? 0 });
   }
   if (a.kind === "areaSave") {
     // A lasting area they walked into (out of combat): it lands now, with their save.

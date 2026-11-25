@@ -47,3 +47,23 @@ test("an effect outcome on the improviser (or someone else)", () => {
   assert.match(told.get(tok)?.[0] ?? "", /You're emboldened/);
   void getCondition;
 });
+
+test("settled: a player is asked for its roll; out of combat it plays out when the roll comes in; with no roll, at once", async () => {
+  const { createUser, db, getOpenRollRequest } = await import("@/lib/db");
+  const { startImprovisation, improvisationRolled } = await import("@/app/(play)/play/improvising");
+  createUser({ name: "impP", username: "impP", contact: "", role: "player" } as never, "pw");
+  const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("impP")!.id;
+  const lv = level(), pc = character("Pip");
+  db.prepare("UPDATE characters SET player_id = ? WHERE id = ?").run(pid, pc);
+  const tok = placeCharacterToken(lv, pc, 0, 0);
+  const id = askImprovise(lv, tok, "climb the chandelier");
+  agreeImprovisation(id, { name: "Chandelier", cost: "action", seconds: 2, roll: { type: "check", skill: "athletics", dc: 12 }, success: { kind: "narrative", text: "You swing across." } });
+  startImprovisation(id);
+  assert.deepEqual(getOpenRollRequest(pid)?.action, { kind: "improvise", id });
+  assert.equal(improvisationRolled(id, { total: 15, natural: 13 }), "Chandelier: it works. You swing across.");
+  assert.equal(getImprovisation(id)!.status, "done");
+  const id2 = askImprovise(lv, tok, "shout");
+  agreeImprovisation(id2, { name: "Shout", cost: "free", seconds: 0, roll: null, success: { kind: "script", script: "game.vars.shouted = true" } });
+  startImprovisation(id2);
+  assert.equal(getVars().shouted, true);
+});

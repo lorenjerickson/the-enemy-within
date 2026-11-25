@@ -1,6 +1,7 @@
 "use server";
 import { agreeImprovisation, dropImprovisation, getImprovisation, type Agreed } from "@/lib/improvise";
 import { checkScript } from "@/lib/script";
+import { startImprovisation } from "./improvising";
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
@@ -276,6 +277,7 @@ export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<
     if (o?.kind === "map" && !o.outcomes.length) return { error: "Add what changes on the map" };
   }
   agreeImprovisation(Number(id), { ...agreed, seconds: Math.max(0, Math.min(6, Number(agreed.seconds) || 0)) });
+  startImprovisation(Number(id)); // its roll asked for (or, out of combat with none, it plays out now)
   revalidatePath("/play");
   return {};
 }

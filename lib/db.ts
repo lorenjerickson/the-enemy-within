@@ -2880,6 +2880,7 @@ export type RollAction =
   | { kind: "hide"; levelId: number; tokenId: number; inRound?: boolean } // inRound: they already hid in a round; the roll only sets the total // Hide: their Stealth total is how hard they are to find (if no enemy sees them as they roll)
   | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
   | { kind: "conditionSave"; levelId: number; tokenId: number; key: string } // a save against a condition as it lands, mid-round
+  | { kind: "improvise"; id: number } // the roll an improvisation needs (its outcome shown when it plays out)
   | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean }; // out of combat: a save against a lasting area they walked into (left, stayed in)
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
