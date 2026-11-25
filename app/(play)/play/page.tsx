@@ -17,6 +17,8 @@ import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import CharacterSheet from "./CharacterSheet";
 import AreaSounds from "./AreaSounds";
+import ImprovisingCard from "./ImprovisingCard";
+import { listOpenImprovisations, openImprovisation } from "@/lib/improvise";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
@@ -128,6 +130,7 @@ function GmView({ session }: { session: GameSession }) {
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
+      <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} />
       <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
@@ -219,7 +222,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock planClock={me && rp ? (() => { const c = planClock(me.level_id); return c && c.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock improvising={me ? openImprovisation(me.token_id)?.intent ?? null : null} planClock={me && rp ? (() => { const c = planClock(me.level_id); return c && c.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",

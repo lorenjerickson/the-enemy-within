@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
+import { cancelImprovise, improvise, hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots, useHideSpots } from "./hideMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
@@ -30,7 +30,7 @@ import type { PutOptions } from "@/lib/combat";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], puts, dice, self = null, lastRound = null, attackRange = 1,
+  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], puts, improvising = null, dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
   things?: { id: number; name: string }[]; // levers, switches, objects within reach (interactable map triggers)
@@ -48,6 +48,7 @@ export default function PickLock({
   selected?: number | null; // their selected target (kept from last round): used for a targeted action straight away
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
+  improvising?: string | null; // their improvisation waiting on the GM (its line of intent)
   puts?: PutOptions; // what Refit could put away, or bring out of a pack onto the belt
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
@@ -81,6 +82,7 @@ export default function PickLock({
   const [using, setUsing] = useState(false); // Use: picking which item (in hand or on a belt) to use
   const [usingOn, setUsingOn] = useState<(typeof gear)[number] | null>(null); // out of combat: an item picked, now who on
   const [told, setTold] = useState<string | null>(null);
+  const [intent, setIntent] = useState<string | null>(null); // Improvise: what they want to do (being typed)
   const [query, setQuery] = useState(""); // the action search
   const shownGear = gear.filter((g) => matchesAction(query, g.name, g.source, g.description));
   const [interacting, setInteracting] = useState(false);
@@ -106,7 +108,7 @@ export default function PickLock({
   // What each button does now: plan it (encounter), do it (out of one), or nothing yet.
   // In an encounter: one action, bonus action and reaction each, and only what fits the time left (greyed out, with why).
   const spent = (id: PlayerActionId) => (plan && DEFERRED_ACTIONS.includes(id) ? DEFERRED_WHY : plan && id === "dash" ? (running <= 0 ? "No running speed" : unavailable(plan.steps, plan.used, "movement", 0, forbidden) ?? unavailable(plan.steps, plan.used, "action", 0, forbidden)) : plan ? (id === "shake" && !shakeable ? "Nothing to shake off (no condition on you allows it)" : unavailable(plan.steps, plan.used, actionKind(id), ACTION_SECONDS[id] ?? 0, forbidden)) : null);
-  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || id === "hide" || (id === "dash" && running > 0) || CHASE_ACTIONS.includes(id)); // Dash out of one: Run (free moves at running speed) // Follow / Pursue / Evade out of one: a standing order
+  const usable = (id: PlayerActionId) => onMap && (plan ? !plan.ready && !dice?.rolled && !spent(id) : id === "move" || id === "search" || id === "use" || id === "interact" || id === "assist" || id === "hide" || id === "improvise" || (id === "dash" && running > 0) || CHASE_ACTIONS.includes(id)); // Dash out of one: Run (free moves at running speed) // Follow / Pursue / Evade out of one: a standing order
   const press = (id: PlayerActionId) => {
     if (id === "move") {
       // Move takes over: whatever else was being picked is put away.
@@ -121,6 +123,7 @@ export default function PickLock({
     }
     setMoveMode(false);
     if (id === "refit") return setRefitting(!refitting);
+    if (id === "improvise") return setIntent(intent === null ? "" : null);
     if (plan && id === "use") { setTargetMode(null); setRefitting(false); return setUsing(!using); }
     if (plan && id === "hide") {
       setTargetMode(null);
@@ -158,6 +161,7 @@ export default function PickLock({
     !onMap ? "You're not on the map yet"
     : plan && spent(id) ? spent(id)!
     : plan ? (id === "refit" ? "Refit: swap something into an equipment slot, put something away, or bring something out of a pack onto your belt (2 s, bonus action)" : id === "use" ? "Use something in hand or on your belt" : id === "interact" ? "Interact: open or close a door within reach (1 s; it happens after the round)" : id === "hide" ? "Hide (2 s): unseen where your plan leaves you, hide there; seen, pick a blind spot you can reach in time (then Stealth with disadvantage)" : id === "move" ? "Plan a move: click where to go on the map" : id === "dash" ? "Dash: click where to run on the map (running speed; uses your action)" : CHASE_ACTIONS.includes(id) ? `${label(id)} someone for a few seconds or the rest of the round, as 1-second slices on your plan` : `Plan ${label(id)} (${ACTION_SECONDS[id] ?? 1} s)`)
+    : id === "improvise" ? "Improvise: say what you want to do; you and the GM settle it"
     : id === "wait" ? "Wait: only in a round (each click adds a second of doing nothing)"
     : id === "search" ? "Search: Investigation check (DC 14) for anything hidden within 10 ft"
     : id === "use" ? "Use something you carry: it happens straight away"
@@ -291,6 +295,21 @@ export default function PickLock({
         </div>
       )}
       <RoundHistory rounds={history} />
+      {improvising ? (
+        <div className="rounded-box bg-warning/20 p-2 text-xs" data-improvising>
+          <span className="font-semibold">Improvising:</span> “{improvising}”. Settle it with the GM.
+          <button type="button" className="btn btn-ghost btn-xs ml-1" disabled={pending} onClick={() => run(cancelImprovise)}>Take it back</button>
+        </div>
+      ) : intent !== null && (
+        <div className="space-y-1 rounded-box bg-base-100/70 p-2 text-xs" data-improvise>
+          <div className="font-semibold">Improvise: what do you want to do?</div>
+          <textarea value={intent} onChange={(e) => setIntent(e.target.value)} placeholder="e.g. tip the oil barrel toward the door" className="textarea textarea-xs w-full" rows={2} />
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-primary btn-xs" disabled={pending || !intent.trim()} onClick={() => run(async () => { const r = await improvise(intent); if (!r.error) setIntent(null); return r; })}>Ask the GM</button>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={() => setIntent(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {/* Grouped by kind: movement, actions (with their gear's), bonus actions (none yet), reactions; the search narrows them. */}
       <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find an action…" aria-label="Find an action" className="input input-sm w-full" data-action-search />
       {query && !PLAYER_ACTIONS.some((a) => matchesAction(query, a.label, a.desc)) && !shownGear.length && <p className="text-xs opacity-70">No action matches “{query}”.</p>}

@@ -1,4 +1,5 @@
 "use server";
+import { dropImprovisation } from "@/lib/improvise";
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
@@ -254,5 +255,12 @@ export async function gmRemoveAffliction(id: number) {
   await requireGm();
   const levelId = removeAffliction(Number(id));
   if (levelId !== undefined) syncAurasOn(levelId); // it may have carried an aura
+  revalidatePath("/play");
+}
+
+/** The GM turns an improvisation down (or it's been dealt with by hand). */
+export async function gmDropImprovisation(id: number): Promise<void> {
+  await requireGm();
+  dropImprovisation(Number(id));
   revalidatePath("/play");
 }

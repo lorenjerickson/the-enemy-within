@@ -33,6 +33,7 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
+import { askImprovise, dropImprovisation, openImprovisation } from "@/lib/improvise";
 import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
 import { inArea, type LastingArea } from "@/lib/aoe";
 
@@ -569,4 +570,24 @@ export async function submitPlanDice(thrown: number[][][]): Promise<{ error?: st
   const error = p ? submitPlanRoll(p, thrown) : "Not in an encounter";
   revalidatePath("/play");
   return error ? { error } : {};
+}
+
+/** Improvise: the acting token asks the GM to do something the rules don't cover (a line of intent); the GM is told. */
+export async function improvise(intent: string): Promise<{ error?: string }> {
+  const { me, error } = await acting();
+  if (error) return { error };
+  if (!me) return { error: "You're not on the map yet" };
+  if (!String(intent ?? "").trim()) return { error: "Say what you want to do" };
+  askImprovise(me.level_id, me.token_id, String(intent));
+  logSessionEvent(`💡 ${me.name} wants to improvise: ${String(intent).trim()}`);
+  revalidatePath("/play");
+  return {};
+}
+
+/** Takes back an improvisation not yet settled. */
+export async function cancelImprovise(): Promise<void> {
+  const { me, error } = await acting();
+  const open = !error && me ? openImprovisation(me.token_id) : undefined;
+  if (open) dropImprovisation(open.id);
+  revalidatePath("/play");
 }

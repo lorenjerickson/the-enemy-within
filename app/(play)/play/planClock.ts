@@ -1,3 +1,4 @@
+import { openImprovisation } from "@/lib/improvise";
 import { db, downTokens, getCharacterPlayer, getEncounter, getOpenGameSession, getPendingRound, gmPlayedPlayers, listTokens, logSessionEvent, readyTokens, saveRoundPlan, tokenLabels } from "@/lib/db";
 
 /** How long the last player has to finish planning once everyone else is ready. */
@@ -26,6 +27,7 @@ export function planClock(levelId: number): { tokenId: number; endsAt: number } 
   const id = unready[0], t = tokens.find((x) => x.id === id)!;
   const player = t.character_id ? getCharacterPlayer(t.character_id) : null, session = getOpenGameSession();
   if (!player || (session && gmPlayedPlayers(session.id).includes(player))) return clear(); // the GM's (or played by the GM): no clock
+  if (openImprovisation(id)) return clear(); // settling an improvisation with the GM: the clock waits (it starts over after)
   let row = db.prepare<[number], { token_id: number; started: number }>("SELECT token_id, started FROM plan_clock WHERE level_id = ?").get(levelId);
   if (!row || row.token_id !== id) {
     row = { token_id: id, started: Date.now() };
