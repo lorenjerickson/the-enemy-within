@@ -33,6 +33,7 @@ import TrapsEditor from "./TrapsEditor";
 import TriggersEditor from "./TriggersEditor";
 import type { MapTrigger } from "@/lib/triggers";
 import { trapFromDrag, type TrapShape } from "./trapDraw";
+import AreasEditor from "./AreasEditor";
 import type { Trap } from "@/lib/traps";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";
@@ -44,7 +45,7 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, breakStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeArea as drawArea, placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, breakStructure, removeTile, removeToken, toggleLayer } from "../actions";
 import { GM_ONLY_LAYERS, capitalize, type Area, EyeIcon, type MapState, type CellRect, useImage, noteLayout, SCENE, JOIN_DISTANCE, fitScene, gridOrigin, figureCells, HOLD_MS, LIFT_MS, PING_MS, FX_MS, SIGHT, LAYER_RENDERERS } from "./mapLayers";
 
 
@@ -104,7 +105,9 @@ export default function MapView({
   dockInitial = null,
   dockOpposite,
   switchTo = [],
+  gameNow = 0,
 }: {
+  gameNow?: number; // game time now (minutes): how long the GM's areas have left
   switchTo?: number[]; // the GM in a session: tokens a click switches to acting as (their view)
   locationId: number;
   levelId: number;
@@ -914,7 +917,7 @@ export default function MapView({
       });
       return;
     }
-    if (e.button === 0 && (selected === "traps" || selected === "triggers")) {
+    if (e.button === 0 && (selected === "traps" || selected === "triggers" || selected === "areas")) {
       const { gx, gy } = gridAt(e);
       const at = { x: quarter(gx), y: quarter(gy) };
       setTrapDrag({ start: at, end: at });
@@ -1273,6 +1276,10 @@ export default function MapView({
       const area = trapFromDrag(trapShape, trapDrag);
       setTrapDrag(null);
       if (!area) return; // a click without a drag places nothing
+      if (selected === "areas") {
+        startTransition(async () => { await drawArea(locationId, levelId, area); });
+        return;
+      }
       if (selected === "triggers") {
         startTransition(async () => {
           changeTriggers({ add: { id: -Date.now(), name: "Trigger", area, springs: ["enter"], who: "", often: "once", outcomes: [], sprung: [] } });
@@ -1596,6 +1603,8 @@ export default function MapView({
                   })
                 }
               />
+            ) : selected === "areas" ? (
+              <AreasEditor locationId={locationId} shape={trapShape} onShape={setTrapShape} areas={lasting} effects={trapEffects} now={gameNow} />
             ) : selected === "traps" ? (
               <TrapsEditor
                 locationId={locationId}

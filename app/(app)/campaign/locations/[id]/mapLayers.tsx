@@ -208,7 +208,7 @@ export const FX_MS = 1000; // how long a script's effect plays
 export const SIGHT = 500;
 
 /** Layers only the GM ever sees. */
-export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "triggers"];
+export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "triggers", "areas"];
 
 export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
