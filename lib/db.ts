@@ -1160,6 +1160,9 @@ export interface Asset {
   url: string;
 }
 
+/** An asset's URL (an area's sound…), if it's still there. */
+export const getAssetUrl = (id: number): string | undefined => db.prepare<[number], { url: string }>("SELECT url FROM assets WHERE id = ?").get(id)?.url;
+
 export function listAssets(filter: { type: AssetType; usage: AssetUsage }): Asset[] {
   return db
     .prepare<[string, string], Asset>("SELECT id, name, type, usage, url FROM assets WHERE type = ? AND usage = ? ORDER BY name")
@@ -2259,6 +2262,14 @@ export function saveExposures(levelId: number, all: Exposures): void {
 export function getLastingArea(id: number): (LastingArea & { level_id: number }) | undefined {
   const r = db.prepare<[number], { id: number; level_id: number; name: string; ends: number; spec: string }>("SELECT id, level_id, name, ends, spec FROM lasting_areas WHERE id = ?").get(id);
   return r ? { id: r.id, level_id: r.level_id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) } : undefined;
+}
+
+/** A hidden lasting area is found (players see it from now on). */
+export function setLastingAreaFound(id: number): void {
+  const a = getLastingArea(id);
+  if (!a || a.found || (a.visibility ?? "shown") !== "hidden") return;
+  const { id: _id, level_id: _l, ...rest } = a;
+  updateLastingArea(id, { ...rest, found: true });
 }
 
 /** The GM changes a lasting area (everything but where it is). */

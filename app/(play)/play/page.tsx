@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getTokenActor, type ActorToken, getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
+import { getAssetUrl, listLastingAreas, getTokenActor, type ActorToken, getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -16,6 +16,7 @@ import PlayDock, { type DockTool } from "./PlayDock";
 import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import CharacterSheet from "./CharacterSheet";
+import AreaSounds from "./AreaSounds";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
@@ -127,6 +128,7 @@ function GmView({ session }: { session: GameSession }) {
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
+      <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
       <LevelMap switchable="all" locationId={place.location_id} level={levels.find((l) => l.id === levelId)!} levels={levels} dock={{ side: "left", tools, initial: "map" }} contest={contest} planTargets={enc ? listPlanTargets(levelId!) : []} planRoutes={enc ? listPlanRoutes(levelId!) : []} />

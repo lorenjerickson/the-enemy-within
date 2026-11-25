@@ -1604,7 +1604,7 @@ export default function MapView({
                 }
               />
             ) : selected === "areas" ? (
-              <AreasEditor locationId={locationId} shape={trapShape} onShape={setTrapShape} areas={lasting} effects={trapEffects} now={gameNow} />
+              <AreasEditor locationId={locationId} shape={trapShape} onShape={setTrapShape} areas={lasting} effects={trapEffects} now={gameNow} sounds={audioAssets.map((a) => ({ id: a.id, name: a.name }))} />
             ) : selected === "traps" ? (
               <TrapsEditor
                 locationId={locationId}

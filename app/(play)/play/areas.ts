@@ -4,7 +4,7 @@
  * work lasting areas out in round resolution instead. A player's character rolls its own save (it's asked, and the
  * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
-import { getCharacterPlayer, getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
+import { setLastingAreaFound, getCharacterPlayer, getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
 import { saveRollFor } from "@/lib/creatureChanges";
 import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
 import { caughtBy, type LastingArea } from "@/lib/aoe";
@@ -20,6 +20,7 @@ const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corn
 /** A lasting area catches a token: the save, the damage (half or none on a success), effects on a failed save. Returns what they're told. */
 export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false, saveTotal?: number): string {
   const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
+  setLastingAreaFound(l.id); // hidden: walking into it finds it
   // A player's character rolls its own save: asked now, settled when the roll comes in (this again, with its total).
   const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && tok?.character_id ? getCharacterPlayer(tok.character_id) : null;
   if (player && tok?.character_id) {

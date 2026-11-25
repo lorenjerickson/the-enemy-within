@@ -15,7 +15,7 @@ const SHAPES: [TrapShape, string, string][] = [
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** What an area does, as a form (saved as a whole). */
-function AreaSettings({ locationId, area: a, effects, now }: { locationId: number; area: LastingArea; effects: { id: number; name: string }[]; now: number }) {
+function AreaSettings({ locationId, area: a, effects, now, sounds }: { locationId: number; area: LastingArea; effects: { id: number; name: string }[]; now: number; sounds: { id: number; name: string }[] }) {
   const left = a.ends >= UNTIL_REMOVED ? "" : String(Math.max(0, Math.round((a.ends - now) * 10) / 10));
   const has = new Set((a.conditions ?? []).map((c) => c.id));
   return (
@@ -50,6 +50,18 @@ function AreaSettings({ locationId, area: a, effects, now }: { locationId: numbe
           </div>
         ) : <p className="text-xs opacity-60">No effects that last rounds in the catalog yet.</p>}
       </fieldset>
+      <div className="flex flex-wrap items-center gap-2" data-area-visibility>
+        <span className="opacity-70">Players</span>
+        <select name="visibility" defaultValue={a.visibility ?? "shown"} className="select select-xs w-auto">
+          <option value="shown">see it</option>
+          <option value="hidden">see it once found{a.found ? " (found)" : ""}</option>
+          <option value="gm">never see it (only what it does)</option>
+        </select>
+        <span className="opacity-70">Search DC to find</span>
+        <input name="find_dc" type="number" min={1} max={40} defaultValue={a.findDc ?? 14} className="input input-xs w-16" />
+        <span className="opacity-70">Sound</span>
+        <select name="sound" defaultValue={a.sound ?? ""} className="select select-xs w-auto"><option value="">none</option>{sounds.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+      </div>
       <div className="flex flex-wrap items-center gap-2" data-area-lingers>
         <label className="flex items-center gap-1"><input type="checkbox" name="lingers" defaultChecked={!!a.lingers} className="checkbox checkbox-xs" />lingers</label>
         <span className="opacity-70">+</span><input name="build_up" type="number" min={0} max={20} defaultValue={a.buildUp ?? 1} className="input input-xs w-14" />
@@ -68,7 +80,7 @@ function AreaSettings({ locationId, area: a, effects, now }: { locationId: numbe
 }
 
 /** Areas layer editor: drag an area out on the map (a burning hallway, an acid pool); set what it does; remove it (its look goes with it). */
-export default function AreasEditor({ locationId, shape, onShape, areas, effects, now }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; areas: LastingArea[]; effects: { id: number; name: string }[]; now: number }) {
+export default function AreasEditor({ locationId, shape, onShape, areas, effects, now, sounds = [] }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; areas: LastingArea[]; effects: { id: number; name: string }[]; now: number; sounds?: { id: number; name: string }[] }) {
   return (
     <div className="space-y-3 text-sm" data-areas-editor>
       <div className="join" role="radiogroup" aria-label="Area shape">
@@ -83,10 +95,10 @@ export default function AreasEditor({ locationId, shape, onShape, areas, effects
             <li key={`${a.id}:${JSON.stringify(a)}`} data-area={a.id}>
               <details>
                 <summary className="flex cursor-pointer items-center gap-2">
-                  <span className="flex-1"><span className="font-medium">{a.name}</span> <span className="opacity-60">{a.damage ? `${a.damage} ${a.damageType ?? ""}`.trimEnd() : "no damage"}{a.ends >= UNTIL_REMOVED ? "" : " · runs out"}{a.drawn ? "" : " · from an action"}</span></span>
+                  <span className="flex-1"><span className="font-medium">{a.name}</span> <span className="opacity-60">{a.damage ? `${a.damage} ${a.damageType ?? ""}`.trimEnd() : "no damage"}{a.ends >= UNTIL_REMOVED ? "" : " · runs out"}{a.visibility === "gm" ? " · GM only" : a.visibility === "hidden" ? (a.found ? " · found" : " · hidden") : ""}{a.sound ? " · ♪" : ""}{a.drawn ? "" : " · from an action"}</span></span>
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); removeArea(locationId, a.id); }} data-remove-area={a.id}>Remove</button>
                 </summary>
-                <AreaSettings locationId={locationId} area={a} effects={effects} now={now} />
+                <AreaSettings locationId={locationId} area={a} effects={effects} now={now} sounds={sounds} />
               </details>
             </li>
           ))}

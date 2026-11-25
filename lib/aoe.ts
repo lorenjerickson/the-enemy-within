@@ -54,7 +54,14 @@ export interface LastingArea {
   lingers?: boolean; // its harm builds while they stay and keeps landing (less each interval) after they leave (lib/exposure.ts)
   buildUp?: number; // lingering: added to its damage each interval inside (default 1)
   decay?: number; // lingering: taken off each interval after leaving (default 2)
+  visibility?: "shown" | "hidden" | "gm"; // players see it (default); only once found (walked into, a Search beating findDc, the GM); never
+  findDc?: number; // hidden: a Search beating this within 10 ft finds it
+  found?: boolean; // hidden: found (players see it now)
+  sound?: number; // an audio asset that loops on the GM's screen while it's on (crackling fire)
 }
+
+/** Whether players see a lasting area (hidden ones once found; GM-only ones never). */
+export const playersSee = (l: LastingArea) => (l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found);
 
 /** A lasting area that lasts until the GM removes it: its end, far off in game time. */
 export const UNTIL_REMOVED = 1e9;

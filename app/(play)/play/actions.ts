@@ -33,7 +33,11 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
-import { getLastingArea } from "@/lib/db";
+import { getLastingArea, listLastingAreas, setLastingAreaFound } from "@/lib/db";
+import { inArea, type LastingArea } from "@/lib/aoe";
+
+/** Whether a Search from `p` reaches an area: within 10 ft of it (inside it, or near its middle or edge). */
+const caughtByNear = (l: LastingArea, p: { x: number; y: number }) => inArea(l.area, p) || Math.hypot(p.x - l.area.origin.x, p.y - l.area.origin.y) <= l.area.size + SEARCH_RANGE + 0.5;
 
 /**
  * Who's acting, and their token: a player's own character; the GM playing an absent player's, or a creature of theirs.
@@ -234,14 +238,17 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     // Traps in range they beat the find DC of (each trap has its own).
     const traps = me ? listTraps(me.level_id).filter((t) => !t.found && scored.total >= t.find_dc && distanceToTrap(t.area, { x: me.col + 0.5, y: me.row + 0.5 }) <= SEARCH_RANGE + 0.5) : [];
     for (const t of traps) setTrapFound(t.id, true);
+    // Hidden areas (a pocket of gas) in range whose find DC they beat.
+    const areas = me ? listLastingAreas(me.level_id).filter((l) => l.visibility === "hidden" && !l.found && scored.total >= (l.findDc ?? 14) && caughtByNear(l, { x: me.col + 0.5, y: me.row + 0.5 })) : [];
+    for (const l of areas) setLastingAreaFound(l.id);
     // Anyone hiding from them within 10 ft whose Stealth they beat (Hide).
     const tokens = me ? listTokens(me.level_id) : [], mine = me && tokens.find((t) => t.id === me.token_id), hiddenNow = me ? listHidden(me.level_id) : new Map<number, number>();
     const hiders = me && mine ? tokens.filter((t) => hiddenNow.has(t.id) && scored.total > hiddenNow.get(t.id)! && relation(allegianceOf(mine), allegianceOf(t)) !== "friendly" && Math.hypot(t.col - me.col, t.row - me.row) <= SEARCH_RANGE + 0.5) : [];
     for (const h of hiders) reveal(me!.level_id, h.id, `found by ${me!.name}'s search`);
     const labelsNow = me ? tokenLabels(me.level_id) : new Map<number, string>();
-    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
+    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`), ...areas.map((l) => l.name), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
     if (hiders.length) success = true;
-    if (traps.length) success = true;
+    if (traps.length || areas.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
     logSessionEvent(`${me?.name ?? who} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);

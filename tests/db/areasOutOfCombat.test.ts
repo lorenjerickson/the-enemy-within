@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addLastingArea, createUser, db, getCondition, getLastingArea, getOpenRollRequest, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addLastingArea, createUser, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
 import { catchInArea } from "@/app/(play)/play/areas";
-import { UNTIL_REMOVED, areaFromDrawn, inArea, type LastingArea } from "@/lib/aoe";
+import { UNTIL_REMOVED, areaFromDrawn, inArea, playersSee, type LastingArea } from "@/lib/aoe";
 
 const wall = (o: Partial<Omit<LastingArea, "id">> = {}): Omit<LastingArea, "id"> => ({
   name: "Fire wall", look: "fire", area: { shape: "line", origin: { x: 3.5, y: -2 }, dir: Math.PI / 2, size: 10 }, damage: "6", dc: 40, save: "agility", half: true, ends: getGameTime() + 10, ...o,
@@ -99,4 +99,17 @@ test("a player's character rolls its own save against an area: asked as they wal
   assert.deepEqual(req.action, { kind: "areaSave", levelId: lv, areaId: id, tokenId: tok });
   assert.match(catchInArea(lv, getLastingArea(id)!, tok, false, false, 16), /You walk into Fire wall! You partly get clear but are hurt/);
   assert.equal(tokenHealth(tok)!.current, 17, "saved (16 vs 15): half of 6");
+});
+
+test("visibility: players see shown areas; hidden ones once found (walking into one finds it); GM-only ones never", () => {
+  const lv = level();
+  const gas = addLastingArea(lv, wall({ name: "Sewer gas", visibility: "hidden", damage: "1" }));
+  const ward = addLastingArea(lv, wall({ name: "Ward", visibility: "gm", damage: null, area: areaFromDrawn({ shape: "rect", x: 8, y: 0, w: 1, h: 3 }) }));
+  const seen = () => listLastingAreas(lv).filter(playersSee).map((l) => l.name);
+  assert.deepEqual(seen(), []);
+  const tok = placeCharacterToken(lv, character("Jo", { health: "20" }), 1, 1);
+  walkRoute(lv, tok, row(1, 1, 9));
+  assert.equal(getLastingArea(gas)!.found, true);
+  assert.deepEqual(seen(), ["Sewer gas"], "found; the ward still never shown");
+  assert.equal(getLastingArea(ward)!.found, undefined);
 });
