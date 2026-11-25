@@ -141,3 +141,15 @@ test("a lingering area: staying in it builds the harm (+1 a round); after leavin
   assert.equal(later.hp.get(2), 7, "then 1, and it fades");
   assert.equal(later.exposure.get(2)?.length ?? 0, 0);
 });
+
+test("fire reaching a flammable area sets it alight: a fire area attack landing on it, or a fire area touching it", () => {
+  const oil = lastingAt(5, 5, { id: 7, name: "Oil slick", damage: null, flammable: true });
+  const r = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball(), aim: aimAt(5, 5) })]), mover(2, { col: 9, row: 9 })], { 1: fighter(), 2: fighter() }, { lasting: [oil] });
+  assert.deepEqual(r.ignited, [7]);
+  assert.match(r.text, /Oil slick catches fire!/);
+  const wall = lastingAt(6, 5, { id: 8, name: "Fire wall", look: "fire", damageType: "fire" });
+  const r2 = resolve([mover(2, { col: 9, row: 9 })], { 2: fighter() }, { lasting: [oil, wall] });
+  assert.deepEqual(r2.ignited, [7]);
+  const cold = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball({ damageType: "cold" }), aim: aimAt(5, 5) })])], { 1: fighter() }, { lasting: [oil] });
+  assert.deepEqual(cold.ignited, [], "cold doesn't light it");
+});

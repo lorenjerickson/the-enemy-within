@@ -58,7 +58,27 @@ export interface LastingArea {
   findDc?: number; // hidden: a Search beating this within 10 ft finds it
   found?: boolean; // hidden: found (players see it now)
   sound?: number; // an audio asset that loops on the GM's screen while it's on (crackling fire)
+  flammable?: boolean; // fire reaching it (a fire area touching it, fire damage landing in it) sets it burning (ignite)
 }
+
+/** How long a flammable area burns once lit (game minutes: 3 rounds). */
+export const BURN_MINUTES = 0.3;
+
+/** Whether two areas overlap (either's outline or middle inside the other: good enough for spreading fire). */
+export function areasOverlap(a: AreaAt, b: AreaAt): boolean {
+  return [a.origin, ...areaPolygon(a)].some((p) => inArea(b, p)) || [b.origin, ...areaPolygon(b)].some((p) => inArea(a, p));
+}
+
+/** Fire reaches a flammable area: it burns (fire, 1d6 a round inside, lingering, no save) for 3 rounds, then it's spent. */
+export function ignite<A extends LastingArea>(l: A, now: number): A {
+  return { ...l, name: `${l.name} (burning)`, flammable: false, damage: "1d6", damageType: "fire", look: "fire", dc: NO_SAVE_DC, half: false, fires: ["inside"], lingers: true, buildUp: l.buildUp ?? 1, decay: l.decay ?? 2, conditions: [], ends: Math.round((now + BURN_MINUTES) * 1e6) / 1e6, visibility: "shown", found: undefined };
+}
+
+/** A fire area (its damage is fire): it lights flammable ones it touches. */
+export const isFire = (l: Pick<LastingArea, "damageType" | "look">) => l.damageType === "fire" || l.look === "fire";
+
+/** Flammable areas a fire touches (by their ids). */
+export const caughtFire = (areas: LastingArea[], fire: AreaAt) => areas.filter((l) => l.flammable && areasOverlap(l.area, fire)).map((l) => l.id);
 
 /** Whether players see a lasting area (hidden ones once found; GM-only ones never). */
 export const playersSee = (l: LastingArea) => (l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found);

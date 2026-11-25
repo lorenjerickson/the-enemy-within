@@ -1,5 +1,5 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { NO_SAVE_DC, caughtBy, describeArea, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, caughtBy, caughtFire, describeArea, isFire, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
@@ -175,6 +175,7 @@ export function resolveMovement(
   exposureAtStart: Exposures = new Map(), // exposure to lingering areas' harm (still burning, poisoned…): builds inside, decays after
 ) {
   const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
+  const ignited: number[] = []; // flammable areas set burning this round (by fire landing in them, or a fire touching them): burning from the next round
   const exposedThisRound = new Set<string>(); // "token:kind": a lingering area of that kind caught them this round (one per kind)
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
   const sideOf = (id: number) => fighters.get(id)?.allegiance ?? "hostile";
@@ -1251,6 +1252,7 @@ export function resolveMovement(
       if (area && step.aim && step.use) {
         const me = fighters.get(m.tokenId), here = pos.get(m.tokenId)!;
         const at = placeArea(area.shape, area.ft, { x: here.col + 0.5, y: here.row + 0.5 }, { x: step.aim.col, y: step.aim.row });
+        if (step.use.damageType === "fire") for (const id of caughtFire(lasting, at)) if (!ignited.includes(id)) { ignited.push(id); say(`${lasting.find((l) => l.id === id)!.name} catches fire!`); }
         let hits: AreaHit[] = [];
         if (me) {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
@@ -1408,7 +1410,8 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
+  for (const f of lasting.filter((l) => isFire(l) && !l.flammable)) for (const id of caughtFire(lasting, f.area)) if (!ignited.includes(id)) { ignited.push(id); log.push(`${ROUND_SECONDS} s: ${lasting.find((l) => l.id === id)!.name} catches fire from ${f.name}!`); }
+  return { ignited, exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

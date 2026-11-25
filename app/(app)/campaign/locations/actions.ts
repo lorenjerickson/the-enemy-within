@@ -12,7 +12,7 @@ import { revealAfterStep } from "../../../(play)/play/hiding";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
 import { AREA_FIRES, UNTIL_REMOVED, areaFromDrawn, type AreaFires } from "@/lib/aoe";
-import { addLastingArea, getCondition, getGameTime, getLastingArea, removeLastingArea, updateLastingArea } from "@/lib/db";
+import { db, addLastingArea, getCondition, getGameTime, getLastingArea, igniteAreas, removeLastingArea, spreadFire, updateLastingArea } from "@/lib/db";
 import { lookOf } from "@/lib/combat";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
@@ -353,6 +353,9 @@ export async function switchThing(locationId: number, table: "light_sources" | "
   await requireGm();
   if (!["light_sources", "map_effects"].includes(table)) throw new Error("Can't switch that");
   setMapThingOn(table, id, !!on);
+  const lv = table === "map_effects" ? db.prepare<[number], { level_id: number }>("SELECT level_id FROM map_effects WHERE id = ?").get(Number(id))?.level_id : undefined;
+  if (lv !== undefined) spreadFire(lv); // a fire switched on next to something flammable
+  revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
@@ -648,6 +651,7 @@ export async function saveAreaSettings(locationId: number, id: number, formData:
   const { id: _id, level_id: _l, ...rest } = a;
   updateLastingArea(a.id, {
     ...rest,
+    flammable: !!formData.get("flammable"),
     name: text("name") || "Area",
     damage: damage || null,
     damageType,
@@ -666,6 +670,18 @@ export async function saveAreaSettings(locationId: number, id: number, formData:
     conditions: [...new Set(formData.getAll("effect").map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }),
     ends: Number.isFinite(minutes) && minutes > 0 ? Math.round((getGameTime() + minutes) * 1e6) / 1e6 : UNTIL_REMOVED, // blank: until removed
   });
+  spreadFire(a.level_id); // a fire now, or flammable next to one
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM sets a flammable area alight (a torch thrown in, a spark): it burns for a few rounds, then it's spent. */
+export async function setAreaAlight(locationId: number, id: number) {
+  await requireGm();
+  const a = getLastingArea(Number(id));
+  if (!a) return;
+  igniteAreas([a.id]);
+  spreadFire(a.level_id);
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }

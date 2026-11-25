@@ -14,7 +14,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { CREATURE_TYPES, MOVEMENT_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
-import { NO_SAVE_DC, areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, areaFires, caughtFire, ignite, isFire, type AreaShape, type LastingArea } from "@/lib/aoe";
 import type { Exposure, Exposures } from "@/lib/exposure";
 import type { Trap, TrapArea } from "@/lib/traps";
 import type { MapTrigger } from "@/lib/triggers";
@@ -2289,6 +2289,25 @@ export function listHazards(levelId: number): LastingArea[] {
 export function getLastingArea(id: number): (LastingArea & { level_id: number }) | undefined {
   const r = db.prepare<[number], { id: number; level_id: number; name: string; ends: number; spec: string }>("SELECT id, level_id, name, ends, spec FROM lasting_areas WHERE id = ?").get(id);
   return r ? { id: r.id, level_id: r.level_id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) } : undefined;
+}
+
+/** Fire reaches these flammable areas: each burns for a few rounds (`ignite`), then it's spent. */
+export function igniteAreas(ids: number[]): void {
+  for (const id of ids) {
+    const a = getLastingArea(id);
+    if (!a?.flammable) continue;
+    const { id: _id, level_id: _l, ...rest } = a;
+    updateLastingArea(id, ignite({ id, ...rest }, getGameTime()));
+  }
+}
+
+/** Out of a round: any fire on the level (a fire area, a fire map effect) touching a flammable area sets it burning (and so on, as it spreads). */
+export function spreadFire(levelId: number): void {
+  for (let pass = 0; pass < 10; pass++) {
+    const all = listHazards(levelId), lit = all.filter((l) => isFire(l) && !l.flammable).flatMap((f) => caughtFire(all, f.area)).filter((id) => id > 0);
+    if (!lit.length) return;
+    igniteAreas([...new Set(lit)]);
+  }
 }
 
 /** A hidden lasting area is found (players see it from now on). */

@@ -4,7 +4,7 @@ import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { AREA_FIRES, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
-import { removeArea, saveAreaSettings } from "../actions";
+import { removeArea, saveAreaSettings, setAreaAlight } from "../actions";
 import type { TrapShape } from "./trapDraw";
 
 const SHAPES: [TrapShape, string, string][] = [
@@ -61,6 +61,11 @@ function AreaSettings({ locationId, area: a, effects, now, sounds }: { locationI
         <input name="find_dc" type="number" min={1} max={40} defaultValue={a.findDc ?? 14} className="input input-xs w-16" />
         <span className="opacity-70">Sound</span>
         <select name="sound" defaultValue={a.sound ?? ""} className="select select-xs w-auto"><option value="">none</option>{sounds.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+      </div>
+      <div className="flex flex-wrap items-center gap-2" data-area-flammable>
+        <label className="flex items-center gap-1"><input type="checkbox" name="flammable" defaultChecked={!!a.flammable} className="checkbox checkbox-xs" />flammable</label>
+        <span className="text-xs opacity-60">(fire touching it, or fire damage landing in it, sets it burning for 3 rounds; then it&apos;s spent)</span>
+        {a.flammable && <button type="button" className="btn btn-warning btn-xs" onClick={() => setAreaAlight(locationId, a.id)} data-set-alight={a.id}>Set alight</button>}
       </div>
       <div className="flex flex-wrap items-center gap-2" data-area-lingers>
         <label className="flex items-center gap-1"><input type="checkbox" name="lingers" defaultChecked={!!a.lingers} className="checkbox checkbox-xs" />lingers</label>

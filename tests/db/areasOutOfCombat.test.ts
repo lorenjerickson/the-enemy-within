@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addEffect, addLastingArea, createUser, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addEffect, addLastingArea, createUser, spreadFire, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
 import { catchInArea } from "@/app/(play)/play/areas";
@@ -128,4 +128,17 @@ test("a fire map effect burns whoever walks through it (no save), and keeps burn
   const t2 = placeCharacterToken(lv2, character("Lu", { health: "40" }), 0, 1);
   walkRoute(lv2, t2, row(1, 0, 6));
   assert.equal(tokenHealth(t2)!.current, 40);
+});
+
+test("out of a round: a fire map effect (or a fire area) touching a flammable area sets it burning for 3 rounds; then it burns whoever walks in", () => {
+  const lv = level();
+  const oil = addLastingArea(lv, { name: "Oil slick", look: "oil", area: areaFromDrawn({ shape: "rect", x: 2, y: 0, w: 2, h: 3 }), damage: null, dc: 12, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["inside"], flammable: true, drawn: true });
+  spreadFire(lv);
+  assert.equal(getLastingArea(oil)!.flammable, true, "nothing burning yet");
+  addEffect(lv, { kind: "fire", x: 3, y: 0, w: 2, h: 2, intensity: 0.5 });
+  spreadFire(lv);
+  const lit = getLastingArea(oil)!;
+  assert.equal(lit.name, "Oil slick (burning)");
+  assert.equal(lit.damageType, "fire");
+  assert.ok(lit.ends < UNTIL_REMOVED && lit.ends > getGameTime());
 });
