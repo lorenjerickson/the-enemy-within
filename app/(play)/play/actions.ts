@@ -33,7 +33,7 @@ import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
-import { askImprovise, dropImprovisation, openImprovisation } from "@/lib/improvise";
+import { askImprovise, dropImprovisation, openImprovisation, seenImprovisationResult } from "@/lib/improvise";
 import { improvisationRolled } from "./improvising";
 import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
 import { inArea, type LastingArea } from "@/lib/aoe";
@@ -595,5 +595,12 @@ export async function cancelImprovise(): Promise<void> {
   const { me, error } = await acting();
   const open = !error && me ? openImprovisation(me.token_id) : undefined;
   if (open) dropImprovisation(open.id);
+  revalidatePath("/play");
+}
+
+/** The player has seen how their improvisation went. */
+export async function seenImprovise(id: number): Promise<void> {
+  await requireUser();
+  seenImprovisationResult(Number(id));
   revalidatePath("/play");
 }

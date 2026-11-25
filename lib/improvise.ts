@@ -15,6 +15,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
   details TEXT -- JSON: what was agreed
 )`);
 try { db.exec("ALTER TABLE improvisations ADD COLUMN rolled TEXT"); } catch { /* there already */ }
+try { db.exec("ALTER TABLE improvisations ADD COLUMN result TEXT"); } catch { /* there already */ } // what the improviser was told when it played out (until they've seen it)
 
 /**
  * How the GM decides an improvisation plays out in the rules (more kinds as play needs them; "place an area" next):
@@ -84,7 +85,12 @@ export function agreeImprovisation(id: number, agreed: Agreed): void {
 export const setImproviseRolled = (id: number, rolled: { total: number; natural: number }): void => void db.prepare("UPDATE improvisations SET rolled = ? WHERE id = ?").run(JSON.stringify(rolled), id);
 
 /** It has played out. */
-export const finishImprovisation = (id: number): void => void db.prepare("UPDATE improvisations SET status = 'done' WHERE id = ?").run(id);
+export const finishImprovisation = (id: number, result = ""): void => void db.prepare("UPDATE improvisations SET status = 'done', result = ? WHERE id = ?").run(result || null, id);
+
+/** How a token's last improvisation went, until they've seen it. */
+export const improvisationResult = (tokenId: number): { id: number; text: string } | undefined =>
+  db.prepare<[number], { id: number; text: string }>("SELECT id, result AS text FROM improvisations WHERE token_id = ? AND status = 'done' AND result IS NOT NULL ORDER BY id DESC").get(tokenId);
+export const seenImprovisationResult = (id: number): void => void db.prepare("UPDATE improvisations SET result = NULL WHERE id = ?").run(id);
 
 /** Every open ask on a level (the GM's list). */
 export const listOpenImprovisations = (levelId?: number): Improvisation[] =>

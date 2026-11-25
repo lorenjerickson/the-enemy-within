@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cancelImprovise, improvise, hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
+import { cancelImprovise, improvise, seenImprovise, hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
 import { setMoveMode, useMoveMode, useRunMode } from "./moveMode";
 import { setHideSpots, useHideSpots } from "./hideMode";
 import { actionKind, ACTION_GROUPS, CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, PLAYER_ACTIONS, TARGETED_ACTIONS, type PlayerActionId } from "@/lib/playerActions";
@@ -30,7 +30,7 @@ import type { PutOptions } from "@/lib/combat";
  * onto a six-second timeline, then the player marks themselves ready.
  */
 export default function PickLock({
-  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], puts, improvising = null, dice, self = null, lastRound = null, attackRange = 1,
+  planClock = null, running = 0, standing = null, things = [], doors, onMap, moveLeft, freeMovement, plan, targets = [], selected = null, history = [], forbidden = {}, shakeable = false, gear = [], down = false, refits = [], puts, improvising = null, agreed = null, improvResult = null, dice, self = null, lastRound = null, attackRange = 1,
 }: {
   doors: { id: number; name: string; open: boolean; locked: boolean }[]; // doors within reach (Interact)
   things?: { id: number; name: string }[]; // levers, switches, objects within reach (interactable map triggers)
@@ -49,6 +49,8 @@ export default function PickLock({
   gear?: (GearAction & { source: string })[]; // actions from their equipped gear and professions
   refits?: RefitOption[]; // what Refit could swap in (with the plan so far done)
   improvising?: string | null; // their improvisation waiting on the GM (its line of intent)
+  agreed?: { name: string; terms: string; waitingRoll: boolean; planned: boolean } | null; // settled with the GM, not yet played out
+  improvResult?: { id: number; text: string } | null; // how their last one went (until seen)
   puts?: PutOptions; // what Refit could put away, or bring out of a pack onto the belt
   dice?: { count: number; rolled: 0 | 1 | 2 }; // the rolls the plan needs, and whether they're rolled
   attackRange?: number; // squares their plain Attack reaches (main-hand weapon)
@@ -295,6 +297,17 @@ export default function PickLock({
         </div>
       )}
       <RoundHistory rounds={history} />
+      {improvResult && (
+        <div className="rounded-box bg-info/20 p-2 text-xs" data-improvise-result>
+          💡 {improvResult.text} <button type="button" className="btn btn-ghost btn-xs" onClick={() => run(() => seenImprovise(improvResult.id))}>OK</button>
+        </div>
+      )}
+      {agreed && (
+        <div className="rounded-box bg-success/15 p-2 text-xs" data-improvise-agreed>
+          <span className="font-semibold">Agreed:</span> {agreed.name} ({agreed.terms}).{" "}
+          {agreed.waitingRoll ? "Roll for it (your dice prompt)." : plan ? (agreed.planned ? "It's in your plan." : <button type="button" className="btn btn-primary btn-xs" disabled={pending || plan.ready} onClick={() => run(() => planStep({ kind: "action", action: "improvise" }))}>Add to plan</button>) : null}
+        </div>
+      )}
       {improvising ? (
         <div className="rounded-box bg-warning/20 p-2 text-xs" data-improvising>
           <span className="font-semibold">Improvising:</span> “{improvising}”. Settle it with the GM.

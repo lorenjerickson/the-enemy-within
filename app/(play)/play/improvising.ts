@@ -43,7 +43,7 @@ export function playImprovisation(i: Improvisation): Map<number, string[]> {
   const o = ok ? a.success : a.failure;
   const told = o ? playOutcome(i.level_id, o, i.token_id, a.name) : new Map<number, string[]>();
   if (verdict) told.set(i.token_id, [`${a.name}: ${verdict}.`, ...(told.get(i.token_id) ?? [])]);
-  finishImprovisation(i.id);
+  finishImprovisation(i.id, (told.get(i.token_id) ?? []).join(" "));
   logSessionEvent(`💡 ${tokenLabels(i.level_id).get(i.token_id) ?? "Someone"}: ${a.name}${a.roll ? ` (${i.rolled?.total ?? "no roll"} vs DC ${a.roll.dc}: ${ok ? "success" : "failure"})` : ""}.`);
   return told;
 }

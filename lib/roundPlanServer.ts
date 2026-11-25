@@ -3,6 +3,7 @@ import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, onBelt, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
+import { agreedImprovisation } from "@/lib/improvise";
 import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/lib/combat";
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
@@ -39,6 +40,18 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const kind = step.kind === "move" ? "movement" : step.use !== undefined ? (gearKind === "reaction" ? "reaction" : "action") : actionKind(step.action);
   const stopped = unavailable([], 0, kind, 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) ?? (step.kind === "move" && step.run ? unavailable([], 0, "action", 0, restrictionsOn(p.tok.token_id, p.tok.level_id).forbid) : null);
   if (stopped) return stopped;
+  // Improvise: what the GM agreed goes into the plan as one step (its cost and time as the GM said; rolled for first).
+  if (step.kind === "action" && step.action === "improvise") {
+    const i = agreedImprovisation(p.tok.token_id);
+    if (!i?.agreed) return "Nothing agreed with the GM yet";
+    if (i.agreed.roll && !i.rolled) return "Roll for it first";
+    if (p.plan.some((s) => s.kind === "action" && s.improv?.id === i.id)) return "It's in the plan already";
+    const add: PlanStep = { kind: "action", action: "improvise", improv: { id: i.id, name: i.agreed.name, seconds: i.agreed.seconds, cost: i.agreed.cost } };
+    const why = cannotAdd(p.plan, add, p.walking);
+    if (why) return why;
+    saveRoundPlan(p.tok.level_id, p.tok.token_id, [...p.plan, add], false);
+    return null;
+  }
   const run = step.kind === "move" && step.run ? p.running : undefined; // a Dash: at running speed
   if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";

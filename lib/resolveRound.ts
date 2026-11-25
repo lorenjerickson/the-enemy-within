@@ -175,6 +175,7 @@ export function resolveMovement(
   exposureAtStart: Exposures = new Map(), // exposure to lingering areas' harm (still burning, poisoned…): builds inside, decays after
 ) {
   const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
+  const improvised: { id: number; tokenId: number; sec: number }[] = []; // improvisations whose planned step was done (they play out after the round)
   const ignited: number[] = []; // flammable areas set burning this round (by fire landing in them, or a fire touching them): burning from the next round
   const exposedThisRound = new Set<string>(); // "token:kind": a lingering area of that kind caught them this round (one per kind)
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
@@ -1101,6 +1102,10 @@ export function resolveMovement(
         continue;
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
+      if (step.action === "improvise") { // it plays out after the round (its roll was made with the plan)
+        if (step.improv) { improvised.push({ id: step.improv.id, tokenId: m.tokenId, sec }); say(`${m.name}: ${step.improv.name}.`); }
+        continue;
+      }
       // Hide: out of sight of every enemy (as if hidden: walls, light) as it's done, they're hidden; their Stealth is rolled after the round.
       if (step.action === "hide") {
         const seer = [...fighters.keys()].find((o) => o !== m.tokenId && !down.has(o) && relation(sideOf(o), sideOf(m.tokenId)) !== "friendly" && spots(o, m.tokenId));
@@ -1411,7 +1416,7 @@ export function resolveMovement(
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
   for (const f of lasting.filter((l) => isFire(l) && !l.flammable)) for (const id of caughtFire(lasting, f.area)) if (!ignited.includes(id)) { ignited.push(id); log.push(`${ROUND_SECONDS} s: ${lasting.find((l) => l.id === id)!.name} catches fire from ${f.name}!`); }
-  return { ignited, exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
+  return { improvised, ignited, exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

@@ -67,3 +67,26 @@ test("settled: a player is asked for its roll; out of combat it plays out when t
   startImprovisation(id2);
   assert.equal(getVars().shouted, true);
 });
+
+test("in a round: an agreed (and rolled) improvisation goes into the plan as one step at its cost and time; done, it plays out after the round", async () => {
+  const { creature } = await import("./seed");
+  const { addCreatureToken, getRoundPlan, saveEncounter, db } = await import("@/lib/db");
+  const { addPlanStep, tokenPlanner } = await import("@/lib/roundPlanServer");
+  const { resolveMovement } = await import("@/lib/resolveRound");
+  const lv = level(), pc = character("Quin");
+  db.prepare("UPDATE characters SET movement = ? WHERE id = ?").run(JSON.stringify({ walking: { value: 5, dist: "ft", per: "s" } }), pc);
+  const me = placeCharacterToken(lv, pc, 0, 0), rat = addCreatureToken(lv, creature("Rat"), 6, 0);
+  saveEncounter(lv, { round: 1, turn: 0, order: [{ token_id: me, initiative: 15 }, { token_id: rat, initiative: 8 }] });
+  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), "Nothing agreed with the GM yet");
+  const id = askImprovise(lv, me, "tip the table for cover");
+  agreeImprovisation(id, { name: "Tip the table", cost: "bonus", seconds: 1, roll: { type: "check", skill: "athletics", dc: 10 }, success: { kind: "narrative", text: "It crashes over." } });
+  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), "Roll for it first");
+  setImproviseRolled(id, { total: 14, natural: 12 });
+  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), null);
+  const step = getRoundPlan(lv, me).plan[0];
+  assert.deepEqual(step.kind === "action" && step.improv, { id, name: "Tip the table", seconds: 1, cost: "bonus" });
+  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "search" }), null, "a bonus action: the action is still free");
+  const r = resolveMovement([{ tokenId: me, name: "Quin", initiative: 15, start: { col: 0, row: 0 }, plan: [step], fps: 5 }], [], [], false);
+  assert.deepEqual(r.improvised.map((x) => x.id), [id]);
+  assert.match(playImprovisation(getImprovisation(id)!).get(me)!.join(" "), /Tip the table: it works\. It crashes over\./);
+});

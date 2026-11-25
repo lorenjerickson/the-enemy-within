@@ -1,4 +1,6 @@
 import { inArea } from "@/lib/aoe";
+import { getImprovisation } from "@/lib/improvise";
+import { playImprovisation } from "./improvising";
 import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound,
   addLastingArea, addTokenStatus, clearRoundPlans, closeRollRequest, closeRollOffRequests, downTokens, getCharacterPlayer, getEncounter, getEncounterWaiting,
   getGameTime, getPendingRound, getRoundPlan, getTokenMover, isGridlessLevel, listLastingAreas, listStructures, listTokens, logSessionEvent, moveToken,
@@ -111,7 +113,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before, r.put); // the swap stays after the round
   for (const u of result.itemsUsed) useUpItem(u.tokenId, u.item); // consumables used this round are gone
   saveExposures(levelId, result.exposure); // still burning, poisoned… (lingering areas)
-  igniteAreas(result.ignited.filter((id) => id > 0)); // flammable areas fire reached this round: burning from now on
+  igniteAreas(result.ignited.filter((id) => id > 0));
+  for (const x of result.improvised) { const i = getImprovisation(x.id); if (i?.status === "agreed") playImprovisation(i); } // improvisations done this round play out // flammable areas fire reached this round: burning from now on
   // Hidden areas someone ended the round in: found (they know it's there now).
   for (const l of lasting) if (l.visibility === "hidden" && !l.found && [...final.values()].some((p) => inArea(l.area, { x: p.col + 0.5, y: p.row + 0.5 }))) setLastingAreaFound(l.id);
   for (const [id, h] of hp) saveHp(id, h);

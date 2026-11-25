@@ -41,7 +41,7 @@ export type PlanStep =
   | { kind: "move"; to: { col: number; row: number }; feet: number; run?: number } // run: a Dash, at this running speed (feet per second); it uses the round's action
   // Attacks, evasion and pursuit have a target; a gear attack (Aimed shot…) carries its action in `use`.
   // An area attack is aimed at a spot (map position) instead of at someone.
-  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; put?: Put; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string }; hurried?: boolean };
+  | { kind: "action"; action: PlayerActionId; target?: { id: number; name: string }; use?: GearAction; aim?: { col: number; row: number }; seconds?: number; swap?: Refit; put?: Put; improv?: { id: number; name: string; seconds: number; cost: "action" | "bonus" | "free" }; dice?: StepDice; picks?: { id: number; name: string }[]; door?: { id: number; name: string; open: boolean }; thing?: { id: number; name: string }; hurried?: boolean };
 // hurried: a Hide after slipping into a blind spot while seen (its Stealth roll has disadvantage)
 // thing: Interact with a lever / switch / object (an interactable map trigger): it fires after the round
 // door: Interact with a door (opened or closed after the round; open: how it was when planned)
@@ -107,7 +107,7 @@ export function stepSeconds(step: PlanStep, walkFps: number): number {
     const speed = step.run ?? walkFps; // a Dash goes at running speed
     return speed > 0 ? Math.round((step.feet / speed) * 10) / 10 : Infinity;
   }
-  return step.use?.seconds ?? ACTION_SECONDS[step.action] ?? 1;
+  return step.improv?.seconds ?? step.use?.seconds ?? ACTION_SECONDS[step.action] ?? 1;
 }
 
 /** The plan laid out in time: when each step starts and ends, and the seconds used. */
@@ -128,7 +128,7 @@ export function timeline(plan: PlanStep[], walkFps: number) {
 /** A Dash: a move at running speed, which takes the round's action (any number of Dash legs, but no other action). */
 export const isDash = (s: PlanStep) => s.kind === "move" && !!s.run;
 
-export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.use ? (s.use.kind === "reaction" ? "reaction" : "action") : actionKind(s.action));
+export const stepKind = (s: PlanStep) => (s.kind === "move" ? "movement" : s.improv ? s.improv.cost : s.use ? (s.use.kind === "reaction" ? "reaction" : "action") : actionKind(s.action)); // an improvisation costs what the GM said
 
 /**
  * Why something of this kind, taking these seconds, can't be added to the plan now (for greying out its button), or

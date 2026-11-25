@@ -22,7 +22,8 @@ import type { ImproviseChoices } from "./ImproviseWindow";
 import { listLights, listEffects, listSecrets, listTraps, listEffectDefs } from "@/lib/db";
 import { listDiscoveries } from "@/lib/story";
 import { listLibraryScripts } from "@/lib/scriptLibrary";
-import { listOpenImprovisations, openImprovisation } from "@/lib/improvise";
+import type { PlanStep } from "@/lib/roundPlan";
+import { agreedImprovisation, improvisationResult, listOpenImprovisations, openImprovisation } from "@/lib/improvise";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
@@ -226,7 +227,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         </div>
       ),
     },
-    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock improvising={me ? openImprovisation(me.token_id)?.intent ?? null : null} planClock={me && rp ? (() => { const c = planClock(me.level_id); return c && c.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
+    { id: "actions", label: "Actions", icon: "bolt" as const, content: <PickLock improvising={me ? openImprovisation(me.token_id)?.intent ?? null : null} agreed={me ? agreedView(me.token_id, rp?.plan ?? []) : null} improvResult={me ? improvisationResult(me.token_id) ?? null : null} planClock={me && rp ? (() => { const c = planClock(me.level_id); return c && c.tokenId === me.token_id ? c.endsAt : null; })() : null} running={running} standing={me && !getEncounter(me.level_id) ? (() => { const o = getStandingOrder(me.token_id); return o ? { mode: o.mode, name: tokenLabels(me.level_id).get(o.targetId) ?? "someone" } : null; })() : null} down={isDown} gear={me ? gearActions(me.token_id, equipped, { packs: !rp, onBelt: onBelt(rp?.plan ?? []) }) : []} refits={me && rp ? refitOptions(me.token_id, equipped) : []} puts={me && rp ? putOptions(me.token_id, equipped, rp.plan) : undefined} dice={rp ? { count: diceRolls.length, rolled: rp.rolled } : undefined} attackRange={me ? attackRange(me.token_id, equipped) : 1} lastRound={replay ? { round: replay.round, seconds: replay.frames.length, endsAt: replay.starts + (replay.frames.length + 1) * 1000 } : null} self={me ? { id: me.token_id, name: tokenLabels(me.level_id).get(me.token_id) ?? me.name, allegiance: allegianceOf(listTokens(me.level_id).find((t) => t.id === me.token_id) ?? { character_id: me.character_id }) } : null} targets={targets} selected={selectedTarget} history={roundHistory} forbidden={me ? restrictionsOn(me.token_id, me.level_id).forbid : {}} shakeable={!!me && canShakeOff(me.token_id, me.level_id)} plan={plan && { steps: plan.steps.map((s) => ({ ...s.step, start: s.start, end: s.end })), used: plan.used, ready: plan.ready }} doors={doorsNearby} things={interactables} onMap={!!me} freeMovement={!!me && !getEncounter(me.level_id)} moveLeft={me ? Math.floor(Math.max(0, walking * ROUND_SECONDS - me.moved)) : 0} /> },
     {
       id: "journal",
       label: "Journal",
@@ -302,5 +303,18 @@ function improviseChoices(levelId: number): ImproviseChoices {
     scripts: listLibraryScripts().map((x) => x.name),
     effects: listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })),
     tokens: listTokens(levelId).map((t) => ({ id: t.id, name: labels.get(t.id) ?? t.name })),
+  };
+}
+
+/** A token's settled improvisation as the Actions panel shows it: its name and terms, whether its roll is awaited, whether it's planned. */
+function agreedView(tokenId: number, plan: PlanStep[]) {
+  const i = agreedImprovisation(tokenId), a = i?.agreed;
+  if (!i || !a) return null;
+  const roll = a.roll ? `${a.roll.type === "check" ? a.roll.skill : `${a.roll.attribute} ${a.roll.type}`} roll` : "no roll";
+  return {
+    name: a.name,
+    terms: `${a.cost === "free" ? "costs nothing" : a.cost === "bonus" ? "your bonus action" : "your action"}, ${a.seconds} s, ${roll}`,
+    waitingRoll: !!a.roll && !i.rolled,
+    planned: plan.some((s) => s.kind === "action" && s.improv?.id === i.id),
   };
 }
