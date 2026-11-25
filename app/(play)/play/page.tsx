@@ -18,6 +18,10 @@ import RollPrompt from "./RollPrompt";
 import CharacterSheet from "./CharacterSheet";
 import AreaSounds from "./AreaSounds";
 import ImprovisingCard from "./ImprovisingCard";
+import type { ImproviseChoices } from "./ImproviseWindow";
+import { listLights, listEffects, listSecrets, listTraps, listEffectDefs } from "@/lib/db";
+import { listDiscoveries } from "@/lib/story";
+import { listLibraryScripts } from "@/lib/scriptLibrary";
 import { listOpenImprovisations, openImprovisation } from "@/lib/improvise";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
@@ -130,7 +134,7 @@ function GmView({ session }: { session: GameSession }) {
       {/* Players move their own tokens now, so the GM's map keeps up. */}
       <AutoRefresh />
       <GmSheetPanel />
-      <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} />
+      <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} choices={improviseChoices(levelId!)} />
       <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}
       {pending?.save && <SaveWaitModal save={pending.save} player={(() => { const t = listTokens(levelId!).find((x) => x.id === pending.save!.tokenId); const pid = t?.character_id ? getCharacterPlayer(t.character_id) : null; return listPlayers().find((u) => u.id === pid)?.name ?? null; })()} />}
@@ -280,4 +284,23 @@ function SwitchPlayers({ session, user }: { session: GameSession; user: User }) 
       <form action={playAs.bind(null, null)}><button className="btn btn-xs btn-neutral">Back to GM</button></form>
     </div>
   );
+}
+
+/** What the GM's Improvise window offers on this level: map things, library scripts, catalogue effects, who's here. */
+function improviseChoices(levelId: number): ImproviseChoices {
+  const labels = tokenLabels(levelId);
+  return {
+    things: {
+      door: listStructures(levelId).filter((x) => x.kind === "door").map((x) => ({ id: x.id, name: x.name || `Door ${x.id}` })),
+      light: listLights(levelId).map((x) => ({ id: x.id, name: x.name ?? `Light ${x.id}` })),
+      effect: listEffects(levelId).map((x) => ({ id: x.id, name: x.name })),
+      secret: listSecrets(levelId).map((x) => ({ id: x.id, name: x.name })),
+      trap: listTraps(levelId).map((x) => ({ id: x.id, name: x.name })),
+      discovery: listDiscoveries().map((x) => ({ id: x.id, name: x.title })),
+      area: listLastingAreas(levelId).map((x) => ({ id: x.id, name: x.name })),
+    },
+    scripts: listLibraryScripts().map((x) => x.name),
+    effects: listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })),
+    tokens: listTokens(levelId).map((t) => ({ id: t.id, name: labels.get(t.id) ?? t.name })),
+  };
 }

@@ -27,7 +27,7 @@ type Pickable = keyof TriggerThings;
 const PICKS: Pickable[] = ["door", "light", "effect", "secret", "trap", "discovery", "area"];
 
 /** Adding one outcome: what kind, which thing, and (doors, lights, effects) what happens to it. */
-function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; scripts?: string[]; onAdd: (o: TriggerOutcome) => void }) {
+export function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; scripts?: string[]; onAdd: (o: TriggerOutcome) => void }) {
   const [kind, setKind] = useState<TriggerOutcome["kind"]>("door");
   const [id, setId] = useState("");
   const [to, setTo] = useState("open");

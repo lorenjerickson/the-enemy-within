@@ -1,5 +1,6 @@
 "use server";
-import { dropImprovisation } from "@/lib/improvise";
+import { agreeImprovisation, dropImprovisation, getImprovisation, type Agreed } from "@/lib/improvise";
+import { checkScript } from "@/lib/script";
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
@@ -263,4 +264,18 @@ export async function gmDropImprovisation(id: number): Promise<void> {
   await requireGm();
   dropImprovisation(Number(id));
   revalidatePath("/play");
+}
+
+/** The GM settles an improvisation: how it plays out, what it costs, the roll; checked first (scripts must parse). */
+export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<{ error?: string }> {
+  await requireGm();
+  if (!getImprovisation(Number(id))) return { error: "It's gone" };
+  for (const o of [agreed.success, agreed.failure]) {
+    if (o?.kind === "script") { const e = checkScript(o.script); if (e) return { error: `Script: ${e}` }; }
+    if (o?.kind === "effect" && !o.effect) return { error: "Pick the effect" };
+    if (o?.kind === "map" && !o.outcomes.length) return { error: "Add what changes on the map" };
+  }
+  agreeImprovisation(Number(id), { ...agreed, seconds: Math.max(0, Math.min(6, Number(agreed.seconds) || 0)) });
+  revalidatePath("/play");
+  return {};
 }
