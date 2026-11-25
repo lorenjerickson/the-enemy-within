@@ -80,9 +80,10 @@ test("in a round: an agreed (and rolled) improvisation goes into the plan as one
   assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), "Nothing agreed with the GM yet");
   const id = askImprovise(lv, me, "tip the table for cover");
   agreeImprovisation(id, { name: "Tip the table", cost: "bonus", seconds: 1, roll: { type: "check", skill: "athletics", dc: 10 }, success: { kind: "narrative", text: "It crashes over." } });
-  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), "Roll for it first");
+  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), null, "in a round: planned first, its roll goes with the plan dice");
+  const { planRolls } = await import("@/lib/planRolls");
+  assert.deepEqual(planRolls(me, getRoundPlan(lv, me).plan).map((r) => [r.step, r.key, r.spec.label]), [[0, "check", "Tip the table: Athletics"]]);
   setImproviseRolled(id, { total: 14, natural: 12 });
-  assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "improvise" }), null);
   const step = getRoundPlan(lv, me).plan[0];
   assert.deepEqual(step.kind === "action" && step.improv, { id, name: "Tip the table", seconds: 1, cost: "bonus" });
   assert.equal(addPlanStep(tokenPlanner(me)!, { kind: "action", action: "search" }), null, "a bonus action: the action is still free");

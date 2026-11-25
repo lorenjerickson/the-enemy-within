@@ -2,11 +2,9 @@
  * An improvisation playing out (out of combat when the GM accepts it; in a round when its planned step finishes): its
  * roll decides success or failure, and the matching outcome happens. What the improviser (and anyone it lands on) is told.
  */
-import { addLastingArea, getGameTime, getLastingArea, spreadFire, getCharacterPlayer, getCondition, getEncounter, getTokenActor, listTokens, logSessionEvent, requestRoll, tokenLabels } from "@/lib/db";
-import { saveRollFor, skillCheckFor } from "@/lib/creatureChanges";
-import { rollSpec, type RollSpec } from "@/lib/rolls";
-import type { Attributes } from "@/lib/attributes";
-import { finishImprovisation, getImprovisation, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
+import { addLastingArea, getGameTime, getLastingArea, spreadFire, getCharacterPlayer, getCondition, getEncounter, listTokens, logSessionEvent, requestRoll, tokenLabels } from "@/lib/db";
+import { rollSpec } from "@/lib/rolls";
+import { finishImprovisation, getImprovisation, improviseRollSpec, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { fireTrigger } from "./mapTriggers";
@@ -70,14 +68,6 @@ export function playImprovisation(i: Improvisation): Map<number, string[]> {
   return told;
 }
 
-/** The dice an improvisation's roll needs, for its improviser. */
-function rollSpecFor(i: Improvisation): RollSpec | null {
-  const r = i.agreed?.roll, me = getTokenActor(i.token_id);
-  if (!r || !me) return null;
-  const spec = r.type === "check" ? skillCheckFor(i.token_id, r.skill, JSON.parse(me.attributes) as Attributes) : saveRollFor(i.token_id, r.attribute as never, "");
-  return { ...spec, label: `${i.agreed!.name}: ${r.type === "check" ? cap(r.skill) : `${cap(r.attribute)} ${r.type}`}` };
-}
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /**
  * Settled by the GM: its roll is asked for (a player rolls their own; the GM's creatures roll at once). Out of combat
@@ -89,7 +79,7 @@ export function startImprovisation(id: number): Map<number, string[]> {
   if (!i?.agreed) return new Map();
   const inRound = !!getEncounter(i.level_id);
   if (waitingOnTemplate(i)) return new Map(); // its template first: the player places it, the GM goes ahead (then this again)
-  const spec = rollSpecFor(i);
+  const spec = inRound ? null : improviseRollSpec(i); // in a round its roll goes with the plan dice (Ready)
   if (spec) {
     const t = listTokens(i.level_id).find((x) => x.id === i.token_id), player = t?.character_id ? getCharacterPlayer(t.character_id) : null;
     if (player && t?.character_id) { requestRoll(player, t.character_id, spec, { kind: "improvise", id }); return new Map(); }

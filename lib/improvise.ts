@@ -3,7 +3,10 @@
  * They ask with a line of intent; the GM is told and the two settle it at the table, and the app records what was
  * agreed. While one is open, that player's planning clock waits.
  */
-import { db } from "@/lib/db";
+import { db, getTokenActor } from "@/lib/db";
+import { saveRollFor, skillCheckFor } from "@/lib/creatureChanges";
+import type { RollSpec } from "@/lib/rolls";
+import type { Attributes } from "@/lib/attributes";
 import type { TriggerOutcome } from "@/lib/triggers";
 import type { Template } from "@/lib/templates";
 export { templateArea, shifted, type Template } from "@/lib/templates";
@@ -135,3 +138,12 @@ export const listOpenImprovisations = (levelId?: number): Improvisation[] =>
 export const dropImprovisation = (id: number): void => void db.prepare("UPDATE improvisations SET status = 'dropped' WHERE id = ?").run(id);
 
 export const getImprovisation = (id: number): Improvisation | undefined => parse(db.prepare<[number], Row>(`SELECT ${COLS} FROM improvisations WHERE id = ?`).get(id));
+
+/** The dice an improvisation's roll needs, for its improviser (null: no roll). */
+export function improviseRollSpec(i: Improvisation): RollSpec | null {
+  const r = i.agreed?.roll, me = getTokenActor(i.token_id);
+  if (!r || !me) return null;
+  const spec = r.type === "check" ? skillCheckFor(i.token_id, r.skill, JSON.parse(me.attributes) as Attributes) : saveRollFor(i.token_id, r.attribute as never, "");
+  const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+  return { ...spec, label: `${i.agreed!.name}: ${r.type === "check" ? cap(r.skill) : `${cap(r.attribute)} ${r.type}`}` };
+}

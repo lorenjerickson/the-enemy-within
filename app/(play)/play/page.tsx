@@ -139,7 +139,7 @@ function GmView({ session }: { session: GameSession }) {
       <ImprovisingCard asks={listOpenImprovisations(levelId!).map((i) => ({ id: i.id, intent: i.intent, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone" }))} choices={improviseChoices(levelId!)}
         agreed={listAgreedImprovisations(levelId!).map((i) => {
           const t = templateOf(i), me = listTokens(levelId!).find((x) => x.id === i.token_id);
-          const state = t && !i.placed ? "waiting for them to place it" : t && !i.agreed?.go ? "placed: move it or go ahead" : i.agreed?.roll && !i.rolled ? "waiting for their roll" : "ready to plan or play out";
+          const state = t && !i.placed ? "waiting for them to place it" : t && !i.agreed?.go ? "placed: move it or go ahead" : getEncounter(levelId!) ? "for their plan (rolled with it)" : i.agreed?.roll && !i.rolled ? "waiting for their roll" : "playing out";
           return { id: i.id, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone", name: i.agreed?.name ?? "", state, template: t && me && !i.agreed?.go && i.placed ? { template: t, from: { x: me.col + 0.5, y: me.row + 0.5 } } : null };
         })} />
       <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
@@ -324,7 +324,7 @@ function agreedView(tokenId: number, plan: PlanStep[]) {
     name: a.name,
     terms: `${a.cost === "free" ? "costs nothing" : a.cost === "bonus" ? "your bonus action" : "your action"}, ${a.seconds} s, ${roll}`,
     template: t && me && !a.go ? { id: i.id, template: t, from: { x: me.col + 0.5, y: me.row + 0.5 }, placed: !!i.placed } : null,
-    waitingRoll: !!a.roll && !i.rolled && !waitingOnTemplate(i),
+    waitingRoll: !!a.roll && !i.rolled && !waitingOnTemplate(i) && !getEncounter(i.level_id), // in a round it's rolled with the plan
     planned: plan.some((s) => s.kind === "action" && s.improv?.id === i.id),
   };
 }

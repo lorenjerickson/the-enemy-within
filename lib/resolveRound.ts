@@ -175,7 +175,7 @@ export function resolveMovement(
   exposureAtStart: Exposures = new Map(), // exposure to lingering areas' harm (still burning, poisoned…): builds inside, decays after
 ) {
   const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
-  const improvised: { id: number; tokenId: number; sec: number }[] = []; // improvisations whose planned step was done (they play out after the round)
+  const improvised: { id: number; tokenId: number; sec: number; dice?: number[] }[] = []; // dice: its roll, thrown with the plan // improvisations whose planned step was done (they play out after the round)
   const ignited: number[] = []; // flammable areas set burning this round (by fire landing in them, or a fire touching them): burning from the next round
   const exposedThisRound = new Set<string>(); // "token:kind": a lingering area of that kind caught them this round (one per kind)
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
@@ -1103,7 +1103,7 @@ export function resolveMovement(
       }
       if (CHASE_ACTIONS.includes(step.action)) continue; // movement: handled above
       if (step.action === "improvise") { // it plays out after the round (its roll was made with the plan)
-        if (step.improv) { improvised.push({ id: step.improv.id, tokenId: m.tokenId, sec }); say(`${m.name}: ${step.improv.name}.`); }
+        if (step.improv) { improvised.push({ id: step.improv.id, tokenId: m.tokenId, sec, ...(step.dice?.check ? { dice: step.dice.check } : {}) }); say(`${m.name}: ${step.improv.name}.`); }
         continue;
       }
       // Hide: out of sight of every enemy (as if hidden: walls, light) as it's done, they're hidden; their Stealth is rolled after the round.

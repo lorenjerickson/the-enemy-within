@@ -1,5 +1,6 @@
 import { inArea } from "@/lib/aoe";
-import { getImprovisation } from "@/lib/improvise";
+import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
+import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
 import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound,
   addLastingArea, addTokenStatus, clearRoundPlans, closeRollRequest, closeRollOffRequests, downTokens, getCharacterPlayer, getEncounter, getEncounterWaiting,
@@ -114,7 +115,17 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const u of result.itemsUsed) useUpItem(u.tokenId, u.item); // consumables used this round are gone
   saveExposures(levelId, result.exposure); // still burning, poisoned… (lingering areas)
   igniteAreas(result.ignited.filter((id) => id > 0));
-  for (const x of result.improvised) { const i = getImprovisation(x.id); if (i?.status === "agreed") playImprovisation(i); } // improvisations done this round play out // flammable areas fire reached this round: burning from now on
+  // Improvisations done this round play out, by the roll thrown with the plan (the GM's creatures: rolled now).
+  for (const x of result.improvised) {
+    const i = getImprovisation(x.id);
+    if (i?.status !== "agreed") continue;
+    const spec = improviseRollSpec(i);
+    if (spec) {
+      const r = x.dice?.length ? { total: rolledTotal(spec, x.dice).total, natural: x.dice[0] } : (() => { const t = rollSpec(spec); return { total: t.total, natural: t.parts[0]?.dice[0] ?? 0 }; })();
+      setImproviseRolled(i.id, r);
+    }
+    playImprovisation(getImprovisation(i.id)!);
+  } // flammable areas fire reached this round: burning from now on
   // Hidden areas someone ended the round in: found (they know it's there now).
   for (const l of lasting) if (l.visibility === "hidden" && !l.found && [...final.values()].some((p) => inArea(l.area, { x: p.col + 0.5, y: p.row + 0.5 }))) setLastingAreaFound(l.id);
   for (const [id, h] of hp) saveHp(id, h);

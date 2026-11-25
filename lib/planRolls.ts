@@ -1,6 +1,7 @@
 import { formatModifier, modifier } from "@/lib/attributes";
 import { getItem } from "@/lib/db";
 import { tokenWho } from "@/lib/combat";
+import { getImprovisation, improviseRollSpec } from "@/lib/improvise";
 import { partDice, type RollPart, type RollSpec } from "@/lib/rolls";
 import { DODGE_DC, afterRefits, type PlanStep, type StepDice } from "@/lib/roundPlan";
 
@@ -26,7 +27,8 @@ export function planRolls(tokenId: number, plan: PlanStep[]): PlanRoll[] {
   if (!who) return [];
   const mod = (a: "might" | "agility") => modifier(who.attributes[a] ?? 10);
   const out: PlanRoll[] = [];
-  plan.forEach((s, i) => {
+  plan.forEach((s, idx) => {
+    const i = idx;
     if (s.kind !== "action") return;
     const main = afterRefits(who.equipment ?? {}, plan.slice(0, i))["main hand"];
     const weapon = main ? getItem(main) : undefined;
@@ -38,6 +40,10 @@ export function planRolls(tokenId: number, plan: PlanStep[]): PlanRoll[] {
       out.push({ step: i, key: "damage", spec: { label: `${what}${versus}: damage`, mode: "normal", parts: [...terms(s.use?.damage || weapon?.damage || "1d4", s.use?.damage || weapon?.damage ? what : "Unarmed"), ...might] } });
     } else if (s.use?.area && s.use.damage) {
       out.push({ step: i, key: "damage", spec: { label: `${what}: damage`, mode: "normal", parts: terms(s.use.damage, what) } });
+    } else if (s.improv) {
+      // An improvisation's roll (as the GM settled it): thrown with the plan, so it can't be taken back once seen.
+      const i = getImprovisation(s.improv.id), spec = i ? improviseRollSpec(i) : null;
+      if (spec) out.push({ step: idx, key: "check", spec });
     } else if (s.action === "dodge") {
       out.push({ step: i, key: "check", spec: { label: `Dodge (Agility, DC ${DODGE_DC})`, mode: "normal", parts: [{ formula: "1d20", source: "Dodge (thrown twice)" }, ...flat(mod("agility"), `Agility (${formatModifier(mod("agility"))})`)] } });
     }
