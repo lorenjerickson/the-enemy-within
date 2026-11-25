@@ -929,7 +929,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   target_n: number;
   targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
   conditions: { id: number; on: "self" | "target" }[]; // catalog effects it puts on its user / its target (on a hit, or a failed save); the column kept its old name
-  kind?: "action" | "reaction"; // a reaction is planned as the round's reaction and only affects its user: it readies conditions whose triggers do the reacting
+  kind?: "action" | "bonus" | "reaction" | "free"; // a reaction is planned as the round's reaction and only affects its user: it readies conditions whose triggers do the reacting
 }
 
 /** Who an action can be used on: only its user, anyone but its user, or either; '' = worked out from what it does. */

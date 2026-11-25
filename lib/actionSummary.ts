@@ -58,7 +58,8 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     const caught = t ? cap(who) : "Everyone";
     const save = `${an(cap(g.area.save))} save (DC ${g.area.dc})`;
     const theirs = does(st?.target, "them", minutes);
-    if (dmg) out.push(`${caught} in it ${t && t.count !== "one" ? "make" : "makes"} ${save} or takes ${dmg}${g.area.half ? ", half on a success" : ""}.`);
+    const many = !!t && t.count !== "one";
+    if (dmg) out.push(`${caught} in it ${many ? "make" : "makes"} ${save} or ${many ? "take" : "takes"} ${dmg}${g.area.half ? ", half on a success" : ""}.`);
     else out.push(`${caught} in it ${t && t.count !== "one" ? "make" : "makes"} ${save}${theirs.length ? `; on a failure it ${list(theirs)}` : ""}.`);
     if (dmg && theirs.length) out.push(`A failed save also ${list(theirs)}.`);
     if (g.area.minutes) out.push(`The area stays ${lasting(g.area.minutes)}, catching whoever is in it.`);

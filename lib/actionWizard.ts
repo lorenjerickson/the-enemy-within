@@ -1,0 +1,124 @@
+// Client-safe: the action editor's interview. One question at a time; which comes next depends on the answers so far.
+// Answers turn into the action's saved fields and back (so an existing action opens with the interview filled in).
+import type { Boost } from "@/lib/actions";
+import type { ActionFields } from "@/lib/actionCard";
+import type { ModifierTarget } from "@/lib/modifiers";
+
+export type ActionType = "action" | "bonus" | "reaction" | "free";
+export type Who = "self" | "one" | "several" | "area";
+export type Affect = "attack" | "defend" | "heal" | "aid" | "effect";
+export const AFFECTS: Affect[] = ["attack", "defend", "heal", "aid", "effect"];
+
+export interface Answers {
+  name: string;
+  description: string;
+  type: ActionType;
+  seconds: number;
+  who: Who;
+  targetWho: "" | "friendly" | "enemy";
+  count: "exactly" | "upto"; // several
+  n: number;
+  rangeFt: number; // one / several: how far; area (circle): how far away it can be aimed
+  shape: "circle" | "cone" | "line";
+  areaFt: number;
+  lasts: boolean; // area: stays on the map
+  affects: Affect[];
+  damage: string;
+  damageType: ActionFields["damage_type"];
+  attackBonus: string; // an attack roll's to-hit (not an area: an area always uses a save)
+  saveAttr: ActionFields["save_attr"];
+  saveDc: number;
+  saveHalf: boolean;
+  defend: string; // +N defense
+  heal: string; // dice
+  aidTarget: ModifierTarget | "";
+  aid: string;
+  durationAmount: number; // defend, aid, a lasting area
+  durationUnit: ActionFields["duration_unit"];
+  effects: number[]; // catalog effects (each lasts as the catalog says)
+  // Kept as they were (not asked): an older action's other bonuses, roll mode, when a lasting area catches.
+  keep: Pick<ActionFields, "roll" | "area_fires" | "roll_grants"> & { boosts: Boost[] };
+}
+
+export type Question =
+  | "name" | "type" | "who" | "targetWho" | "count" | "range" | "shape" | "areaSize" | "lasts"
+  | "affects" | "damage" | "avoid" | "defend" | "heal" | "aid" | "duration" | "effects";
+
+/** The questions, in order, for these answers (answering one can add or remove the ones after it). */
+export function questions(a: Answers): Question[] {
+  const q: Question[] = ["name", "type"];
+  if (a.type !== "reaction") { // a reaction readies something on its user
+    q.push("who");
+    if (a.who === "one" || a.who === "several") q.push("targetWho", ...(a.who === "several" ? (["count"] as const) : []), "range");
+    if (a.who === "area") q.push("shape", "areaSize", "lasts");
+  }
+  q.push("affects");
+  if (a.affects.includes("attack")) q.push("damage", "avoid");
+  if (a.affects.includes("defend")) q.push("defend");
+  if (a.affects.includes("heal")) q.push("heal");
+  if (a.affects.includes("aid")) q.push("aid");
+  if (a.affects.includes("defend") || a.affects.includes("aid") || (a.who === "area" && a.lasts)) q.push("duration");
+  if (a.affects.includes("effect")) q.push("effects");
+  return q;
+}
+
+const plus = (v: string) => (/^[+-]/.test(v) ? v : `+${v}`);
+const isSelf = (a: Answers) => a.type === "reaction" || a.who === "self";
+
+/** The action's saved fields from the answers. */
+export function fieldsFromAnswers(a: Answers): ActionFields {
+  const on = isSelf(a) ? ("self" as const) : ("target" as const);
+  const has = (x: Affect) => a.affects.includes(x);
+  const asked: Boost[] = [
+    ...(has("heal") && a.heal ? [{ target: "health" as const, value: plus(a.heal), on }] : []),
+    ...(has("defend") && a.defend ? [{ target: "defense" as const, value: plus(a.defend), on }] : []),
+    ...(has("aid") && a.aid && a.aidTarget ? [{ target: a.aidTarget, value: plus(a.aid), on }] : []),
+  ];
+  // Bonuses this interview asks about come from it; any other (an older action's) are kept.
+  const askedTargets = new Set<string>(["health", "defense", ...(a.aidTarget ? [a.aidTarget] : [])]);
+  const area = !isSelf(a) && a.who === "area";
+  const several = !isSelf(a) && a.who === "several";
+  const attack = has("attack");
+  return {
+    name: a.name, description: a.description, kind: a.type, seconds: a.seconds,
+    roll: a.keep.roll, attack: attack && !area && a.attackBonus ? a.attackBonus : null,
+    damage: attack && a.damage ? a.damage : null, damage_type: attack ? a.damageType : "",
+    radius: 0, split: 0,
+    boosts: [...asked, ...a.keep.boosts.filter((b) => !askedTargets.has(b.target))], roll_grants: a.keep.roll_grants,
+    duration_amount: a.durationAmount, duration_unit: a.durationUnit,
+    range_ft: isSelf(a) || (area && a.shape !== "circle") ? 0 : a.rangeFt,
+    area_shape: area ? a.shape : "", area_ft: area ? a.areaFt : 0,
+    save_attr: a.saveAttr, save_dc: a.saveDc, save_half: a.saveHalf ? 1 : 0,
+    area_lasts: area && a.lasts ? 1 : 0, area_fires: a.keep.area_fires,
+    target_who: isSelf(a) ? "" : a.targetWho, target_count: several ? a.count : "one", target_n: several ? a.n : 1,
+    targets: isSelf(a) ? "self" : a.targetWho === "enemy" || attack ? "others" : "anyone",
+    conditions: has("effect") ? a.effects.map((id) => ({ id, on })) : [],
+  };
+}
+
+/** The answers for a saved action (or a new one, from nothing). */
+export function answersFromAction(f?: Partial<ActionFields>): Answers {
+  const boosts = f?.boosts ?? [];
+  const find = (t: (x: ModifierTarget) => boolean) => boosts.find((b) => t(b.target));
+  const heal = find((t) => t === "health"), defend = find((t) => t === "defense");
+  const aid = find((t) => t.startsWith("skill:") || t.startsWith("attribute:") || t === "check" || t.startsWith("save"));
+  const area = !!f?.area_shape && (f.area_ft ?? 0) > 0;
+  const self = f?.targets === "self" || f?.kind === "reaction";
+  const several = !area && (f?.target_count === "exactly" || f?.target_count === "upto");
+  const affects = AFFECTS.filter((x) =>
+    x === "attack" ? !!f?.damage : x === "heal" ? !!heal : x === "defend" ? !!defend : x === "aid" ? !!aid : !!f?.conditions?.length);
+  const used = new Set([heal, defend, aid]);
+  return {
+    name: f?.name ?? "", description: f?.description ?? "", type: (f?.kind ?? "action") as ActionType, seconds: f?.seconds ?? 2,
+    who: self ? "self" : area ? "area" : several ? "several" : "one",
+    targetWho: f?.target_who ?? "", count: f?.target_count === "upto" ? "upto" : "exactly", n: f?.target_n && f.target_n > 1 ? f.target_n : 2,
+    rangeFt: f?.range_ft ?? 5, shape: f?.area_shape || "circle", areaFt: f?.area_ft || 10, lasts: !!f?.area_lasts,
+    affects, damage: f?.damage ?? "", damageType: f?.damage_type ?? "", attackBonus: f?.attack ?? "",
+    saveAttr: f?.save_attr ?? "agility", saveDc: f?.save_dc ?? 12, saveHalf: f ? !!f.save_half : true,
+    defend: defend?.value.replace(/^\+/, "") ?? "", heal: heal?.value.replace(/^\+/, "") ?? "",
+    aidTarget: aid?.target ?? "", aid: aid?.value.replace(/^\+/, "") ?? "",
+    durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit ?? "minute",
+    effects: (f?.conditions ?? []).map((c) => c.id),
+    keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)) },
+  };
+}
