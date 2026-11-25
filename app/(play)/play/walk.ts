@@ -9,6 +9,7 @@ import { linkEntered } from "@/lib/levelLinks";
 import type { Point } from "@/lib/visibility";
 import { trapsOnStep, trapsWhereStopped } from "./traps";
 import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
+import { areasOnStep } from "./areas";
 
 /** How a walk out of an encounter went: the corners walked (start first), whether it was cut short, what the walker
  * learns (traps, triggers' doings to them), and a level link they stepped onto (they're asked whether to take it). */
@@ -21,7 +22,7 @@ export interface Walk {
 
 /**
  * Walks a token out of an encounter along `route` (token corners, start first), a step at a time: each step can spring
- * traps, fire map triggers and game scripts' triggers, or come onto a level link, any of which can cut the walk short.
+ * traps, walk into lasting areas, fire map triggers and game scripts' triggers, or come onto a level link, any of which can cut the walk short.
  * Where it ends, traps and triggers for ending a move in them get their turn. Auras are brought up to date after.
  */
 export function walkRoute(levelId: number, tokenId: number, route: Point[]): Walk {
@@ -38,6 +39,7 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
     const sprung = trapsOnStep(levelId, tokenId, from, step);
     told.push(...sprung.map((t) => t.player));
     if (sprung.some((t) => t.stops)) { stopped = true; break; }
+    told.push(...areasOnStep(levelId, tokenId, from, step)); // lasting areas (a fire wall left after a fight) catch whoever walks into them
     const fired = triggersOnStep(levelId, tokenId, from, step); // map triggers: the walker learns only what they do to them
     for (const f of fired) told.push(...(f.told.get(tokenId) ?? []));
     if (fired.some((f) => f.stops)) { stopped = true; break; }
