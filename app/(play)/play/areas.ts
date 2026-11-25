@@ -1,10 +1,11 @@
 /**
  * Areas out of combat (lasting areas: a fire wall left after an encounter). There are no rounds, so a walk coming into
  * one catches the walker whatever its round timings say: its save, its damage, its effects on a failed save. Rounds
- * work lasting areas out in round resolution instead. Saves are rolled by the server for now (players rolling their
- * own: the areas design, build step 5).
+ * work lasting areas out in round resolution instead. A player's character rolls its own save (it's asked, and the
+ * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
-import { getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, saveExposures } from "@/lib/db";
+import { getCharacterPlayer, getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
+import { saveRollFor } from "@/lib/creatureChanges";
 import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
 import { caughtBy, type LastingArea } from "@/lib/aoe";
 import { fightersOn } from "@/lib/combat";
@@ -17,12 +18,19 @@ import { applyConditionNow } from "./workOutRound";
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
 /** A lasting area catches a token: the save, the damage (half or none on a success), effects on a failed save. Returns what they're told. */
-export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false): string {
+export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false, saveTotal?: number): string {
+  const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
+  // A player's character rolls its own save: asked now, settled when the roll comes in (this again, with its total).
+  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && tok?.character_id ? getCharacterPlayer(tok.character_id) : null;
+  if (player && tok?.character_id) {
+    requestRoll(player, tok.character_id, saveRollFor(tokenId, l.save, `${l.name}: ${l.save} save (DC ${l.dc})`), { kind: "areaSave", levelId, areaId: l.id, tokenId, ...(leaving ? { leaving } : {}), ...(staying ? { staying } : {}) });
+    return `You ${doing[1]} ${l.name}! Roll your ${l.save} save.`;
+  }
   const exposures = l.lingers && !leaving ? getExposures(levelId) : null, extra = exposures ? exposureExtra(exposures, tokenId, harmOf(l)) : 0; // lingering: plus the build-up so far
   const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
   const f = fightersOn(levelId).get(tokenId);
-  const save = f ? f.save(l.save) : null;
+  const save = saveTotal !== undefined ? { total: saveTotal } : f ? f.save(l.save) : null;
   const saved = !!save && save.total >= l.dc;
   const gm: string[] = [save ? `${l.save} ${save.total} vs DC ${l.dc}${saved ? " (saved)" : ""}` : ""].filter(Boolean), you: string[] = [];
   const h = tokenHealth(tokenId);
@@ -41,7 +49,6 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
     gm.push(`${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
-  const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
   logSessionEvent(`${name} ${doing[0]} ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
   return `You ${doing[1]} ${l.name}! ${you.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
 }

@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addLastingArea, db, getCondition, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addLastingArea, createUser, db, getCondition, getLastingArea, getOpenRollRequest, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
+import { catchInArea } from "@/app/(play)/play/areas";
 import { UNTIL_REMOVED, areaFromDrawn, inArea, type LastingArea } from "@/lib/aoe";
 
 const wall = (o: Partial<Omit<LastingArea, "id">> = {}): Omit<LastingArea, "id"> => ({
@@ -81,4 +82,21 @@ test("out of combat, lingering harm lands every 6 s walked: after walking out of
   const w = walkRoute(lv, tok, row(1, 0, 12)); // 60 ft at 5 ft/s: two 6 s marks, both out of the fire
   assert.equal(tokenHealth(tok)!.current, 14, "4 walking through it, then 2 as it fades");
   assert.ok(w.told.some((t) => /Burning hall still hurts: .*\(-2\), and it fades/.test(t)), w.told.join(" | "));
+});
+
+test("a player's character rolls its own save against an area: asked as they walk in; it lands when the roll comes in", () => {
+  createUser({ name: "areaP", username: "areaP", contact: "", role: "player" } as never, "pw");
+  const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("areaP")!.id;
+  const lv = level();
+  const id = addLastingArea(lv, wall({ dc: 15 }));
+  const ivy = character("Ivy", { health: "20" });
+  db.prepare("UPDATE characters SET player_id = ? WHERE id = ?").run(pid, ivy);
+  const tok = placeCharacterToken(lv, ivy, 1, 1);
+  const w = walkRoute(lv, tok, row(1, 1, 5));
+  assert.ok(w.told.some((t) => /You walk into Fire wall! Roll your agility save\./.test(t)), w.told.join(" | "));
+  assert.equal(tokenHealth(tok)!.current, 20, "nothing yet");
+  const req = getOpenRollRequest(pid)!;
+  assert.deepEqual(req.action, { kind: "areaSave", levelId: lv, areaId: id, tokenId: tok });
+  assert.match(catchInArea(lv, getLastingArea(id)!, tok, false, false, 16), /You walk into Fire wall! You partly get clear but are hurt/);
+  assert.equal(tokenHealth(tok)!.current, 17, "saved (16 vs 15): half of 6");
 });

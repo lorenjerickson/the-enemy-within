@@ -32,6 +32,8 @@ import { hidingPlaces, reveal, settleHide } from "./hiding";
 import type { Attributes } from "@/lib/attributes";
 import { rollSpec, scoreRoll, type RollSpec } from "@/lib/rolls";
 import { REACH, distanceToDoor } from "./reach";
+import { catchInArea } from "./areas";
+import { getLastingArea } from "@/lib/db";
 
 /**
  * Who's acting, and their token: a player's own character; the GM playing an absent player's, or a creature of theirs.
@@ -253,6 +255,12 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     const r = settleHide(a.levelId, a.tokenId, scored.total);
     success = r.hidden;
     outcome = r.told;
+  }
+  if (a.kind === "areaSave") {
+    // A lasting area they walked into (out of combat): it lands now, with their save.
+    const l = getLastingArea(a.areaId);
+    success = !!l && scored.total >= l.dc;
+    outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying, scored.total) : "It's gone.";
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).

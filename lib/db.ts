@@ -2814,7 +2814,8 @@ export type RollAction =
   | { kind: "initiative"; levelId: number; tokenId: number }
   | { kind: "hide"; levelId: number; tokenId: number; inRound?: boolean } // inRound: they already hid in a round; the roll only sets the total // Hide: their Stealth total is how hard they are to find (if no enemy sees them as they roll)
   | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
-  | { kind: "conditionSave"; levelId: number; tokenId: number; key: string }; // a save against a condition as it lands, mid-round
+  | { kind: "conditionSave"; levelId: number; tokenId: number; key: string } // a save against a condition as it lands, mid-round
+  | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean }; // out of combat: a save against a lasting area they walked into (left, stayed in)
 
 type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
 const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
