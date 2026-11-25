@@ -4,7 +4,7 @@ import { character, level } from "./seed";
 import { addLastingArea, getCondition, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
-import type { LastingArea } from "@/lib/aoe";
+import { UNTIL_REMOVED, areaFromDrawn, inArea, type LastingArea } from "@/lib/aoe";
 
 const wall = (o: Partial<Omit<LastingArea, "id">> = {}): Omit<LastingArea, "id"> => ({
   name: "Fire wall", look: "fire", area: { shape: "line", origin: { x: 3.5, y: -2 }, dir: Math.PI / 2, size: 10 }, damage: "6", dc: 40, save: "agility", half: true, ends: getGameTime() + 10, ...o,
@@ -36,4 +36,19 @@ test("a save for half; starting inside it or walking along inside it isn't comin
   const c = placeCharacterToken(lv2, character("Dee", { health: "20" }), 1, 1);
   walkRoute(lv2, c, row(1, 1, 5));
   assert.equal(tokenHealth(c)!.current, 20, "burnt out");
+});
+
+
+test("areas the GM draws: a rectangle, circle or line drawn as on the Traps layer; a rectangle catches what's inside it", () => {
+  const r = areaFromDrawn({ shape: "rect", x: 2, y: 1, w: 3, h: 2 });
+  assert.equal(inArea(r, { x: 2.5, y: 1.5 }), true);
+  assert.equal(inArea(r, { x: 4.9, y: 2.9 }), true);
+  assert.equal(inArea(r, { x: 5.5, y: 1.5 }), false);
+  assert.equal(inArea(areaFromDrawn({ shape: "circle", x: 0, y: 0, r: 2 }), { x: 1, y: 1 }), true);
+  assert.equal(inArea(areaFromDrawn({ shape: "line", x1: 0, y1: 0.5, x2: 6, y2: 0.5 }), { x: 3.5, y: 0.5 }), true);
+  const lv = level();
+  addLastingArea(lv, { name: "Acid pool", look: "fog", area: r, damage: "4", dc: 40, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["enter"], drawn: true });
+  const tok = placeCharacterToken(lv, character("Eve", { health: "20" }), 0, 1);
+  walkRoute(lv, tok, row(1, 0, 3));
+  assert.equal(tokenHealth(tok)!.current, 16);
 });

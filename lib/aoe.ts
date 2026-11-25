@@ -45,14 +45,28 @@ export interface LastingArea {
   fires?: AreaFires[]; // when it catches someone (default: the end of each round)
   conditions?: Condition[]; // put on whoever fails its save (as the action that left it did)
   by?: number | null; // whose it is
+  damageType?: string; // fire, poison… (the GM's areas; an action's carries its look instead)
+  drawn?: boolean; // drawn by the GM (Areas layer), not left by an action
 }
 
-/** An area placed on the map: a circle centred where it's aimed; a cone or line from the actor towards the aim. */
+/** A lasting area that lasts until the GM removes it: its end, far off in game time. */
+export const UNTIL_REMOVED = 1e9;
+
+/** An area placed on the map: a circle centred where it's aimed; a cone or line from the actor towards the aim; a rectangle the GM draws (origin: its centre). */
 export interface AreaAt {
-  shape: AreaShape;
+  shape: AreaShape | "rect";
   origin: Point;
   dir: number; // radians, cone and line
-  size: number; // grid units
+  size: number; // grid units (a rectangle: half its longer side)
+  w?: number; // a rectangle's width and height (grid units)
+  h?: number;
+}
+
+/** An area the GM drew (the same shapes traps are drawn with) as one placed on the map: a tripwire drawn becomes a 5 ft wide line. */
+export function areaFromDrawn(a: { shape: "circle"; x: number; y: number; r: number } | { shape: "rect"; x: number; y: number; w: number; h: number } | { shape: "line"; x1: number; y1: number; x2: number; y2: number }): AreaAt {
+  if (a.shape === "circle") return { shape: "circle", origin: { x: a.x, y: a.y }, dir: 0, size: a.r };
+  if (a.shape === "rect") return { shape: "rect", origin: { x: a.x + a.w / 2, y: a.y + a.h / 2 }, dir: 0, size: Math.max(a.w, a.h) / 2, w: a.w, h: a.h };
+  return { shape: "line", origin: { x: a.x1, y: a.y1 }, dir: Math.atan2(a.y2 - a.y1, a.x2 - a.x1), size: Math.hypot(a.x2 - a.x1, a.y2 - a.y1) };
 }
 
 const CONE_HALF = Math.atan(0.5); // a cone is as wide at its end as it is long
@@ -67,6 +81,7 @@ export function placeArea(shape: AreaShape, ft: number, actor: Point, aim: Point
 /** Whether a point (a token's centre) is inside the area. */
 export function inArea(a: AreaAt, p: Point): boolean {
   const dx = p.x - a.origin.x, dy = p.y - a.origin.y, d = Math.hypot(dx, dy);
+  if (a.shape === "rect") return Math.abs(dx) <= (a.w ?? 0) / 2 + 1e-9 && Math.abs(dy) <= (a.h ?? 0) / 2 + 1e-9;
   if (a.shape === "circle") return d <= a.size + 1e-9;
   if (d < 1e-9 || d > a.size + 1e-9) return false;
   if (a.shape === "cone") {
@@ -83,6 +98,7 @@ export const caughtBy = (a: AreaAt, p: Point, walls: Segment[]) => inArea(a, p) 
 /** The area's outline, for drawing. */
 export function areaPolygon(a: AreaAt): Point[] {
   const { x, y } = a.origin;
+  if (a.shape === "rect") { const w = (a.w ?? 0) / 2, h = (a.h ?? 0) / 2; return [{ x: x - w, y: y - h }, { x: x + w, y: y - h }, { x: x + w, y: y + h }, { x: x - w, y: y + h }]; }
   if (a.shape === "circle") return Array.from({ length: 48 }, (_, i) => ({ x: x + Math.cos((i / 48) * Math.PI * 2) * a.size, y: y + Math.sin((i / 48) * Math.PI * 2) * a.size }));
   if (a.shape === "cone") {
     const arc = Array.from({ length: 13 }, (_, i) => a.dir - CONE_HALF + (i / 12) * 2 * CONE_HALF).map((t) => ({ x: x + Math.cos(t) * a.size, y: y + Math.sin(t) * a.size }));

@@ -2237,10 +2237,22 @@ db.exec(`CREATE TABLE IF NOT EXISTS lasting_areas (
   spec TEXT NOT NULL
 )`);
 
-export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): void {
+export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): number {
   const { name, ends, ...spec } = a;
   db.prepare("DELETE FROM lasting_areas WHERE ends <= ?").run(getGameTime());
-  db.prepare("INSERT INTO lasting_areas (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(levelId, name, ends, JSON.stringify(spec));
+  return Number(db.prepare("INSERT INTO lasting_areas (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(levelId, name, ends, JSON.stringify(spec)).lastInsertRowid);
+}
+
+/** One lasting area (or none, gone or run out). */
+export function getLastingArea(id: number): (LastingArea & { level_id: number }) | undefined {
+  const r = db.prepare<[number], { id: number; level_id: number; name: string; ends: number; spec: string }>("SELECT id, level_id, name, ends, spec FROM lasting_areas WHERE id = ?").get(id);
+  return r ? { id: r.id, level_id: r.level_id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) } : undefined;
+}
+
+/** The GM changes a lasting area (everything but where it is). */
+export function updateLastingArea(id: number, a: Omit<LastingArea, "id">): void {
+  const { name, ends, ...spec } = a;
+  db.prepare<[string, number, string, number]>("UPDATE lasting_areas SET name = ?, ends = ?, spec = ? WHERE id = ?").run(name, ends, JSON.stringify(spec), id);
 }
 
 /** A level's lasting areas still in effect. */

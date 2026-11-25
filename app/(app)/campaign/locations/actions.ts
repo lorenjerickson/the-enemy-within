@@ -11,7 +11,9 @@ import { speedFps } from "@/lib/creatureChanges";
 import { revealAfterStep } from "../../../(play)/play/hiding";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, listEffectDefs, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
-import { AREA_FIRES } from "@/lib/aoe";
+import { AREA_FIRES, UNTIL_REMOVED, areaFromDrawn, type AreaFires } from "@/lib/aoe";
+import { addLastingArea, getCondition, getGameTime, getLastingArea, removeLastingArea, updateLastingArea } from "@/lib/db";
+import { lookOf } from "@/lib/combat";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { isDiceFormula } from "@/lib/itemTypes";
@@ -615,6 +617,57 @@ export async function saveTrapSettings(locationId: number, id: number, formData:
     stops: formData.get("stops") ? 1 : 0,
     find_dc: int("find_dc", 1, 40, 14),
   });
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM draws an area on the map (Areas layer): it does nothing until its settings are saved, and lasts until removed. */
+export async function placeArea(locationId: number, levelId: number, drawn: TrapArea) {
+  await requireGm();
+  const n = (v: unknown) => { const x = Number(v); if (!Number.isFinite(x)) throw new Error("Invalid area"); return x; };
+  const clean: TrapArea = drawn.shape === "circle" ? { shape: "circle", x: n(drawn.x), y: n(drawn.y), r: Math.max(0.25, n(drawn.r)) }
+    : drawn.shape === "rect" ? { shape: "rect", x: n(drawn.x), y: n(drawn.y), w: Math.max(0.25, n(drawn.w)), h: Math.max(0.25, n(drawn.h)) }
+    : { shape: "line", x1: n(drawn.x1), y1: n(drawn.y1), x2: n(drawn.x2), y2: n(drawn.y2) };
+  addLastingArea(Number(levelId), { name: "Area", look: "fog", area: areaFromDrawn(clean), damage: null, dc: 12, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["enter"], drawn: true });
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM saves what an area does: its name and look, its save and damage, effects on a failed save, when it catches someone, how long it lasts. */
+export async function saveAreaSettings(locationId: number, id: number, formData: FormData) {
+  await requireGm();
+  const a = getLastingArea(Number(id));
+  if (!a) throw new Error("No such area");
+  const text = (k: string) => String(formData.get(k) ?? "").trim();
+  const int = (k: string, lo: number, hi: number, d: number) => { const v = Math.round(Number(formData.get(k))); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  const damage = text("damage").toLowerCase().replace(/\s/g, "");
+  if (damage && !isDiceFormula(damage) && !/^\d+$/.test(damage)) throw new Error("Damage must be dice (2d6) or a number");
+  const damageType = (DAMAGE_TYPES as readonly string[]).includes(text("damage_type")) ? text("damage_type") : "";
+  const look = (EFFECT_KINDS as readonly string[]).includes(text("look")) ? (text("look") as EffectKind) : lookOf(damageType);
+  const fires = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`fires_${k}`)) as AreaFires[];
+  const minutes = Number(formData.get("minutes"));
+  const { id: _id, level_id: _l, ...rest } = a;
+  updateLastingArea(a.id, {
+    ...rest,
+    name: text("name") || "Area",
+    damage: damage || null,
+    damageType,
+    look,
+    save: ((ATTRIBUTES as readonly string[]).includes(text("save")) ? text("save") : "agility") as never,
+    dc: int("dc", 1, 40, 12),
+    half: !!formData.get("half"),
+    fires: fires.length ? fires : ["enter"],
+    conditions: [...new Set(formData.getAll("effect").map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }),
+    ends: Number.isFinite(minutes) && minutes > 0 ? Math.round((getGameTime() + minutes) * 1e6) / 1e6 : UNTIL_REMOVED, // blank: until removed
+  });
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM removes an area (its look with it). */
+export async function removeArea(locationId: number, id: number) {
+  await requireGm();
+  removeLastingArea(Number(id));
+  revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

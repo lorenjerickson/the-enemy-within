@@ -291,7 +291,7 @@ function durationMinutes(amount: number, unit: string): number {
 }
 
 /** How a lasting area looks, from its damage type. */
-const lookOf = (type: string): EffectKind =>
+export const lookOf = (type: string): EffectKind =>
   type === "fire" ? "fire" : type === "lightning" ? "lightning" : type === "cold" ? "snow" : type === "thunder" ? "wind" : "fog";
 
 /**
