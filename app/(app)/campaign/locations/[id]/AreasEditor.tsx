@@ -50,6 +50,13 @@ function AreaSettings({ locationId, area: a, effects, now }: { locationId: numbe
           </div>
         ) : <p className="text-xs opacity-60">No effects that last rounds in the catalog yet.</p>}
       </fieldset>
+      <div className="flex flex-wrap items-center gap-2" data-area-lingers>
+        <label className="flex items-center gap-1"><input type="checkbox" name="lingers" defaultChecked={!!a.lingers} className="checkbox checkbox-xs" />lingers</label>
+        <span className="opacity-70">+</span><input name="build_up" type="number" min={0} max={20} defaultValue={a.buildUp ?? 1} className="input input-xs w-14" />
+        <span className="text-xs opacity-60">damage each round inside;</span>
+        <span className="opacity-70">−</span><input name="decay" type="number" min={1} max={20} defaultValue={a.decay ?? 2} className="input input-xs w-14" />
+        <span className="text-xs opacity-60">each round after leaving, until it&apos;s gone</span>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="opacity-70">Lasts</span>
         <input name="minutes" type="number" min={0} step={0.1} defaultValue={left} placeholder="until removed" className="input input-xs w-28" />

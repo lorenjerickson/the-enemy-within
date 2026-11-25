@@ -51,6 +51,9 @@ export interface LastingArea {
   by?: number | null; // whose it is
   damageType?: string; // fire, poison… (the GM's areas; an action's carries its look instead)
   drawn?: boolean; // drawn by the GM (Areas layer), not left by an action
+  lingers?: boolean; // its harm builds while they stay and keeps landing (less each interval) after they leave (lib/exposure.ts)
+  buildUp?: number; // lingering: added to its damage each interval inside (default 1)
+  decay?: number; // lingering: taken off each interval after leaving (default 2)
 }
 
 /** A lasting area that lasts until the GM removes it: its end, far off in game time. */

@@ -126,3 +126,18 @@ test("'stays in it' areas: their effects last only while inside (off as they lea
   assert.equal(out.hp.get(2), 16);
   assert.match(out.text, /Thorns catches T2 leaving it/);
 });
+
+test("a lingering area: staying in it builds the harm (+1 a round); after leaving it still lands, less each round (−2), until gone", () => {
+  const fire = lastingAt(5, 5, { name: "Burning room", damage: "4", dc: 40, fires: ["inside"], lingers: true, damageType: "fire" });
+  const r1 = resolve([mover(2, { col: 5, row: 5 })], { 2: fighter({ save: 5 }) }, { lasting: [fire] });
+  assert.equal(r1.hp.get(2), 16, "first round in it: its damage");
+  assert.deepEqual(r1.exposure.get(2)?.map((e) => [e.kind, e.extra, e.last]), [["fire", 1, 4]]);
+  const r2 = resolve([mover(2, { col: 5, row: 5 })], { 2: fighter({ hp: 16, save: 5 }) }, { lasting: [fire], exposure: r1.exposure });
+  assert.equal(r2.hp.get(2), 11, "second round: 4 + 1");
+  const away = resolve([mover(2, { col: 9, row: 9 })], { 2: fighter({ hp: 11, save: 5 }) }, { lasting: [fire], exposure: r2.exposure });
+  assert.equal(away.hp.get(2), 8, "out of it: last 5 less 2");
+  assert.match(away.text, /Burning room still hurts T2: 3/);
+  const later = resolve([mover(2, { col: 9, row: 9 })], { 2: fighter({ hp: 8, save: 5 }) }, { lasting: [fire], exposure: away.exposure });
+  assert.equal(later.hp.get(2), 7, "then 1, and it fades");
+  assert.equal(later.exposure.get(2)?.length ?? 0, 0);
+});

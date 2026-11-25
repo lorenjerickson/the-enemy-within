@@ -5,6 +5,7 @@ import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
 import { savePct, whileWithin } from "@/lib/conditions";
+import { decayed, exposedInside, exposureExtra, harmOf, type Exposures } from "@/lib/exposure";
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
@@ -171,7 +172,10 @@ export function resolveMovement(
   links: LevelLink[] = [], // level links: coming onto one stops the mover; players are asked after the round whether to take it
   assists: Map<number, { by: number; name: string }> = new Map(), // who has been helped (Assist): advantage on their next attack roll
   hiddenAtStart: Map<number, number> = new Map(), // who is hidden (Hide), with their Stealth totals: unseen by anyone not on their side
+  exposureAtStart: Exposures = new Map(), // exposure to lingering areas' harm (still burning, poisoned…): builds inside, decays after
 ) {
+  const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
+  const exposedThisRound = new Set<string>(); // "token:kind": a lingering area of that kind caught them this round (one per kind)
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
   const sideOf = (id: number) => fighters.get(id)?.allegiance ?? "hostile";
   const hides: { tokenId: number; hurried: boolean }[] = []; // who hid this round (their Stealth rolled after it)
@@ -543,7 +547,7 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)}: ${describeStatus(status)} (${status.source}, ${minutes < 1 ? `${Math.round(minutes * 10)} round(s)` : `${minutes} min`}).`);
   };
   /** Everyone caught by an area (but `except`) rolls its save against `total` damage; returns how each fared. */
-  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean, type?: string, anywhere = false): AreaHit[] => {
+  const catchIn = (at: AreaAt, spec: { dc: number; save: Attribute; half: boolean }, total: number, except: number, sec: number, what = "the area", only?: (id: number) => boolean, type?: string, anywhere = false, bonus?: (id: number) => number, onTaken?: (id: number, n: number) => void): AreaHit[] => {
     const hits: AreaHit[] = [];
     for (const id of [...fighters.keys()]) {
       const p = where(id);
@@ -551,8 +555,10 @@ export function resolveMovement(
       const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
       const s = f.save ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" };
       const saved = s.total >= spec.dc;
-      const t = takenBy(id, saved ? (spec.half ? Math.floor(total / 2) : 0) : total, type);
+      const all = total + (bonus?.(id) ?? 0); // lingering: plus the build-up so far
+      const t = takenBy(id, saved ? (spec.half ? Math.floor(all / 2) : 0) : all, type);
       const taken = t.n;
+      onTaken?.(id, taken);
       const left = Math.max(0, hp.get(id)! - taken);
       if (taken > 0) {
         hp.set(id, left);
@@ -584,7 +590,10 @@ export function resolveMovement(
     if (!fires.includes(when) && !(inside && (when === "enter" || when === "end"))) return;
     const key = (id: number) => `${l.id}:${id}${when === "leave" ? ":leave" : ""}`;
     const total = l.damage ? rollDice(l.damage) : 0, before = log.length;
-    const hits = catchIn(l.area, l, total, -1, sec, l.name, (id) => !caughtIn.has(key(id)) && (!only || only.has(id)), l.damageType, when === "leave");
+    const kind = harmOf(l);
+    const hits = catchIn(l.area, l, total, -1, sec, l.name, (id) => !caughtIn.has(key(id)) && (!only || only.has(id)) && !(l.lingers && exposedThisRound.has(`${id}:${kind}`)), l.damageType, when === "leave",
+      l.lingers ? (id) => exposureExtra(exposure, id, kind) : undefined,
+      l.lingers && when !== "leave" ? (id, n) => { exposedThisRound.add(`${id}:${kind}`); if (n > 0) exposedInside(exposure, id, l, n); } : undefined);
     if (!hits.length) return;
     const how = when === "enter" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} coming into it` : when === "leave" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} leaving it` : when === "start" ? "catches whoever starts the round in it" : "lingers";
     log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage, ${l.save} save DC ${l.dc}.`);
@@ -1359,6 +1368,25 @@ export function resolveMovement(
     // The end of the round: whoever is in a lasting area rolls its save (its damage dice rolled once for everyone).
     if (sec === ROUND_SECONDS) {
       for (const l of lasting) areaCatch(l, sec, "end", fx);
+      // Lingering harm out of its area: it keeps landing, less each round, until it's gone (still in an area of that kind: it built up instead).
+      for (const [id, list] of [...exposure]) {
+        const p = where(id), keep: typeof list = [];
+        for (const e of list) {
+          const stillIn = !!p && lasting.some((l) => l.lingers && harmOf(l) === e.kind && caughtBy(l.area, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls));
+          if (stillIn || exposedThisRound.has(`${id}:${e.kind}`) || down.has(id) || !hp.has(id)) { keep.push(e); continue; }
+          const d = decayed(e);
+          if (d.next) keep.push(d.next);
+          const t = takenBy(id, d.damage, lasting.find((l) => harmOf(l) === e.kind)?.damageType);
+          if (t.n <= 0) { log.push(`${sec} s: ${nameOf(id)} is clear of ${e.source}.`); continue; }
+          const after = Math.max(0, hp.get(id)! - t.n);
+          hp.set(id, after);
+          wasHurt(id, sec, t.n);
+          log.push(`${sec} s: ${e.source} still hurts ${nameOf(id)}: ${t.n}${t.note}; ${after} left${d.next ? "" : " (it fades)"}.`);
+          story.push({ sec, k: "effect", who: id, name: e.source, much: t.n, heal: false, hurt: hurt(id, t.n) });
+          if (after <= 0) { down.add(id); story.push({ sec, k: "down", who: id }); log.push(`${sec} s: ${nameOf(id)} is down.`); }
+        }
+        exposure.set(id, keep);
+      }
       trapsFor("end", sec, (t, id) => inTrap(t.area, centreOf(where(id)!))); // traps that catch whoever ends the round in them
       triggersFor("end", sec, (t, id) => inTrap(t.area, centreOf(where(id)!)));
       // Effects tick: damage or healing, a round off each, then a save to shake it off.
@@ -1380,7 +1408,7 @@ export function resolveMovement(
     const end = pos.get(m.tokenId)!;
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
-  return { final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
+  return { exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

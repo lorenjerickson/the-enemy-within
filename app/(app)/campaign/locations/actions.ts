@@ -656,6 +656,9 @@ export async function saveAreaSettings(locationId: number, id: number, formData:
     dc: int("dc", 1, 40, 12),
     half: !!formData.get("half"),
     fires: fires.length ? fires : ["enter"],
+    lingers: !!formData.get("lingers"),
+    buildUp: int("build_up", 0, 20, 1),
+    decay: int("decay", 1, 20, 2),
     conditions: [...new Set(formData.getAll("effect").map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }),
     ends: Number.isFinite(minutes) && minutes > 0 ? Math.round((getGameTime() + minutes) * 1e6) / 1e6 : UNTIL_REMOVED, // blank: until removed
   });

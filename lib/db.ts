@@ -15,6 +15,7 @@ import crypto from "node:crypto";
 import { CREATURE_TYPES, MOVEMENT_TYPES, type CreatureType, type Movement } from "@/lib/creatureTypes";
 import type { Attribute, Attributes } from "@/lib/attributes";
 import { areaFires, type AreaShape, type LastingArea } from "@/lib/aoe";
+import type { Exposure, Exposures } from "@/lib/exposure";
 import type { Trap, TrapArea } from "@/lib/traps";
 import type { MapTrigger } from "@/lib/triggers";
 import {
@@ -2241,6 +2242,17 @@ export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): num
   const { name, ends, ...spec } = a;
   db.prepare("DELETE FROM lasting_areas WHERE ends <= ?").run(getGameTime());
   return Number(db.prepare("INSERT INTO lasting_areas (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(levelId, name, ends, JSON.stringify(spec)).lastInsertRowid);
+}
+
+// Exposure to lingering areas' harm, per level: who is still burning, poisoned… (lib/exposure.ts), as JSON.
+db.exec("CREATE TABLE IF NOT EXISTS level_exposure (level_id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
+export function getExposures(levelId: number): Exposures {
+  const r = db.prepare<[number], { data: string }>("SELECT data FROM level_exposure WHERE level_id = ?").get(levelId);
+  return new Map(r ? (JSON.parse(r.data) as [number, Exposure[]][]) : []);
+}
+export function saveExposures(levelId: number, all: Exposures): void {
+  const data = [...all].filter(([, l]) => l.length);
+  db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
 }
 
 /** One lasting area (or none, gone or run out). */
