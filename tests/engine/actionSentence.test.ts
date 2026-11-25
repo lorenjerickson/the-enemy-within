@@ -44,3 +44,16 @@ test("a reaction on yourself", () => {
   const g = { ...base, name: "Shield", self: true, kind: "reaction" as const, statuses: { minutes: 0.1, self: status({ conditions: [cond("Shielded")] }) } };
   assert.equal(actionSentence(g), "As a reaction: applies Shielded to you. Takes 2 seconds.");
 });
+
+test("settings that don't apply stay off the card", async () => {
+  const { gearOf } = await import("@/lib/actionCard");
+  const fields = {
+    name: "Mesmerize", description: "", roll: "advantage" as const, attack: "2", damage: null, damage_type: "fire" as const, radius: 0, split: 0 as const,
+    boosts: [], roll_grants: [], duration_amount: 3, duration_unit: "hour" as const, seconds: 2, range_ft: 30,
+    area_shape: "circle" as const, area_ft: 0, save_dc: 12, save_attr: "agility" as const, save_half: 1 as const, area_lasts: 1 as const, area_fires: "end",
+    target_who: "" as const, target_count: "one" as const, target_n: 2, kind: "action" as const, targets: "" as const, conditions: [{ id: 5, on: "target" as const }],
+  };
+  const card = actionSentence(gearOf(fields, () => ({ name: "Mesmerized", id: 5, effects: [] }) as never));
+  assert.equal(card, "Applies Mesmerized to one creature within 30 feet, no roll needed. Takes 2 seconds.");
+  assert.doesNotMatch(card, /DC|to hit|advantage|fire|hour|Agility/);
+});
