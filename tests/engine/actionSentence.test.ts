@@ -26,12 +26,18 @@ test("a condition with no damage says there's no roll", () => {
 
 test("healing on yourself or others", () => {
   const g = { ...base, name: "Healing Draught", targets: "anyone" as const, statuses: { minutes: 0, target: status({ boosts: [{ target: "health", value: "+2d4" }] }) } };
-  assert.equal(actionSentence(g), "Heals you or one creature for 2d4 within 5 feet, no roll needed. Takes 2 seconds.");
+  assert.equal(actionSentence(g), "Heals one target creature within 5 feet for 2d4, no roll needed. Takes 2 seconds.");
 });
 
 test("a plain melee attack reads in one sentence", () => {
   const g = { ...base, name: "Club", damage: "1d8", damageType: "bludgeoning" };
   assert.deepEqual(gearSummary(g), ["On a successful attack roll, strikes one creature within 5 feet for 1d8 bludgeoning damage. Takes 2 seconds."]);
+});
+
+test("a named effect is said in plain words, once", () => {
+  const mesmerized = { name: "Mesmerized", id: 5, rounds: 10, duration: "rounds", effects: [{ id: 5, name: "Mesmerized", description: "", modifiers: [{ kind: "boost", target: "attribute:intellect", value: "-2" }, { kind: "roll", roll: "attack", mode: "disadvantage" }] }] };
+  const g = { ...base, name: "Mesmerize", range: 6, statuses: { minutes: 1, target: status({ conditions: [mesmerized] }) } };
+  assert.match(actionSentence(g), /^Applies Mesmerized to one creature within 30 feet, no roll needed\. Mesmerized: -2 Intellect and disadvantage on attack rolls/);
 });
 
 test("a reaction on yourself", () => {

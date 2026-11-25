@@ -12,6 +12,16 @@ const once = (c: Condition) => !lingers(c) && modifiersOf(c).length > 0;
 const an = (w: string) => (/^[aeiou]/i.test(w) ? `an ${w}` : `a ${w}`);
 const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/** What a named condition does, in plain words: "-2 Intellect and disadvantage on attack rolls for 10 rounds". */
+export function conditionInWords(c: Condition): string {
+  const [effects = "", ...more] = describeCondition(c).split(" · ");
+  const parts = effects.replace(/ \((attribute|skill)\)/g, "").replace(/ on their /g, " on ").replace(/([+-]\d+) ([a-z]+)/g, (_, n, w) => `${n} ${cap(w)}`).split(", ").filter(Boolean);
+  const how = parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  const time = more.find((m) => /^\d+ rounds?$/.test(m));
+  const rest = more.filter((m) => m !== time);
+  return [how + (time ? ` for ${time}` : ""), ...rest].filter(Boolean).join("; ");
+}
+
 /** What a status does to `on` ("you", "the target", "them", "one creature"), as verb phrases: heals, harms, conditions put on, boosts. */
 function does(s: ActionStatuses["self"], on: string, minutes: number): string[] {
   if (!s) return [];
@@ -36,7 +46,7 @@ function does(s: ActionStatuses["self"], on: string, minutes: number): string[] 
 /** The card: one or two plain sentences of what the action does and how long it takes, as the player reads it. */
 export function actionSentence(g: GearAction & { damageType?: string }): string {
   const t = g.targeting && (g.targeting.count !== "one" || g.targeting.who) ? g.targeting : undefined;
-  const who = t ? describeTargeting(t, !!g.area).replace(/ in (range|its area)$/, "") : g.targets === "anyone" ? "you or one creature" : "one creature";
+  const who = t ? describeTargeting(t, !!g.area).replace(/ in (range|its area)$/, "") : g.targets === "anyone" ? "one target creature" : "one creature";
   const dmg = g.damage ? `${g.damage}${g.damageType ? ` ${g.damageType}` : ""} damage` : "";
   const st = g.statuses, minutes = st?.minutes ?? 0.1;
   const mine = does(st?.self, "you", minutes);
@@ -59,19 +69,19 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     const theirs = does(st?.target, "the target", minutes);
     if (theirs.length) out.push(`A hit also ${list(theirs)}.`);
   } else {
-    const theirs = does(st?.target, who, minutes);
-    out.push(theirs.length ? `${cap(list(theirs))} ${feet(g.range)}, no roll needed.` : `Used on ${who} ${feet(g.range)}.`);
+    const theirs = does(st?.target, `${who} ${feet(g.range)}`, minutes);
+    out.push(theirs.length ? `${cap(list(theirs))}, no roll needed.` : `Used on ${who} ${feet(g.range)}.`);
   }
   if (mine.length && !g.self) out.push(`It also ${list(mine)}.`);
+  // Each condition the card names, said once in plain words.
+  const named = [...(st?.target?.conditions ?? []), ...(st?.self?.conditions ?? [])].filter((c, i, all) => !once(c) && all.findIndex((x) => x.id === c.id) === i);
+  for (const c of named) { const w = conditionInWords(c); if (w) out.push(`${c.name}: ${w}.`); }
   out.push(`Takes ${seconds(g.seconds)}.`);
   const text = out.join(" ");
   return g.kind === "reaction" ? `As a reaction: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
 }
 
-/** The card's lines: the sentence, then what each named condition does (the card names them; this explains them). */
+/** The card's lines (one paragraph: the sentence already explains every effect it names). */
 export function gearSummary(g: GearAction & { damageType?: string }): string[] {
-  const conds: Condition[] = [...(g.statuses?.self?.conditions ?? []), ...(g.statuses?.target?.conditions ?? [])].filter((c) => !once(c));
-  const seen = new Set<number>();
-  const explain = conds.filter((c) => !seen.has(c.id) && seen.add(c.id)).map((c) => [c.name, describeCondition(c)] as const).filter(([, d]) => d).map(([n, d]) => `${n}: ${d}.`);
-  return [actionSentence(g), ...explain];
+  return [actionSentence(g)];
 }
