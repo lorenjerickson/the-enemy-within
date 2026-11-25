@@ -37,7 +37,7 @@ import AreasEditor from "./AreasEditor";
 import { setPlaceMode, usePlaceMode } from "../../../../(play)/play/placeMode";
 import { placeImprovise } from "../../../../(play)/play/actions";
 import { gmPlaceImprovise } from "../../../../(play)/play/gmActions";
-import { templateArea, type Template } from "@/lib/improvise";
+import { templateArea, type Template } from "@/lib/templates";
 import type { Trap } from "@/lib/traps";
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";

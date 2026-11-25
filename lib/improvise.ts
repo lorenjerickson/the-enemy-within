@@ -5,6 +5,8 @@
  */
 import { db } from "@/lib/db";
 import type { TriggerOutcome } from "@/lib/triggers";
+import type { Template } from "@/lib/templates";
+export { templateArea, shifted, type Template } from "@/lib/templates";
 import type { AreaAt, LastingArea } from "@/lib/aoe";
 
 db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
@@ -31,24 +33,10 @@ export type ImproviseOutcome =
   | { kind: "effect"; effect: number; on: "self" | "target"; target?: number }
   | { kind: "area"; template: Template; settings: AreaSettings }; // place an area: the player places the template, the GM can move it
 
-/** An area template the GM sizes: a circle (radius ft), a rectangle (width × height ft), or a line from the improviser (length ft, 5 ft wide). */
-export type Template = { shape: "circle"; ft: number } | { shape: "rect"; ft: number; ft2: number } | { shape: "line"; ft: number };
 /** What a placed area does: as the GM's Areas settings (name, look, damage, save, effects, timings, lingering, flammable, who sees it), lasting `minutes` (0: until removed). */
 export type AreaSettings = Omit<LastingArea, "id" | "area" | "ends" | "conditions"> & { minutes: number; effectIds?: number[] }; // effectIds: catalogue effects put on whoever fails its save
 
-/** The template on the map where it was put (grid units: a circle's or rectangle's middle; a line runs from `from` toward it). */
-export function templateArea(t: Template, at: { x: number; y: number }, from: { x: number; y: number }): AreaAt {
-  const size = t.ft / 5;
-  if (t.shape === "circle") return { shape: "circle", origin: at, dir: 0, size };
-  if (t.shape === "rect") { const w = t.ft / 5, h = t.ft2 / 5; return { shape: "rect", origin: at, dir: 0, size: Math.max(w, h) / 2, w, h }; }
-  return { shape: "line", origin: from, dir: Math.atan2(at.y - from.y, at.x - from.x), size };
-}
 
-/** A critical failure: the system's d8 shifts where it lands to one of the eight compass points (1 = north, clockwise), by the template's own size. */
-export function shifted(at: { x: number; y: number }, t: Template, d8: number): { x: number; y: number } {
-  const angle = ((Math.max(1, Math.min(8, d8)) - 1) * Math.PI) / 4, dist = t.ft / 5;
-  return { x: at.x + Math.sin(angle) * dist, y: at.y - Math.cos(angle) * dist };
-}
 
 /** The roll an improvisation needs, if any: a skill check, a save or a plain ability roll, against a DC. */
 export type ImproviseRoll = { type: "check"; skill: string; dc: number } | { type: "save" | "ability"; attribute: string; dc: number };
