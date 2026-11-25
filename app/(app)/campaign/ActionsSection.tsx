@@ -6,6 +6,7 @@ import { describeCondition, asCondition, type Effect } from "@/lib/conditions";
 import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
 import EffectChips, { type EffectOption } from "./EffectChips";
+import CardPreview from "./CardPreview";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -37,6 +38,7 @@ function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?:
   }));
   return (
     <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
+      <CardPreview conditions={effects.map(asCondition)} />
       <input name="name" placeholder="Action name (e.g. Circle of Flames)" required defaultValue={initial?.name} className="input input-sm col-span-2 w-full" />
       <textarea name="description" placeholder="What the action does" defaultValue={initial?.description} className="textarea textarea-sm col-span-2 w-full" />
       <select name="roll" defaultValue={initial?.roll ?? "normal"} className="select select-sm w-full">
