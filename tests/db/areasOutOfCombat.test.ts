@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addLastingArea, getCondition, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addLastingArea, db, getCondition, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
 import { UNTIL_REMOVED, areaFromDrawn, inArea, type LastingArea } from "@/lib/aoe";
@@ -70,4 +70,15 @@ test("out of combat: a 'stays in it' area's effects come off as they walk out; a
   assert.equal(tokenHealth(t2)!.current, 20, "coming in: nothing");
   walkRoute(lv2, t2, row(1, 2, 5));
   assert.equal(tokenHealth(t2)!.current, 16, "leaving: caught");
+});
+
+test("out of combat, lingering harm lands every 6 s walked: after walking out of the fire it keeps hurting, less each time, until it fades", () => {
+  const lv = level();
+  addLastingArea(lv, { name: "Burning hall", look: "fire", area: areaFromDrawn({ shape: "rect", x: 2, y: 0, w: 1, h: 3 }), damage: "4", damageType: "fire", dc: 40, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["inside"], lingers: true, drawn: true });
+  const hal = character("Hal", { health: "20" });
+  db.prepare("UPDATE characters SET movement = ? WHERE id = ?").run(JSON.stringify({ walking: { value: 5, dist: "ft", per: "s" } }), hal);
+  const tok = placeCharacterToken(lv, hal, 0, 1);
+  const w = walkRoute(lv, tok, row(1, 0, 12)); // 60 ft at 5 ft/s: two 6 s marks, both out of the fire
+  assert.equal(tokenHealth(tok)!.current, 14, "4 walking through it, then 2 as it fades");
+  assert.ok(w.told.some((t) => /Burning hall still hurts: .*\(-2\), and it fades/.test(t)), w.told.join(" | "));
 });

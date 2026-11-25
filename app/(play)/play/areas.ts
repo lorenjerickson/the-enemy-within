@@ -4,7 +4,8 @@
  * work lasting areas out in round resolution instead. Saves are rolled by the server for now (players rolling their
  * own: the areas design, build step 5).
  */
-import { leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent } from "@/lib/db";
+import { getExposures, leaveAreaAfflictions, listLastingAreas, listStructures, listTokens, logSessionEvent, saveExposures } from "@/lib/db";
+import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
 import { caughtBy, type LastingArea } from "@/lib/aoe";
 import { fightersOn } from "@/lib/combat";
 import { rollDice } from "@/lib/dice";
@@ -16,7 +17,8 @@ import { applyConditionNow } from "./workOutRound";
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
 /** A lasting area catches a token: the save, the damage (half or none on a success), effects on a failed save. Returns what they're told. */
-export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false): string {
+export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false): string {
+  const exposures = l.lingers && !leaving ? getExposures(levelId) : null, extra = exposures ? exposureExtra(exposures, tokenId, harmOf(l)) : 0; // lingering: plus the build-up so far
   const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
   const f = fightersOn(levelId).get(tokenId);
@@ -25,7 +27,8 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
   const gm: string[] = [save ? `${l.save} ${save.total} vs DC ${l.dc}${saved ? " (saved)" : ""}` : ""].filter(Boolean), you: string[] = [];
   const h = tokenHealth(tokenId);
   if (l.damage && h) {
-    const rolled = Math.max(0, rollDice(l.damage)), n = saved ? (l.half ? Math.floor(rolled / 2) : 0) : rolled;
+    const rolled = Math.max(0, rollDice(l.damage)) + extra, n = saved ? (l.half ? Math.floor(rolled / 2) : 0) : rolled;
+    if (exposures && n > 0) { exposedInside(exposures, tokenId, l, n); saveExposures(levelId, exposures); }
     if (n > 0) {
       const next = takeDamage(h, n);
       saveTokenHealth(tokenId, next);
@@ -38,8 +41,9 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
     gm.push(`${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
-  logSessionEvent(`${name} ${leaving ? "leaves" : "walks into"} ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
-  return `You ${leaving ? "leave" : "walk into"} ${l.name}! ${you.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
+  const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
+  logSessionEvent(`${name} ${doing[0]} ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
+  return `You ${doing[1]} ${l.name}! ${you.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
 }
 
 /** Whether a step (token corners) comes into the area: outside where it starts, inside where it ends or halfway (a thin wall of fire stepped across). */
@@ -64,6 +68,30 @@ export function areasOnStep(levelId: number, tokenId: number, from: Point, to: P
       if (off.length) told.push(`Out of ${l.name}, you're no longer ${off.map((n) => n.toLowerCase()).join(" or ")}.`);
       if (fires.includes("leave")) told.push(catchInArea(levelId, l, tokenId, true));
     }
+  }
+  return told;
+}
+
+/**
+ * Another 6 s walked (an interval, out of combat): each lingering harm on the walker lands again: built up if they're
+ * still in an area of that kind, else less by its decay, until it's gone. What they're told.
+ */
+export function exposureTick(levelId: number, tokenId: number, at: Point): string[] {
+  const all = getExposures(levelId), list = all.get(tokenId);
+  if (!list?.length) return [];
+  const walls = movementBlockers(listStructures(levelId)), areas = listLastingAreas(levelId), told: string[] = [];
+  for (const e of [...list]) {
+    const inIt = areas.find((l) => l.lingers && harmOf(l) === e.kind && caughtBy(l.area, centre(at), walls));
+    if (inIt) { told.push(catchInArea(levelId, inIt, tokenId, false, true)); continue; } // still in it: it lands again, built up
+    const d = decayed(e), now = getExposures(levelId);
+    now.set(tokenId, (now.get(tokenId) ?? []).flatMap((x) => (x.kind === e.kind ? (d.next ? [d.next] : []) : [x])));
+    saveExposures(levelId, now);
+    const h = tokenHealth(tokenId);
+    if (!h || d.damage <= 0) continue;
+    const next = takeDamage(h, d.damage);
+    saveTokenHealth(tokenId, next);
+    logSessionEvent(`${listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone"}: ${e.source} still hurts (${d.damage}).`);
+    told.push(`${e.source} still hurts: ${severity(d.damage / Math.max(1, h.maximum))} (-${d.damage})${next.current <= 0 ? ", and you go down" : d.next ? "" : ", and it fades"}.`);
   }
   return told;
 }

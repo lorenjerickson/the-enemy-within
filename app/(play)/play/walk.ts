@@ -9,7 +9,7 @@ import { linkEntered } from "@/lib/levelLinks";
 import type { Point } from "@/lib/visibility";
 import { trapsOnStep, trapsWhereStopped } from "./traps";
 import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
-import { areasOnStep } from "./areas";
+import { areasOnStep, exposureTick } from "./areas";
 
 /** How a walk out of an encounter went: the corners walked (start first), whether it was cut short, what the walker
  * learns (traps, triggers' doings to them), and a level link they stepped onto (they're asked whether to take it). */
@@ -31,6 +31,8 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
   let link: Walk["link"];
   const links = listStructures(levelId);
   const told: string[] = [];
+  const fps = speedFps(tokenId, getTokenMover(tokenId)?.movement ?? "{}") || 5; // for how long the walk takes: lingering harm lands every 6 s of it
+  let seconds = 0;
   for (const step of route.slice(1)) {
     const from = walked[walked.length - 1];
     moveToken(tokenId, step.x, step.y); // also remembers what they saw from here
@@ -40,6 +42,9 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
     told.push(...sprung.map((t) => t.player));
     if (sprung.some((t) => t.stops)) { stopped = true; break; }
     told.push(...areasOnStep(levelId, tokenId, from, step)); // lasting areas (a fire wall left after a fight) catch whoever walks into them
+    const was = seconds;
+    seconds += (Math.hypot(step.x - from.x, step.y - from.y) * 5) / fps;
+    for (let k = Math.floor(was / 6); k < Math.floor(seconds / 6); k++) told.push(...exposureTick(levelId, tokenId, step)); // each 6 s walked: still burning…
     const fired = triggersOnStep(levelId, tokenId, from, step); // map triggers: the walker learns only what they do to them
     for (const f of fired) told.push(...(f.told.get(tokenId) ?? []));
     if (fired.some((f) => f.stops)) { stopped = true; break; }
