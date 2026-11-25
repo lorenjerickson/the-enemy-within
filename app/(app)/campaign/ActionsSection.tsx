@@ -7,6 +7,7 @@ import { DICE_PATTERN, MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { deleteAction, submitAction } from "./actions";
 import EffectChips, { type EffectOption } from "./EffectChips";
 import CardPreview from "./CardPreview";
+import ActionInterview from "./ActionInterview";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
 
@@ -180,7 +181,10 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
               <span className="text-sm opacity-70">{summary(a, new Map(effects.map((c) => [c.id, c.name])))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionForm owner={owner} initial={a} effects={effects} />
+            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} />
+            <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
+              <ActionForm owner={owner} initial={a} effects={effects} />
+            </details>
           </details>
           <form action={deleteAction.bind(null, owner, a.id)}>
             <button className="btn btn-ghost btn-xs">Remove</button>
@@ -189,7 +193,10 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionForm owner={owner} effects={effects} />
+        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} />
+        <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
+          <ActionForm owner={owner} effects={effects} />
+        </details>
       </details>
     </div>
   );

@@ -37,7 +37,7 @@ export interface Answers {
   durationUnit: ActionFields["duration_unit"];
   effects: number[]; // catalog effects (each lasts as the catalog says)
   // Kept as they were (not asked): an older action's other bonuses, roll mode, when a lasting area catches.
-  keep: Pick<ActionFields, "roll" | "area_fires" | "roll_grants"> & { boosts: Boost[] };
+  keep: Pick<ActionFields, "roll" | "area_fires" | "roll_grants" | "conditions"> & { boosts: Boost[] }; // conditions: on the other side (an attack that also helps its user)
 }
 
 export type Question =
@@ -92,7 +92,7 @@ export function fieldsFromAnswers(a: Answers): ActionFields {
     area_lasts: area && a.lasts ? 1 : 0, area_fires: a.keep.area_fires,
     target_who: isSelf(a) ? "" : a.targetWho, target_count: several ? a.count : "one", target_n: several ? a.n : 1,
     targets: isSelf(a) ? "self" : a.targetWho === "enemy" || attack ? "others" : "anyone",
-    conditions: has("effect") ? a.effects.map((id) => ({ id, on })) : [],
+    conditions: [...(has("effect") ? a.effects.map((id) => ({ id, on })) : []), ...a.keep.conditions.filter((c) => c.on !== on)],
   };
 }
 
@@ -106,7 +106,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
   const self = f?.targets === "self" || f?.kind === "reaction";
   const several = !area && (f?.target_count === "exactly" || f?.target_count === "upto");
   const affects = AFFECTS.filter((x) =>
-    x === "attack" ? !!f?.damage : x === "heal" ? !!heal : x === "defend" ? !!defend : x === "aid" ? !!aid : !!f?.conditions?.length);
+    x === "attack" ? !!f?.damage : x === "heal" ? !!heal : x === "defend" ? !!defend : x === "aid" ? !!aid : !!f?.conditions?.some((c) => c.on === (self ? "self" : "target")));
   const used = new Set([heal, defend, aid]);
   return {
     name: f?.name ?? "", description: f?.description ?? "", type: (f?.kind ?? "action") as ActionType, seconds: f?.seconds ?? 2,
@@ -118,7 +118,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
     defend: defend?.value.replace(/^\+/, "") ?? "", heal: heal?.value.replace(/^\+/, "") ?? "",
     aidTarget: aid?.target ?? "", aid: aid?.value.replace(/^\+/, "") ?? "",
     durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit ?? "minute",
-    effects: (f?.conditions ?? []).map((c) => c.id),
-    keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)) },
+    effects: (f?.conditions ?? []).filter((c) => c.on === (self ? "self" : "target")).map((c) => c.id),
+    keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)), conditions: (f?.conditions ?? []).filter((c) => c.on !== (self ? "self" : "target")) },
   };
 }

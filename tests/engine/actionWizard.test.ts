@@ -49,3 +49,9 @@ test("an older action's other bonuses survive being edited", () => {
   old.boosts.push({ target: "damage", value: "+1", on: "target" });
   assert.deepEqual(fieldsFromAnswers(answersFromAction(old)).boosts.map((b) => b.target), ["health", "damage"]);
 });
+
+test("effects an older action puts on its user as well as its target survive being edited", () => {
+  const old = fieldsFromAnswers(answer({ affects: ["attack", "effect"], damage: "1d6", effects: [3] }));
+  old.conditions.push({ id: 8, on: "self" });
+  assert.deepEqual(fieldsFromAnswers(answersFromAction(old)).conditions, [{ id: 3, on: "target" }, { id: 8, on: "self" }]);
+});
