@@ -25,7 +25,7 @@ import type { Attributes } from "@/lib/attributes";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
-import { addAffliction, addStrain, recordSightingAt } from "@/lib/db";
+import { addAffliction, addStrain, clearTokenTargets, recordSightingAt } from "@/lib/db";
 import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
 import { fireTrigger } from "./mapTriggers";
 import { clearAssist, clearHidden, setHidden, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
@@ -104,6 +104,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     return;
   }
   setPendingRound(levelId, null);
+  clearTokenTargets(levelId); // targets don't carry over to the next round (nor stay on someone who went down)
   closeRollOffRequests(); // the GM may have decided without waiting for them
   const { final, hp, log, frames, created, statuses, refits, story } = result;
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.

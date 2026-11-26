@@ -1405,6 +1405,11 @@ export function setTokenTarget(id: number, target: number | null): void {
   db.prepare<[number | null, number]>("UPDATE map_tokens SET target = ? WHERE id = ?").run(target, id);
 }
 
+/** Everyone's selected target on a level let go (after each round: targets don't carry over). */
+export function clearTokenTargets(levelId: number): void {
+  db.prepare<[number]>("UPDATE map_tokens SET target = NULL WHERE level_id = ?").run(levelId);
+}
+
 export function moveToken(id: number, col: number, row: number): void {
   db.prepare<[number, number, number]>("UPDATE map_tokens SET col = ?, row = ? WHERE id = ?").run(col, row, id);
   recordSighting(id);

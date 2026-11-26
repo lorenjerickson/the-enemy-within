@@ -524,10 +524,11 @@ async function planner() {
   return !error && me ? tokenPlanner(me.token_id) : null;
 }
 
-/** The player picks who's their target (clicking a token on the map): someone else they can see from where their plan has them. */
-export async function selectTarget(tokenId: number): Promise<{ error?: string }> {
+/** The player picks who's their target (clicking a token on the map): someone else they can see from where their plan has them; null lets it go. */
+export async function selectTarget(tokenId: number | null): Promise<{ error?: string }> {
   const p = await planner();
   if (!p) return { error: "Not in an encounter" };
+  if (tokenId === null) { setTokenTarget(p.tok.token_id, null); revalidatePath("/play"); return {}; }
   const id = Number(tokenId);
   if (id === p.tok.token_id) return {};
   if (!seenFrom(p.tok.level_id, planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), p.tok.token_id).has(id)) return { error: "You can't see them from there" };

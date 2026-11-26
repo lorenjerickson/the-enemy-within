@@ -1286,8 +1286,8 @@ export default function MapView({
           setGmPlanToken(tp.id);
         }
       } else if (readOnly) {
-        if (tp.id !== selectedTarget) startTransition(async () => {
-          const r = await selectTarget(tp.id);
+        startTransition(async () => { // clicking their target again lets it go
+          const r = await selectTarget(tp.id === selectedTarget ? null : tp.id);
           if (r.error) setControlResult({ label: "Target", ok: false, text: r.error });
         });
       } else if (planningAs === null) setSheetToken(tp.id);

@@ -182,8 +182,8 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
         return listTokens(me.level_id).filter((t) => seen.has(t.id)).map((t) => ({ id: t.id, name: labels.get(t.id)!, allegiance: t.allegiance, character_id: t.character_id }));
       })()
     : [];
-  // Who they have selected as their target (kept from last round), if they can see them now.
-  const selectedTarget = me && rp ? (() => { const id = getTokenTarget(me.token_id); return targets.some((t) => t.id === id) ? id : null; })() : null;
+  // Who they have selected as their target this round, if they can see them and they're still up.
+  const selectedTarget = me && rp ? (() => { const id = getTokenTarget(me.token_id); return id !== null && targets.some((t) => t.id === id) && !downTokens(me.level_id).has(id) ? id : null; })() : null;
   // Their gear as the plan leaves it: a planned refit counts for what they plan after it.
   const equipped = me ? afterRefits(tokenWho(me.token_id)?.equipment ?? {}, rp?.plan ?? []) : {};
   // The dice their plan needs (rolled before Ready), with what they came to once rolled.
