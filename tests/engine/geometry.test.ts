@@ -117,3 +117,18 @@ test("areaPolygon and descriptions", () => {
   assert.deepEqual(areaFires(null), ["end"]);
   assert.deepEqual(areaFires("enter,bogus,start"), ["enter", "start"]);
 });
+
+test("map effects as hazards: fog's oval (or the whole map), fire's circle as a burning area, and where fire spreads", async () => {
+  const { inFogOf, fireHazards, fireReaches } = await import("@/lib/aoe");
+  const fog = { id: 1, name: "Mist", kind: "fog", enabled: 1, x: 0, y: 0, w: 10, h: 4 };
+  assert.ok(inFogOf([fog], { x: 5, y: 2 }));
+  assert.ok(!inFogOf([fog], { x: 5, y: 5 }));
+  assert.ok(inFogOf([{ ...fog, x: null, y: null, w: null, h: null }], { x: 99, y: 99 }), "over the whole map");
+  assert.ok(!inFogOf([{ ...fog, enabled: 0 }], { x: 5, y: 2 }), "switched off");
+  const [fire] = fireHazards([{ id: 7, name: null, kind: "fire", enabled: 1, x: 0, y: 0, w: 4, h: 4 }]);
+  assert.equal(fire.id, -7);
+  assert.equal(fire.name, "Fire");
+  assert.deepEqual(fire.area, { shape: "circle", origin: { x: 2, y: 2 }, dir: 0, size: 2 });
+  const oil = { ...fire, id: 3, name: "Oil", damage: null, damageType: undefined, look: "fog", flammable: true, area: { shape: "circle", origin: { x: 3, y: 2 }, dir: 0, size: 1 } } as never;
+  assert.deepEqual(fireReaches([fire, oil]), [3]);
+});

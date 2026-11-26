@@ -1,4 +1,4 @@
-import { NO_SAVE_DC, ignite, isFire, caughtFire } from "@/lib/aoe";
+import { fireHazards, fireReaches, ignite, inFogOf } from "@/lib/aoe";
 import type { LastingArea } from "@/lib/aoe";
 import { db } from "@/lib/db/connection";
 import { getGameTime } from "@/lib/db/calendar";
@@ -26,12 +26,7 @@ export const FOG_SIGHT_FT = 15;
 
 /** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on. */
 export function inFog(levelId: number, p: { x: number; y: number }): boolean {
-  return listEffects(levelId).some((e) => {
-    if (!e.enabled || e.kind !== "fog") return false;
-    if (e.x === null || e.y === null || e.w === null || e.h === null) return true; // the whole map
-    const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
-    return ((p.x - cx) / (e.w / 2)) ** 2 + ((p.y - cy) / (e.h / 2)) ** 2 <= 1;
-  });
+  return inFogOf(listEffects(levelId), p);
 }
 
 /**
@@ -40,12 +35,7 @@ export function inFog(levelId: number, p: { x: number; y: number }): boolean {
  * areas design, Q7). A fire effect's area is the circle inside its rectangle; its id is the effect's, negated.
  */
 export function listHazards(levelId: number): LastingArea[] {
-  const fires = listEffects(levelId).filter((e) => e.enabled && e.kind === "fire" && e.x !== null && e.y !== null && e.w !== null && e.h !== null).map((e): LastingArea => ({
-    id: -e.id, name: e.name || "Fire", look: "fire", damage: "1d6", damageType: "fire", dc: NO_SAVE_DC, save: "agility", half: false, ends: 1e9,
-    area: { shape: "circle", origin: { x: e.x! + e.w! / 2, y: e.y! + e.h! / 2 }, dir: 0, size: Math.min(e.w!, e.h!) / 2 },
-    fires: ["inside"], lingers: true, buildUp: 1, decay: 2, drawn: true,
-  }));
-  return [...listLastingAreas(levelId).filter((l) => !l.off), ...fires];
+  return [...listLastingAreas(levelId).filter((l) => !l.off), ...fireHazards(listEffects(levelId))];
 }
 
 /** One lasting area (or none, gone or run out). */
@@ -67,9 +57,9 @@ export function igniteAreas(ids: number[]): void {
 /** Out of a round: any fire on the level (a fire area, a fire map effect) touching a flammable area sets it burning (and so on, as it spreads). */
 export function spreadFire(levelId: number): void {
   for (let pass = 0; pass < 10; pass++) {
-    const all = listHazards(levelId), lit = all.filter((l) => isFire(l) && !l.flammable).flatMap((f) => caughtFire(all, f.area)).filter((id) => id > 0);
+    const lit = fireReaches(listHazards(levelId));
     if (!lit.length) return;
-    igniteAreas([...new Set(lit)]);
+    igniteAreas(lit);
   }
 }
 

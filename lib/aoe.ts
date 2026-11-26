@@ -153,3 +153,36 @@ export function areaPolygon(a: AreaAt): Point[] {
 }
 
 export const describeArea = (a: Pick<AreaSpec, "shape" | "ft">) => `${a.ft} ft ${a.shape === "circle" ? "radius" : a.shape}`;
+
+// ---------- Map effects as hazards (pure: the database side is lib/db/areas.ts) ----------
+
+/** A placed map effect, as far as hazards care: what it is, whether it's on, and its rectangle (none: the whole map). */
+export type PlacedEffect = { id: number; name: string | null; kind: string; enabled: number | boolean; x: number | null; y: number | null; w: number | null; h: number | null };
+
+/** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on. */
+export function inFogOf(effects: PlacedEffect[], p: { x: number; y: number }): boolean {
+  return effects.some((e) => {
+    if (!e.enabled || e.kind !== "fog") return false;
+    if (e.x === null || e.y === null || e.w === null || e.h === null) return true; // the whole map
+    const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+    return ((p.x - cx) / (e.w / 2)) ** 2 + ((p.y - cy) / (e.h / 2)) ** 2 <= 1;
+  });
+}
+
+/**
+ * Placed fire map effects (switched on) as areas: they burn whoever is in them like a lingering fire area (1d6 fire
+ * each interval, no save, +1 while inside, −2 after; the areas design, Q7). The circle inside the effect's rectangle;
+ * its id is the effect's, negated.
+ */
+export function fireHazards(effects: PlacedEffect[]): LastingArea[] {
+  return effects.filter((e) => e.enabled && e.kind === "fire" && e.x !== null && e.y !== null && e.w !== null && e.h !== null).map((e): LastingArea => ({
+    id: -e.id, name: e.name || "Fire", look: "fire", damage: "1d6", damageType: "fire", dc: NO_SAVE_DC, save: "agility", half: false, ends: 1e9,
+    area: { shape: "circle", origin: { x: e.x! + e.w! / 2, y: e.y! + e.h! / 2 }, dir: 0, size: Math.min(e.w!, e.h!) / 2 },
+    fires: ["inside"], lingers: true, buildUp: 1, decay: 2, drawn: true,
+  }));
+}
+
+/** Which flammable lasting areas the fires among these hazards reach now (ids; one step of fire spreading). */
+export const fireReaches = (hazards: LastingArea[]): number[] =>
+  [...new Set(hazards.filter((l) => isFire(l) && !l.flammable).flatMap((f) => caughtFire(hazards, f.area)).filter((id) => id > 0))];
+

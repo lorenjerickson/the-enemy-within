@@ -1,4 +1,5 @@
 import { db } from "@/lib/db/connection";
+import { numberedNames } from "@/lib/containers";
 import { getEncounter, saveEncounter, setEncounterWaiting, getEncounterWaiting } from "@/lib/db/encounters";
 import type { CreatureType } from "@/lib/creatureTypes";
 import type { Attributes } from "@/lib/attributes";
@@ -408,16 +409,7 @@ export function getTokenMover(tokenId: number): { token_id: number; level_id: nu
 
 /** Token names on a level, with several of the same name numbered (Human 1, Human 2) so they can be told apart. */
 export function tokenLabels(levelId: number): Map<number, string> {
-  const tokens = listTokens(levelId);
-  const count = new Map<string, number>(), seen = new Map<string, number>();
-  for (const t of tokens) count.set(t.name, (count.get(t.name) ?? 0) + 1);
-  return new Map(
-    tokens.map((t) => {
-      const n = (seen.get(t.name) ?? 0) + 1;
-      seen.set(t.name, n);
-      return [t.id, count.get(t.name)! > 1 ? `${t.name} ${n}` : t.name];
-    })
-  );
+  return numberedNames(listTokens(levelId));
 }
 
 /** Every player's character and where its tokens are (a row per token: location and level), or nowhere yet. */

@@ -1,5 +1,6 @@
 import type { ItemType, Rarity, EquipSlot } from "@/lib/itemTypes";
 import { db } from "@/lib/db/connection";
+import { fillStacks } from "@/lib/containers";
 import { MOVEMENT_TYPES } from "@/lib/creatureTypes";
 import type { CreatureType, Movement } from "@/lib/creatureTypes";
 import type { Attributes, Attribute } from "@/lib/attributes";
@@ -497,22 +498,11 @@ export function addToContainer(characterId: number, containerId: number, itemId:
   if (!container?.capacity || !item || item.id === containerId) return qty;
   const max = Math.max(1, item.max_stack ?? 1);
   return db.transaction(() => {
-    let left = qty;
     const stacks = db.prepare<[number, number], { id: number; item_id: number; qty: number }>("SELECT id, item_id, qty FROM container_items WHERE character_id = ? AND container_id = ?").all(characterId, containerId);
-    for (const s of stacks) {
-      if (s.item_id !== itemId || s.qty >= max || left <= 0) continue;
-      const put = Math.min(left, max - s.qty);
-      db.prepare("UPDATE container_items SET qty = qty + ? WHERE id = ?").run(put, s.id);
-      left -= put;
-    }
-    let free = container.capacity! - stacks.length;
-    while (left > 0 && free > 0) {
-      const put = Math.min(left, max);
-      db.prepare("INSERT INTO container_items (character_id, container_id, item_id, qty) VALUES (?, ?, ?, ?)").run(characterId, containerId, itemId, put);
-      left -= put;
-      free--;
-    }
-    return left;
+    const fill = fillStacks(stacks, itemId, qty, max, container.capacity!);
+    for (const t of fill.topUps) db.prepare("UPDATE container_items SET qty = qty + ? WHERE id = ?").run(t.put, t.id);
+    for (const put of fill.newStacks) db.prepare("INSERT INTO container_items (character_id, container_id, item_id, qty) VALUES (?, ?, ?, ?)").run(characterId, containerId, itemId, put);
+    return fill.left;
   })();
 }
 
