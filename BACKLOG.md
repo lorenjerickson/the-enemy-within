@@ -53,6 +53,7 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
   - R14. ✅ A token shows its player's name on hover.
   - R15. A round recap with the numbers for the GM, kept after the replay ends (every roll, modifier, DC, save and damage, as in the round log), so rules like Dodge can be checked. Dodge seems to work (R5) but can't be seen: the attacker's line should say "with disadvantage (Dodge)", and players' stories "you dodge: their attack has disadvantage".
   - R16. After rolling, the 3D dice stay on the game area: clear them once the roll has settled.
+  - R17. A token with no movement planned is "held up" every second (Loren, round 6 on level 17: Sigmund planned only Dodge; the spider closed in to attack; Sigmund's story then says "Blind Boiler 2 gets in your way, holding you up" ×5). The saved story has `blocked` events for Sigmund with intent "move": the resolver thought Sigmund wanted to move every second from 2 s on. Likely: at 1 s the spider's close-in ended overlapping Sigmund (gridless "same spot" is < 0.9 apart), the move was contested and Sigmund pushed aside, after which his plan (stand at his starting spot) kept trying to walk back into the spider. Fix to try: a token whose plan has no moves wants to stay wherever it is (not its starting spot), and closing in never ends within 0.9 of anyone; reproduce first with a gridless round test. Round 6's GM log wasn't kept (only the last round's is): see R15.
 
 Earlier:
 
