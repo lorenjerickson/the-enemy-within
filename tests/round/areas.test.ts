@@ -153,3 +153,15 @@ test("fire reaching a flammable area sets it alight: a fire area attack landing 
   const cold = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball({ damageType: "cold" }), aim: aimAt(5, 5) })])], { 1: fighter() }, { lasting: [oil] });
   assert.deepEqual(cold.ignited, [], "cold doesn't light it");
 });
+
+test("an area with no damage of its own (a smoke bomb) hurts no one: not the user's weapon damage", () => {
+  const blinded = condition(41, "Blinded", [{ kind: "roll", roll: "attack", mode: "disadvantage" }]);
+  const smoke = gear({ name: "Popping Smoke", damage: null, area: { shape: "circle", ft: 15, dc: 99, save: "agility", half: false, at: "self" }, statuses: { minutes: 0.1, target: { source: "Popping Smoke", boosts: [], grants: [], conditions: [blinded] } } });
+  const r = resolve(
+    [mover(1, { col: 5, row: 5 }, [act("attack", { use: smoke, aim: aimAt(5, 5) })]), mover(2, { col: 6, row: 5 })],
+    { 1: fighter({ dmg: 7 }), 2: fighter({ hp: 7 }) },
+  );
+  assert.equal(r.hp.get(2), 7);
+  assert.ok(!r.log.some((l) => /damage \(|is down/.test(l)), r.log.join("\n"));
+  assert.ok(r.log.some((l) => /is caught in Popping Smoke/.test(l)), r.log.join("\n"));
+});

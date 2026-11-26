@@ -568,7 +568,8 @@ export function resolveMovement(
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
         if (except >= 0) lastHitBy.set(id, except);
       }
-      log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}${t.note}; ${left} left.`);
+      if (spec.dc >= NO_SAVE_DC) log.push(`${sec} s: ${name} is caught in ${what}${taken ? `, takes ${taken}${t.note}; ${left} left` : ""}.`);
+      else log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}${t.note}; ${left} left.`);
       hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
       story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken), dmg: taken });
       if (left <= 0) {
@@ -1260,8 +1261,9 @@ export function resolveMovement(
         if (step.use.damageType === "fire") for (const id of caughtFire(lasting, at)) if (!ignited.includes(id)) { ignited.push(id); say(`${lasting.find((l) => l.id === id)!.name} catches fire!`); }
         let hits: AreaHit[] = [];
         if (me) {
-          const dmg = usingDice(step.dice?.damage, () => me.damage(step.use));
-          say(`${m.name} uses ${step.use.name} (${describeArea(area)}): ${dmg.total} damage (${dmg.text}), ${area.save} save DC ${area.dc}.`);
+          // No damage of its own (a smoke bomb: only its effects): none, not their weapon's.
+          const dmg = step.use.damage ? usingDice(step.dice?.damage, () => me.damage(step.use)) : { total: 0, text: "no damage" };
+          say(`${m.name} uses ${step.use.name} (${describeArea(area)})${step.use.damage ? `: ${dmg.total} damage (${dmg.text})` : ""}${area.dc < NO_SAVE_DC ? `, ${area.save} save DC ${area.dc}` : ""}.`);
           story.push({ sec, k: "area", who: m.tokenId, name: step.use.name });
           // Selective: only the kind it's for (friendlies / enemies), the ones picked, or at most N of them (nearest the aim).
           const tg = step.use.targeting, mine = fighters.get(m.tokenId)?.allegiance ?? "hostile";
