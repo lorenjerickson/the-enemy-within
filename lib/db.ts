@@ -51,6 +51,8 @@ export * from "@/lib/db/mapThings";
 import { listEffects } from "@/lib/db/mapThings";
 export * from "@/lib/db/effects";
 import { saveEffectDef, settleEffects, LIFECYCLE_COLUMNS, type OldEffectDef, oldModifiers } from "@/lib/db/effects";
+export * from "@/lib/db/areas";
+export * from "@/lib/db/traps";
 
 // Professions are progressions of ranks: each rank (a `professions` row) belongs to a profession (`profession_groups`),
 // and a character has one rank (`characters.rank_id`), holding every rank before it too.
@@ -246,108 +248,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS lasting_areas (
   spec TEXT NOT NULL
 )`);
 
-export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): number {
-  const { name, ends, ...spec } = a;
-  db.prepare("DELETE FROM lasting_areas WHERE ends <= ?").run(getGameTime());
-  return Number(db.prepare("INSERT INTO lasting_areas (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(levelId, name, ends, JSON.stringify(spec)).lastInsertRowid);
-}
-
 // Exposure to lingering areas' harm, per level: who is still burning, poisoned… (lib/exposure.ts), as JSON.
 db.exec("CREATE TABLE IF NOT EXISTS level_exposure (level_id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
-export function getExposures(levelId: number): Exposures {
-  const r = db.prepare<[number], { data: string }>("SELECT data FROM level_exposure WHERE level_id = ?").get(levelId);
-  return new Map(r ? (JSON.parse(r.data) as [number, Exposure[]][]) : []);
-}
-export function saveExposures(levelId: number, all: Exposures): void {
-  const data = [...all].filter(([, l]) => l.length);
-  db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
-}
-
-/** How far anyone sees in fog (feet): fog map effects are Obscured (the areas design, Q7). */
-export const FOG_SIGHT_FT = 15;
-
-/** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on. */
-export function inFog(levelId: number, p: { x: number; y: number }): boolean {
-  return listEffects(levelId).some((e) => {
-    if (!e.enabled || e.kind !== "fog") return false;
-    if (e.x === null || e.y === null || e.w === null || e.h === null) return true; // the whole map
-    const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
-    return ((p.x - cx) / (e.w / 2)) ** 2 + ((p.y - cy) / (e.h / 2)) ** 2 <= 1;
-  });
-}
-
-/**
- * Every area that does something on a level: its lasting areas, and placed fire map effects (switched on), which burn
- * whoever is in them like a lingering fire area (1d6 fire each interval, no save, +1 while inside, −2 after; the
- * areas design, Q7). A fire effect's area is the circle inside its rectangle; its id is the effect's, negated.
- */
-export function listHazards(levelId: number): LastingArea[] {
-  const fires = listEffects(levelId).filter((e) => e.enabled && e.kind === "fire" && e.x !== null && e.y !== null && e.w !== null && e.h !== null).map((e): LastingArea => ({
-    id: -e.id, name: e.name || "Fire", look: "fire", damage: "1d6", damageType: "fire", dc: NO_SAVE_DC, save: "agility", half: false, ends: 1e9,
-    area: { shape: "circle", origin: { x: e.x! + e.w! / 2, y: e.y! + e.h! / 2 }, dir: 0, size: Math.min(e.w!, e.h!) / 2 },
-    fires: ["inside"], lingers: true, buildUp: 1, decay: 2, drawn: true,
-  }));
-  return [...listLastingAreas(levelId).filter((l) => !l.off), ...fires];
-}
-
-/** One lasting area (or none, gone or run out). */
-export function getLastingArea(id: number): (LastingArea & { level_id: number }) | undefined {
-  const r = db.prepare<[number], { id: number; level_id: number; name: string; ends: number; spec: string }>("SELECT id, level_id, name, ends, spec FROM lasting_areas WHERE id = ?").get(id);
-  return r ? { id: r.id, level_id: r.level_id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) } : undefined;
-}
-
-/** Fire reaches these flammable areas: each burns for a few rounds (`ignite`), then it's spent. */
-export function igniteAreas(ids: number[]): void {
-  for (const id of ids) {
-    const a = getLastingArea(id);
-    if (!a?.flammable) continue;
-    const { id: _id, level_id: _l, ...rest } = a;
-    updateLastingArea(id, ignite({ id, ...rest }, getGameTime()));
-  }
-}
-
-/** Out of a round: any fire on the level (a fire area, a fire map effect) touching a flammable area sets it burning (and so on, as it spreads). */
-export function spreadFire(levelId: number): void {
-  for (let pass = 0; pass < 10; pass++) {
-    const all = listHazards(levelId), lit = all.filter((l) => isFire(l) && !l.flammable).flatMap((f) => caughtFire(all, f.area)).filter((id) => id > 0);
-    if (!lit.length) return;
-    igniteAreas([...new Set(lit)]);
-  }
-}
-
-/** A lasting area switched on or off (a trigger, the GM). */
-export function setLastingAreaOff(id: number, off: boolean): void {
-  const a = getLastingArea(id);
-  if (!a) return;
-  const { id: _id, level_id: _l, ...rest } = a;
-  updateLastingArea(id, { ...rest, off: off || undefined });
-}
-
-/** A hidden lasting area is found (players see it from now on). */
-export function setLastingAreaFound(id: number): void {
-  const a = getLastingArea(id);
-  if (!a || a.found || (a.visibility ?? "shown") !== "hidden") return;
-  const { id: _id, level_id: _l, ...rest } = a;
-  updateLastingArea(id, { ...rest, found: true });
-}
-
-/** The GM changes a lasting area (everything but where it is). */
-export function updateLastingArea(id: number, a: Omit<LastingArea, "id">): void {
-  const { name, ends, ...spec } = a;
-  db.prepare<[string, number, string, number]>("UPDATE lasting_areas SET name = ?, ends = ?, spec = ? WHERE id = ?").run(name, ends, JSON.stringify(spec), id);
-}
-
-/** A level's lasting areas still in effect. */
-export function listLastingAreas(levelId: number): LastingArea[] {
-  return db
-    .prepare<[number, number], { id: number; name: string; ends: number; spec: string }>("SELECT id, name, ends, spec FROM lasting_areas WHERE level_id = ? AND ends > ? ORDER BY id")
-    .all(levelId, getGameTime())
-    .map((r) => ({ id: r.id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) }));
-}
-
-export function removeLastingArea(id: number): void {
-  db.prepare("DELETE FROM lasting_areas WHERE id = ?").run(id);
-}
 
 // ---------- Statuses ----------
 
@@ -833,62 +735,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_traps (
   sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
 )`);
 
-addColumn("map_traps", "seen_by", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids: who saw it go off (their players see it; others don't)
-type TrapRow = Omit<Trap, "area" | "springs" | "effects" | "sprung" | "seen_by"> & { area: string; springs: string; effects: string; sprung: string; seen_by: string };
-const parseTrap = (r: TrapRow): Trap => ({ ...r, area: JSON.parse(r.area), springs: r.springs ? areaFires(r.springs) : [] /* none: only a trigger sets it off */, effects: JSON.parse(r.effects), sprung: JSON.parse(r.sprung), seen_by: JSON.parse(r.seen_by ?? "[]") });
-
-/** A level's traps. */
-export function listTraps(levelId: number): Trap[] {
-  return db.prepare<[number], TrapRow>("SELECT * FROM map_traps WHERE level_id = ? ORDER BY id").all(levelId).map(parseTrap);
-}
-
-export function getTrap(id: number): (Trap & { level_id: number }) | undefined {
-  const r = db.prepare<[number], TrapRow & { level_id: number }>("SELECT * FROM map_traps WHERE id = ?").get(id);
-  return r ? { ...parseTrap(r), level_id: r.level_id } : undefined;
-}
-
-/** Places a trap (the rest as the defaults: springs on entering, once, Agility DC 12 for half, stops the mover, DC 14 to find); returns its id. */
-export function addTrap(levelId: number, area: TrapArea, name = "Trap"): number {
-  return Number(db.prepare("INSERT INTO map_traps (level_id, name, area) VALUES (?, ?, ?)").run(levelId, name, JSON.stringify(area)).lastInsertRowid);
-}
-
-/** Saves what a trap does (not where it is, whether it's found, or whom it has sprung on). */
-export function saveTrap(id: number, t: Omit<Trap, "id" | "area" | "found" | "sprung">): void {
-  db.prepare(`UPDATE map_traps SET name = @name, springs = @springs, who = @who, often = @often, damage = @damage, damage_type = @damage_type,
-    save_attr = @save_attr, save_dc = @save_dc, save_half = @save_half, effects = @effects, stops = @stops, find_dc = @find_dc WHERE id = @id`)
-    .run({ ...t, springs: t.springs.join(","), effects: JSON.stringify(t.effects), damage: t.damage || null, id });
-}
-
-export function moveTrap(id: number, area: TrapArea): void {
-  db.prepare("UPDATE map_traps SET area = ? WHERE id = ?").run(JSON.stringify(area), id);
-}
-
-export function deleteTrap(id: number): void {
-  db.prepare("DELETE FROM map_traps WHERE id = ?").run(id);
-}
-
-/** Found (by a Search) or revealed by the GM: players see it; hidden again (false). */
-export function setTrapFound(id: number, found: boolean): void {
-  db.prepare("UPDATE map_traps SET found = ? WHERE id = ?").run(found ? 1 : 0, id);
-}
-
-/** Who saw a trap go off (added to those who already had): their players see it on the map. */
-export function trapSeenBy(id: number, tokenIds: number[]): void {
-  const t = getTrap(id);
-  if (!t) return;
-  db.prepare("UPDATE map_traps SET seen_by = ? WHERE id = ?").run(JSON.stringify([...new Set([...(t.seen_by ?? []), ...tokenIds])]), id);
-}
-
-/** Records that a trap sprang on a token (spending it, or spending it for them). */
-export function markTrapSprung(id: number, tokenId: number): void {
-  const t = getTrap(id);
-  if (t && !t.sprung.includes(tokenId)) db.prepare("UPDATE map_traps SET sprung = ? WHERE id = ?").run(JSON.stringify([...t.sprung, tokenId]), id);
-}
-
-/** Re-arms a trap (whom it has sprung on is forgotten). */
-export function resetTrap(id: number): void {
-  db.prepare("UPDATE map_traps SET sprung = '[]' WHERE id = ?").run(id);
-}
+addColumn("map_traps", "seen_by", "TEXT NOT NULL DEFAULT '[]'");
 
 // ---------- Map triggers (lib/triggers.ts) ----------
 
@@ -905,45 +752,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_triggers (
   sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
 )`);
 
-addColumn("map_triggers", "interact", "INTEGER NOT NULL DEFAULT 0"); // fires when someone within reach Interacts with it
-type MapTriggerRow = Omit<MapTrigger, "area" | "springs" | "outcomes" | "sprung" | "interact"> & { area: string; springs: string; outcomes: string; sprung: string; interact: number };
-const parseTrigger = (r: MapTriggerRow): MapTrigger => ({ ...r, area: JSON.parse(r.area), springs: areaFires(r.springs), outcomes: JSON.parse(r.outcomes), sprung: JSON.parse(r.sprung), interact: !!r.interact });
-
-/** A level's map triggers. */
-export function listMapTriggers(levelId: number): MapTrigger[] {
-  return db.prepare<[number], MapTriggerRow>("SELECT * FROM map_triggers WHERE level_id = ? ORDER BY id").all(levelId).map(parseTrigger);
-}
-
-export function getMapTrigger(id: number): (MapTrigger & { level_id: number }) | undefined {
-  const r = db.prepare<[number], MapTriggerRow & { level_id: number }>("SELECT * FROM map_triggers WHERE id = ?").get(id);
-  return r ? { ...parseTrigger(r), level_id: r.level_id } : undefined;
-}
-
-/** Places a map trigger (springs on entering, once, doing nothing until it's given outcomes); returns its id. */
-export function addMapTrigger(levelId: number, area: TrapArea, name = "Trigger"): number {
-  return Number(db.prepare("INSERT INTO map_triggers (level_id, name, area) VALUES (?, ?, ?)").run(levelId, name, JSON.stringify(area)).lastInsertRowid);
-}
-
-/** Saves when a map trigger fires, for whom, how often, and what it does. */
-export function saveMapTrigger(id: number, t: Omit<MapTrigger, "id" | "area" | "sprung">): void {
-  db.prepare("UPDATE map_triggers SET name = @name, springs = @springs, who = @who, often = @often, outcomes = @outcomes, interact = @interact WHERE id = @id")
-    .run({ ...t, springs: t.springs.join(","), outcomes: JSON.stringify(t.outcomes), interact: t.interact ? 1 : 0, id });
-}
-
-export function deleteMapTrigger(id: number): void {
-  db.prepare("DELETE FROM map_triggers WHERE id = ?").run(id);
-}
-
-/** Records that a map trigger fired for a token. */
-export function markMapTriggerSprung(id: number, tokenId: number): void {
-  const t = getMapTrigger(id);
-  if (t && !t.sprung.includes(tokenId)) db.prepare("UPDATE map_triggers SET sprung = ? WHERE id = ?").run(JSON.stringify([...t.sprung, tokenId]), id);
-}
-
-/** Re-arms a map trigger (whom it has fired for is forgotten). */
-export function resetMapTrigger(id: number): void {
-  db.prepare("UPDATE map_triggers SET sprung = '[]' WHERE id = ?").run(id);
-}
+addColumn("map_triggers", "interact", "INTEGER NOT NULL DEFAULT 0");
 
 // Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
 settleEffects();
