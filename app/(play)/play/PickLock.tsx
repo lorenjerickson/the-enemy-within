@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { setPlaceMode } from "./placeMode";
 import type { Template } from "@/lib/improvise";
 import { cancelImprovise, improvise, hidePlanOptions, startHide, interactDoor, interactThing, pickLock, planStep, search, setPlanReady, rollPlan, removeStep, setStanding, useItemNow } from "./actions";
@@ -179,6 +179,14 @@ export default function PickLock({
     : `${base}: not available yet`;
 
   // Once the last round has played back: step through it second by second (only what they could have seen).
+  // While the last round plays back, planning is closed (the panel is shown, but nothing in it can be used).
+  const [, tick] = useState(0);
+  const replaying = !!lastRound && Date.now() < lastRound.endsAt;
+  useEffect(() => {
+    if (!replaying || !lastRound) return;
+    const t = setTimeout(() => tick((n) => n + 1), lastRound.endsAt - Date.now() + 50);
+    return () => clearTimeout(t);
+  }, [replaying, lastRound]);
   const scrubber = lastRound && Date.now() > lastRound.endsAt ? <RoundScrubber round={lastRound.round} seconds={lastRound.seconds} /> : null;
   if (down) {
     return (
@@ -192,7 +200,13 @@ export default function PickLock({
     );
   }
   return (
-    <div className="space-y-3 text-sm">
+    <div className="relative space-y-3 text-sm">
+      {replaying && lastRound && (
+        <div role="status" className="alert alert-info sticky top-0 z-10 text-sm" data-replay-lock>
+          Round {lastRound.round} is playing back. Planning opens when it ends.
+        </div>
+      )}
+      <div className={replaying ? "pointer-events-none select-none space-y-3 opacity-40" : "space-y-3"} inert={replaying} aria-disabled={replaying}>
       {scrubber}
       {!plan && told && <p className="text-xs" data-use-told>{told}</p>}
       {hideSpots && (
@@ -367,6 +381,7 @@ export default function PickLock({
       })}
 
       {error && <p className="text-warning">{error}</p>}
+      </div>
     </div>
   );
 }

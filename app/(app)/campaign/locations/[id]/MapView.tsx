@@ -1543,6 +1543,7 @@ export default function MapView({
                 // Centred on the part of the map the dock leaves visible.
                 style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
               >
+                {!("scrubbing" in replayFrame) && <div className="mb-1 text-center text-lg font-bold uppercase tracking-wide text-info" data-replay-banner>Replaying round {replay.round}</div>}
                 <div className="font-semibold">
                   Round {replay.round}{replayFrame.startsIn ? ` plays in ${replayFrame.startsIn}…` : replayFrame.sec === 0 ? " · before it" : ` · ${replayFrame.sec} s`}
                   {"scrubbing" in replayFrame && <span className="ml-2 badge badge-warning badge-sm">replay (only you see this)</span>}
