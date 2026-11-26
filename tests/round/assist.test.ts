@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { act, attack, fighter, mover, resolve } from "./harness";
+import { act, attack, condition, fighter, mover, resolve } from "./harness";
 import { playerStory } from "@/lib/roundStory";
 import { SaveNeeded, type RoundTrap } from "@/lib/resolveRound";
 
@@ -42,8 +42,9 @@ test("unhelped, the same check fails", () => {
 });
 
 test("a player's own save mid-round, once helped: they're asked to roll it with advantage, and the help is spent on it", () => {
-  // T1 helps T2 (1st second); T2 then walks into a pit that wants an Agility save (T2 rolls its own saves).
-  const pit: RoundTrap = { id: 1, name: "Pit", area: { shape: "rect" as const, x: 3, y: 0, w: 1, h: 1 }, springs: ["enter"], who: "", often: "once", damage: "6", damage_type: "piercing", save_attr: "agility", save_dc: 12, save_half: 1, effects: [], stops: 0, find_dc: 14, found: 0, sprung: [], given: [] };
+  // T1 helps T2 (1st second); T2 then walks into a pit whose net wants an Agility save as it lands (T2 rolls its own saves).
+  const net = condition(6, "Netted", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "agility", apply_save_dc: 12 });
+  const pit: RoundTrap = { id: 1, name: "Pit", area: { shape: "rect" as const, x: 3, y: 0, w: 1, h: 1 }, springs: ["enter"], who: "", often: "once", damage: "6", damage_type: "piercing", save_attr: "", save_dc: 12, save_half: 1, effects: [], stops: 0, find_dc: 14, found: 0, sprung: [], given: [net] };
   const run = (decisions: Record<string, number> = {}) => resolve(
     [mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("wait"), { kind: "move", to: { col: 3, row: 0 }, feet: 10 }])],
     { 1: fighter(), 2: fighter({ hp: 20 }) },

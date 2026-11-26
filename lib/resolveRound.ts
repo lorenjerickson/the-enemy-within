@@ -1,12 +1,12 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { NO_SAVE_DC, caughtBy, caughtFire, describeArea, isFire, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { caughtBy, caughtFire, describeArea, isFire, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
 import { savePct, whileWithin } from "@/lib/conditions";
 import { decayed, exposedInside, exposureExtra, harmOf, type Exposures } from "@/lib/exposure";
-import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
+import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
 import type { RollMode } from "@/lib/actions";
 import { FEET_PER_SQUARE, clearPath, crosses, reachableSquares, routeTo, shortestPath, squareKey } from "@/lib/movement";
@@ -555,11 +555,10 @@ export function resolveMovement(
     for (const id of [...fighters.keys()]) {
       const p = where(id);
       if (id === except || down.has(id) || !p || (!anywhere && !caughtBy(at, { x: p.col + 0.5, y: p.row + 0.5 }, effectWalls)) || (only && !only(id))) continue; // anywhere: those `only` names (leaving it)
-      const f = fighters.get(id)!, name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
-      const s = f.save && spec.dc < NO_SAVE_DC ? saveRoll(id, spec.save, spec.dc, `area:${sec}:${what}:${id}`, what, sec) : { total: 0, text: "no save" }; // no save: it always lands
-      const saved = s.total >= spec.dc;
+      const name = order.find((o) => o.tokenId === id)?.name ?? bystanders.find((b) => b.tokenId === id)?.name ?? "someone";
+      // No save against an area (Q): its damage always lands; each effect it puts on has its own save as it lands.
       const all = total + (bonus?.(id) ?? 0); // lingering: plus the build-up so far
-      const t = takenBy(id, saved ? (spec.half ? Math.floor(all / 2) : 0) : all, type);
+      const t = takenBy(id, all, type);
       const taken = t.n;
       onTaken?.(id, taken);
       const left = Math.max(0, hp.get(id)! - taken);
@@ -569,10 +568,9 @@ export function resolveMovement(
         hitAt.set(id, [...(hitAt.get(id) ?? []), sec]);
         if (except >= 0) lastHitBy.set(id, except);
       }
-      if (spec.dc >= NO_SAVE_DC) log.push(`${sec} s: ${name} is caught in ${what}${taken ? `, takes ${taken}${t.note}; ${left} left` : ""}.`);
-      else log.push(`${sec} s: ${name} saves (${spec.save}): ${s.total} (${s.text}) vs DC ${spec.dc}, ${saved ? (taken ? `half damage (${taken})` : "no damage") : `fails, takes ${taken}`}${t.note}; ${left} left.`);
-      hits.push({ id, outcome: left <= 0 ? "down" : !saved ? "hit" : taken ? "half" : "save" });
-      story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: !saved ? "hit" : taken ? "half" : "save", hurt: hurt(id, taken), dmg: taken });
+      log.push(`${sec} s: ${name} is caught in ${what}${taken ? `, takes ${taken}${t.note}; ${left} left` : ""}.`);
+      hits.push({ id, outcome: left <= 0 ? "down" : "hit" });
+      story.push({ sec, k: "caught", who: id, by: except >= 0 ? except : null, name: what, outcome: "hit", hurt: hurt(id, taken), dmg: taken });
       if (left <= 0) {
         story.push({ sec, k: "down", who: id });
         down.add(id);
@@ -600,7 +598,7 @@ export function resolveMovement(
       l.lingers && when !== "leave" ? (id, n) => { exposedThisRound.add(`${id}:${kind}`); if (n > 0) exposedInside(exposure, id, l, n); } : undefined);
     if (!hits.length) return;
     const how = when === "enter" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} coming into it` : when === "leave" ? `catches ${hits.map((h) => nameOf(h.id)).join(", ")} leaving it` : when === "start" ? "catches whoever starts the round in it" : "lingers";
-    log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage, ${l.save} save DC ${l.dc}.`);
+    log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage.`);
     for (const h of hits) {
       caughtIn.add(key(h.id));
       if (h.outcome === "hit") for (const c of l.conditions ?? []) afflict(h.id, c, l.by ?? null, sec, undefined, inside && when !== "leave" ? l.id : undefined);
@@ -614,12 +612,11 @@ export function resolveMovement(
   const springTrap = (t: RoundTrap, id: number, sec: number) => {
     trapSprung.set(t.id, [...trapSprung.get(t.id)!, id]);
     sprungNow.push({ trapId: t.id, tokenId: id });
-    const s = t.save_attr ? saveRoll(id, t.save_attr as Attribute, t.save_dc, `trap:${sec}:${t.id}:${id}`, t.name, sec) : null;
-    const saved = !!s && s.total >= t.save_dc;
-    const parts: string[] = s ? [`${t.save_attr} ${s.total} vs DC ${t.save_dc}${saved ? ", saved" : ""}`] : [];
+    // No save against a trap (Q): its damage always lands; each effect it puts on has its own save as it lands.
+    const parts: string[] = [];
     let dmg = 0;
     if (t.damage && hp.has(id)) {
-      const rolled = Math.max(0, rollDice(t.damage)), tk = takenBy(id, saved ? (t.save_half ? Math.floor(rolled / 2) : 0) : rolled, t.damage_type || undefined);
+      const rolled = Math.max(0, rollDice(t.damage)), tk = takenBy(id, rolled, t.damage_type || undefined);
       const before = hp.get(id)!, after = Math.max(0, before - tk.n);
       hp.set(id, after);
       parts.push(`${tk.n}${t.damage_type ? ` ${t.damage_type}` : ""} damage${tk.note}; ${after} left`);
@@ -629,9 +626,9 @@ export function resolveMovement(
     }
     if (t.stops && !down.has(id)) { trapped.add(id); parts.push("stopped where they are"); }
     log.push(`${sec} s: ${nameOf(id)} sets off ${t.name}${parts.length ? ` (${parts.join("; ")})` : ""}.`);
-    story.splice(story.length - (down.has(id) && dmg ? 1 : 0), 0, { sec, k: "trap", who: id, name: t.name, outcome: !s ? "hit" : saved ? (dmg ? "half" : "save") : "hit", hurt: hurt(id, dmg), ...(dmg ? { dmg } : {}), ...(t.stops ? { stops: true } : {}) }); // before their "down"
+    story.splice(story.length - (down.has(id) && dmg ? 1 : 0), 0, { sec, k: "trap", who: id, name: t.name, outcome: "hit", hurt: hurt(id, dmg), ...(dmg ? { dmg } : {}), ...(t.stops ? { stops: true } : {}) }); // before their "down"
     if (down.has(id)) log.push(`${sec} s: ${nameOf(id)} is down.`);
-    if (!saved) for (const c of t.given) afflict(id, c, null, sec);
+    for (const c of t.given) afflict(id, c, null, sec);
   };
   /** Traps springing on whoever (not down, of the side it's for, not spent for them) `catches` says, at `sec`. */
   const trapsFor = (when: "enter" | "start" | "end", sec: number, catches: (t: RoundTrap, id: number) => boolean) => {
@@ -1286,7 +1283,7 @@ export function resolveMovement(
         if (me) {
           // No damage of its own (a smoke bomb: only its effects): none, not their weapon's.
           const dmg = step.use.damage ? usingDice(step.dice?.damage, () => me.damage(step.use)) : { total: 0, text: "no damage" };
-          say(`${m.name} uses ${step.use.name} (${describeArea(area)})${step.use.damage ? `: ${dmg.total} damage (${dmg.text})` : ""}${area.dc < NO_SAVE_DC ? `, ${area.save} save DC ${area.dc}` : ""}.`);
+          say(`${m.name} uses ${step.use.name} (${describeArea(area)})${step.use.damage ? `: ${dmg.total} damage (${dmg.text})` : ""}.`);
           story.push({ sec, k: "area", who: m.tokenId, name: step.use.name });
           // Selective: only the kind it's for (friendlies / enemies), the ones picked, or at most N of them (nearest the aim).
           const tg = step.use.targeting, mine = fighters.get(m.tokenId)?.allegiance ?? "hostile";

@@ -28,17 +28,14 @@ test("a trap with no save always lands: damage, its effects, found, spent; the p
   assert.match(s.gm, /Annis sets off Spike pit: 6 piercing damage; Hobbled/);
 });
 
-test("a save for half (or none); effects only on a failed save", () => {
-  const strong = character("Bram", { health: "20", attributes: { agility: 30 } }); // always saves (d20 + 10)
+test("an old trap save is ignored (Q): its damage and effects always land", () => {
+  const strong = character("Bram", { health: "20", attributes: { agility: 30 } }); // would always have saved
   const tok = placeCharacterToken(lv, strong, 2, 2);
   const stuck = saveEffectDef(null, { name: "Stuck", description: "", modifiers: [{ kind: "forbid", what: "movement" }], rounds: 2 });
-  const half = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, effects: [stuck] }))!, tok);
-  assert.equal(tokenHealth(tok)!.current, 16);
-  assert.match(half.player, /partly get clear/);
-  assert.ok(!listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Stuck"));
-  const none = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, save_half: 0 }))!, tok);
-  assert.equal(tokenHealth(tok)!.current, 16);
-  assert.match(none.player, /You get clear/);
+  const s = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, effects: [stuck] }))!, tok);
+  assert.equal(tokenHealth(tok)!.current, 12);
+  assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Stuck"));
+  assert.doesNotMatch(s.gm, /vs DC/);
 });
 
 test("walking: stepping in springs it (once), passing beside doesn't; who it's for counts", () => {
