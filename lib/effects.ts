@@ -83,7 +83,7 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
     // point where each one hits. Sharp and quick, so it never reads as a soft drifting vapour.
     ctx.lineWidth = Math.max(1, unit * 0.02);
     for (let i = 0; i < count(60, 300); i++) {
-      const life = 0.45 + 0.3 * rnd(i + 0.8);
+      const life = 0.9 + 0.6 * rnd(i + 0.8);
       const phase = mod(t / life + rnd(i), 1);
       const born = Math.floor(t / life + rnd(i)); // each drop lands somewhere new
       const px = x + rnd(i * 7 + born * 13.1) * w;
