@@ -49,7 +49,7 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
   - R10. ✅ A planned move's length can be changed by click-dragging the end of its overlay.
   - R11. ~~Attack bonuses are shown in action descriptions.~~ Closed 2026-11-25 (the card shows them; Loren will reopen with a case).
   - R12. ✅ Players can change their target at any time; targets from previous rounds don't carry over.
-  - R13. Check level transitions (they don't seem to work). (Checked: code path and tests fine; a fast mover in rounds can step over a 1-square link. Waiting on what Loren saw.)
+  - R13. ✅ Level transitions (2026-11-26: the "Go to …?" prompt was only in the editor's layout, never in sessions; awaiting Loren's smoke test).
   - R14. ✅ A token shows its player's name on hover.
   - R15. ✅ A round recap with the numbers for the GM, kept after the replay ends (every roll, modifier, DC, save and damage, as in the round log), so rules like Dodge can be checked. Dodge seems to work (R5) but can't be seen: the attacker's line should say "with disadvantage (Dodge)", and players' stories "you dodge: their attack has disadvantage".
   - R16. ✅ (also the blur: the canvas was sized after the dice library measured it) After rolling, the 3D dice stay on the game area: clear them once the roll has settled.
