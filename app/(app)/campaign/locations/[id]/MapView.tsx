@@ -600,7 +600,12 @@ export default function MapView({
       const end = r.route[r.route.length - 1];
       startWalks([{ tokenId: t.id, route: r.route, fps: r.fps }, ...(r.followers ?? [])]);
       changeTokens({ move: { id: t.id, col: end.x, row: end.y } });
-      if (r.link) setLevelPrompt({ id: r.link.id, to: r.link.to, back: r.route[r.route.length - 2] });
+      // Asked once the walk on screen reaches the link (it was worked out ahead), not as it sets off.
+      if (r.link) {
+        const route = r.route, link = r.link, fps = r.fps && r.fps > 0 ? r.fps : 5;
+        const ms = (1000 * FEET_PER_SQUARE / fps) * route.slice(1).reduce((n, p, i) => n + Math.hypot(p.x - route[i].x, p.y - route[i].y), 0);
+        setTimeout(() => setLevelPrompt({ id: link.id, to: link.to, back: route[route.length - 2] }), ms);
+      }
       if (r.trap) setControlResult({ label: "Trap", ok: false, text: r.trap });
       else if (r.stopped && !r.link) setControlResult({ label: "Move", ok: false, text: "Something stops you." });
     });
