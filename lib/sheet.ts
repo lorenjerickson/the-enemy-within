@@ -1,6 +1,10 @@
 import { asSpeed, feetPerSecond, formatSpeed } from "@/lib/speed";
 import { MOVEMENT_TYPES } from "@/lib/creatureTypes";
-import { characterContainers, characterPlayers, db, getGameTime, getItem, getStrain, listAfflictions, listTokenStatuses, tokenLabels } from "@/lib/db";
+import { characterContainers, getItem } from "@/lib/db/catalog";
+import { characterPlayers, listTokenStatuses, tokenLabels } from "@/lib/db/tokens";
+import { db } from "@/lib/db/connection";
+import { getGameTime } from "@/lib/db/calendar";
+import { getStrain, listAfflictions } from "@/lib/db/effects";
 import { describeCondition, whileWithin } from "@/lib/conditions";
 import { effectText } from "@/lib/effectGrammar";
 import { effectiveMaxHp, standingEffects } from "@/lib/creatureChanges";

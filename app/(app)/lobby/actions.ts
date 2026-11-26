@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/auth";
-import { getOpenGameSession, isRemovedFrom, listPresentPlayers, markPresent } from "@/lib/db";
+import { getOpenGameSession, isRemovedFrom, listPresentPlayers, markPresent } from "@/lib/db/sessions";
 
 /** A player's lobby page checking in, so they show as present. */
 export async function checkIn() {

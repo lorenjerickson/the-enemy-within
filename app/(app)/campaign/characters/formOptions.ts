@@ -1,4 +1,4 @@
-import { getProfession, listAdvancements, listItems, listProfessionGroups, startingRanks } from "@/lib/db";
+import { getProfession, listAdvancements, listItems, listProfessionGroups, startingRanks } from "@/lib/db/catalog";
 import type { ProfessionOption } from "./RankInput";
 
 /** Items that can go in at least one slot, trimmed for the client form. */

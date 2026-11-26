@@ -1,6 +1,9 @@
 /** What's drawn over the map's layers: pings, and the editor's highlights and drafts (see MapView). */
 import { STRUCTURE_STYLES } from "@/lib/maps";
-import type { LightSource, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { LightSource, MapNote } from "@/lib/db/mapThings";
+import type { MapStructure, MapTile } from "@/lib/db/maps";
+import type { MapToken } from "@/lib/db/tokens";
+import type { PositionalSound } from "@/lib/db/media";
 import type { TrapArea } from "@/lib/traps";
 import { drawTrap } from "./trapDraw";
 import { mapRect, FX_MS, PING_MS, SCENE, SIGHT, cellToRect, gridOrigin, inScene, noteLayout, viewPast, type Area, type CellRect, type MapState } from "./mapLayers";

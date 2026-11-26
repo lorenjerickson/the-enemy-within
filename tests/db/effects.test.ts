@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { creature, item } from "./seed";
-import { db, getEffectDef, getStandingEffects, listActions, listAfflictions, listAuraPasses, listEffectDefs, migrateConditions, removeEffectDef, saveAction, saveEffectDef, settleEffects, setStandingEffects } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { getEffectDef, getStandingEffects, listAfflictions, listAuraPasses, listEffectDefs, migrateConditions, removeEffectDef, saveEffectDef, settleEffects, setStandingEffects } from "@/lib/db/effects";
+import { listActions, saveAction } from "@/lib/db/catalog";
 import { BUILTIN_EFFECTS, BUILTIN_PIECES } from "@/lib/builtinConditions";
 import type { Modifier } from "@/lib/conditions";
 

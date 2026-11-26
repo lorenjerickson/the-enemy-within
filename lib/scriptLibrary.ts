@@ -1,4 +1,4 @@
-import db from "@/lib/db";
+import { db } from "@/lib/db/connection";
 
 /**
  * The GM's library of named scripts (Campaign › Scripts): written once, run by name from any other script with

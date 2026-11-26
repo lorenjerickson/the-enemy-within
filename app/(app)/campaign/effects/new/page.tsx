@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import EffectForm from "../EffectForm";
-import { listEffectDefs } from "@/lib/db";
+import { listEffectDefs } from "@/lib/db/effects";
 
 export default async function NewEffect() {
   await connection();

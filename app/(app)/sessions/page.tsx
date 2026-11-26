@@ -2,7 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
 import { formatGameTime } from "@/lib/calendar";
-import { listGameSessions } from "@/lib/db";
+import { listGameSessions } from "@/lib/db/sessions";
 import { startSession } from "./actions";
 import SessionSummary from "./SessionSummary";
 

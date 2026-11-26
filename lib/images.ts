@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { DATA_DIR, addAsset, type AssetUsage } from "@/lib/db";
+import { DATA_DIR } from "@/lib/db/connection";
+import { addAsset, type AssetUsage } from "@/lib/db/media";
 import { transparentToken } from "@/lib/tokenArt";
 
 // Uploaded media (images and audio) live in <DATA_DIR>/images and are served by app/images/[file]/route.ts.

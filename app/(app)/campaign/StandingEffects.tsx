@@ -1,6 +1,6 @@
 import { effectText } from "@/lib/effectGrammar";
 import Link from "next/link";
-import { getStandingEffects, listEffectDefs } from "@/lib/db";
+import { getStandingEffects, listEffectDefs } from "@/lib/db/effects";
 import { saveStandingEffects } from "./standingActions";
 
 /**

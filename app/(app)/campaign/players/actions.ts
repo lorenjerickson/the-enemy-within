@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { requireGm } from "@/lib/auth";
-import { createUser, deletePlayer, updatePlayer } from "@/lib/db";
+import { createUser, deletePlayer, updatePlayer } from "@/lib/db/users";
 import { sendMail } from "@/lib/mail";
 
 /** Invites a player: creates their account with a temporary password and emails them how to log in. */

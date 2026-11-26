@@ -1,4 +1,5 @@
-import { getCurrentLevelId, getGmLevelId, getPlayerTokenLevelId, listLevels, listLocations, listPlayerPlaces } from "@/lib/db";
+import { getCurrentLevelId, getGmLevelId, listLevels, listLocations } from "@/lib/db/maps";
+import { getPlayerTokenLevelId, listPlayerPlaces } from "@/lib/db/tokens";
 import { loadLevel } from "./gmActions";
 
 /**

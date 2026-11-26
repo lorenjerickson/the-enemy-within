@@ -1,6 +1,6 @@
 "use client";
 
-import type { LightSource } from "@/lib/db";
+import type { LightSource } from "@/lib/db/mapThings";
 import { LIGHT_KINDS, type LightKind } from "@/lib/maps";
 import NameInput from "./NameInput";
 

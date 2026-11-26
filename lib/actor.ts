@@ -1,4 +1,6 @@
-import db, { getOpenGameSession, gmPlayedPlayers, isRemovedFrom, type User, USER_COLUMNS } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { getOpenGameSession, gmPlayedPlayers, isRemovedFrom } from "@/lib/db/sessions";
+import { type User, USER_COLUMNS } from "@/lib/db/users";
 
 /**
  * Who the GM is acting as in the running session (the "act as" cookie): a token ("t12") or a player ("p3"). A token

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
-import { getCharacterPlayer, saveCharacter, setCharacterPlayer, setCharacterRank, setInParty } from "@/lib/db";
+import { getCharacterPlayer, setCharacterPlayer, setInParty } from "@/lib/db/tokens";
+import { saveCharacter, setCharacterRank } from "@/lib/db/catalog";
 import { parseCreatureForm } from "@/lib/creatureForm";
 import { getJournalEntry, saveJournalNotes, syncObjectiveJournals } from "@/lib/story";
 import { chosenRank, professionOptions } from "../campaign/characters/formOptions";

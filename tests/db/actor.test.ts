@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, beginGameSession, createUser, db, placeCharacterToken, setSessionMember, startGameSession, type User } from "@/lib/db";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { beginGameSession, setSessionMember, startGameSession } from "@/lib/db/sessions";
+import { createUser, type User } from "@/lib/db/users";
+import { db } from "@/lib/db/connection";
 import { formatActAs, parseActAs, resolveActor } from "@/lib/actor";
 
 const user = (username: string, role: "player" | "gm") => {

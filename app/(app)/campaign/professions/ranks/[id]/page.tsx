@@ -2,10 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import {
-  charactersAtRank, getProfession, getProfessionGroup, laterRanks, listActions, listProfessionGroups, listAdvancements, listItems, listPrerequisites, listProfessionItems,
-  listProfessionModifiers, listRanks, rankChain, type Profession,
-} from "@/lib/db";
+import { charactersAtRank, getProfession, getProfessionGroup, laterRanks, listActions, listProfessionGroups, listAdvancements, listItems, listPrerequisites, listProfessionItems, listProfessionModifiers, listRanks, rankChain, type Profession } from "@/lib/db/catalog";
 import { MODIFIER_PATTERN } from "@/lib/itemTypes";
 import { MODIFIER_TARGET_GROUPS, targetLabel } from "@/lib/modifiers";
 import { addAdvancement, addGrantedItem, addModifier, deleteModifier, moveRankTo, removeAdvancement, removeGrantedItem, removeRank } from "../../actions";

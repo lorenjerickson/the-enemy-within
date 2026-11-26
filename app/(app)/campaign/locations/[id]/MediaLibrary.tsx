@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import type { Asset, AssetType, AssetUsage } from "@/lib/db";
+import type { Asset, AssetType, AssetUsage } from "@/lib/db/media";
 
 export interface MediaLibraryHandle {
   open: () => void;

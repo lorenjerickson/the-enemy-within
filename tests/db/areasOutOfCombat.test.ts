@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addEffect, addLastingArea, createUser, listHazards, spreadFire, db, getCondition, getLastingArea, getOpenRollRequest, listLastingAreas, getGameTime, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { addEffect } from "@/lib/db/mapThings";
+import { addLastingArea, listHazards, spreadFire, getLastingArea, listLastingAreas } from "@/lib/db/areas";
+import { createUser } from "@/lib/db/users";
+import { db } from "@/lib/db/connection";
+import { getCondition, listAfflictions, saveEffectDef } from "@/lib/db/effects";
+import { getOpenRollRequest } from "@/lib/db/rolls";
+import { getGameTime } from "@/lib/db/calendar";
+import { placeCharacterToken } from "@/lib/db/tokens";
 import { tokenHealth } from "@/lib/health";
 import { walkRoute } from "@/app/(play)/play/walk";
 import { catchInArea } from "@/app/(play)/play/areas";

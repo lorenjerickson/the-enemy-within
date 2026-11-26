@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, getCharacter, placeCharacterToken, saveCharacter } from "@/lib/db";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { getCharacter, saveCharacter } from "@/lib/db/catalog";
 import { characterHealth, parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 
 test("saving a character and reading it back", () => {

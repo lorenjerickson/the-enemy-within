@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { getGm } from "@/lib/db";
+import { getGm } from "@/lib/db/users";
 import { currentUser, login } from "@/lib/auth";
 import Logo from "@/app/Logo";
 

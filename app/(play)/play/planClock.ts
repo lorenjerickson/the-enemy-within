@@ -1,5 +1,9 @@
 import { openImprovisation } from "@/lib/improvise";
-import { db, downTokens, getCharacterPlayer, getEncounter, getOpenGameSession, getPendingRound, gmPlayedPlayers, listTokens, logSessionEvent, readyTokens, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { downTokens, getCharacterPlayer, listTokens, tokenLabels } from "@/lib/db/tokens";
+import { getEncounter } from "@/lib/db/encounters";
+import { getOpenGameSession, gmPlayedPlayers, logSessionEvent } from "@/lib/db/sessions";
+import { getPendingRound, readyTokens, saveRoundPlan } from "@/lib/db/rounds";
 
 /** How long the last player has to finish planning once everyone else is ready. */
 export const PLAN_SECONDS = 30;

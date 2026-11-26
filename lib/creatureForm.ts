@@ -1,5 +1,7 @@
 import { asSpeed } from "@/lib/speed";
-import { CREATURE_TYPES, EQUIP_SLOTS, listItems, type Creature, type CreatureType, type Equipment } from "@/lib/db";
+import { CREATURE_TYPES, type CreatureType } from "@/lib/creatureTypes";
+import { EQUIP_SLOTS } from "@/lib/itemTypes";
+import { listItems, type Creature, type Equipment } from "@/lib/db/catalog";
 import { imageFromForm } from "@/lib/images";
 import { isDiceFormula } from "@/lib/itemTypes";
 import { MOVEMENT_TYPES, type Movement } from "@/lib/creatureTypes";

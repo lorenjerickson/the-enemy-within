@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import db, { type User, USER_COLUMNS, verifyPassword } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { type User, USER_COLUMNS, verifyPassword } from "@/lib/db/users";
 import { formatActAs, parseActAs, resolveActor, type ActAs } from "@/lib/actor";
 
 const COOKIE = "session";

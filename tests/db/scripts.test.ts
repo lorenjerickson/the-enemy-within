@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character } from "./seed";
-import { getCharacter, getVars, listActiveTriggers, setGameTime } from "@/lib/db";
+import { getCharacter } from "@/lib/db/catalog";
+import { getVars, listActiveTriggers } from "@/lib/db/story";
+import { setGameTime } from "@/lib/db/calendar";
 import { characterHealth } from "@/lib/health";
 import { checkGameState, fireTriggers, tryGameScript } from "@/lib/game";
 

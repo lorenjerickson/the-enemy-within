@@ -1,5 +1,5 @@
 import { tryGameScript, type ScriptResult } from "./game";
-import { listPartyMembers } from "./db";
+import { listPartyMembers } from "@/lib/db/tokens";
 import { addJournalEntry, findDiscovery, getDiscovery, getObjective, objectiveRecipients, syncObjectiveJournals, type ObjectiveStatus } from "./story";
 
 /**

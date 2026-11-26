@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, addStructure, clearHidden, listHidden, moveToken, placeCharacterToken, setHidden } from "@/lib/db";
+import { addCreatureToken, clearHidden, listHidden, moveToken, placeCharacterToken, setHidden } from "@/lib/db/tokens";
+import { addStructure } from "@/lib/db/maps";
 import { hidingPlaces, revealAfterStep, settleHide } from "../../app/(play)/play/hiding";
 import { searchFor } from "../../app/(play)/play/workOutRound";
 import { seenFrom } from "@/lib/sight";

@@ -1,4 +1,6 @@
-import { getTokenMover, downTokens, getEncounter, isGridlessLevel, listStandingOrdersOn, listStructures, listTokens, moveToken, setLinkPrompt } from "@/lib/db";
+import { getTokenMover, downTokens, listStandingOrdersOn, listTokens, moveToken, setLinkPrompt } from "@/lib/db/tokens";
+import { getEncounter } from "@/lib/db/encounters";
+import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { pointAlong, routeTimes, standingRoute, truncateRoute, walkLength, type StandingMode } from "@/lib/standing";
 import { revealAfterStep } from "./hiding";
 import { speedFps } from "@/lib/creatureChanges";

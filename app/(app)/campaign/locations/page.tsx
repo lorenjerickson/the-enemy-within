@@ -2,7 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import FilterableList from "@/app/(app)/FilterableList";
 import { requireGm } from "@/lib/auth";
-import { listLocations } from "@/lib/db";
+import { listLocations } from "@/lib/db/maps";
 
 export default async function Locations() {
   await connection();

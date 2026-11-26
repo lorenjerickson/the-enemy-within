@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Asset, MapTile } from "@/lib/db";
+import type { Asset } from "@/lib/db/media";
+import type { MapTile } from "@/lib/db/maps";
 import ImagePicker from "../../ImagePicker";
 import { addTileAsset } from "../actions";
 import AssetPicker from "./AssetPicker";

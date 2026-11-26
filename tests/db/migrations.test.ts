@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { db, listActions, saveAction } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { listActions, saveAction } from "@/lib/db/catalog";
 import { runMigrations } from "@/lib/db/migrations";
 
 test("the action-boosts migration ran once and is recorded: boosts the action interview saves (Defend, Aid, Heal) stay", () => {

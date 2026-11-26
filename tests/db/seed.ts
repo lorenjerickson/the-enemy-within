@@ -1,5 +1,7 @@
 // Builders for database tests: each test file has its own empty database (see tests/register.mjs).
-import { db, saveCharacter, saveCreature, saveItem, saveLocation, addLevel, type Item } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { saveCharacter, saveCreature, saveItem, type Item } from "@/lib/db/catalog";
+import { saveLocation, addLevel } from "@/lib/db/maps";
 import { defaultAttributes } from "@/lib/attributes";
 import { MOVEMENT_TYPES } from "@/lib/creatureTypes";
 

@@ -1,4 +1,4 @@
-import { listLocations, type Location } from "@/lib/db";
+import { listLocations, type Location } from "@/lib/db/maps";
 import { submitLocation } from "./actions";
 
 export const LOCATION_FORM_ID = "location-form";

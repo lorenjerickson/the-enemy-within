@@ -1,6 +1,6 @@
 // Client-safe: turns a saved action into the card a player sees (no database here: the action editor builds it live).
 import { areaFires } from "@/lib/aoe";
-import type { Action } from "@/lib/db"; // type only
+import type { Action } from "@/lib/db/catalog"; // type only
 import type { Condition } from "@/lib/conditions";
 import type { EffectKind } from "@/lib/effects";
 import type { GearAction } from "@/lib/roundPlan";

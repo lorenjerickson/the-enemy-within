@@ -2,7 +2,10 @@
  * Springing traps outside rounds (free movement): the save, the damage, the effects, and what the GM's log and the
  * player are told. Rounds spring traps in round resolution instead. Saves are rolled by the server for now.
  */
-import { getCondition, listTokens, listTraps, logSessionEvent, markTrapSprung } from "@/lib/db";
+import { getCondition } from "@/lib/db/effects";
+import { listTokens } from "@/lib/db/tokens";
+import { listTraps, markTrapSprung } from "@/lib/db/traps";
+import { logSessionEvent } from "@/lib/db/sessions";
 import { fightersOn } from "@/lib/combat";
 import { resistancesOf } from "@/lib/creatureChanges";
 import { afterResist, combineResist } from "@/lib/conditions";

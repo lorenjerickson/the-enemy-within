@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, item, level } from "./seed";
-import { addAffliction, addCreatureToken, addProfessionModifier, getCondition, placeCharacterToken, saveEffectDef, saveProfession, saveProfessionGroup, setCharacterRank, setStandingEffects } from "@/lib/db";
+import { addAffliction, getCondition, saveEffectDef, setStandingEffects } from "@/lib/db/effects";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { addProfessionModifier, saveProfession, saveProfessionGroup, setCharacterRank } from "@/lib/db/catalog";
 import { fightersOn } from "@/lib/combat";
 import { withSeed } from "@/lib/dice";
 

@@ -5,13 +5,20 @@ import { startImprovisation } from "./improvising";
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import {
-  setGmViewLevel, getCharacter, getCharacterPlayer, getCreature, getGmLevelId, listTokens, logSessionEvent, requestRoll, saveEncounter, setEncounterWaiting, clearRoundPlans,
-  getEncounter, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest, getEncounterWaiting, tokenLabels, removeLastingArea , clearStandingOrdersOn, listHidden } from "@/lib/db";
+import { setGmViewLevel, getGmLevelId } from "@/lib/db/maps";
+import { getCharacter, getCreature } from "@/lib/db/catalog";
+import { getCharacterPlayer, listTokens, tokenLabels, clearStandingOrdersOn, listHidden } from "@/lib/db/tokens";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { requestRoll, openInitiativeRequest, settleInitiative, saveRollResult, closeRollRequest } from "@/lib/db/rolls";
+import { saveEncounter, setEncounterWaiting, getEncounter, getEncounterWaiting } from "@/lib/db/encounters";
+import { clearRoundPlans } from "@/lib/db/rounds";
+import { removeLastingArea } from "@/lib/db/areas";
 import { skillCheckFor } from "@/lib/creatureChanges";
 import { tokenWho } from "@/lib/combat";
 import type { Attributes } from "@/lib/attributes";
-import { getPendingRound, listEffectDefs, getCondition, addAffliction, removeAffliction, getTokenMover } from "@/lib/db";
+import { getPendingRound } from "@/lib/db/rounds";
+import { listEffectDefs, getCondition, addAffliction, removeAffliction } from "@/lib/db/effects";
+import { getTokenMover } from "@/lib/db/tokens";
 import { asCondition, describeCondition } from "@/lib/conditions";
 const listTokensById = (id: number) => { const t = getTokenMover(id); return t ? { id: t.token_id, level_id: t.level_id } : undefined; };
 import { hidingPlaces, settleHide, reveal as revealToken } from "./hiding";
@@ -21,7 +28,7 @@ import { parseHealthForm, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { initiativeRoll, rollSpec } from "@/lib/rolls";
 import { sheetFor, type Sheet } from "@/lib/sheet";
 import { ALLEGIANCES } from "@/lib/sides";
-import { setTokenAllegiance } from "@/lib/db";
+import { setTokenAllegiance } from "@/lib/db/tokens";
 import { syncAurasOn } from "@/lib/auraSync";
 import { addPlanStep, setReady, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
 

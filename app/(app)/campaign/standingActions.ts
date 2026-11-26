@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { listEffectDefs, setStandingEffects } from "@/lib/db";
+import { listEffectDefs, setStandingEffects } from "@/lib/db/effects";
 
 /** Saves the effects an item gives while equipped, or a creature always has. */
 export async function saveStandingEffects(owner: { item_id: number } | { creature_id: number }, formData: FormData) {

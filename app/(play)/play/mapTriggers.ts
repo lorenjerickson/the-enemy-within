@@ -3,7 +3,12 @@
  * player learns only what it does to them (a trap it sets off on them; being stopped). Rounds note which fire and
  * apply them after the round (see workOutRound).
  */
-import { getDoor, listMapTriggers, listSecrets, listTokens, logSessionEvent, markMapTriggerSprung, setDoorLocked, setDoorOpen, setMapThingOn, setSecretRevealed } from "@/lib/db";
+import { getDoor, setDoorLocked, setDoorOpen } from "@/lib/db/maps";
+import { listMapTriggers, markMapTriggerSprung } from "@/lib/db/traps";
+import { listSecrets, setSecretRevealed } from "@/lib/db/story";
+import { listTokens } from "@/lib/db/tokens";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { setMapThingOn } from "@/lib/db/mapThings";
 import { revealDiscovery } from "@/lib/storyRules";
 import { allegianceOf } from "@/lib/sides";
 import { sprungByStep, sprungWhereStanding } from "@/lib/traps";
@@ -13,7 +18,7 @@ import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { setOffTrap } from "./traps";
 import { catchInArea } from "./areas";
-import { getLastingArea, setLastingAreaOff, spreadFire } from "@/lib/db";
+import { getLastingArea, setLastingAreaOff, spreadFire } from "@/lib/db/areas";
 import { inArea } from "@/lib/aoe";
 
 export interface Fired {

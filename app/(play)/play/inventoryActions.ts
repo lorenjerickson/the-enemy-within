@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { loggedInUser, requireUser } from "@/lib/auth";
-import { listItems, listPlayerCharacters } from "@/lib/db";
+import { listItems } from "@/lib/db/catalog";
+import { listPlayerCharacters } from "@/lib/db/tokens";
 import { changeInventory, inEncounter, type InventoryOp } from "@/lib/inventory";
 
 /**

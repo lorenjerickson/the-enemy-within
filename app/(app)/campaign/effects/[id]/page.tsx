@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getEffectDef, listEffectDefs } from "@/lib/db";
+import { getEffectDef, listEffectDefs } from "@/lib/db/effects";
 import EffectForm from "../EffectForm";
 import { deleteEffect } from "../actions";
 

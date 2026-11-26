@@ -4,10 +4,13 @@ import { asSpeed, feetPerSecond, speedChangeFtPerRound } from "@/lib/speed";
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
  * modifiers (always on).
  */
-import { getStrain } from "@/lib/db";
-import { db, getItem, getProfession, getStandingEffects, listAfflictions, listCharacterProfessionIds, listEffectDefs, listProfessionModifiers, listTokenStatuses, type Equipment } from "@/lib/db";
+import { getStrain } from "@/lib/db/effects";
+import { db } from "@/lib/db/connection";
+import { getItem, getProfession, listCharacterProfessionIds, listProfessionModifiers, type Equipment } from "@/lib/db/catalog";
+import { getStandingEffects, listAfflictions, listEffectDefs } from "@/lib/db/effects";
+import { listTokenStatuses } from "@/lib/db/tokens";
 import { blindRangeOf, sensesFrom, type Senses } from "@/lib/conditions";
-import { FOG_SIGHT_FT, inFog } from "@/lib/db";
+import { FOG_SIGHT_FT, inFog } from "@/lib/db/areas";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import { combineModes, d20Tweaks, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";

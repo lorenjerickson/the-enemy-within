@@ -1,4 +1,4 @@
-import type { MapStructure } from "./db";
+import type { MapStructure } from "@/lib/db/maps";
 
 /**
  * Gravity on portrait (side-on) maps. Floors are the walls, windows and closed doors you've drawn that run

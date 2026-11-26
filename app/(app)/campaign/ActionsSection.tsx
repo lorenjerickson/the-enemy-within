@@ -1,4 +1,5 @@
-import { listEffectDefs, type Action, type ActionOwner } from "@/lib/db";
+import { listEffectDefs } from "@/lib/db/effects";
+import { type Action, type ActionOwner } from "@/lib/db/catalog";
 import { describeCondition, asCondition, type Effect } from "@/lib/conditions";
 import { deleteAction, submitAction } from "./actions";
 import type { EffectOption } from "./EffectChips";

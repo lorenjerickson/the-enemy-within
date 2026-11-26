@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listItems } from "@/lib/db";
+import { listItems } from "@/lib/db/catalog";
 import CreatureForm from "./CreatureForm";
 
 export default async function NewCreature() {

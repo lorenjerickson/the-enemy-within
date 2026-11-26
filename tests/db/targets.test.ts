@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clearTokenTargets, db, getTokenTarget, setTokenTarget } from "@/lib/db";
+import { clearTokenTargets, getTokenTarget, setTokenTarget } from "@/lib/db/tokens";
+import { db } from "@/lib/db/connection";
 
 test("targets are let go after a round, and can be cleared one at a time", () => {
   db.exec("INSERT INTO locations (id, name) VALUES (900, 'Here')");

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { listPlayerCharacters } from "@/lib/db";
+import { listPlayerCharacters } from "@/lib/db/tokens";
 import CreatureForm from "../../campaign/creatures/new/CreatureForm";
 import { equippableItems, professionOptions } from "../../campaign/characters/formOptions";
 import RankInput from "../../campaign/characters/RankInput";

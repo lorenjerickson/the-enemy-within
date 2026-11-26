@@ -7,7 +7,7 @@ import { DICE_PATTERN } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
 import AttributesInput from "./AttributesInput";
 import EquipmentInput, { type EquippableItem } from "./EquipmentInput";
-import type { Creature } from "@/lib/db";
+import type { Creature } from "@/lib/db/catalog";
 import { submitCreature } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);

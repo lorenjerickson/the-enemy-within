@@ -1,4 +1,7 @@
-import { clearHidden, setHidden, getIllumination, isGridlessLevel, listHidden, listLights, listStructures, listTokens, logSessionEvent, tokenLabels } from "@/lib/db";
+import { clearHidden, setHidden, listHidden, listTokens, tokenLabels } from "@/lib/db/tokens";
+import { getIllumination, isGridlessLevel, listStructures } from "@/lib/db/maps";
+import { listLights } from "@/lib/db/mapThings";
+import { logSessionEvent } from "@/lib/db/sessions";
 import { blindSpots, watched, type Watcher } from "@/lib/hiding";
 import { brightEnough } from "@/lib/light";
 import { FEET_PER_SQUARE, reachableSquares } from "@/lib/movement";

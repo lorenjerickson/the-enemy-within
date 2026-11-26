@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getOpenGameSession, isRemovedFrom, listPlayerCharacters, markPresent } from "@/lib/db";
+import { getOpenGameSession, isRemovedFrom, markPresent } from "@/lib/db/sessions";
+import { listPlayerCharacters } from "@/lib/db/tokens";
 import AutoRefresh from "../AutoRefresh";
 import PlayerPresence from "../sessions/PlayerPresence";
 import { checkIn } from "./actions";

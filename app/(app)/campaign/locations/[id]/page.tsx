@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getLocation, listLevels } from "@/lib/db";
+import { getLocation, listLevels } from "@/lib/db/maps";
 import LocationForm, { LOCATION_FORM_ID } from "../LocationForm";
 import LevelBar from "./LevelBar";
 import LevelMap from "./LevelMap";

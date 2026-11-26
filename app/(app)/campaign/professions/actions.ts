@@ -3,9 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import {
-  addProfessionModifier, deleteProfessionGroup, deleteRank, getProfession, moveRank, grantItem, listPrerequisites, listRanks, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement,
-} from "@/lib/db";
+import { addProfessionModifier, deleteProfessionGroup, deleteRank, getProfession, moveRank, grantItem, listPrerequisites, listRanks, linkAdvancement, rankChain, removeProfessionModifier, revokeItem, saveProfession, saveProfessionGroup, unlinkAdvancement } from "@/lib/db/catalog";
 import { isModifierFormula } from "@/lib/itemTypes";
 import { isModifierTarget } from "@/lib/modifiers";
 

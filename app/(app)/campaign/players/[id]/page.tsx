@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getPlayer, listPlayerCharacters } from "@/lib/db";
+import { getPlayer } from "@/lib/db/users";
+import { listPlayerCharacters } from "@/lib/db/tokens";
 import { removePlayer, savePlayer } from "../actions";
 
 export default async function EditPlayer({ params }: { params: Promise<{ id: string }> }) {

@@ -1,4 +1,4 @@
-import type { ProfessionGroup } from "@/lib/db";
+import type { ProfessionGroup } from "@/lib/db/catalog";
 import { submitProfessionGroup } from "./actions";
 
 /** A profession's name and description (a new one: its starting rank too). */

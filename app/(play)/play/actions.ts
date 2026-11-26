@@ -4,15 +4,23 @@ import { applyConditionNow, recordConditionSave, recordRollOff } from "./workOut
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
 import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
-import { setTokenTarget } from "@/lib/db";
+import { setTokenTarget } from "@/lib/db/tokens";
 import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { getTokenActor, type ActorToken, type RollAction, type User } from "@/lib/db";
-import {
-  addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
-  logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getGmLevelId, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
+import { getTokenActor, type ActorToken } from "@/lib/db/tokens";
+import { type RollAction } from "@/lib/db/rolls";
+import { type User } from "@/lib/db/users";
+import { addPing, listPings, type Ping, listMapFx } from "@/lib/db/mapThings";
+import { closeRollRequest, settleInitiative, getOpenRollRequest, requestRoll, saveRollResult, assistOpenRequest } from "@/lib/db/rolls";
+import { getDoor, setDoorLocked, listStructures, isGridlessLevel, isPortraitLevel, getGmLevelId, setDoorOpen } from "@/lib/db/maps";
+import { getOpenGameSession, logSessionEvent } from "@/lib/db/sessions";
+import { getPlayerToken, walkToken, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setAssist, listHidden, setHidden } from "@/lib/db/tokens";
+import { listSecrets, setSecretRevealed } from "@/lib/db/story";
+import { getEncounter, getEncounterWaiting, setEncounterWaiting, saveEncounter } from "@/lib/db/encounters";
+import { listMapTriggers } from "@/lib/db/traps";
+import { getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, moveStepEnd, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -20,7 +28,7 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
-import { listTraps, setTrapFound } from "@/lib/db";
+import { listTraps, setTrapFound } from "@/lib/db/traps";
 import { distanceToTrap } from "@/lib/traps";
 import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
@@ -35,7 +43,7 @@ import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
 import { agreedImprovisation, askImprovise, dropImprovisation, openImprovisation, seenImprovisationResult, setImprovisePlaced, templateOf } from "@/lib/improvise";
 import { improvisationRolled } from "./improvising";
-import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db";
+import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db/areas";
 import { inArea, type LastingArea } from "@/lib/aoe";
 
 /** Whether a Search from `p` reaches an area: within 10 ft of it (inside it, or near its middle or edge). */

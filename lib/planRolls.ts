@@ -1,5 +1,5 @@
 import { formatModifier, modifier } from "@/lib/attributes";
-import { getItem } from "@/lib/db";
+import { getItem } from "@/lib/db/catalog";
 import { tokenWho } from "@/lib/combat";
 import { getImprovisation, improviseRollSpec } from "@/lib/improvise";
 import { partDice, type RollPart, type RollSpec } from "@/lib/rolls";

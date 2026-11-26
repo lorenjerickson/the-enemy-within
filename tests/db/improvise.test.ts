@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { getCondition, getVars, listAfflictions, placeCharacterToken, saveEffectDef } from "@/lib/db";
+import { getCondition, listAfflictions, saveEffectDef } from "@/lib/db/effects";
+import { getVars } from "@/lib/db/story";
+import { placeCharacterToken } from "@/lib/db/tokens";
 import { agreeImprovisation, agreedImprovisation, askImprovise, dropImprovisation, getImprovisation, listOpenImprovisations, openImprovisation, rollSucceeds, setImproviseRolled } from "@/lib/improvise";
 import { playImprovisation } from "@/app/(play)/play/improvising";
 
@@ -49,7 +51,7 @@ test("an effect outcome on the improviser (or someone else)", () => {
 });
 
 test("settled: a player is asked for its roll; out of combat it plays out when the roll comes in; with no roll, at once", async () => {
-  const { createUser, db, getOpenRollRequest } = await import("@/lib/db");
+  const { createUser } = await import("@/lib/db/users"), { db } = await import("@/lib/db/connection"), { getOpenRollRequest } = await import("@/lib/db/rolls");
   const { startImprovisation, improvisationRolled } = await import("@/app/(play)/play/improvising");
   createUser({ name: "impP", username: "impP", contact: "", role: "player" } as never, "pw");
   const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("impP")!.id;
@@ -70,7 +72,7 @@ test("settled: a player is asked for its roll; out of combat it plays out when t
 
 test("in a round: an agreed (and rolled) improvisation goes into the plan as one step at its cost and time; done, it plays out after the round", async () => {
   const { creature } = await import("./seed");
-  const { addCreatureToken, getRoundPlan, saveEncounter, db } = await import("@/lib/db");
+  const { addCreatureToken } = await import("@/lib/db/tokens"), { getRoundPlan } = await import("@/lib/db/rounds"), { saveEncounter } = await import("@/lib/db/encounters"), { db } = await import("@/lib/db/connection");
   const { addPlanStep, tokenPlanner } = await import("@/lib/roundPlanServer");
   const { resolveMovement } = await import("@/lib/resolveRound");
   const lv = level(), pc = character("Quin");
@@ -94,7 +96,7 @@ test("in a round: an agreed (and rolled) improvisation goes into the plan as one
 
 test("place an area: the template where it was put (a line from the improviser); a critical failure shifts it to a compass point by its size", async () => {
   const { templateArea, shifted, setImprovisePlaced, needsPlacing } = await import("@/lib/improvise");
-  const { listLastingAreas } = await import("@/lib/db");
+  const { listLastingAreas } = await import("@/lib/db/areas");
   assert.deepEqual(templateArea({ shape: "circle", ft: 10 }, { x: 5, y: 5 }, { x: 0, y: 0 }), { shape: "circle", origin: { x: 5, y: 5 }, dir: 0, size: 2 });
   assert.equal(templateArea({ shape: "line", ft: 15 }, { x: 3, y: 0.5 }, { x: 0.5, y: 0.5 }).dir, 0);
   const n = shifted({ x: 5, y: 5 }, { shape: "circle", ft: 10 }, 1), e = shifted({ x: 5, y: 5 }, { shape: "circle", ft: 10 }, 3);
@@ -113,7 +115,7 @@ test("place an area: the template where it was put (a line from the improviser);
 test("a template to place: nothing (no roll, no outcome) until it's placed and the GM goes ahead", async () => {
   const { setImprovisePlaced, goAheadImprovisation, waitingOnTemplate } = await import("@/lib/improvise");
   const { startImprovisation } = await import("@/app/(play)/play/improvising");
-  const { listLastingAreas } = await import("@/lib/db");
+  const { listLastingAreas } = await import("@/lib/db/areas");
   const lv = level(), tok = placeCharacterToken(lv, character("Sol"), 0, 0);
   const id = askImprovise(lv, tok, "spill the lamp oil");
   agreeImprovisation(id, { name: "Spill oil", cost: "action", seconds: 2, roll: null, success: { kind: "area", template: { shape: "circle", ft: 5 }, settings: { name: "Lamp oil", look: "oil", damage: null, dc: 12, save: "agility", half: true, fires: ["inside"], minutes: 0 } } });

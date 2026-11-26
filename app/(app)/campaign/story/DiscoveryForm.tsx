@@ -1,5 +1,7 @@
 import { SKILLS_BY_ATTRIBUTE } from "@/lib/attributes";
-import { listCharacters, listItems, listLocations, listPartyMembers } from "@/lib/db";
+import { listCharacters, listItems } from "@/lib/db/catalog";
+import { listLocations } from "@/lib/db/maps";
+import { listPartyMembers } from "@/lib/db/tokens";
 import { DISCOVERY_KINDS, RELATIONS, discoveryRecipients, listDiscoveries, listLinks, listObjectives, type Discovery } from "@/lib/story";
 import { removeDiscovery, submitDiscovery } from "./actions";
 import ScriptEditor from "../../ScriptEditor";

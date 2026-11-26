@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { level } from "./seed";
-import { addMapTrigger, deleteMapTrigger, getMapTrigger, listMapTriggers, markMapTriggerSprung, resetMapTrigger, saveMapTrigger } from "@/lib/db";
+import { addMapTrigger, deleteMapTrigger, getMapTrigger, listMapTriggers, markMapTriggerSprung, resetMapTrigger, saveMapTrigger } from "@/lib/db/traps";
 import { describeOutcome, type TriggerOutcome } from "@/lib/triggers";
 import { sprungByStep } from "@/lib/traps";
 

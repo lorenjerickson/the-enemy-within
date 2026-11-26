@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, item, level } from "./seed";
-import { addToContainer, characterContainers, getCharacter, placeCharacterToken, saveAction } from "@/lib/db";
+import { addToContainer, characterContainers, getCharacter, saveAction } from "@/lib/db/catalog";
+import { placeCharacterToken } from "@/lib/db/tokens";
 import { gearActions, useUpItem } from "@/lib/combat";
 
 const act = (name: string) => ({ name, description: "", roll: "normal", attack: null, damage: null, damage_type: "", radius: 0, split: 0, boosts: [], roll_grants: [], duration_amount: 1, duration_unit: "", seconds: 2, range_ft: 5, area_shape: "", area_ft: 0, save_dc: 12, save_attr: "agility", save_half: 1, area_lasts: 0, area_fires: "end", targets: "anyone", target_who: "", target_count: "one", target_n: 1, conditions: [], kind: "action" }) as never;

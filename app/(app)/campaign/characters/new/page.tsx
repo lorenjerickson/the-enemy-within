@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getCreature, listCreatures, listPlayers } from "@/lib/db";
+import { getCreature, listCreatures } from "@/lib/db/catalog";
+import { listPlayers } from "@/lib/db/users";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { submitCharacter } from "../actions";
 import { equippableItems, professionOptions } from "../formOptions";

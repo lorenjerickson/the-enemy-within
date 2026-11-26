@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { changePassword } from "@/lib/db";
+import { changePassword } from "@/lib/db/users";
 import { loggedInUser } from "@/lib/auth";
 import Logo from "@/app/Logo";
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getOpenGameSession } from "@/lib/db";
+import { getOpenGameSession } from "@/lib/db/sessions";
 import Logo from "@/app/Logo";
 
 export default async function Home() {

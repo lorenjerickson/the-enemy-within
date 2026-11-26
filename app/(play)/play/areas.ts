@@ -4,7 +4,12 @@
  * work lasting areas out in round resolution instead. A player's character rolls its own save (it's asked, and the
  * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
-import { setLastingAreaFound, getCharacterPlayer, getExposures, leaveAreaAfflictions, listHazards, listStructures, listTokens, logSessionEvent, requestRoll, saveExposures } from "@/lib/db";
+import { setLastingAreaFound, getExposures, listHazards, saveExposures } from "@/lib/db/areas";
+import { getCharacterPlayer, listTokens } from "@/lib/db/tokens";
+import { leaveAreaAfflictions } from "@/lib/db/effects";
+import { listStructures } from "@/lib/db/maps";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { requestRoll } from "@/lib/db/rolls";
 import { saveRollFor } from "@/lib/creatureChanges";
 import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
 import { NO_SAVE_DC, caughtBy, type LastingArea } from "@/lib/aoe";

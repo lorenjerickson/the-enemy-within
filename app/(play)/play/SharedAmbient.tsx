@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { playOnce, playSequence, setAmbientVolume, stopAmbient } from "@/lib/ambientPlayer";
-import type { SharedAmbient as Shared } from "@/lib/db"; // type only
+import type { SharedAmbient as Shared } from "@/lib/db/media"; // type only
 
 /**
  * Plays on a player's screen whatever ambient sound the GM is playing on their level (each new play starts it again;

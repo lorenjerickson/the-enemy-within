@@ -3,11 +3,13 @@
  * or sides change, those within an aura get its condition and those out of it lose it. (In a round, the engine does
  * this every second.) A save as it lands is rolled here by the server for now (backlog: players roll their own).
  */
-import { downTokens, listAfflictions, listAuraPasses, listTokens, logSessionEvent, saveAfflictions, saveAuraPasses, tokenLabels } from "@/lib/db";
+import { downTokens, listTokens, tokenLabels } from "@/lib/db/tokens";
+import { listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db/effects";
+import { logSessionEvent } from "@/lib/db/sessions";
 import { fightersOn } from "@/lib/combat";
 import { auraAffliction, auraWants, syncAuras } from "@/lib/auras";
 import { describeCondition } from "@/lib/conditions";
-import { isGridlessLevel } from "@/lib/db";
+import { isGridlessLevel } from "@/lib/db/maps";
 
 /** Brings a level's aura conditions in line with where everyone is; returns what happened (also logged). */
 export function syncAurasOn(levelId: number): string[] {

@@ -93,7 +93,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   console.log(`\nMost exports:\n${top((m) => m.exports)}`);
   console.log(`\nMost imported (fan-in):\n${top((m) => m.importedBy.length)}`);
   console.log(`\nMost imports (fan-out, runtime):\n${top((m) => m.runtime.length)}`);
-  const db = "lib/db.ts";
-  console.log(`\n${db}: ${mods.get(db)?.exports} exports, imported by ${mods.get(db)?.importedBy.length} modules (${mods.get(db)?.importedBy.filter((n) => n.startsWith("lib/")).length} in lib/)`);
+  const store = [...mods].filter(([k]) => k.startsWith("lib/db/"));
+  console.log(`\nStorage (lib/db/): ${store.length} modules, ${store.reduce((n, [, m]) => n + m.exports, 0)} exports; biggest ${store.sort((a, b) => b[1].exports - a[1].exports).slice(0, 3).map(([k, m]) => `${k} (${m.exports})`).join(", ")}`);
   console.log(`\nCycles:\n${cyc.map((g) => `  ${g.length}: ${g.slice(0, 6).join(", ")}${g.length > 6 ? ", …" : ""}`).join("\n") || "  none"}`);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { AmbientSound, Asset, PositionalSound } from "@/lib/db";
+import type { AmbientSound, Asset, PositionalSound } from "@/lib/db/media";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
 import { dropAmbientClip, dropAmbientSound, playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
 import { changePositionalLoop, addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset, shareAmbient } from "../actions";

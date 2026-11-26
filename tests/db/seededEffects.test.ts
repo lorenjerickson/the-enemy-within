@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { db, listEffectDefs, removeEffectDef, seedCatalogEffects } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { listEffectDefs, removeEffectDef, seedCatalogEffects } from "@/lib/db/effects";
 import { SEEDED_EFFECTS } from "@/lib/seedEffects";
 
 const byName = (name: string) => listEffectDefs().find((e) => e.name === name);

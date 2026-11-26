@@ -20,7 +20,7 @@ test("rule modules never reach the database", () => {
   const mods = graph();
   for (const m of PURE) {
     assert.ok(mods.has(m), `${m} exists`);
-    assert.ok(!reaches(mods, m).has("lib/db.ts"), `${m} reaches lib/db.ts`);
+    assert.ok(!reaches(mods, m).has("lib/db/connection.ts"), `${m} reaches the database`);
   }
 });
 
@@ -28,7 +28,7 @@ test("import cycles don't grow (2 today: game/storyRules, and the play folder's 
   assert.ok(cycles(graph()).length <= 2);
 });
 
-test("lib/db/* area modules never import lib/db.ts (it re-exports them: that would be a cycle)", () => {
+test("lib/db/* storage modules never import the migrations (they run at start-up, after every module has loaded)", () => {
   const mods = graph();
-  for (const [name, m] of mods) if (name.startsWith("lib/db/")) assert.ok(!m.runtime.includes("lib/db.ts") && !m.types.includes("lib/db.ts"), `${name} imports lib/db.ts`);
+  for (const [name, m] of mods) if (name.startsWith("lib/db/") && name !== "lib/db/migrations.ts") assert.ok(!m.runtime.includes("lib/db/migrations.ts"), `${name} imports lib/db/migrations.ts`);
 });

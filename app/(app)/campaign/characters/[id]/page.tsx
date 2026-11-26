@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { characterPlayers, getCharacter, getCharacterPlayer, isInParty, getCharacterRank, listPlayers } from "@/lib/db";
+import { characterPlayers, getCharacterPlayer, isInParty } from "@/lib/db/tokens";
+import { getCharacter, getCharacterRank } from "@/lib/db/catalog";
+import { listPlayers } from "@/lib/db/users";
 import DeleteCharacter from "../DeleteCharacter";
 import CreatureForm from "../../creatures/new/CreatureForm";
 import { setCharacterHealth, submitCharacter } from "../actions";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import type { MapControl } from "@/lib/db";
+import type { MapControl } from "@/lib/db/mapThings";
 import { CONTROL_EDGES } from "@/lib/maps";
 import { changeControlScript, removeControl, submitControl } from "../actions";
 import GameIcon, { ICON_NAMES, iconWords } from "./GameIcon";

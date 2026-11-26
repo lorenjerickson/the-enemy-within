@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { saveItem, EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/db";
+import { saveItem } from "@/lib/db/catalog";
+import { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity } from "@/lib/itemTypes";
 import { imageFromForm } from "@/lib/images";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 

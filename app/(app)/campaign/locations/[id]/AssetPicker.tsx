@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import type { Asset } from "@/lib/db";
+import type { Asset } from "@/lib/db/media";
 import { uploadTileAsset } from "../actions";
 import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 

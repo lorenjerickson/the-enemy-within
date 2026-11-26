@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { level } from "./seed";
-import { addStructure, deleteLevelStructures, listStructures, setStructureEnds, splitStructure } from "@/lib/db";
+import { addStructure, deleteLevelStructures, listStructures, setStructureEnds, splitStructure } from "@/lib/db/maps";
 
 const wall = (lv: number, x1: number, y1: number, x2: number, y2: number) => addStructure(lv, { kind: "wall", x1, y1, x2, y2, target_level_id: null } as never);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { MapStructure } from "@/lib/db";
+import type { MapStructure } from "@/lib/db/maps";
 import { STRUCTURE_KINDS, STRUCTURE_LABELS, type StructureKind } from "@/lib/maps";
 import NameInput from "./NameInput";
 

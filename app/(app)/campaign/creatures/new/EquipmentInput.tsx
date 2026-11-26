@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { EQUIP_SLOTS, type EquipSlot } from "@/lib/itemTypes";
-import type { Equipment } from "@/lib/db";
+import type { Equipment } from "@/lib/db/catalog";
 import { sumDice } from "@/lib/dice";
 
 export interface EquippableItem {

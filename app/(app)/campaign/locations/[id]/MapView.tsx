@@ -8,7 +8,11 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { DARK_BELOW, brightEnough } from "@/lib/light";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { snapWallEnd } from "@/lib/wallSnap";
-import type { MapSecret, MapEffect, AmbientSound, Asset, LightSource, MapControl, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { MapSecret } from "@/lib/db/story";
+import type { MapEffect, LightSource, MapControl, MapNote } from "@/lib/db/mapThings";
+import type { AmbientSound, Asset, PositionalSound } from "@/lib/db/media";
+import type { MapStructure, MapTile } from "@/lib/db/maps";
+import type { MapToken } from "@/lib/db/tokens";
 import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";

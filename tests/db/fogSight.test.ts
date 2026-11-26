@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addEffect, db, placeCharacterToken } from "@/lib/db";
+import { addEffect } from "@/lib/db/mapThings";
+import { db } from "@/lib/db/connection";
+import { placeCharacterToken } from "@/lib/db/tokens";
 import { seenFrom } from "@/lib/sight";
 import { sensesOf } from "@/lib/creatureChanges";
 

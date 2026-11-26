@@ -1,6 +1,6 @@
 "use client";
 
-import type { MapNote } from "@/lib/db";
+import type { MapNote } from "@/lib/db/mapThings";
 
 /** Notes layer editor: write a note, click the map to stick it there; edit or remove placed notes. GM only. */
 export default function NotesEditor({

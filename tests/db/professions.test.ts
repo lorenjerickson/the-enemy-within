@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character } from "./seed";
-import { addProfessionModifier, deleteRank, getCharacterRank, laterRanks, linkAdvancement, listCharacterProfessionIds, moveRank, rankChain, saveProfession, saveProfessionGroup, setCharacterRank, startingRanks } from "@/lib/db";
+import { addProfessionModifier, deleteRank, getCharacterRank, laterRanks, linkAdvancement, listCharacterProfessionIds, moveRank, rankChain, saveProfession, saveProfessionGroup, setCharacterRank, startingRanks } from "@/lib/db/catalog";
 import { professionStatuses } from "@/lib/creatureChanges";
 
 function lawEnforcement() {

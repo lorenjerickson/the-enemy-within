@@ -5,7 +5,8 @@ import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 
 import { revalidatePath } from "next/cache";
 import { requireGm, requireUser } from "@/lib/auth";
-import { addAsset, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, type AssetUsage, ACTION_TARGETS, type ActionTargets } from "@/lib/db";
+import { addAsset, type AssetUsage } from "@/lib/db/media";
+import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, ACTION_TARGETS, type ActionTargets } from "@/lib/db/catalog";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { createUser, getGm } from "@/lib/db";
+import { createUser, getGm } from "@/lib/db/users";
 import Logo from "@/app/Logo";
 
 async function createGm(formData: FormData) {

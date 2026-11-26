@@ -5,7 +5,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { requireGm } from "@/lib/auth";
 import { importCampaignFile } from "@/lib/campaignArchive";
-import { DATA_DIR } from "@/lib/db";
+import { DATA_DIR } from "@/lib/db/connection";
 
 /**
  * Replaces this server's campaign with an uploaded export. The .zip is the request body (not a form), streamed to

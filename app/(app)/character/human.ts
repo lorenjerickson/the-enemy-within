@@ -1,4 +1,4 @@
-import { getCreature, listCreatures } from "@/lib/db";
+import { getCreature, listCreatures } from "@/lib/db/catalog";
 
 /** The creature every player character is based on: the one named Human. */
 export function findHuman() {

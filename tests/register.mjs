@@ -9,3 +9,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "tew-test-"));
 process.on("exit", () => fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }));
 
 register("./resolve.mjs", import.meta.url);
+
+// The database's one-time migrations, as the server runs them at start-up (instrumentation.ts): built-in effects seeded…
+const { runMigrations } = await import("../lib/db/migrations.ts");
+runMigrations();

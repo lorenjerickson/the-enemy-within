@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { db, getCharacter, placeCharacterToken, settleSpeeds } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { getCharacter } from "@/lib/db/catalog";
+import { placeCharacterToken } from "@/lib/db/tokens";
+import { settleSpeeds } from "@/lib/db/effects";
 import { speedFps, speedOf } from "@/lib/creatureChanges";
 
 test("old speeds (feet per round) become feet per second, once; speeds are read the same either way", () => {

@@ -7,12 +7,15 @@ import type { Point } from "./visibility";
 /** How far ahead a script's effects are scheduled, so every map in the session (polling each second) catches them together. */
 const FX_LEAD_MS = 1500;
 import { characterHealth, saveCharacterHealth, saveTokenHealth, tokenHealth } from "./health";
-import {
-  getGameTime, setGameTime, listTimers, saveTimers, addTrigger, listActiveTriggers, setTriggerState, setTriggerError, logSessionEvent, type Trigger,
-  getIllumination, saveIllumination, listLights, updateLight, listEffects, updateEffect, setDoorOpen, setDoorLocked,
-  addCreatureToken, addMapFx, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, getEncounter, getLevelPlace, saveEncounter, getVars, listCharacterStates, listCreatures, listLocations, listTokens, moveToken, saveCharacterState, saveVars, transaction,
-  type VarValue,
-} from "./db";
+import { getGameTime, setGameTime, listTimers, saveTimers } from "@/lib/db/calendar";
+import { addTrigger, listActiveTriggers, setTriggerState, setTriggerError, type Trigger, getVars, saveVars, type VarValue } from "@/lib/db/story";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { getIllumination, saveIllumination, setDoorOpen, setDoorLocked, isPortraitLevel, isGridlessLevel, listStructures, type MapStructure, listLocations } from "@/lib/db/maps";
+import { listLights, updateLight, listEffects, updateEffect, addMapFx } from "@/lib/db/mapThings";
+import { addCreatureToken, getLevelPlace, listCharacterStates, listTokens, moveToken, saveCharacterState } from "@/lib/db/tokens";
+import { getEncounter, saveEncounter } from "@/lib/db/encounters";
+import { listCreatures } from "@/lib/db/catalog";
+import { transaction } from "@/lib/db/connection";
 import type { ScriptAnswers, ScriptPrompt } from "./scriptPrompt";
 import { Collection, FREEFORM, Health, PromptNeeded, plain, promptHelpers, Method, ScriptError, Tags, Watch, quote, refCollection, runScript, setRef, spread, toPlain, triggerScript, truthy, type Hooks, type TriggerDef } from "./script";
 import { makeEncounter, rollsFor, type Actor, type EncounterState, type Rolls } from "./encounter";

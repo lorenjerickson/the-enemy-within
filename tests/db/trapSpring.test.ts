@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, addTrap, getTrap, listAfflictions, placeCharacterToken, saveEffectDef, saveTrap } from "@/lib/db";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { addTrap, getTrap, saveTrap } from "@/lib/db/traps";
+import { listAfflictions, saveEffectDef } from "@/lib/db/effects";
 import { tokenHealth } from "@/lib/health";
 import { springTrap, trapsOnStep, trapsWhereStopped } from "@/app/(play)/play/traps";
 import type { Trap } from "@/lib/traps";
@@ -66,7 +68,7 @@ test("a trap that springs when a move ends in it", () => {
 });
 
 test("a trap going off is known only to characters who could see it (and those it caught)", async () => {
-  const { addStructure, saveIllumination } = await import("@/lib/db");
+  const { addStructure, saveIllumination } = await import("@/lib/db/maps");
   const { witnessTrap } = await import("@/app/(play)/play/workOutRound");
   const room = level("Two rooms");
   saveIllumination(room, 1);

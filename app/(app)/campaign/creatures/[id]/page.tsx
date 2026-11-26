@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getCreature, listActions, listItems } from "@/lib/db";
+import { getCreature, listActions, listItems } from "@/lib/db/catalog";
 import ActionsSection from "../../ActionsSection";
 import StandingEffects from "../../StandingEffects";
 import CreatureForm from "../new/CreatureForm";

@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { assistOpenRequest, createUser, db, getOpenRollRequest, listAssists, placeCharacterToken, requestRoll, setAssist } from "@/lib/db";
+import { assistOpenRequest, getOpenRollRequest, requestRoll } from "@/lib/db/rolls";
+import { createUser } from "@/lib/db/users";
+import { db } from "@/lib/db/connection";
+import { listAssists, placeCharacterToken, setAssist } from "@/lib/db/tokens";
 
 const player = (username: string) => {
   createUser({ name: username, username, contact: "", role: "player" } as never, "pw");

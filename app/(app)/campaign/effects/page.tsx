@@ -3,7 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import FilterableList from "@/app/(app)/FilterableList";
 import { requireGm } from "@/lib/auth";
-import { listEffectDefs } from "@/lib/db";
+import { listEffectDefs } from "@/lib/db/effects";
 
 export default async function Effects() {
   await connection();

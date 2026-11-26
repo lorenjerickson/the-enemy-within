@@ -1,4 +1,9 @@
-import { downTokens, listMapTriggers, setTokenTarget, getItem, listTokens, setPlanRolled, getEncounter, getRoundPlan, getTokenMover, isGridlessLevel, listStructures, saveRoundPlan, tokenLabels } from "@/lib/db";
+import { downTokens, setTokenTarget, listTokens, getTokenMover, tokenLabels } from "@/lib/db/tokens";
+import { listMapTriggers } from "@/lib/db/traps";
+import { getItem } from "@/lib/db/catalog";
+import { setPlanRolled, getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
+import { getEncounter } from "@/lib/db/encounters";
+import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";

@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listPlayerCharacters, listPlayers } from "@/lib/db";
+import { listPlayerCharacters } from "@/lib/db/tokens";
+import { listPlayers } from "@/lib/db/users";
 import FilterableList from "../../FilterableList";
 import { invitePlayer } from "./actions";
 

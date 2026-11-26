@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { db, listTokens, moveToken, placeCharacterToken, saveEncounter, setStandingOrder } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { listTokens, moveToken, placeCharacterToken, setStandingOrder } from "@/lib/db/tokens";
+import { saveEncounter } from "@/lib/db/encounters";
 import { walkWithFollowers } from "../../app/(play)/play/walk";
 
 const fast = (id: number, fps: number) => db.prepare("UPDATE characters SET movement = ? WHERE id = ?").run(JSON.stringify({ walking: { value: fps, dist: "ft", per: "s" } }), id);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { MapEffect } from "@/lib/db";
+import type { MapEffect } from "@/lib/db/mapThings";
 import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
 import NameInput from "./NameInput";
 

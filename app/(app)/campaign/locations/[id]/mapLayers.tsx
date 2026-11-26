@@ -2,7 +2,11 @@
 import { useEffect, useState } from "react";
 import { STRUCTURE_STYLES, type MapBackground, type MapGrid, type MapImage, type MapLayer } from "@/lib/maps";
 import { blockingSegments, visibilityPolygon, type Point } from "@/lib/visibility";
-import type { MapSecret, MapEffect, LightSource, MapNote, MapStructure, MapTile, MapToken, PositionalSound } from "@/lib/db";
+import type { MapSecret } from "@/lib/db/story";
+import type { MapEffect, LightSource, MapNote } from "@/lib/db/mapThings";
+import type { MapStructure, MapTile } from "@/lib/db/maps";
+import type { MapToken } from "@/lib/db/tokens";
+import type { PositionalSound } from "@/lib/db/media";
 import { drawLasting } from "@/lib/vfx";
 import { type LastingArea } from "@/lib/aoe";
 import { drawTrap } from "./trapDraw";

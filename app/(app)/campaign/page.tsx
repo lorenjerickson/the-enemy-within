@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getPartyStart } from "@/lib/db";
+import { getPartyStart } from "@/lib/db/maps";
 import CampaignImport from "./CampaignImport";
 
 export default async function CampaignOverview() {

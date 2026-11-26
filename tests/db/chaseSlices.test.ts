@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, db, getRoundPlan, placeCharacterToken, saveEncounter } from "@/lib/db";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { db } from "@/lib/db/connection";
+import { getRoundPlan } from "@/lib/db/rounds";
+import { saveEncounter } from "@/lib/db/encounters";
 import { addPlanStep, removePlanStep, tokenPlanner } from "@/lib/roundPlanServer";
 
 const setup = () => {

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, item } from "./seed";
-import { addToContainer, characterContainers, getCharacter, takeCarried } from "@/lib/db";
+import { addToContainer, characterContainers, getCharacter, takeCarried } from "@/lib/db/catalog";
 import { changeInventory } from "@/lib/inventory";
 
 const pack = item({ name: "Pack", type: "container", capacity: 2, slots: ["back"] });

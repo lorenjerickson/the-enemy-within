@@ -2,11 +2,14 @@ import { inArea } from "@/lib/aoe";
 import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
-import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound,
-  addLastingArea, addTokenStatus, clearRoundPlans, closeRollRequest, closeRollOffRequests, downTokens, getCharacterPlayer, getEncounter, getEncounterWaiting,
-  getGameTime, getPendingRound, getRoundPlan, getTokenMover, isGridlessLevel, listLastingAreas, listStructures, listTokens, logSessionEvent, moveToken,
-  openRollOffRequest, requestRoll, saveEncounter, saveRollResult, setGameTime, setLastRoundLog, setPendingRound, setReplay, tokenLabels,
-} from "@/lib/db";
+import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas } from "@/lib/db/areas";
+import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
+import { clearRoundPlans, getPendingRound, getRoundPlan, setLastRoundLog, setPendingRound, setReplay } from "@/lib/db/rounds";
+import { closeRollRequest, closeRollOffRequests, openRollOffRequest, requestRoll, saveRollResult } from "@/lib/db/rolls";
+import { getEncounter, getEncounterWaiting, saveEncounter } from "@/lib/db/encounters";
+import { getGameTime, setGameTime } from "@/lib/db/calendar";
+import { isGridlessLevel, listStructures } from "@/lib/db/maps";
+import { logSessionEvent } from "@/lib/db/sessions";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import { fireTriggers } from "@/lib/game";
 import { ContestedMove, SaveNeeded, resolveMovement, type Mover } from "@/lib/resolveRound";
@@ -14,7 +17,7 @@ import { withSeed } from "@/lib/dice";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho, useUpItem } from "@/lib/combat";
 import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
-import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db";
+import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db/effects";
 import { litOn } from "@/lib/sight";
 import { tickAfflictions } from "@/lib/resolveRound";
 import { saveRollFor, skillCheckFor, speedFps, effectiveMaxHp } from "@/lib/creatureChanges";
@@ -25,12 +28,17 @@ import type { Attributes } from "@/lib/attributes";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
-import { addAffliction, addStrain, clearTokenTargets, recordSightingAt } from "@/lib/db";
-import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, trapSeenBy } from "@/lib/db";
+import { addAffliction, addStrain } from "@/lib/db/effects";
+import { clearTokenTargets, recordSightingAt } from "@/lib/db/tokens";
+import { openConditionSaveRequest } from "@/lib/db/rolls";
+import { getCondition } from "@/lib/db/effects";
+import { listTraps, listMapTriggers, markTrapSprung, trapSeenBy } from "@/lib/db/traps";
 import { seesSpot } from "@/lib/sight";
 import { trapCentre, type Trap } from "@/lib/traps";
 import { fireTrigger } from "./mapTriggers";
-import { clearAssist, clearHidden, setHidden, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
+import { clearAssist, clearHidden, setHidden, listHidden, listAssists, setAssist, setLinkPrompt } from "@/lib/db/tokens";
+import { getCharacter } from "@/lib/db/catalog";
+import { getDoor, setDoorOpen } from "@/lib/db/maps";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */

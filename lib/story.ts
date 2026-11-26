@@ -1,4 +1,6 @@
-import { addColumn, db, getGameTime, listPartyMembers } from "./db";
+import { addColumn, db } from "@/lib/db/connection";
+import { getGameTime } from "@/lib/db/calendar";
+import { listPartyMembers } from "@/lib/db/tokens";
 
 /**
  * The story: discoveries (what the party can learn) and objectives (what it's asked to do).

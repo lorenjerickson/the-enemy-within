@@ -2,7 +2,7 @@ import Link from "next/link";
 import FilterableList from "@/app/(app)/FilterableList";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { listProfessionGroups, listRanks, startingRanks } from "@/lib/db";
+import { listProfessionGroups, listRanks, startingRanks } from "@/lib/db/catalog";
 
 /** Professions (Law Enforcement, Military…); their ranks are on each one's page. */
 export default async function Professions() {

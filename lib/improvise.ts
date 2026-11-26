@@ -3,7 +3,8 @@
  * They ask with a line of intent; the GM is told and the two settle it at the table, and the app records what was
  * agreed. While one is open, that player's planning clock waits.
  */
-import { db, getTokenActor } from "@/lib/db";
+import { db } from "@/lib/db/connection";
+import { getTokenActor } from "@/lib/db/tokens";
 import { saveRollFor, skillCheckFor } from "@/lib/creatureChanges";
 import type { RollSpec } from "@/lib/rolls";
 import type { Attributes } from "@/lib/attributes";

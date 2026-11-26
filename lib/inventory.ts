@@ -1,4 +1,5 @@
-import { addToContainer, characterContainers, db, getCharacter, getItem, saveCharacter, takeFromStack, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, getCharacter, getItem, saveCharacter, takeFromStack, type Equipment } from "@/lib/db/catalog";
+import { db } from "@/lib/db/connection";
 import type { EquipSlot } from "@/lib/itemTypes";
 
 /**

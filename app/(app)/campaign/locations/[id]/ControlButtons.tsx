@@ -1,4 +1,4 @@
-import type { MapControl } from "@/lib/db";
+import type { MapControl } from "@/lib/db/mapThings";
 import GameIcon from "./GameIcon";
 
 /**

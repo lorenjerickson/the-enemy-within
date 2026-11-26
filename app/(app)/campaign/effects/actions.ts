@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
-import { getEffectDef, listEffectDefs, removeEffectDef, saveEffectDef } from "@/lib/db";
+import { getEffectDef, listEffectDefs, removeEffectDef, saveEffectDef } from "@/lib/db/effects";
 import type { Modifier } from "@/lib/conditions";
 import { CONDITION_SENTENCE, MADE_CONDITION, checkRule, compile, compileLifecycle, type Filled } from "@/lib/effectGrammar";
 

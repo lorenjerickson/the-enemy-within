@@ -6,8 +6,12 @@ import { redirect } from "next/navigation";
 import { requireGm, setActingAs } from "@/lib/auth";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 import { fireTriggers, tryGameScript, type ScriptResult } from "@/lib/game";
-import { logSessionEvent, restStrain } from "@/lib/db";
-import { beginGameSession, getOpenGameSession, setSessionMember, deleteTrigger, getGmLevelId, getGameTime, setGameTime } from "@/lib/db";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { restStrain } from "@/lib/db/effects";
+import { beginGameSession, getOpenGameSession, setSessionMember } from "@/lib/db/sessions";
+import { deleteTrigger } from "@/lib/db/story";
+import { getGmLevelId } from "@/lib/db/maps";
+import { getGameTime, setGameTime } from "@/lib/db/calendar";
 import { endSession as end, startSession as start } from "@/lib/sessionLog";
 
 /** Runs a console script; `answers` are the GM's choices so far for its select() prompts. */

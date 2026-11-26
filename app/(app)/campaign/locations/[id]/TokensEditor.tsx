@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { MapToken } from "@/lib/db";
+import type { MapToken } from "@/lib/db/tokens";
 
 /** Something that can be placed as a token: a creature (any number of times) or a character (once). */
 export interface TokenCreature {

@@ -2,7 +2,13 @@
  * An improvisation playing out (out of combat when the GM accepts it; in a round when its planned step finishes): its
  * roll decides success or failure, and the matching outcome happens. What the improviser (and anyone it lands on) is told.
  */
-import { addLastingArea, getGameTime, getLastingArea, spreadFire, getCharacterPlayer, getCondition, getEncounter, listTokens, logSessionEvent, requestRoll, tokenLabels } from "@/lib/db";
+import { addLastingArea, getLastingArea, spreadFire } from "@/lib/db/areas";
+import { getGameTime } from "@/lib/db/calendar";
+import { getCharacterPlayer, listTokens, tokenLabels } from "@/lib/db/tokens";
+import { getCondition } from "@/lib/db/effects";
+import { getEncounter } from "@/lib/db/encounters";
+import { logSessionEvent } from "@/lib/db/sessions";
+import { requestRoll } from "@/lib/db/rolls";
 import { rollSpec } from "@/lib/rolls";
 import { finishImprovisation, getImprovisation, improviseRollSpec, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
 import { runGameScript } from "@/lib/game";

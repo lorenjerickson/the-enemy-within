@@ -1,6 +1,6 @@
 "use client";
 
-import type { MapSecret } from "@/lib/db";
+import type { MapSecret } from "@/lib/db/story";
 
 export interface SecretDraft {
   name: string;

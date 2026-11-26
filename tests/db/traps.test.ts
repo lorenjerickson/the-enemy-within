@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { level } from "./seed";
-import { addTrap, deleteTrap, getTrap, listTraps, markTrapSprung, moveTrap, resetTrap, saveTrap, setTrapFound } from "@/lib/db";
+import { addTrap, deleteTrap, getTrap, listTraps, markTrapSprung, moveTrap, resetTrap, saveTrap, setTrapFound } from "@/lib/db/traps";
 
 const lv = level();
 

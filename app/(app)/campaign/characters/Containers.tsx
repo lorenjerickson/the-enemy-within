@@ -1,4 +1,4 @@
-import { characterContainers, listItems } from "@/lib/db";
+import { characterContainers, listItems } from "@/lib/db/catalog";
 import { addContainerItem, removeContainerStack } from "./actions";
 
 /** The character's worn containers (a belt, a pack…), each with its own slots: what's in them, and putting items in. */

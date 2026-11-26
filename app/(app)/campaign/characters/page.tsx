@@ -2,7 +2,8 @@ import Link from "next/link";
 import FilterableList from "@/app/(app)/FilterableList";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { characterPlayers, listCharacters } from "@/lib/db";
+import { characterPlayers } from "@/lib/db/tokens";
+import { listCharacters } from "@/lib/db/catalog";
 
 export default async function Characters() {
   await connection();

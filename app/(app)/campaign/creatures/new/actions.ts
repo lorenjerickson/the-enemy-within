@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireGm } from "@/lib/auth";
-import { saveCreature } from "@/lib/db";
+import { saveCreature } from "@/lib/db/catalog";
 import { parseCreatureForm } from "@/lib/creatureForm";
 
 /** Creates the creature when id is null, otherwise updates it. */

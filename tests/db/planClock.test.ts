@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, createUser, db, getRoundPlan, placeCharacterToken, readyTokens, saveEncounter, saveRoundPlan } from "@/lib/db";
+import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
+import { createUser } from "@/lib/db/users";
+import { db } from "@/lib/db/connection";
+import { getRoundPlan, readyTokens, saveRoundPlan } from "@/lib/db/rounds";
+import { saveEncounter } from "@/lib/db/encounters";
 import { planClock } from "../../app/(play)/play/planClock";
 
 const player = (username: string) => {

@@ -1,4 +1,4 @@
-import { listCharacters } from "@/lib/db";
+import { listCharacters } from "@/lib/db/catalog";
 import { listDiscoveries, listObjectiveCharacters, type Objective } from "@/lib/story";
 import { removeObjective, submitObjective } from "./actions";
 import SettleButtons from "./SettleButtons";

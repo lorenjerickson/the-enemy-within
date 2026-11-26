@@ -1,4 +1,5 @@
-import { downTokens, getGmLevelId, listTokens } from "@/lib/db";
+import { downTokens, listTokens } from "@/lib/db/tokens";
+import { getGmLevelId } from "@/lib/db/maps";
 import { tokenHealth } from "@/lib/health";
 import { setHealth } from "./gmActions";
 import HealthFields from "../../(app)/HealthFields";

@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
-import { addLight, addMapTrigger, addSecret, addStructure, addTrap, getDoor, getMapTrigger, getTrap, getVars, listLights, listSecrets, listStructures, placeCharacterToken, saveMapTrigger, saveTrap, setDoorLocked } from "@/lib/db";
+import { addLight, listLights } from "@/lib/db/mapThings";
+import { addMapTrigger, addTrap, getMapTrigger, getTrap, saveMapTrigger, saveTrap } from "@/lib/db/traps";
+import { addSecret, getVars, listSecrets } from "@/lib/db/story";
+import { addStructure, getDoor, listStructures, setDoorLocked } from "@/lib/db/maps";
+import { placeCharacterToken } from "@/lib/db/tokens";
 import { tokenHealth } from "@/lib/health";
 import { fireTrigger, triggersOnStep, triggersWhereStopped } from "@/app/(play)/play/mapTriggers";
 import type { TriggerOutcome } from "@/lib/triggers";

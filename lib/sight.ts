@@ -1,6 +1,8 @@
-import { FOG_SIGHT_FT, inFog } from "@/lib/db";
+import { FOG_SIGHT_FT, inFog } from "@/lib/db/areas";
 import { blindRangeOf } from "@/lib/conditions";
-import { getIllumination, listHidden, listLights, listStructures, listTokens } from "@/lib/db";
+import { getIllumination, listStructures } from "@/lib/db/maps";
+import { listHidden, listTokens } from "@/lib/db/tokens";
+import { listLights } from "@/lib/db/mapThings";
 import { allegianceOf, relation } from "@/lib/sides";
 import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import { seesThem } from "@/lib/conditions";

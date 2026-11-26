@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { db } from "@/lib/db";
+import { db } from "@/lib/db/connection";
 
 test("a brand-new database gets every table, with foreign keys intact", () => {
   const tables = db.prepare<[], { name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((t) => t.name);

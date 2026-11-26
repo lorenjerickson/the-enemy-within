@@ -1,4 +1,7 @@
-import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, listTokens, takeCarried, takeFromStack, listTokenStatuses, listAfflictions, getCondition, saveCharacter, db, type Creature, type Equipment } from "@/lib/db";
+import { addToContainer, characterContainers, listCharacterProfessionIds, getCharacter, getCreature, getItem, listActions, listItems, takeCarried, takeFromStack, saveCharacter, type Creature, type Equipment } from "@/lib/db/catalog";
+import { listTokens, listTokenStatuses } from "@/lib/db/tokens";
+import { listAfflictions, getCondition } from "@/lib/db/effects";
+import { db } from "@/lib/db/connection";
 import type { EquipSlot } from "@/lib/itemTypes";
 import { allegianceOf } from "@/lib/sides";
 import { type Status } from "@/lib/status";

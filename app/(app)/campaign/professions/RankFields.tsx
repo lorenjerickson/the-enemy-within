@@ -1,4 +1,4 @@
-import type { Profession } from "@/lib/db";
+import type { Profession } from "@/lib/db/catalog";
 import { submitRank } from "./actions";
 
 /** A rank's name and description. */

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getItem, listActions } from "@/lib/db";
+import { getItem, listActions } from "@/lib/db/catalog";
 import ActionsSection from "../../ActionsSection";
 import StandingEffects from "../../StandingEffects";
 import ItemForm from "../new/ItemForm";

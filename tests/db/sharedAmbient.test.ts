@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { level } from "./seed";
-import { addAmbientSound, getLevelAmbient, listAmbientSounds, setLevelAmbient } from "@/lib/db";
+import { addAmbientSound, getLevelAmbient, listAmbientSounds, setLevelAmbient } from "@/lib/db/media";
 
 test("what the GM plays is shared: a new play is a new rev, a volume change isn't, stop plays nothing", () => {
   const lv = level("Hall");

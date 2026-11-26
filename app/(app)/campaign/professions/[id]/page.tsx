@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { requireGm } from "@/lib/auth";
-import { getProfessionGroup, listRanks, startingRanks } from "@/lib/db";
+import { getProfessionGroup, listRanks, startingRanks } from "@/lib/db/catalog";
 import { addStartingRank, removeProfessionGroup } from "../actions";
 import RemoveButton from "../RemoveButton";
 import ProfessionFields from "../ProfessionFields";

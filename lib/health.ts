@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "@/lib/db/connection";
 import { rollDice } from "./dice";
 
 /** Health: current, maximum (rolled once from the health formula) and temporary (lost first). */

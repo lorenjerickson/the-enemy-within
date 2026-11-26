@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { DICE_PATTERN, EQUIP_SLOTS, ITEM_TYPES, MODIFIER_PATTERN, RARITIES } from "@/lib/itemTypes";
 import ImagePicker from "../../ImagePicker";
-import type { Item } from "@/lib/db";
+import type { Item } from "@/lib/db/catalog";
 import { submitItem } from "./actions";
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);

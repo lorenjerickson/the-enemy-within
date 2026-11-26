@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
-import { addCreatureToken, clearStandingOrdersOn, getStandingOrder, listStandingOrdersOn, setStandingOrder, getEncounter, getEncounterWaiting, getRoundPlan, listTokens, moveTokenToLevel, placeCharacterToken, saveEncounter, saveRoundPlan, setEncounterWaiting } from "@/lib/db";
+import { addCreatureToken, clearStandingOrdersOn, getStandingOrder, listStandingOrdersOn, setStandingOrder, listTokens, moveTokenToLevel, placeCharacterToken } from "@/lib/db/tokens";
+import { getEncounter, getEncounterWaiting, saveEncounter, setEncounterWaiting } from "@/lib/db/encounters";
+import { getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
 
 test("taking a level link leaves the encounter on the old level and arrives outside the new one's", () => {
   const up = level("Upstairs"), down = level("Cellar");
