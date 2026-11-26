@@ -191,7 +191,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story, newAreas });
+  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story, newAreas }, lines);
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
 }
 

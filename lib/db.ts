@@ -3186,10 +3186,10 @@ export function getReplay(levelId: number): Replay | null {
   return row?.replay ? JSON.parse(row.replay) : null;
 }
 
-export function setReplay(levelId: number, replay: Replay): void {
+export function setReplay(levelId: number, replay: Replay, log?: string[]): void {
   db.prepare<[string, number]>("UPDATE encounters SET replay = ? WHERE level_id = ?").run(JSON.stringify(replay), levelId);
   // Kept for the rest of the encounter, so players can look back over every round they've had.
-  const stories = [...getRoundStories(levelId).filter((r) => r.round !== replay.round), { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [] }];
+  const stories = [...getRoundStories(levelId).filter((r) => r.round !== replay.round), { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [], ...(log ? { log } : {}) }];
   db.prepare<[string, number]>("UPDATE encounters SET stories = ? WHERE level_id = ?").run(JSON.stringify(stories), levelId);
 }
 
@@ -3198,6 +3198,7 @@ export interface RoundStory {
   round: number;
   showAt: number; // ms since epoch: the playback's end (players hear about it then)
   story: import("@/lib/roundStory").StoryEvent[];
+  log?: string[]; // the GM's log of the round, with the numbers (never sent to players)
 }
 
 export function getRoundStories(levelId: number): RoundStory[] {

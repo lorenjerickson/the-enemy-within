@@ -79,14 +79,23 @@ export default function EncounterPanel() {
             return r ? <RoundScrubber round={r.round} seconds={r.frames.length} /> : null;
           })()}
           {levelId !== undefined && <GmRoundHistory rounds={gmRounds(levelId)} />}
-          {levelId !== undefined && getLastRoundLog(levelId).length > 0 && (
-            <details className="rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
-              <summary className="cursor-pointer font-semibold opacity-80">Full log of {getLastRoundLog(levelId)[0]} (rolls and numbers)</summary>
-              {getLastRoundLog(levelId).slice(1).map((line, i) => (
-                <p key={i} className={line.includes("GM to decide") ? "text-warning" : ""}>{line}</p>
-              ))}
-            </details>
-          )}
+          {levelId !== undefined && (() => {
+            // Every round's log with the numbers (rolls, modifiers, DCs, saves, damage), newest first and open; older rounds
+            // folded. Rounds resolved before logs were kept fall back to the last round's log.
+            const kept = getRoundStories(levelId).filter((r) => r.log?.length).sort((a, b) => b.round - a.round);
+            const rounds = kept.length ? kept.map((r) => ({ round: r.round, lines: r.log! })) : getLastRoundLog(levelId).length ? [{ round: 0, lines: getLastRoundLog(levelId).slice(1), title: getLastRoundLog(levelId)[0] }] : [];
+            return rounds.length > 0 && (
+              <div className="space-y-1" data-round-logs>
+                <div className="text-xs font-semibold opacity-80">Round logs (rolls and numbers)</div>
+                {rounds.map((r, i) => (
+                  <details key={r.round} open={i === 0} className="rounded-box bg-base-100/50 p-2 text-xs" data-round-log>
+                    <summary className="cursor-pointer font-semibold opacity-80">{"title" in r ? r.title : `Round ${r.round}`}</summary>
+                    {r.lines.map((line, k) => <p key={k} className={line.includes("GM to decide") ? "text-warning" : ""}>{line}</p>)}
+                  </details>
+                ))}
+              </div>
+            );
+          })()}
           <form action={endEncounter}>
             <button className="btn btn-ghost btn-sm text-error">End encounter</button>
           </form>

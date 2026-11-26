@@ -1318,8 +1318,10 @@ export function resolveMovement(
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         const crit = !!a.crit && !critImmune(them.statuses), misses = a.fumble || (!a.crit && a.total < d.total); // a natural 1 misses; a critical hits
         if (misses) shown("miss");
-        if (misses) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss${a.fumble ? " (a natural 1)" : ""}.`);
-        if (misses) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss" });
+        const dodging = (them.statuses ?? []).some((s) => s.source === "Dodge"); // said, so a Dodge can be seen to count
+        const dodgeNote = dodging ? ` (${target.name} is dodging: disadvantage)` : "";
+        if (misses) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss${a.fumble ? " (a natural 1)" : ""}${dodgeNote}.`);
+        if (misses) story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "miss", ...(dodging ? { dodged: true } : {}) });
         else {
           const dmg = usingDice(step.dice?.damage, () => me.damage(step.use, crit));
           const t0 = takenBy(target.id, dmg.total, step.use?.damageType), x = bonusOnHit(m.tokenId, target.id);
@@ -1328,8 +1330,8 @@ export function resolveMovement(
           hp.set(target.id, left);
           hitAt.set(target.id, [...(hitAt.get(target.id) ?? []), sec]);
           lastHitBy.set(target.id, m.tokenId);
-          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: ${critNote(a.crit, crit)}hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left.`);
-          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}) });
+          say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total}: ${critNote(a.crit, crit)}hit for ${dmg.total} (${dmg.text})${t.note}; ${target.name} has ${left} left${dodgeNote}.`);
+          story.push({ sec, k: "attack", who: m.tokenId, target: target.id, with: step.use?.name ?? null, outcome: "hit", hurt: hurt(target.id, t.n), dmg: t.n, ...(t.r ? { resist: t.r } : {}), ...(crit ? { crit: true } : {}), ...(dodging ? { dodged: true } : {}) });
           if (t.n > 0) wasHurt(target.id, sec, t.n, undefined, m.tokenId);
           shown(left <= 0 ? "down" : "hit");
           if (left <= 0) {

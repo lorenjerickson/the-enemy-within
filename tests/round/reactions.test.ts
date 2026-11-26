@@ -124,3 +124,12 @@ test("refit: the new gear is worn when it finishes and kept after the round", ()
   assert.deepEqual(r.final.get(1), { col: 0, row: 0 }, "the spear reaches: no closing in");
   assert.equal(r.hp.get(2), 15);
 });
+
+test("a Dodge that counts is said: in the GM's log, and in both players' stories", async () => {
+  const { playerStory } = await import("@/lib/roundStory");
+  const r = resolve([mover(1, { col: 0, row: 0 }, [attack(2)]), mover(2, { col: 1, row: 0 }, [act("dodge")])], { 1: fighter({ hit: 1 }), 2: fighter({ save: 15 }) });
+  assert.match(r.text, /miss \(T2 is dodging: disadvantage\)/);
+  const told = (me: number) => [...playerStory(r.story, [me], (id) => `T${id}`).values()].flat().join(" ");
+  assert.match(told(2), /misses: your dodge pays off/);
+  assert.match(told(1), /miss: they're dodging/);
+});
