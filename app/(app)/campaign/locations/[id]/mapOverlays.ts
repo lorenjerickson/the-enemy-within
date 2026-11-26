@@ -271,7 +271,7 @@ export interface SessionOverlayInputs {
   planTargets: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[];
   selectedTarget: number | null;
   drawnTokens: MapToken[];
-  reach: ({ from: { col: number; row: number }; feet: number; perSecond: number; at: MapToken; token: MapToken } & ({ kind: "area"; polys: Point[][]; areas: { poly: Point[]; origin: Point; base: number }[] } | { kind: "squares"; cells: Reach })) | null; // how far they can still move
+  reach: ({ from: { col: number; row: number }; feet: number; perSecond: number; at: MapToken; token: MapToken; route?: { col: number; row: number }[] } & ({ kind: "area"; polys: Point[][]; areas: { poly: Point[]; origin: Point; base: number }[] } | { kind: "squares"; cells: Reach })) | null; // how far they can still move
 }
 
 /** A contested move's box: everyone involved, where the two were and are, and the spot (grid cells). */
@@ -764,14 +764,15 @@ export function drawSessionOverlays(ctx: CanvasRenderingContext2D, state: MapSta
       ctx.fillText(l.text, l.x, l.y);
     }
     ctx.textBaseline = "alphabetic";
-    // Where the plan has them so far: a dashed ring, joined to the token.
+    // Where the plan has them so far: a dashed ring, joined to the token through each planned move's waypoint in turn
+    // (not straight from the token to the last one).
     if (reach.at.col !== reach.token.col || reach.at.row !== reach.token.row) {
       ctx.setLineDash([4 / k, 3 / k]);
       ctx.lineWidth = 2 / k;
       ctx.strokeStyle = "rgba(186,230,253,0.95)";
       ctx.beginPath();
-      ctx.moveTo(x0 + (reach.token.col + 0.5) * size, y0 + (reach.token.row + 0.5) * size);
-      ctx.lineTo(x0 + (reach.at.col + 0.5) * size, y0 + (reach.at.row + 0.5) * size);
+      const via = [reach.token, ...(reach.route ?? []), reach.at];
+      via.forEach((p, i) => (i ? ctx.lineTo(x0 + (p.col + 0.5) * size, y0 + (p.row + 0.5) * size) : ctx.moveTo(x0 + (p.col + 0.5) * size, y0 + (p.row + 0.5) * size)));
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(x0 + (reach.at.col + 0.5) * size, y0 + (reach.at.row + 0.5) * size, size * 0.42, 0, Math.PI * 2);

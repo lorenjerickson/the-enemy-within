@@ -511,8 +511,9 @@ export default function MapView({
     const token = gmPlan ? drawnTokens.find((x) => x.id === gmSel) : drawnTokens.find((x) => x.id === fog?.move?.tokenId);
     if (!token) return null;
     const t = { ...token, ...(m.from ?? {}) }; // in an encounter, reach is from where their plan leaves them
-    return { from: { col: t.col, row: t.row }, feet: m.feet, perSecond: m.perSecond ?? 0, at: t, token };
-  }, [moveOn, runOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens]);
+    const route = planRoutes.find((r) => r.token === token.id)?.points ?? []; // their planned moves' waypoints, in order
+    return { from: { col: t.col, row: t.row }, feet: m.feet, perSecond: m.perSecond ?? 0, at: t, token, route };
+  }, [moveOn, runOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens, planRoutes]);
   // The area itself, worked out only when where they start, how far they can go or the walls change (it's costly on
   // gridless maps: the way round each wall end counts too).
   const reachFromKey = reachAt ? `${reachAt.from.col},${reachAt.from.row},${reachAt.feet}` : "";
