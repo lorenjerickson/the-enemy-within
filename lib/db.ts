@@ -30,83 +30,14 @@ export { DATA_DIR, addColumn, db };
 
 export default db;
 
-export const USER_COLUMNS = "id, name, username, contact, role, must_change_password";
-
-export type Role = "gm" | "player";
-
-export interface User {
-  id: number;
-  name: string;
-  username: string;
-  contact: string | null;
-  role: Role;
-  must_change_password: 0 | 1;
-  playedBy?: number; // set when the GM is playing this (absent) player: the GM's user id
-  watching?: boolean; // the GM only watching this (present) player: they see what the player sees, and can't do anything
-  actingToken?: number; // the GM playing one of their own tokens (a creature): its token
-}
-
-export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
-}
-
-export function getGm(): User | undefined {
-  return db
-    .prepare<[], User>(`SELECT ${USER_COLUMNS} FROM users WHERE role = 'gm'`)
-    .get();
-}
-
-export function createUser(u: Omit<User, "id" | "must_change_password">, password: string): void {
-  // Players get a temporary password and must change it on first login.
-  db.prepare<[string, string, string | null, string, Role, number]>(
-    "INSERT INTO users (name, username, contact, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(u.name, u.username, u.contact, hashPassword(password), u.role, u.role === "player" ? 1 : 0);
-}
-
-export function changePassword(userId: number, password: string): void {
-  db.prepare<[string, number]>(
-    "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?"
-  ).run(hashPassword(password), userId);
-}
-
-export function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  const test = crypto.scryptSync(password, salt, 64);
-  return crypto.timingSafeEqual(test, Buffer.from(hash, "hex"));
-}
-
-export function getPlayer(id: number): User | undefined {
-  return db.prepare<[number], User>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ? AND role = 'player'`).get(id);
-}
-
-/** Players log in with their name, so username follows name. */
-export function updatePlayer(id: number, name: string, contact: string): void {
-  db.prepare<[string, string, string, number]>(
-    "UPDATE users SET name = ?, username = ?, contact = ? WHERE id = ? AND role = 'player'"
-  ).run(name, name, contact, id);
-}
-
-/** Deletes a player's account (never the GM's): their logins and presence go too; characters they played lose their player. */
-export function deletePlayer(id: number): void {
-  db.transaction(() => {
-    if (!db.prepare<[number], { id: number }>("SELECT id FROM users WHERE id = ? AND role = 'player'").get(id)) return;
-    db.prepare<[number]>("DELETE FROM sessions WHERE user_id = ?").run(id);
-    db.prepare<[number]>("DELETE FROM session_presence WHERE user_id = ?").run(id);
-    db.prepare<[number]>("UPDATE characters SET player_id = NULL WHERE player_id = ?").run(id);
-    db.prepare<[number]>("DELETE FROM users WHERE id = ?").run(id);
-  })();
-}
-
-export function listPlayers(): User[] {
-  return db
-    .prepare<[], User>(`SELECT ${USER_COLUMNS} FROM users WHERE role = 'player' ORDER BY name`)
-    .all();
-}
-
 export { CREATURE_TYPES, type CreatureType };
 export { EQUIP_SLOTS, ITEM_TYPES, RARITIES, type EquipSlot, type ItemType, type Rarity };
+export * from "@/lib/db/calendar";
+import { getGameTime } from "@/lib/db/calendar";
+export * from "@/lib/db/users";
+import { type Role } from "@/lib/db/users";
+export * from "@/lib/db/sessions";
+import { getOpenGameSession } from "@/lib/db/sessions";
 
 export interface Item {
   id: number;
@@ -1597,36 +1528,6 @@ export function listPlayerCharacters(playerId: number): { id: number; name: stri
   return db.prepare<[number], { id: number; name: string }>("SELECT id, name FROM characters WHERE player_id = ? ORDER BY name").all(playerId);
 }
 
-// ---------- Calendar ----------
-
-/** Game time in minutes since the campaign began. */
-export function getGameTime(): number {
-  return db.prepare<[], { now: number }>("SELECT now FROM calendar WHERE id = 1").get()?.now ?? 0;
-}
-
-export function setGameTime(minutes: number): void {
-  db.prepare<[number]>("UPDATE calendar SET now = ? WHERE id = 1").run(Math.max(0, minutes));
-}
-
-export interface Timer {
-  name: string;
-  started: number; // game time it started, in minutes
-  duration: number | null; // minutes until it expires; null = never
-}
-
-export function listTimers(): Timer[] {
-  return db.prepare<[], Timer>("SELECT name, started, duration FROM timers ORDER BY name").all();
-}
-
-/** Replaces all timers (scripts load them all, change them, and save them back). */
-export function saveTimers(timers: Timer[]): void {
-  db.transaction(() => {
-    db.exec("DELETE FROM timers");
-    const insert = db.prepare<[string, number, number | null]>("INSERT INTO timers (name, started, duration) VALUES (?, ?, ?)");
-    for (const t of timers) insert.run(t.name, t.started, t.duration);
-  })();
-}
-
 // ---------- Sessions (game nights) ----------
 
 // Not "sessions": that table holds login tokens.
@@ -1655,56 +1556,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS session_events (
   text TEXT NOT NULL
 )`);
 
-export interface GameSession {
-  id: number;
-  number: number; // 1 for the first session
-  started_at: string;
-  game_time: number;
-  began_at: string | null; // null while it's in its lobby
-  ended_at: string | null; // null while it's running
-  start_state: string | null;
-  summary: string | null;
-}
-
-/** Sessions, most recent first. */
-export function listGameSessions(): GameSession[] {
-  return db
-    .prepare<[], GameSession>(
-      "SELECT id, started_at, game_time, began_at, ended_at, start_state, summary, ROW_NUMBER() OVER (ORDER BY id) AS number FROM game_sessions ORDER BY id DESC"
-    )
-    .all();
-}
-
-/** The session being played, if one is running. */
-export function getOpenGameSession(): GameSession | undefined {
-  return listGameSessions().find((s) => !s.ended_at);
-}
-
-/** The GM begins play: the lobby closes. */
-export function beginGameSession(id: number): void {
-  db.prepare<[string, number]>("UPDATE game_sessions SET began_at = COALESCE(began_at, ?) WHERE id = ?").run(new Date().toISOString(), id);
-}
-
-/** A player's page checking in: they're present. */
-export function markPresent(sessionId: number, userId: number): void {
-  db.prepare<[number, number, number]>(
-    "INSERT INTO session_presence (session_id, user_id, last_seen) VALUES (?, ?, ?) ON CONFLICT (session_id, user_id) DO UPDATE SET last_seen = excluded.last_seen"
-  ).run(sessionId, userId, Date.now());
-}
-
-/** How long after a player's last check-in they still count as present. */
-export const PRESENCE_MS = 15_000;
-
-/** The players present in a session now (their pages checked in recently), not counting anyone the GM removed. */
-export function listPresentPlayers(sessionId: number): number[] {
-  const removed = new Set(sessionMembers(sessionId).filter((m) => m.status === "removed").map((m) => m.user_id));
-  return db
-    .prepare<[number, number], { user_id: number }>("SELECT user_id FROM session_presence WHERE session_id = ? AND last_seen > ?")
-    .all(sessionId, Date.now() - PRESENCE_MS)
-    .map((r) => r.user_id)
-    .filter((id) => !removed.has(id));
-}
-
 // Who the GM put in or took out of a session (its lobby): "gm" = an absent player the GM plays; "removed" = kept out.
 // Anyone else is in the session by being present.
 db.exec(`CREATE TABLE IF NOT EXISTS session_members (
@@ -1713,50 +1564,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS session_members (
   status TEXT NOT NULL, -- 'gm' | 'removed'
   PRIMARY KEY (session_id, user_id)
 )`);
-
-export function sessionMembers(sessionId: number): { user_id: number; status: "gm" | "removed" }[] {
-  return db.prepare<[number], { user_id: number; status: "gm" | "removed" }>("SELECT user_id, status FROM session_members WHERE session_id = ?").all(sessionId);
-}
-
-/** The GM adds a player to the session to play for them ("gm"), keeps one out ("removed"), or undoes either (null). */
-export function setSessionMember(sessionId: number, userId: number, status: "gm" | "removed" | null): void {
-  if (status === null) db.prepare<[number, number]>("DELETE FROM session_members WHERE session_id = ? AND user_id = ?").run(sessionId, userId);
-  else db.prepare("INSERT INTO session_members (session_id, user_id, status) VALUES (?, ?, ?) ON CONFLICT (session_id, user_id) DO UPDATE SET status = excluded.status").run(sessionId, userId, status);
-}
-
-/** Players the GM plays in this session (added while absent). */
-export function gmPlayedPlayers(sessionId: number): number[] {
-  return sessionMembers(sessionId).filter((m) => m.status === "gm").map((m) => m.user_id);
-}
-
-/** Whether the GM took this player out of the session. */
-export const isRemovedFrom = (sessionId: number, userId: number) => sessionMembers(sessionId).some((m) => m.user_id === userId && m.status === "removed");
-
-export function endGameSession(id: number, summary: string): void {
-  db.prepare<[string, string, number]>("UPDATE game_sessions SET ended_at = ?, summary = ? WHERE id = ?").run(new Date().toISOString(), summary, id);
-}
-
-/** Notes something that happened in the running session, if there is one. */
-export function logSessionEvent(text: string): void {
-  const open = db.prepare<[], { id: number }>("SELECT id FROM game_sessions WHERE ended_at IS NULL ORDER BY id DESC").get();
-  if (open) db.prepare<[number, number, string]>("INSERT INTO session_events (session_id, game_time, text) VALUES (?, ?, ?)").run(open.id, getGameTime(), text);
-}
-
-export function listSessionEvents(sessionId: number): { game_time: number; text: string }[] {
-  return db.prepare<[number], { game_time: number; text: string }>("SELECT game_time, text FROM session_events WHERE session_id = ? ORDER BY id").all(sessionId);
-}
-
-export function getGameSession(id: number): GameSession | undefined {
-  return listGameSessions().find((s) => s.id === id);
-}
-
-/** Starts a session now, at the current game time, with a snapshot of the game state. Returns its id. */
-export function startGameSession(startState: string): number {
-  return Number(
-    db.prepare<[string, number, string]>("INSERT INTO game_sessions (started_at, game_time, start_state) VALUES (?, ?, ?)")
-      .run(new Date().toISOString(), getGameTime(), startState).lastInsertRowid
-  );
-}
 
 // ---------- Triggers ----------
 

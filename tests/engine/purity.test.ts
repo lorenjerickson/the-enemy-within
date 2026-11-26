@@ -27,3 +27,8 @@ test("rule modules never reach the database", () => {
 test("import cycles don't grow (2 today: game/storyRules, and the play folder's round modules)", () => {
   assert.ok(cycles(graph()).length <= 2);
 });
+
+test("lib/db/* area modules never import lib/db.ts (it re-exports them: that would be a cycle)", () => {
+  const mods = graph();
+  for (const [name, m] of mods) if (name.startsWith("lib/db/")) assert.ok(!m.runtime.includes("lib/db.ts") && !m.types.includes("lib/db.ts"), `${name} imports lib/db.ts`);
+});
