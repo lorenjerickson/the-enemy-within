@@ -41,7 +41,7 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
   - R2. ✅ (2026-11-25; walls don't muffle yet, one-off placed sounds aren't shared) Sound for remote players (Loren, 2026-11-25: all players are remote; sound must play for them). Today every sound plays only on the GM's screen (ambient, area sounds; positional sounds only as editor previews). To do, ~3 steps: (1) the server keeps what's playing (ambient sound and its volume, area sounds on, positional sounds on the level) and every browser in the session plays it, starting where the GM's is; (2) positional sounds louder the nearer that player's token (walls muffling, later); (3) an "Enable sound" click per browser (browsers block sound until the page is clicked), remembered, with a mute / volume control for each player.
   - R3. ✅ Clicking a previous round's target again deselects it.
   - R4. ✅ Targets that die in a round are deselected automatically.
-  - R5. Check that Dodge really works. (Checked: works per rules and tests; likely invisible to players. Waiting on what Loren saw; cheap fix: the round story says so.)
+  - R5. ✅ Check that Dodge really works. Closed 2026-11-25: it works; R15 now says when it counts (log and stories).
   - R6. ✅ A trap set off out of a player's sight shows no set-off marker to them (any lasting effect it left is still seen).
   - R7. ✅ During a round replay: a large banner, and players can't use the planning panel.
   - R8. Check that weapon range overlays really work. (Checked: consistent with resolution, refits included; waiting on what Loren saw.)
