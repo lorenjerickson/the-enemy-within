@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Every round of this encounter so far, told from the player's side ("You close in on Giant Rat 1…"), newest first.
@@ -15,14 +15,18 @@ export default function RoundHistory({ rounds }: { rounds: { round: number; show
     return () => clearInterval(t);
   }, [waiting]);
   const shown = rounds.filter((r) => r.showAt <= now).sort((a, b) => b.round - a.round);
+  // A new round in: back to the top, where it is (a list scrolled down to an older round looked like the latest).
+  const list = useRef<HTMLOListElement>(null);
+  const newest = shown[0]?.round;
+  useEffect(() => { list.current?.scrollTo({ top: 0, behavior: "smooth" }); }, [newest]);
   if (!shown.length) return null;
   return (
     <section data-round-history className="space-y-1">
       <div className="text-xs font-semibold opacity-80">Earlier rounds</div>
-      <ol className="max-h-72 space-y-2 overflow-y-auto pr-1">
+      <ol ref={list} className="max-h-72 space-y-2 overflow-y-auto pr-1">
         {shown.map((r, i) => (
-          <li key={r.round} data-round-story={r.round} className={`rounded-box p-2 text-sm leading-relaxed ${i === 0 ? "bg-base-100/80" : "bg-base-100/40 opacity-80"}`}>
-            <div className="text-xs font-semibold opacity-70">Round {r.round}{i === 0 ? " · latest" : ""}</div>
+          <li key={r.round} data-round-story={r.round} className={`rounded-box p-2 text-sm leading-relaxed ${i === 0 ? "bg-base-100/80 ring-1 ring-primary/50" : "bg-base-100/40 opacity-70"}`}>
+            <div className={`text-xs font-semibold ${i === 0 ? "text-primary" : "opacity-70"}`}>Round {r.round}{i === 0 ? " · latest" : ""}</div>
             <p>{r.lines.length ? r.lines.join(" ") : "You keep watch; nothing comes your way."}</p>
           </li>
         ))}
