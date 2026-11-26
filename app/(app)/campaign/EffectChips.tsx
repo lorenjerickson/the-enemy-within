@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type EffectOption = { id: number; name: string; about: string; unavailable?: string };
+import { effectMatches, type EffectOption } from "@/lib/effectOptions";
+export type { EffectOption };
 
 /**
  * Picks catalog effects: type to find one, Enter or click adds it as a chip (✕ or Backspace takes it off). Each chip
@@ -18,7 +19,7 @@ export default function EffectChips({ name, options, initial, onChange }: { name
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const q = query.trim().toLowerCase();
-  const matches = options.filter((o) => !picked.includes(o.id) && (!q || o.name.toLowerCase().includes(q)));
+  const matches = options.filter((o) => !picked.includes(o.id) && effectMatches(o, q));
   const pickable = matches.filter((o) => !o.unavailable);
   const add = (o: EffectOption) => { setPicked((p) => [...p, o.id]); setQuery(""); setActive(0); };
   const byId = new Map(options.map((o) => [o.id, o]));
@@ -49,6 +50,11 @@ export default function EffectChips({ name, options, initial, onChange }: { name
           }}
         />
       </div>
+      {open && q && matches.length === 0 && (
+        <div className="absolute z-20 mt-1 w-full rounded-box bg-base-100 p-2 text-sm shadow" data-no-effect>
+          No effect matches “{query.trim()}” by name, what it does or its description. Add it in the Effects catalog first, or try another word (“move”, “attack”, “damage”).
+        </div>
+      )}
       {open && matches.length > 0 && (
         <ul className="menu absolute z-20 mt-1 max-h-64 w-full flex-nowrap overflow-y-auto rounded-box bg-base-100 p-1 shadow">
           {matches.map((o) => (

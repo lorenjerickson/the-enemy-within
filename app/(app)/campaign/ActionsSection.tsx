@@ -33,7 +33,7 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
  * are listed greyed out with why (they're for items or creatures). */
 function effectOptions(effects: Effect[], grants: { id: number }[]): EffectOption[] {
   return effects.map((e) => ({
-    id: e.id, name: e.name, about: describeCondition(asCondition(e)) || e.description,
+    id: e.id, name: e.name, about: describeCondition(asCondition(e)) || e.description, description: e.description,
     unavailable: e.duration === "rounds" || grants.some((x) => x.id === e.id) ? undefined : e.duration === "always" ? "lasts always: for creatures" : "while equipped: for items",
   }));
 }
