@@ -3407,8 +3407,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_traps (
   sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
 )`);
 
-type TrapRow = Omit<Trap, "area" | "springs" | "effects" | "sprung"> & { area: string; springs: string; effects: string; sprung: string };
-const parseTrap = (r: TrapRow): Trap => ({ ...r, area: JSON.parse(r.area), springs: r.springs ? areaFires(r.springs) : [] /* none: only a trigger sets it off */, effects: JSON.parse(r.effects), sprung: JSON.parse(r.sprung) });
+addColumn("map_traps", "seen_by", "TEXT NOT NULL DEFAULT '[]'"); // JSON token ids: who saw it go off (their players see it; others don't)
+type TrapRow = Omit<Trap, "area" | "springs" | "effects" | "sprung" | "seen_by"> & { area: string; springs: string; effects: string; sprung: string; seen_by: string };
+const parseTrap = (r: TrapRow): Trap => ({ ...r, area: JSON.parse(r.area), springs: r.springs ? areaFires(r.springs) : [] /* none: only a trigger sets it off */, effects: JSON.parse(r.effects), sprung: JSON.parse(r.sprung), seen_by: JSON.parse(r.seen_by ?? "[]") });
 
 /** A level's traps. */
 export function listTraps(levelId: number): Trap[] {
@@ -3443,6 +3444,13 @@ export function deleteTrap(id: number): void {
 /** Found (by a Search) or revealed by the GM: players see it; hidden again (false). */
 export function setTrapFound(id: number, found: boolean): void {
   db.prepare("UPDATE map_traps SET found = ? WHERE id = ?").run(found ? 1 : 0, id);
+}
+
+/** Who saw a trap go off (added to those who already had): their players see it on the map. */
+export function trapSeenBy(id: number, tokenIds: number[]): void {
+  const t = getTrap(id);
+  if (!t) return;
+  db.prepare("UPDATE map_traps SET seen_by = ? WHERE id = ?").run(JSON.stringify([...new Set([...(t.seen_by ?? []), ...tokenIds])]), id);
 }
 
 /** Records that a trap sprang on a token (spending it, or spending it for them). */

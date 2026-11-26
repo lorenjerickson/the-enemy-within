@@ -2,7 +2,7 @@
  * Springing traps outside rounds (free movement): the save, the damage, the effects, and what the GM's log and the
  * player are told. Rounds spring traps in round resolution instead. Saves are rolled by the server for now.
  */
-import { getCondition, listTokens, listTraps, logSessionEvent, markTrapSprung, setTrapFound } from "@/lib/db";
+import { getCondition, listTokens, listTraps, logSessionEvent, markTrapSprung } from "@/lib/db";
 import { fightersOn } from "@/lib/combat";
 import { resistancesOf } from "@/lib/creatureChanges";
 import { afterResist, combineResist } from "@/lib/conditions";
@@ -12,7 +12,7 @@ import { severity } from "@/lib/roundStory";
 import { allegianceOf } from "@/lib/sides";
 import { canSpring, inTrap, sprungByStep, sprungWhereStanding, type Trap } from "@/lib/traps";
 import type { Point } from "@/lib/visibility";
-import { applyConditionNow } from "./workOutRound";
+import { applyConditionNow, witnessTrap } from "./workOutRound";
 
 export interface Sprung {
   trap: Trap;
@@ -22,12 +22,12 @@ export interface Sprung {
   player: string; // for whoever set it off: how bad, and their own damage
 }
 
-/** A trap springs on a token: it's spent (for them), it's found, and its save, damage and effects land. */
+/** A trap springs on a token: it's spent (for them), whoever saw it knows it's there, and its save, damage and effects land. */
 export function springTrap(levelId: number, trap: Trap, tokenId: number): Sprung {
   const token = listTokens(levelId).find((t) => t.id === tokenId);
   const name = token?.name ?? "Someone";
   markTrapSprung(trap.id, tokenId);
-  setTrapFound(trap.id, true); // once it has gone off, it's no secret
+  witnessTrap(levelId, trap, [tokenId]); // no secret any more to whoever saw it
   const f = fightersOn(levelId).get(tokenId);
   const save = trap.save_attr && f ? f.save(trap.save_attr as never) : null;
   const saved = !!save && save.total >= trap.save_dc;
@@ -80,7 +80,7 @@ export function setOffTrap(levelId: number, trapId: number): Sprung[] {
   const trap = listTraps(levelId).find((t) => t.id === trapId);
   if (!trap) return [];
   const caught = listTokens(levelId).filter((t) => canSpring(trap, t.id, allegianceOf(t)) && inTrap(trap.area, centre({ x: t.col, y: t.row })));
-  setTrapFound(trap.id, true);
+  witnessTrap(levelId, trap, caught.map((t) => t.id));
   if (!caught.length) {
     markTrapSprung(trap.id, 0); // gone off, on no one
     logSessionEvent(`${trap.name} goes off, catching no one.`);

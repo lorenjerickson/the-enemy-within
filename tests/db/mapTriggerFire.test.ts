@@ -56,7 +56,8 @@ test("a pressure plate sets off a trap elsewhere: it springs on whoever stands i
   assert.equal(tokenHealth(victim)!.current, 15);
   assert.equal(tokenHealth(walker)!.current, 20);
   assert.match(fired[0].told.get(victim)![0], /Falling stones/);
-  assert.equal(getTrap(trapId)!.found, 1);
+  assert.ok(getTrap(trapId)!.seen_by?.includes(victim), "whoever it caught knows it's there");
+  assert.equal(getTrap(trapId)!.found, 0, "not found by everyone: only by those who saw it");
 });
 
 test("set off with no one in it, a once-only trap still goes off and is spent", () => {
@@ -64,7 +65,8 @@ test("set off with no one in it, a once-only trap still goes off and is spent", 
   const trapId = addTrap(l3, { shape: "rect", x: 9, y: 9, w: 1, h: 1 });
   fireTrigger(l3, { id: 0, name: "Lever", area: wire, springs: [], who: "", often: "always", outcomes: [{ kind: "trap", trap: trapId }], sprung: [] }, null);
   assert.deepEqual(getTrap(trapId)!.sprung, [0]);
-  assert.equal(getTrap(trapId)!.found, 1);
+  assert.equal(getTrap(trapId)!.found, 0, "gone off with no one there to see: still a secret");
+  assert.deepEqual(getTrap(trapId)!.seen_by, []);
 });
 
 test("a trigger that fires when a move ends in it", () => {

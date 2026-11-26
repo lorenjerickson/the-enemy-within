@@ -16,6 +16,16 @@ export function litOn(levelId: number): (p: { col: number; row: number }) => boo
   return (p) => litAt({ x: p.col + 0.5, y: p.row + 0.5 }, illumination, lights, walls);
 }
 
+/** Whether a token can see a spot (grid units) where it stands: walls, its senses, the light, fog. */
+export function seesSpot(levelId: number, tokenId: number, p: { x: number; y: number }): boolean {
+  const t = listTokens(levelId).find((x) => x.id === tokenId);
+  if (!t) return false;
+  const me = sensesOf(tokenId, levelId), walls = blockingSegments(listStructures(levelId)), from = { x: t.col + 0.5, y: t.row + 0.5 };
+  if (!insidePolygon(p, visibilityPolygon(from, me.blind ? me.blindRange : SIGHT, walls))) return false;
+  if (inFog(levelId, p) && Math.hypot(p.x - from.x, p.y - from.y) > blindRangeOf(FOG_SIGHT_FT)) return false;
+  return me.blind || brightEnough(from, p, me.darkvision, getIllumination(levelId), listLights(levelId), walls);
+}
+
 /**
  * The tokens on a level that someone at `at` could see (never someone hidden from their side: Hide) (walls and closed doors block sight), not counting `self`.
  * With `self`: their senses count (blind: only within 5 ft; in the dark: only what's lit or within their darkvision;

@@ -26,7 +26,9 @@ import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain, clearTokenTargets, recordSightingAt } from "@/lib/db";
-import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, setTrapFound } from "@/lib/db";
+import { openConditionSaveRequest, getCondition, listTraps, listMapTriggers, markTrapSprung, trapSeenBy } from "@/lib/db";
+import { seesSpot } from "@/lib/sight";
+import { trapCentre, type Trap } from "@/lib/traps";
 import { fireTrigger } from "./mapTriggers";
 import { clearAssist, clearHidden, setHidden, listHidden, getCharacter, getDoor, listAssists, setAssist, setDoorOpen, setLinkPrompt } from "@/lib/db";
 import type { RoundTrap } from "@/lib/resolveRound";
@@ -134,7 +136,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
   for (const s of result.strains) addStrain(s.tokenId, s.attribute, s.points); // strain outlasts the round (and the condition)
-  for (const t of result.trapsSprung) { markTrapSprung(t.trapId, t.tokenId); setTrapFound(t.trapId, true); } // spent (for them), and no secret any more
+  // Spent (for them), and no secret any more to whoever saw it go off (from where they ended the round).
+  for (const t of result.trapsSprung) { markTrapSprung(t.trapId, t.tokenId); const trap = listTraps(levelId).find((x) => x.id === t.trapId); if (trap) witnessTrap(levelId, trap, [t.tokenId]); }
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {
     const h = tokenHealth(id);
@@ -312,3 +315,14 @@ export function applyConditionNow(levelId: number, tokenId: number, c: Condition
   if (lingers(c) && !addAffliction(levelId, tokenId, c, null, area)) out.push(`already ${c.name.toLowerCase()}: no change`); // area: while in it
   return out;
 }
+
+/**
+ * A trap went off: the characters who could see it (and those it caught) now know it's there; their players see it on
+ * the map. Going off out of everyone's sight reveals it to no one (a Search still finds it).
+ */
+export function witnessTrap(levelId: number, trap: Trap, caught: number[] = []): void {
+  const middle = trapCentre(trap.area);
+  const saw = listTokens(levelId).filter((t) => t.character_id !== null && (caught.includes(t.id) || seesSpot(levelId, t.id, middle))).map((t) => t.id);
+  if (saw.length) trapSeenBy(trap.id, saw);
+}
+

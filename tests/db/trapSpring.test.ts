@@ -20,7 +20,7 @@ test("a trap with no save always lands: damage, its effects, found, spent; the p
   const s = springTrap(lv, getTrap(id)!, tok);
   assert.equal(tokenHealth(tok)!.current, 14);
   assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Hobbled"));
-  assert.equal(getTrap(id)!.found, 1);
+  assert.ok(getTrap(id)!.seen_by?.includes(tok), "known to whoever set it off");
   assert.deepEqual(getTrap(id)!.sprung, [tok]);
   assert.match(s.player, /You set off a trap \(Spike pit\)! You're hurt: moderate \(-6\), you're hobbled, you stop where you are\./);
   assert.match(s.gm, /Annis sets off Spike pit: 6 piercing damage; Hobbled/);
@@ -63,4 +63,20 @@ test("a trap that springs when a move ends in it", () => {
   assert.equal(trapsWhereStopped(l3, tok, { x: 3, y: 0 }).length, 1, "every time");
   assert.equal(trapsWhereStopped(l3, tok, { x: 5, y: 0 }).length, 0);
   assert.equal(tokenHealth(tok)!.current, 8);
+});
+
+test("a trap going off is known only to characters who could see it (and those it caught)", async () => {
+  const { addStructure, saveIllumination } = await import("@/lib/db");
+  const { witnessTrap } = await import("@/app/(play)/play/workOutRound");
+  const room = level("Two rooms");
+  saveIllumination(room, 1);
+  const near = placeCharacterToken(room, character("Near", { health: "20" }), 1, 0);
+  const behind = placeCharacterToken(room, character("Behind", { health: "20" }), 8, 0);
+  addStructure(room, { kind: "wall", x1: 6, y1: -5, x2: 6, y2: 5, target_level_id: null } as never); // a wall between Behind and the trap
+  const id = addTrap(room, { shape: "rect", x: 3, y: 0, w: 1, h: 1 });
+  saveTrap(id, settings());
+  witnessTrap(room, getTrap(id)!);
+  const seen = getTrap(id)!.seen_by ?? [];
+  assert.ok(seen.includes(near), "in sight");
+  assert.ok(!seen.includes(behind), "behind a wall: still a secret to them");
 });

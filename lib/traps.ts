@@ -35,9 +35,14 @@ export interface Trap {
   effects: number[]; // catalog effects put on whoever fails the save (or on anyone it springs on, with no save)
   stops: 0 | 1; // stops the mover where they are
   find_dc: number; // Search (Investigation) to find it
-  found: 0 | 1; // found (or revealed by the GM): players see it
+  found: 0 | 1; // found (by a Search, or revealed by the GM): every player sees it
+  seen_by?: number[]; // tokens that saw it go off: their players see it (going off out of sight reveals nothing)
   sprung: number[]; // tokens it has sprung on (once: any spends it; each: those it won't spring on again)
 }
+
+/** A trap's middle (a tripwire's midpoint), in grid units: what someone has to see to see it go off. */
+export const trapCentre = (a: TrapArea): { x: number; y: number } =>
+  a.shape === "circle" ? { x: a.x, y: a.y } : a.shape === "rect" ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 };
 
 /** What zone checks need (traps and triggers alike). */
 export type Zone = Pick<Trap, "area" | "springs" | "who" | "often" | "sprung">;
