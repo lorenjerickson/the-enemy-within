@@ -14,7 +14,7 @@ export const EFFECT_LABELS: Record<EffectKind, string> = {
   fog: "Fog",
   clouds: "Clouds",
   fire: "Fire",
-  lightning: "Lightning",
+  lightning: "Electricity",
   poison: "Poison vapour",
   acid: "Acid pool",
   necrotic: "Necrotic gloom",
@@ -293,59 +293,52 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       ctx.fill();
     }
   } else if (kind === "lightning") {
-    // A strike every few seconds (more often when stronger): a soft flash and a jagged bolt.
-    const period = 7 - 5 * k;
-    const cycle = Math.floor(t / period);
-    const since = t - cycle * period;
-    // Where this strike lands; the flash is brightest there.
-    const cx = x + w * (0.35 + 0.3 * rnd(cycle + 0.1)), cy = y + h * (0.35 + 0.3 * rnd(cycle + 0.2));
-    if (since < 0.35) {
-      // The flash is an oval glow over the area, brightest where it struck.
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(w / 2, h / 2);
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      const a = 0.55 * (1 - since / 0.35);
-      g.addColorStop(0, `rgba(235,240,255,${a})`);
-      g.addColorStop(0.6, `rgba(235,240,255,${a * 0.6})`);
-      g.addColorStop(1, "rgba(235,240,255,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(-1, -1, 2, 2);
-      ctx.restore();
-    }
-    if (since < 0.2) {
-      // Seen from above, a bolt hits a point: jagged forks branch out from it in every direction.
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.shadowColor = "rgba(170,190,255,0.9)";
-      ctx.shadowBlur = unit * 0.4;
-      ctx.lineCap = "round";
-      const sx = cx, sy = cy;
-      const forks = 5 + Math.round(3 * k);
-      for (let f = 0; f < forks; f++) {
-        const n = cycle * 97 + f * 13;
-        let ang = (f / forks) * Math.PI * 2 + (rnd(n) - 0.5) * 0.8;
-        const reach = Math.min(w, h) * (0.25 + 0.2 * rnd(n + 0.5));
-        const steps = 6;
-        let px = sx, py = sy;
-        for (let s2 = 1; s2 <= steps; s2++) {
-          ang += (rnd(n + s2) - 0.5) * 1.1;
-          const nx = px + Math.cos(ang) * reach / steps, ny = py + Math.sin(ang) * reach / steps;
-          ctx.globalAlpha = fade((px + nx) / 2, (py + ny) / 2);
-          ctx.lineWidth = Math.max(1, unit * 0.06 * (1 - s2 / (steps + 1)));
-          ctx.beginPath();
-          ctx.moveTo(px, py);
-          ctx.lineTo(nx, ny);
-          ctx.stroke();
-          px = nx;
-          py = ny;
+    // Electricity crawling along a surface (shown as "Electricity"): a few thin arcs walk along short winding
+    // paths, forking into smaller and smaller branches as they go, crackling (their shape jitters many times a
+    // second) and fading out behind their tips.
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = "rgba(150,180,255,0.9)";
+    ctx.shadowBlur = unit * 0.2;
+    const crackle = Math.floor(t * 18); // the shape jitters 18 times a second
+    const seg = unit * 0.18;
+    // One path from (px, py) heading `ang`, `n` segments long. `head` is how far along its tip has walked (in
+    // segments); the last `tail` segments behind the tip show, fading. Some segments fork off a smaller branch.
+    const path = (seed: number, px: number, py: number, ang: number, n: number, head: number, tail: number, width: number, depth: number) => {
+      for (let s2 = 1; s2 <= n && s2 <= head; s2++) {
+        ang += (rnd(seed + s2) - 0.5) * 0.9;
+        const j = (rnd(seed + s2 * 3.1 + crackle * 0.37) - 0.5) * seg * 0.6; // crackle, across the path
+        const nx = px + Math.cos(ang) * seg - Math.sin(ang) * j, ny = py + Math.sin(ang) * seg + Math.cos(ang) * j;
+        const behind = head - s2;
+        if (behind < tail) {
+          const a = fade((px + nx) / 2, (py + ny) / 2) * (1 - behind / tail) * (0.7 + 0.3 * rnd(seed + s2 + crackle));
+          if (a > 0) {
+            ctx.strokeStyle = `rgba(215,228,255,${0.9 * a})`;
+            ctx.lineWidth = width;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(nx, ny);
+            ctx.stroke();
+          }
         }
+        if (depth < 2 && rnd(seed + s2 + 0.5) < 0.28) {
+          const side = rnd(seed + s2 + 0.8) < 0.5 ? -1 : 1;
+          path(seed * 3 + s2 * 7.7, nx, ny, ang + side * (0.5 + 0.6 * rnd(seed + s2 + 0.9)), Math.round(n * 0.45), (head - s2) * 1.3, tail * 0.7, width * 0.6, depth + 1);
+        }
+        px = nx;
+        py = ny;
       }
-      // The bright point where it struck.
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.beginPath();
-      ctx.arc(sx, sy, unit * 0.12 + 1, 0, Math.PI * 2);
-      ctx.fill();
+    };
+    const arcs = 1 + Math.round(2 * k);
+    for (let i = 0; i < arcs; i++) {
+      const period = 2.4 - 0.8 * k;
+      const run = Math.floor(t / period + rnd(i + 0.1)); // each walk starts somewhere new
+      const phase = mod(t / period + rnd(i + 0.1), 1);
+      const seed = i * 101 + run * 37;
+      const n = 14, tail = 6;
+      const sx = x + w * (0.15 + 0.7 * rnd(seed + 0.2)), sy = y + h * (0.15 + 0.7 * rnd(seed + 0.4));
+      path(seed, sx, sy, rnd(seed + 0.6) * Math.PI * 2, n, phase * (n + tail), tail, Math.max(0.8, unit * 0.025), 0);
     }
   }
   ctx.restore();
