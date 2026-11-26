@@ -119,7 +119,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
     saveAttr: f?.save_attr ?? "agility", saveDc: f?.save_dc ?? 12, saveHalf: f ? !!f.save_half : true,
     defend: defend?.value.replace(/^\+/, "") ?? "", heal: heal?.value.replace(/^\+/, "") ?? "",
     aidTarget: aid?.target ?? "", aid: aid?.value.replace(/^\+/, "") ?? "",
-    durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit ?? "minute",
+    durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit || "minute",
     effects: (f?.conditions ?? []).filter((c) => c.on === (self ? "self" : "target")).map((c) => c.id),
     keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)), conditions: (f?.conditions ?? []).filter((c) => c.on !== (self ? "self" : "target")) },
   };

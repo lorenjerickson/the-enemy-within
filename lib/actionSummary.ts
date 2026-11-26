@@ -13,10 +13,13 @@ const once = (c: Condition) => !lingers(c) && modifiersOf(c).length > 0;
 const an = (w: string) => (/^[aeiou]/i.test(w) ? `an ${w}` : `a ${w}`);
 const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/** Catalog wording made plain: "+1d4 persuasion (skill)" → "+1d4 Persuasion". */
+const plainly = (s: string) => s.replace(/ \((attribute|skill)\)/g, "").replace(/ on their /g, " on ").replace(/([+-][\dd]+) ([a-z]+)/g, (_, n, w) => `${n} ${w === "defense" || w === "damage" ? w : cap(w)}`);
+
 /** What a named condition does, in plain words: "-2 Intellect and disadvantage on attack rolls for 10 rounds". */
 export function conditionInWords(c: Condition): string {
   const [effects = "", ...more] = describeCondition(c).split(" · ");
-  const parts = effects.replace(/ \((attribute|skill)\)/g, "").replace(/ on their /g, " on ").replace(/([+-]\d+) ([a-z]+)/g, (_, n, w) => `${n} ${cap(w)}`).split(", ").filter(Boolean);
+  const parts = plainly(effects).split(", ").filter(Boolean);
   const how = parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   const time = more.find((m) => /^\d+ rounds?$/.test(m));
   // Its save as it lands: "unless they make a Fortitude save (DC 12)" (halves: it lasts half as long on a success).
@@ -33,7 +36,7 @@ function does(s: ActionStatuses["self"], on: string, minutes: number): string[] 
   const heal = s.boosts.filter((x) => x.target === "health").map((x) => x.value.replace(/^\+/, ""));
   if (heal.length) out.push(`heals ${on} for ${heal.join(" + ")}`);
   const rest = { boosts: s.boosts.filter((x) => x.target !== "health"), grants: s.grants };
-  if (rest.boosts.length || rest.grants.length) out.push(`gives ${on} ${describeStatus(rest)} ${lasting(minutes)}`);
+  if (rest.boosts.length || rest.grants.length) out.push(`gives ${on} ${plainly(describeStatus(rest))} ${lasting(minutes)}`);
   const conds = s.conditions ?? [];
   // A condition that only lands once (a healing draught) reads as what it does; one that stays, by its name.
   for (const c of conds.filter(once)) {

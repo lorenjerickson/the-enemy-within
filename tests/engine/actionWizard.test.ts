@@ -56,3 +56,9 @@ test("effects an older action puts on its user as well as its target survive bei
   old.conditions.push({ id: 8, on: "self" });
   assert.deepEqual(fieldsFromAnswers(answersFromAction(old)).conditions, [{ id: 3, on: "target" }, { id: 8, on: "self" }]);
 });
+
+test("defend, heal and aid read on the card", () => {
+  assert.equal(card(answer({ who: "several", count: "upto", n: 3, targetWho: "friendly", rangeFt: 30, affects: ["defend", "aid"], defend: "1", aidTarget: "skill:persuasion", aid: "1d4", durationAmount: 1, durationUnit: "minute" })),
+    "Gives up to 3 friendlies within 30 feet +1 defense, +1d4 Persuasion for 1 minute, no roll needed. Takes 2 seconds.");
+  assert.equal(card(answer({ type: "bonus", who: "self", affects: ["heal"], heal: "1d10" })), "As a bonus action: heals you for 1d10. Takes 2 seconds.");
+});

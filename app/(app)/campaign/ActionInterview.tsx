@@ -5,7 +5,11 @@ import { gearOf, type ActionFields } from "@/lib/actionCard";
 import { gearSummary } from "@/lib/actionSummary";
 import { answersFromAction, fieldsFromAnswers, questions, type ActionType, type Answers, type Question } from "@/lib/actionWizard";
 import type { Condition } from "@/lib/conditions";
-import { DAMAGE_TYPES } from "@/lib/actions";
+import { DAMAGE_TYPES, DURATION_UNITS } from "@/lib/actions";
+import { MODIFIER_TARGET_GROUPS, type ModifierTarget } from "@/lib/modifiers";
+
+// What Aid can raise: attributes, skills, rolls, and to-hit or damage (health and defense have their own questions).
+const AID_GROUPS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Movement").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "defense")] as const);
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 import { AFFECTS, type Affect } from "@/lib/actionWizard";
 
@@ -86,6 +90,9 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
     : at === "affects" ? a.affects.length > 0
     : at === "damage" ? isDiceFormula(compact(a.damage))
     : at === "toHit" ? !a.attackBonus || isModifierFormula(compact(a.attackBonus))
+    : at === "defend" ? isModifierFormula(compact(a.defend))
+    : at === "heal" ? isModifierFormula(compact(a.heal))
+    : at === "aid" ? !!a.aidTarget && isModifierFormula(compact(a.aid))
     : true;
 
   return (
@@ -222,7 +229,45 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
             <input autoFocus value={a.attackBonus} onChange={(e) => set({ attackBonus: e.target.value })} placeholder="none, or e.g. +2 or 1d4" className={`input input-sm w-40 ${!ok ? "input-error" : ""}`} />
           </>
         )}
-        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts", "affects", "damage", "toHit"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
+        {at === "defend" && (
+          <>
+            <div className="text-sm font-semibold">How much does it raise {a.who === "self" || a.type === "reaction" ? "your" : "their"} defense?</div>
+            <div className="flex items-center gap-2 text-sm">+<input autoFocus value={a.defend} onChange={(e) => set({ defend: e.target.value })} placeholder="e.g. 2" className={`input input-sm w-24 ${a.defend && !ok ? "input-error" : ""}`} /> defense</div>
+          </>
+        )}
+        {at === "heal" && (
+          <>
+            <div className="text-sm font-semibold">How much does it heal?</div>
+            <input autoFocus value={a.heal} onChange={(e) => set({ heal: e.target.value })} placeholder="e.g. 2d4+2" className={`input input-sm w-32 ${a.heal && !ok ? "input-error" : ""}`} />
+          </>
+        )}
+        {at === "aid" && (
+          <>
+            <div className="text-sm font-semibold">Which skill, ability or roll does it help, and by how much?</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <select value={a.aidTarget} onChange={(e) => set({ aidTarget: e.target.value as ModifierTarget | "" })} className="select select-sm w-auto">
+                <option value="">Pick one…</option>
+                {AID_GROUPS.map(([g, opts]) => (
+                  <optgroup key={g} label={g}>{opts.map(([t, label]) => <option key={t} value={t}>{label}</option>)}</optgroup>
+                ))}
+              </select>
+              +<input value={a.aid} onChange={(e) => set({ aid: e.target.value })} placeholder="e.g. 1d4" className={`input input-sm w-24 ${a.aid && !ok ? "input-error" : ""}`} />
+            </div>
+          </>
+        )}
+        {at === "duration" && (
+          <>
+            <div className="text-sm font-semibold">How long does it last?</div>
+            <div className="flex items-center gap-2 text-sm">
+              <input type="number" min="1" value={a.durationAmount} onChange={(e) => set({ durationAmount: Math.round(num(e.target.value, 1, 1)) })} className="input input-sm w-20" />
+              <select value={a.durationUnit} onChange={(e) => set({ durationUnit: e.target.value as Answers["durationUnit"] })} className="select select-sm w-auto">
+                {DURATION_UNITS.filter(Boolean).map((u) => <option key={u} value={u}>{u}{a.durationAmount > 1 && !u.endsWith("rest") ? "s" : ""}</option>)}
+              </select>
+            </div>
+            <p className="text-xs opacity-60">For {[a.affects.includes("defend") && "the defense", a.affects.includes("aid") && "the aid", a.who === "area" && a.lasts && "the area"].filter(Boolean).join(", ")}. Effects last as the catalog says.</p>
+          </>
+        )}
+        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts", "affects", "damage", "toHit", "defend", "heal", "aid", "duration"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
       </div>
       <HiddenFields f={fields} />
       <div className="flex items-center gap-2">
