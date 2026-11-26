@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { AmbientSound, Asset, PositionalSound } from "@/lib/db";
 import { CLIP_MODE_LABELS, CLIP_MODES, type ClipMode } from "@/lib/maps";
 import { dropAmbientClip, dropAmbientSound, playOnce, playSequence, setAmbientVolume, stopAmbient, useAmbientNow } from "@/lib/ambientPlayer";
-import { changePositionalLoop, addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset } from "../actions";
+import { changePositionalLoop, addClipToSound, changeSoundVolume, changePositionalRadius, removePositionalSound, changeClipMode, removeAmbientClip, removeAmbientSound, submitAmbientSound, uploadAudioAsset, shareAmbient } from "../actions";
 import MediaLibrary, { type MediaLibraryHandle } from "./MediaLibrary";
 
 /** Sounds layer editor: ambient sounds made of clip playlists, with GM playback (one ambient sound at a time). */
@@ -90,9 +90,9 @@ export default function SoundsEditor({
               {playing && <span className="badge badge-primary badge-sm">playing</span>}
               <div className="ml-auto flex shrink-0 items-center gap-1">
                 {playing ? (
-                  <button type="button" className="btn btn-sm" onClick={stopAmbient}>■ Stop</button>
+                  <button type="button" className="btn btn-sm" onClick={() => { stopAmbient(); void shareAmbient(levelId, null); }}>■ Stop</button>
                 ) : (
-                  <button type="button" className="btn btn-sm" disabled={looped.length + layered.length === 0} onClick={() => playSequence(s.id, looped, vol(`ambient:${s.id}`, s.volume), layered)}>
+                  <button type="button" className="btn btn-sm" disabled={looped.length + layered.length === 0} onClick={() => { playSequence(s.id, looped, vol(`ambient:${s.id}`, s.volume), layered); void shareAmbient(levelId, { soundId: s.id, volume: vol(`ambient:${s.id}`, s.volume) }); }}>
                     ▶ Play loop
                   </button>
                 )}
@@ -101,7 +101,7 @@ export default function SoundsEditor({
                 </form>
               </div>
             </div>
-            <VolumeSlider wide {...volumeProps("ambient", s.id, s.volume, (v) => playing && setAmbientVolume(v))} />
+            <VolumeSlider wide {...volumeProps("ambient", s.id, s.volume, (v) => { if (playing) { setAmbientVolume(v); void shareAmbient(levelId, { soundId: s.id, volume: v }, true); } })} />
 
             <ol className="space-y-1 text-sm">
               {s.clips.map((c, i) => (
@@ -110,7 +110,7 @@ export default function SoundsEditor({
                     <span className="w-5 shrink-0 opacity-60">{i + 1}.</span>
                     <span className="flex-1 truncate">{c.name}</span>
                     {c.mode !== "loop" && c.mode !== "layer" && (
-                      <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume))}>▶</button>
+                      <button type="button" className="btn btn-xs" title="Play this clip now" onClick={() => { playOnce(s.id, c, vol(`ambient:${s.id}`, s.volume)); void shareAmbient(levelId, { soundId: s.id, clipId: c.id, volume: vol(`ambient:${s.id}`, s.volume) }); }}>▶</button>
                     )}
                     <button type="button" className="btn btn-ghost btn-xs" title="Remove clip" onClick={() => {
                         dropAmbientClip(c.id);

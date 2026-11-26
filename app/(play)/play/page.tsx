@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getAssetUrl, listLastingAreas, getTokenActor, type ActorToken, getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
+import { getAssetUrl, getLevelAmbient, listLastingAreas, getTokenActor, type ActorToken, getGmLevelId, getGameTime, getLevelPlace, getOpenGameSession, getPlayerTokenLevelId, listLevels, listPlayerCharacters, listSightings, getPlayerToken, getLinkPrompt, getStandingOrder, listMapTriggers, listStructures, getOpenRollRequest, getEncounter, getRoundPlan, listTokens, tokenLabels, listPlanTargets, listPlanRoutes, downTokens, listTimers, listTriggers, markPresent, getReplay, characterContainers, gmPlayedPlayers, isRemovedFrom, listPlayers, type GameSession, type User } from "@/lib/db";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
 import LevelMap from "../../(app)/campaign/locations/[id]/LevelMap";
@@ -17,6 +17,7 @@ import PickLock from "./PickLock";
 import RollPrompt from "./RollPrompt";
 import CharacterSheet from "./CharacterSheet";
 import AreaSounds from "./AreaSounds";
+import SharedAmbient from "./SharedAmbient";
 import ImprovisingCard from "./ImprovisingCard";
 import ImproviseResult from "./ImproviseResult";
 import type { ImproviseChoices } from "./ImproviseWindow";
@@ -254,6 +255,8 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {/* Waiting on an improvisation: refresh every second, so its outcome shows as soon as the GM settles it. */}
       <AutoRefresh checkIn={real ? checkIn : undefined} seconds={me && (openImprovisation(me.token_id) || agreedImprovisation(me.token_id)) ? 1 : 3} />
       <ImproviseResult result={me ? improvisationResult(me.token_id) ?? null : null} />
+      {/* The GM's ambient sound on their level, on their own speakers (the GM acting as someone already hears it). */}
+      {real && levelId !== undefined && <SharedAmbient ambient={getLevelAmbient(levelId)} />}
       {!real && <ActingAs session={session} user={user} name={creature !== null && me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : user.name} />}
       {/* Watching: their prompts show as they see them, but can't be rolled. */}
       <fieldset disabled={watching} className="contents">

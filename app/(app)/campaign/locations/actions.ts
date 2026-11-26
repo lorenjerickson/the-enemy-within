@@ -5,7 +5,7 @@ import { syncAurasOn } from "@/lib/auraSync";
 import { requireGm } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revealDiscovery } from "@/lib/storyRules";
-import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, listTokens, addTokenWalk, getEncounter, getTokenMover, setStructureEnds, splitStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible } from "@/lib/db";
+import { addSecret, deleteSecret, setSecretRevealed, setDoorLocked, setLockDc, saveHideWalls, getPartyPlacement, savePartyStart, clearPartyStart, renameMapThing, setMapThingOn, moveEffect, addEffect, setEffectIntensity, deleteEffect, setPositionalLoop, movePositionalSound, saveFigureHeight, getCharacter, placeCharacterToken, getTokenLevel, getTileLevel, isGridlessLevel, isPortraitLevel, listStructures, addControl, deleteControl, getControlScript, saveControlScript, addNote, deleteNote, resizeNote, updateNoteText, setDoorOpen, addLight, deleteLight, saveIllumination, setSoundVolume, addPositionalSound, deletePositionalSound, setPositionalRadius, addAmbientClip, addAmbientSound, deleteAmbientClip, deleteAmbientSound, setClipMode, addCreatureToken, addStructure, addTile, deleteToken, getCreature, moveToken, deleteStructure, deleteLevelStructures, listTokens, addTokenWalk, getEncounter, getTokenMover, setStructureEnds, splitStructure, deleteTile, moveTile, getAssetIdByUrl, addLevel, listLevels, listLocations, removeLevel, saveBackground, saveLocation, saveGrid, saveMapImage, saveTemplateColors, setLayerVisible, setLevelAmbient } from "@/lib/db";
 import { walkWithFollowers } from "../../../(play)/play/walk";
 import { speedFps } from "@/lib/creatureChanges";
 import { revealAfterStep } from "../../../(play)/play/hiding";
@@ -794,4 +794,11 @@ export async function rearmTrigger(locationId: number, id: number) {
   await requireGm();
   resetMapTrigger(Number(id));
   revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM played, stopped or turned an ambient sound up or down: every player's browser on the level follows. */
+export async function shareAmbient(levelId: number, play: { soundId: number; clipId?: number | null; volume: number } | null, volumeOnly = false) {
+  await requireGm();
+  setLevelAmbient(Number(levelId), play && { soundId: Number(play.soundId), clipId: play.clipId == null ? null : Number(play.clipId), volume: Math.min(1, Math.max(0, Number(play.volume))) }, volumeOnly);
+  revalidatePath("/play");
 }

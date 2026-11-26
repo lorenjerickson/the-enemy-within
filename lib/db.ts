@@ -1595,6 +1595,37 @@ export function listAmbientSounds(levelId: number): AmbientSound[] {
   return sounds.map((s) => ({ ...s, clips: clips.all(s.id) }));
 }
 
+// What the GM is playing on a level (ambient), shared with every player's browser on it. rev changes with each new
+// play (or stop), so browsers start it again; volume can change without a new rev.
+db.exec(`CREATE TABLE IF NOT EXISTS level_ambient (
+  level_id INTEGER PRIMARY KEY,
+  sound_id INTEGER,          -- null: nothing playing
+  clip_id INTEGER,           -- a single clip played once (else the sound's loop and layer clips)
+  volume REAL NOT NULL DEFAULT 1,
+  rev INTEGER NOT NULL DEFAULT 0
+)`);
+
+export type SharedAmbient = { rev: number; volume: number; loop: { id: number; url: string }[]; layer: { id: number; url: string }[]; once: { id: number; url: string } | null } | null;
+
+/** The GM played (or stopped: null) an ambient sound on a level; volume alone: same play, louder or softer. */
+export function setLevelAmbient(levelId: number, play: { soundId: number; clipId?: number | null; volume: number } | null, volumeOnly = false): void {
+  const was = db.prepare<[number], { rev: number }>("SELECT rev FROM level_ambient WHERE level_id = ?").get(levelId);
+  if (volumeOnly && play) { db.prepare("UPDATE level_ambient SET volume = ? WHERE level_id = ?").run(play.volume, levelId); return; }
+  db.prepare("INSERT OR REPLACE INTO level_ambient (level_id, sound_id, clip_id, volume, rev) VALUES (?, ?, ?, ?, ?)")
+    .run(levelId, play?.soundId ?? null, play?.clipId ?? null, play?.volume ?? 1, (was?.rev ?? 0) + 1);
+}
+
+/** What's playing on a level, as players' browsers play it (clips with their files). */
+export function getLevelAmbient(levelId: number): SharedAmbient {
+  const row = db.prepare<[number], { sound_id: number | null; clip_id: number | null; volume: number; rev: number }>("SELECT sound_id, clip_id, volume, rev FROM level_ambient WHERE level_id = ?").get(levelId);
+  if (!row) return null;
+  const sound = row.sound_id === null ? undefined : listAmbientSounds(levelId).find((s) => s.id === row.sound_id);
+  if (!sound) return { rev: row.rev, volume: row.volume, loop: [], layer: [], once: null };
+  const clip = (c: AmbientClip) => ({ id: c.id, url: c.url });
+  const once = row.clip_id === null ? null : sound.clips.find((c) => c.id === row.clip_id);
+  return { rev: row.rev, volume: row.volume, once: once ? clip(once) : null, loop: once ? [] : sound.clips.filter((c) => c.mode === "loop").map(clip), layer: once ? [] : sound.clips.filter((c) => c.mode === "layer").map(clip) };
+}
+
 export function addAmbientSound(levelId: number, name: string): void {
   db.prepare<[number, string]>("INSERT INTO ambient_sounds (level_id, name) VALUES (?, ?)").run(levelId, name);
 }
