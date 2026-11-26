@@ -61,7 +61,9 @@ if (dry) process.exit(0);
 const bySpec = new Map();
 for (const [, i] of needImports) { if (!bySpec.has(i.spec)) bySpec.set(i.spec, { lines: new Set(), names: [], types: [] }); const g = bySpec.get(i.spec); if (i.line) g.lines.add(i.line); else (i.type ? g.types : g.names).push(i.text); }
 const importLines = [...bySpec].flatMap(([spec, g]) => [...g.lines, ...(g.names.length ? [`import { ${g.names.join(", ")} } from "${spec}";`] : []), ...(g.types.length ? [`import type { ${g.types.join(", ")} } from "${spec}";`] : [])]);
-const full = (s) => text.slice(s.getFullStart(), s.getEnd()).replace(/^\n+/, "");
+// A moved private declaration that lib/db.ts's remaining code still uses (its migrations, say) is exported for it.
+const stillUsed = (() => { let rest = ""; let p = 0; for (const st of stmts.filter((x) => moving.has(x))) { rest += text.slice(p, st.getFullStart()); p = st.getEnd(); } rest += text.slice(p); const sf = ts.createSourceFile(FILE, rest, ts.ScriptTarget.Latest, true); const u = new Set(); const w = (n) => { if (ts.isIdentifier(n) && !isPropName(n)) u.add(n.text); ts.forEachChild(n, w); }; for (const st of sf.statements) if (!ts.isImportDeclaration(st)) w(st); return u; })();
+const full = (s) => { const t = text.slice(s.getFullStart(), s.getEnd()).replace(/^\n+/, ""); return !isExported(s) && namesOf(s).some((n) => stillUsed.has(n)) ? t.replace(/^((?:\s*\/\/[^\n]*\n|\s*\/\*[\s\S]*?\*\/\s*\n)*\s*)/, "$1export ") : t; };
 const outPath = `lib/db/${area}.ts`;
 const existing = fs.existsSync(outPath) ? fs.readFileSync(outPath, "utf8") : "";
 const body = ordered.map(full).join("\n\n");
