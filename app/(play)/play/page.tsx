@@ -19,6 +19,7 @@ import CharacterSheet from "./CharacterSheet";
 import AreaSounds from "./AreaSounds";
 import SharedAmbient from "./SharedAmbient";
 import NearbySounds from "./NearbySounds";
+import SoundControl from "./SoundControl";
 import { playersSee } from "@/lib/aoe";
 import ImprovisingCard from "./ImprovisingCard";
 import ImproviseResult from "./ImproviseResult";
@@ -261,7 +262,8 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {real && levelId !== undefined && <SharedAmbient ambient={getLevelAmbient(levelId)} />}
       {/* Sounds where they are: the GM's placed looping sounds by distance, and the sounds of areas they can see. */}
       {real && levelId !== undefined && <NearbySounds sounds={listPositionalSounds(levelId).filter((p) => p.loop)} at={me && me.level_id === levelId ? { x: me.col + 0.5, y: me.row + 0.5 } : null} />}
-      {real && levelId !== undefined && <AreaSounds sounds={listLastingAreas(levelId).filter((l) => l.sound && playersSee(l)).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />}
+      {real && levelId !== undefined && <AreaSounds sounds={listLastingAreas(levelId).filter((l) => l.sound && playersSee(l)).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} player />}
+      {real && <SoundControl />}
       {!real && <ActingAs session={session} user={user} name={creature !== null && me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : user.name} />}
       {/* Watching: their prompts show as they see them, but can't be rolled. */}
       <fieldset disabled={watching} className="contents">

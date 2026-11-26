@@ -13,6 +13,7 @@ let audio: HTMLAudioElement | null = null;
 let layers: HTMLAudioElement[] = [];
 let sequence: { id: number; url: string }[] = []; // the loop clips, played in turn
 let volume = 1;
+let gain = 1; // this browser's own master volume (a player's sound settings; the GM's stays 1)
 let now: Now = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -37,17 +38,23 @@ function play(clip: { id: number; url: string }, onEnded: (() => void) | null) {
   const a = player();
   a.onended = onEnded;
   a.src = clip.url;
-  a.volume = volume;
+  a.volume = volume * gain;
   void a.play().catch(() => {}); // autoplay can be refused; the GM can press play again
   if (now) now = { ...now, clipId: clip.id };
   emit();
 }
 
+/** This browser's master volume (0..1) over every ambient channel. */
+export function setAmbientGain(g: number) {
+  gain = Math.min(1, Math.max(0, g));
+  setAmbientVolume(volume);
+}
+
 /** Sets the playing ambient sound's volume (0..1), for every channel. */
 export function setAmbientVolume(v: number) {
   volume = Math.min(1, Math.max(0, v));
-  player().volume = volume;
-  for (const l of layers) l.volume = volume;
+  player().volume = volume * gain;
+  for (const l of layers) l.volume = volume * gain;
 }
 
 /**
@@ -67,7 +74,7 @@ export function playSequence(
   layers = layerClips.map((c) => {
     const l = new Audio(c.url);
     l.loop = true;
-    l.volume = volume;
+    l.volume = volume * gain;
     void l.play().catch(() => {});
     return l;
   });
