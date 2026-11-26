@@ -258,6 +258,38 @@ export function removePlanStep(p: Planner, index: number): string | null {
   return null;
 }
 
+/**
+ * A planned move's end dragged somewhere else (its length changed): the move is measured again from where the plan has
+ * them before it, the next move after it starts from the new end, and nothing later in the plan may fall out of the
+ * round (else it's refused and the plan stays as it was).
+ */
+export function moveStepEnd(p: Planner, index: number, to: { col: number; row: number }): string | null {
+  if (p.rolled) return "The dice are rolled: the plan is set";
+  if (p.ready) return "Ready already; undo that to change the plan";
+  const was = p.plan[index];
+  if (!was || was.kind !== "move") return "That isn't a planned move";
+  const start = { col: p.tok.col, row: p.tok.row };
+  const legs = remeasure(p, planEnd(p.plan.slice(0, index), start), to);
+  if (!legs?.length) return "Can't get there";
+  const moved: PlanStep[] = legs.map((l) => ({ ...l, ...(was.run ? { run: was.run } : {}) }) as PlanStep);
+  const after = p.plan.slice(index + 1);
+  const j = after.findIndex((x) => x.kind === "move");
+  if (j >= 0) {
+    const next = remeasure(p, to, (after[j] as Extract<PlanStep, { kind: "move" }>).to);
+    if (next === null) return "The move after it can't be reached from there";
+    const run = (after[j] as Extract<PlanStep, { kind: "move" }>).run;
+    after.splice(j, 1, ...next.map((l) => ({ ...l, ...(run ? { run } : {}) }) as PlanStep));
+  }
+  const plan: PlanStep[] = [];
+  for (const x of [...p.plan.slice(0, index), ...moved, ...after]) {
+    const why = cannotAdd(plan, x, p.walking);
+    if (why) return moved.includes(x) ? why : "That would push the rest of the plan out of the round";
+    plan.push(x);
+  }
+  saveRoundPlan(p.tok.level_id, p.tok.token_id, plan, false);
+  return null;
+}
+
 /** A move from `from` to `to` as plan steps (legs round walls on a gridless map), or null if there's no way there. */
 function remeasure(p: Planner, from: { col: number; row: number }, to: { col: number; row: number }): PlanStep[] | null {
   if (Math.hypot(to.col - from.col, to.row - from.row) < 0.1) return [];

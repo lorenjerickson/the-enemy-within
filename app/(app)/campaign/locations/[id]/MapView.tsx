@@ -14,7 +14,7 @@ import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
 import { expired, pageMoved, walksEnded, walksStarted, type At, type Holds } from "@/lib/walkHold";
-import { assistNow, freeMove, hideAt, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
+import { dragMoveEnd, assistNow, freeMove, hideAt, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
 import { setHideSpots, useHidePick } from "../../../../(play)/play/hideMode";
@@ -141,7 +141,7 @@ export default function MapView({
   gmPlans?: Record<number, { from: { col: number; row: number }; feetLeft: number; perSecond?: number; runPerSecond?: number }>; // GM planning creatures' rounds: where each plan leaves it, feet left
   replay?: Replay | null; // the last resolved round, played back second by second
   planTargets?: { from: number; to: number; action: string; label?: string; at?: { col: number; row: number } | null }[]; // planned targeted actions: lines to the target, from where they'll be
-  planRoutes?: { token: number; points: { col: number; row: number }[] }[]; // planned moves: trails of waypoints
+  planRoutes?: { token: number; points: { col: number; row: number; step?: number }[] }[]; // planned moves: trails of waypoints (step: the plan step a point ends; the player can drag it)
   contest?: Contest | null; // a contested move waiting on the GM: zoomed to, boxed, the spot highlighted
   selectedTarget?: number | null; // a player's selected target (kept from round to round): marked; clicking another token changes it
   planExplored?: Record<number, Point[]>; // GM planning as a character: where it has stood (what it's seen stays shaded in)
@@ -246,6 +246,7 @@ export default function MapView({
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   type TokenChange = { add: MapToken } | { move: { id: number; col: number; row: number } } | { remove: number };
+  const [routeDrag, setRouteDrag] = useState<{ step: number; col: number; row: number } | null>(null); // a planned move's end being dragged
   const tipRef = useRef<HTMLDivElement>(null); // the hover label: moved by hand (no re-render on every pointer move)
   const setHoverTip = (tip: { label: string; x: number; y: number } | null) => {
     const el = tipRef.current;
@@ -815,6 +816,16 @@ export default function MapView({
 
   // Right-button drag pans (left clicks are kept free for layer editing tools).
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Planning: grabbing the end of one of their planned moves drags it (a shorter or longer move).
+    if (readOnly && e.button === 0 && !targetMode && !replayFrame && planRoutes.length) {
+      const { gx, gy } = gridAt(e);
+      const end = planRoutes.flatMap((r) => r.points).find((p) => p.step !== undefined && Math.hypot(gx - (p.col + 0.5), gy - (p.row + 0.5)) < 0.45);
+      if (end) {
+        setRouteDrag({ step: end.step!, col: end.col, row: end.row });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
     // Answering a script's select(): click picks one, shift+click adds or removes it. Other left clicks do nothing meanwhile.
     if (pickEntity && e.button === 0) {
       const { gx, gy } = gridAt(e);
@@ -1156,6 +1167,12 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (routeDrag) {
+      const { gx, gy } = gridAt(e);
+      const col = gridless ? snapHeight(gx - 0.5) : Math.floor(gx), row = gridless ? snapHeight(gy - 0.5) : Math.floor(gy);
+      if (col !== routeDrag.col || row !== routeDrag.row) setRouteDrag({ ...routeDrag, col, row });
+      return;
+    }
     // Hover: a character's name and player (creatures' names for the GM only), next to the pointer.
     {
       const { gx, gy } = gridAt(e);
@@ -1264,6 +1281,15 @@ export default function MapView({
     setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
   };
   const onPointerUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (routeDrag) {
+      const d = routeDrag;
+      startTransition(async () => {
+        const r = await dragMoveEnd(d.step, d.col, d.row);
+        if (r.error) setControlResult({ label: "Move", ok: false, text: r.error });
+        setRouteDrag(null);
+      });
+      return;
+    }
     drag.current = null;
     if (lift.current) {
       clearTimeout(lift.current.timer); // let go before it lifted: just a click
@@ -1486,7 +1512,7 @@ export default function MapView({
       for (const layer of MAP_LAYERS) {
         if (!hiddenSet.has(layer)) LAYER_RENDERERS[layer]?.(state)(ctx, SCENE.w, SCENE.h);
       }
-      drawSessionOverlays(ctx, state, k, { canvas, fogged, fogCanvas, fogWalls, replayFrame, scriptFx, readOnly, gmSel, pickEntity, pickIds, scriptPick, targetMode, aimAt, aimFrom, actingToken, targetCandidates, gridless, contest, planRoutes, planTargets, selectedTarget, drawnTokens, reach });
+      drawSessionOverlays(ctx, state, k, { canvas, fogged, fogCanvas, fogWalls, replayFrame, scriptFx, readOnly, gmSel, pickEntity, pickIds, scriptPick, targetMode, aimAt, aimFrom, actingToken, targetCandidates, gridless, contest, planRoutes: routeDrag ? planRoutes.map((r) => ({ ...r, points: r.points.map((p) => (p.step === routeDrag.step ? { ...p, col: routeDrag.col, row: routeDrag.row } : p)) })) : planRoutes, planTargets, selectedTarget, drawnTokens, reach });
       if (hideSpots) drawHideSpots(ctx, state, hideSpots); // Hide: blind spots to pick
       // Improvisations' templates: where they were put, and the one following the cursor.
       if (templates.length || placingTemplate) drawTemplates(ctx, state, [

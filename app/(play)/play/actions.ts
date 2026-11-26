@@ -13,7 +13,7 @@ import { getTokenActor, type ActorToken, type RollAction, type User } from "@/li
 import {
   addPing, listPings, type Ping, closeRollRequest, settleInitiative, getDoor, getOpenGameSession, getOpenRollRequest, getPlayerToken,
   logSessionEvent, requestRoll, saveRollResult, setDoorLocked, listSecrets, setSecretRevealed, listStructures, isGridlessLevel, isPortraitLevel, walkToken, getEncounter, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, getGmLevelId, setDoorOpen, listMapTriggers, setAssist, assistOpenRequest, listHidden, setHidden, getEncounterWaiting, setEncounterWaiting, saveEncounter, getRoundPlan, saveRoundPlan, listMapFx } from "@/lib/db";
-import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
+import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, moveStepEnd, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
 import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, type Point } from "@/lib/visibility";
@@ -550,6 +550,14 @@ export async function planStep(step: StepRequest): Promise<{ error?: string }> {
 
 /** Takes the last step off the plan (and un-readies). */
 /** Takes a step out of the player's plan (the ones after it move up). */
+/** A planned move's end dragged on the map: the move is that much shorter or longer (later steps kept, if they still fit). */
+export async function dragMoveEnd(index: number, col: number, row: number): Promise<{ error?: string }> {
+  const p = await planner();
+  const error = p ? moveStepEnd(p, Number(index), { col: Number(col), row: Number(row) }) : "Nothing planned";
+  revalidatePath("/play");
+  return error ? { error } : {};
+}
+
 export async function removeStep(index: number): Promise<{ error?: string }> {
   const p = await planner();
   const error = p ? removePlanStep(p, Number(index)) : "Nothing planned";

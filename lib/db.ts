@@ -3281,11 +3281,11 @@ export function listPlanTargets(levelId: number, tokenId?: number): PlanTarget[]
 }
 
 /** Each plan's moves as a trail of waypoints (in order), for drawing the route it takes. */
-export function listPlanRoutes(levelId: number, tokenId?: number): { token: number; points: { col: number; row: number }[] }[] {
+export function listPlanRoutes(levelId: number, tokenId?: number): { token: number; points: { col: number; row: number; step?: number }[] }[] {
   const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
   return rows
     .filter((r) => tokenId === undefined || r.token_id === tokenId)
-    .map((r) => ({ token: r.token_id, points: (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => (s.kind === "move" ? [s.to] : [])) }))
+    .map((r) => ({ token: r.token_id, points: (JSON.parse(r.plan) as PlanStep[]).flatMap((s, step) => (s.kind === "move" ? [{ ...s.to, step }] : [])) })) // step: which plan step it ends (dragging it changes that move)
     .filter((r) => r.points.length);
 }
 
