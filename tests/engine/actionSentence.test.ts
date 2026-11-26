@@ -84,3 +84,10 @@ test("a web: an effect with its own save, no attack", () => {
   assert.match(actionSentence(g), /^Applies Webbed to one creature within 30 feet unless it makes a Might save \(DC 15\)/);
   assert.doesNotMatch(actionSentence(g), /no roll/);
 });
+
+test("a reaction leads with what sets it off", () => {
+  const shielded = { name: "Shielded", id: 41, rounds: 1, duration: "rounds", effects: [{ id: 41, name: "Shielded", description: "", modifiers: [
+    { kind: "trigger", on: "would_hit", reach: "any", damage: "1d4", damage_type: "force", save_attr: "", save_dc: 12, save_halves: true, condition: 0, condition_on: "other", reaction: true }] }] };
+  const g = { ...base, name: "Shield", self: true, kind: "reaction" as const, seconds: 1, statuses: { minutes: 0.1, self: status({ conditions: [shielded] }) } };
+  assert.match(actionSentence(g), /^As a reaction, when an attack would hit you: .* \(Shielded\)\. Takes 1 second\.$/);
+});
