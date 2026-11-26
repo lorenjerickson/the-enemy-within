@@ -66,6 +66,7 @@ test("an area that stays on the map is handed back as a lasting area", () => {
   assert.equal(r.created[0].name, "Stinking cloud");
   assert.equal(r.created[0].minutes, 1);
   assert.equal(r.created[0].by, 1);
+  assert.equal(r.created[0].sec, 2, "when it appeared (the action takes 2 s), so the replay shows it from then");
   assert.match(r.text, /Stinking cloud stays for 1 min/);
 });
 

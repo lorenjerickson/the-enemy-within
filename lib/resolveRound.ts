@@ -123,6 +123,7 @@ export interface Replay {
   startDown?: number[]; // who was already down before it
   story?: StoryEvent[]; // what happened, for telling each player their part (stripped before it reaches a browser)
   frames: ReplayFrame[];
+  newAreas?: { id: number; sec: number }[]; // lasting areas the round left, and the second each appeared (the replay shows them from then)
 }
 
 /** What resolving needs to settle an attack (see lib/combat.ts for the rules). */
@@ -197,7 +198,7 @@ export function resolveMovement(
   const doorsWorked: { tokenId: number; doorId: number; sec: number }[] = []; // doors opened or closed (done after the round)
   const itemsUsed: { tokenId: number; item: NonNullable<GearAction["item"]> }[] = []; // items whose actions were done (consumables are used up)
   const refits: { tokenId: number; equipment: Partial<Record<EquipSlot, number | null>>; before: Partial<Record<EquipSlot, number | null>>; swap?: Refit; put?: Put }[] = []; // refits done, to keep
-  const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number })[] = []; // lasting areas this round's actions leave behind
+  const created: (Omit<LastingArea, "id" | "ends"> & { minutes: number; sec?: number })[] = []; // lasting areas this round's actions leave behind (sec: when, for the replay)
   const statuses: { tokenId: number; status: Status; minutes: number }[] = []; // statuses this round's actions leave
   const story: StoryEvent[] = []; // the round as events, for each player's own account of it
   const hurt = (id: number, dmg: number) => dmg / Math.max(1, fighters.get(id)?.maxHp ?? hp.get(id) ?? 1);
@@ -1287,7 +1288,7 @@ export function resolveMovement(
         }
         // A lasting one stays on the map, catching whoever is in it at the end of each round.
         if (area.minutes) {
-          created.push({ name: step.use.name, look: area.look ?? "fog", area: at, damage: step.use.damage, dc: area.dc, save: area.save, half: area.half, minutes: area.minutes, fires: area.fires, conditions: step.use.statuses?.target?.conditions, by: m.tokenId });
+          created.push({ name: step.use.name, look: area.look ?? "fog", area: at, damage: step.use.damage, dc: area.dc, save: area.save, half: area.half, minutes: area.minutes, fires: area.fires, conditions: step.use.statuses?.target?.conditions, by: m.tokenId, sec });
           say(`${step.use.name} stays for ${area.minutes < 1 ? `${Math.round(area.minutes * 10)} round(s)` : `${area.minutes} min`}.`);
         }
         fx.push({ look: "area", from: m.tokenId, area: at, hits });

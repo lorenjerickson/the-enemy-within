@@ -108,7 +108,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const { final, hp, log, frames, created, statuses, refits, story } = result;
   // The round took 6 s of game time: lasting areas left by it count from its end, and older ones may run out.
   const now = Math.round((getGameTime() + ROUND_SECONDS / 60) * 1e6) / 1e6; // rounded, so 0.1-minute steps add up exactly
-  for (const { minutes, ...c } of created) addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 });
+  const newAreas: { id: number; sec: number }[] = [];
+  for (const { minutes, sec, ...c } of created) { const id = addLastingArea(levelId, { ...c, ends: Math.round((now + minutes) * 1e6) / 1e6 }); if (sec !== undefined) newAreas.push({ id, sec }); }
   for (const st of statuses) addTokenStatus(levelId, st.tokenId, st.status, Math.round((now + st.minutes) * 1e6) / 1e6);
   setGameTime(now);
   for (const r of refits) saveRefit(r.tokenId, r.equipment, r.swap, r.before, r.put); // the swap stays after the round
@@ -186,7 +187,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story });
+  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story, newAreas });
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
 }
 
