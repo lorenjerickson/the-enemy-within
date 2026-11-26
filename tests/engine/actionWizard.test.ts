@@ -95,3 +95,10 @@ test("a circle goes on a spot they pick, where they stand, or (not yet) moves wi
   assert.equal(gearOf(f, () => undefined).area?.at, "self");
   assert.match(card(here), /^Fills a 10-foot radius around where you stand\./);
 });
+
+test("polish: 'How many' starts at 'Up to'; Aid's answer line shows the label", async () => {
+  const { answerLine } = await import("@/lib/actionWizard");
+  assert.equal(blank.count, "upto");
+  assert.deepEqual(answerLine("aid", answer({ aidTarget: "skill:persuasion", aid: "1d4" })), ["Aid", "+1d4 Persuasion"]);
+  assert.deepEqual(answerLine("aid", answer({ aidTarget: "check", aid: "1" })), ["Aid", "+1 All ability and skill checks"]);
+});

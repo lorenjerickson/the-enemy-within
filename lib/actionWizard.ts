@@ -3,7 +3,7 @@
 import type { Boost } from "@/lib/actions";
 import { NO_SAVE_DC } from "@/lib/aoe";
 import type { ActionFields } from "@/lib/actionCard";
-import type { ModifierTarget } from "@/lib/modifiers";
+import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 
 export type ActionType = "action" | "bonus" | "reaction" | "free";
 export type Who = "self" | "one" | "several" | "area";
@@ -119,7 +119,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
   return {
     name: f?.name ?? "", description: f?.description ?? "", type: (f?.kind ?? "action") as ActionType, seconds: f?.seconds ?? 2,
     who: self ? "self" : area ? "area" : several ? "several" : "one",
-    targetWho: f?.target_who ?? "", count: f?.target_count === "upto" ? "upto" : "exactly", n: f?.target_n && f.target_n > 1 ? f.target_n : 2,
+    targetWho: f?.target_who ?? "", count: f?.target_count === "exactly" ? "exactly" : "upto", n: f?.target_n && f.target_n > 1 ? f.target_n : 2,
     rangeFt: f?.range_ft ?? 5, shape: f?.area_shape || "circle", place: f?.area_at === "self" ? "here" : "spot", areaFt: f?.area_ft || 10, lasts: !!f?.area_lasts,
     affects, damage: f?.damage ?? "", damageType: f?.damage_type ?? "", attackBonus: f?.attack ?? "",
     saveAttr: f?.save_attr ?? "agility", saveDc: f?.save_dc ?? 12, saveHalf: f ? !!f.save_half : true,
@@ -156,7 +156,7 @@ export function answerLine(q: Question, a: Answers, effectName: (id: number) => 
     case "toHit": return ["Bonus to hit", a.attackBonus ? plus(a.attackBonus) : "None"];
     case "defend": return ["Defense", a.defend ? plus(a.defend) : "—"];
     case "heal": return ["Heals", a.heal || "—"];
-    case "aid": return ["Aid", a.aidTarget && a.aid ? `${plus(a.aid)} ${a.aidTarget.replace(/^\w+:/, "")}` : "—"];
+    case "aid": return ["Aid", a.aidTarget && a.aid ? `${plus(a.aid)} ${targetLabel(a.aidTarget).replace(/ \((skill|attribute)\)$/, "")}` : "—"];
     case "duration": return ["How long", `${a.durationAmount} ${a.durationUnit}${a.durationAmount > 1 && !a.durationUnit.endsWith("rest") ? "s" : ""}`];
     case "effects": return ["Effects", a.effects.map(effectName).join(", ") || "—"];
   }

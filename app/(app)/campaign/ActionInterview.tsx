@@ -17,7 +17,7 @@ import EffectChips, { type EffectOption } from "./EffectChips";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
   attack: ["Attack", "Deals damage"],
-  defend: ["Defend", "Raises their defense for a while"],
+  defend: ["Defend", "Raises defense for a while"],
   heal: ["Heal", "Gives back health"],
   aid: ["Aid", "A bonus to a skill, attribute or roll for a while"],
   effect: ["Apply an effect", "Poisoned, Bleeding, Shielded… from the catalog"],
@@ -168,7 +168,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
             <label className="flex items-center gap-2 text-sm">
               Takes
               <NumberBox min={0.5} max={6} step={0.5} value={a.seconds} onChange={(seconds) => set({ seconds })} className="input input-sm w-20" />
-              seconds of the six-second round
+              seconds of the six-second round <span className="text-xs opacity-60">(most attacks take 2; quick things 1)</span>
             </label>
           </>
         )}
@@ -298,7 +298,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
         )}
         {at === "aid" && (
           <>
-            <div className="text-sm font-semibold">Which skill, ability or roll does it help, and by how much?</div>
+            <div className="text-sm font-semibold">Which skill, attribute or roll does it help, and by how much?</div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <select value={a.aidTarget} onChange={(e) => set({ aidTarget: e.target.value as ModifierTarget | "" })} className="select select-sm w-auto">
                 <option value="">Pick one…</option>
