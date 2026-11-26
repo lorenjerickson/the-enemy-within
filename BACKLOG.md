@@ -45,7 +45,7 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
   - R6. ✅ A trap set off out of a player's sight shows no set-off marker to them (any lasting effect it left is still seen).
   - R7. ✅ During a round replay: a large banner, and players can't use the planning panel.
   - R8. ✅ Check that weapon range overlays really work. Closed 2026-11-25: they match resolution (refits included).
-  - R9. An action that pursues to get in range moves only so far that enough time is left to do the action. (Checked: already so; waiting on Loren's setup.)
+  - R9. ✅ An action that pursues to get in range moves only so far that enough time is left to do the action. Closed 2026-11-26: already so (round 12 confirmed it).
   - R10. ✅ A planned move's length can be changed by click-dragging the end of its overlay.
   - R11. ~~Attack bonuses are shown in action descriptions.~~ Closed 2026-11-25 (the card shows them; Loren will reopen with a case).
   - R12. ✅ Players can change their target at any time; targets from previous rounds don't carry over.
