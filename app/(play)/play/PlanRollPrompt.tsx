@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { clearDice, diceBox } from "./diceBox";
+import { clearDice, clearDiceSoon, diceBox } from "./diceBox";
 import { formulaText, type RollSpec } from "@/lib/rolls";
 import { rollPlan, submitPlanDice } from "./actions";
 
@@ -35,6 +35,7 @@ export default function PlanRollPrompt({ rolls, rolled }: { rolls: PlanRollView[
       groups.forEach((g, gi) => (thrown[g.ri][g.pi] = dice.filter((d) => d.groupId === gi).map((d) => d.value)));
       const r = await submitPlanDice(thrown);
       if (r.error) setError(r.error);
+      else clearDiceSoon(); // read, then gone
     } catch (e) {
       setError(`The dice didn't roll: ${e instanceof Error ? e.message : e}`);
     } finally {

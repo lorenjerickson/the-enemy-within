@@ -19,8 +19,13 @@ export function diceBox(): Promise<DiceBox> {
   document.body.appendChild(layer);
   const made = import("@3d-dice/dice-box").then(async ({ default: Box }) => {
     const box = new Box({ container: "#dice-layer", assetPath: "/assets/dice-box/", scale: 7, theme: "default", themeColor: "#7c3aed" });
+    // The box sizes its drawing from the canvas's size on screen when it starts (and again only when the window is
+    // resized). Sized after starting, a bare canvas (300×150) was drawn small and stretched to fill the screen:
+    // blurry, squashed dice. So it fills the layer first.
+    for (const c of layer.querySelectorAll("canvas")) Object.assign(c.style, { width: "100%", height: "100%", display: "block" });
     await box.init();
-    for (const c of layer.querySelectorAll("canvas")) Object.assign(c.style, { width: "100%", height: "100%" });
+    for (const c of layer.querySelectorAll("canvas")) Object.assign(c.style, { width: "100%", height: "100%", display: "block" }); // (a canvas made by init)
+    window.dispatchEvent(new Event("resize")); // it measures again on a resize: now at full size
     return box;
   });
   shared = made;
@@ -30,5 +35,13 @@ export function diceBox(): Promise<DiceBox> {
 
 /** Takes the dice off the screen (a prompt closed). */
 export function clearDice(): void {
+  if (soon) clearTimeout(soon);
   shared?.then((b) => b.clear()).catch(() => {});
+}
+
+let soon: ReturnType<typeof setTimeout> | null = null;
+/** Takes the dice off a moment after they've settled (long enough to read them). */
+export function clearDiceSoon(ms = 2500): void {
+  if (soon) clearTimeout(soon);
+  soon = setTimeout(() => { soon = null; shared?.then((b) => b.clear()).catch(() => {}); }, ms);
 }

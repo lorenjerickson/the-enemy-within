@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { clearDice, diceBox } from "./diceBox";
+import { clearDice, clearDiceSoon, diceBox } from "./diceBox";
 import { diceToThrow, formulaText, type RollSpec, type RolledPart } from "@/lib/rolls";
 import { closeRoll, submitRoll } from "./actions";
 
@@ -40,6 +40,7 @@ export default function RollPrompt({ request }: { request: PromptRequest | null 
       });
       const r = await submitRoll(request!.id, thrown);
       if (r.error) setError(r.error);
+      else clearDiceSoon(); // read, then gone
     } catch (e) {
       setError(`The dice didn't roll: ${e instanceof Error ? e.message : e}`);
     } finally {
