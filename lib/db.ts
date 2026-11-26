@@ -1493,18 +1493,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS link_prompts (
   back_row REAL NOT NULL
 )`);
 
-export function setLinkPrompt(tokenId: number, linkId: number, back: { col: number; row: number }): void {
-  db.prepare("INSERT OR REPLACE INTO link_prompts (token_id, link_id, back_col, back_row) VALUES (?, ?, ?, ?)").run(tokenId, linkId, back.col, back.row);
+addColumn("link_prompts", "show_at", "INTEGER NOT NULL DEFAULT 0"); // ms since epoch: in a round, when the replay shows them reaching it
+
+export function setLinkPrompt(tokenId: number, linkId: number, back: { col: number; row: number }, showAt = 0): void {
+  db.prepare("INSERT OR REPLACE INTO link_prompts (token_id, link_id, back_col, back_row, show_at) VALUES (?, ?, ?, ?, ?)").run(tokenId, linkId, back.col, back.row, showAt);
 }
 
 /** The level link prompt waiting for a token, with the name of the level it leads to. */
-export function getLinkPrompt(tokenId: number): { id: number; to: string; back: { x: number; y: number } } | undefined {
+export function getLinkPrompt(tokenId: number): { id: number; to: string; back: { x: number; y: number }; showAt: number } | undefined {
   const r = db
-    .prepare<[number], { link_id: number; back_col: number; back_row: number; to: string | null }>(
-      "SELECT p.link_id, p.back_col, p.back_row, l.name AS \"to\" FROM link_prompts p JOIN map_structures s ON s.id = p.link_id LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE p.token_id = ?"
+    .prepare<[number], { link_id: number; back_col: number; back_row: number; show_at: number; to: string | null }>(
+      "SELECT p.link_id, p.back_col, p.back_row, p.show_at, l.name AS \"to\" FROM link_prompts p JOIN map_structures s ON s.id = p.link_id LEFT JOIN map_levels l ON l.id = s.target_level_id WHERE p.token_id = ?"
     )
     .get(tokenId);
-  return r && { id: r.link_id, to: r.to ?? "another level", back: { x: r.back_col, y: r.back_row } };
+  return r && { id: r.link_id, to: r.to ?? "another level", back: { x: r.back_col, y: r.back_row }, showAt: r.show_at };
 }
 
 export function clearLinkPrompt(tokenId: number): void {

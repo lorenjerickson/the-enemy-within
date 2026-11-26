@@ -184,14 +184,16 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   // Doors worked this round (Interact): open or closed now, in the order it happened.
   for (const d of result.doorsWorked) { const door = getDoor(d.doorId); if (door && !door.locked) setDoorOpen(door.id, !door.open); }
   // Characters who came onto a level link: their player is asked whether to take it before planning again.
-  for (const l of result.linksReached) if (tokens.find((t) => t.id === l.tokenId)?.character_id) setLinkPrompt(l.tokenId, l.linkId, l.back);
+  // Asked once the replay shows them reaching it (the round is worked out ahead; the player sees it as it plays).
+  const replayStarts = Date.now() + REPLAY_DELAY_MS;
+  for (const l of result.linksReached) if (tokens.find((t) => t.id === l.tokenId)?.character_id) setLinkPrompt(l.tokenId, l.linkId, l.back, replayStarts + l.sec * 1000);
   const lines = log.length ? log : ["Nothing happened."];
   logSessionEvent(`Round ${enc.round}: ${lines.join(" ")}`);
   saveEncounter(levelId, { ...enc, round: enc.round + 1 });
   setLastRoundLog(levelId, [`Round ${enc.round}`, ...lines]);
   clearRoundPlans(levelId);
   // Everyone plays the round back together, a second at a time, starting once their screens have caught up.
-  setReplay(levelId, { round: enc.round, starts: Date.now() + REPLAY_DELAY_MS, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story, newAreas }, lines);
+  setReplay(levelId, { round: enc.round, starts: replayStarts, start: Object.fromEntries(movers.map((m) => [m.tokenId, m.start])), startDown, frames, story, newAreas }, lines);
   fireTriggers(); // game time moved on (e.g. ON timer.expired)
 }
 

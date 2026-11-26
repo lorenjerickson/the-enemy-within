@@ -34,7 +34,7 @@ export default function LevelMap({
 }: {
   switchable?: "all" | "side" | null; // the GM in a session: clicking a token switches to acting as it (from the GM view: any; from someone's view: their side)
   locationId: number;
-  linkPrompt?: { id: number; to: string; back: { x: number; y: number } } | null; // a level link a player's character reached in a round: take it?
+  linkPrompt?: { id: number; to: string; back: { x: number; y: number }; showAt?: number } | null; // a level link a player's character reached in a round: take it?
   level: MapLevel;
   levels: MapLevel[];
   readOnly?: boolean;

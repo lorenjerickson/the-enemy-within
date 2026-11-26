@@ -155,7 +155,7 @@ export default function MapView({
   triggers?: MapTrigger[]; // the GM's map triggers (players get none)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view
-  linkPrompt?: { id: number; to: string; back: Point } | null; // from the server: a level link their character reached in a round
+  linkPrompt?: { id: number; to: string; back: Point; showAt?: number } | null; // from the server: a level link their character reached in a round
   fog?: { viewers: number[]; explored: Point[]; sight?: Record<number, number>; darkvision?: Record<number, number>; move?: { tokenId: number; feet: number; free: boolean; from?: { col: number; row: number }; perSecond?: number; runPerSecond?: number } | null }; // from: where their round plan leaves them // a player's fog of war: their characters, where they've stood before, and how far they can still move
   dockSide?: "left" | "right"; // in a session: full-screen map, tools docked on this edge
   dockTools?: DockTool[]; // more dock tools after the map layers
@@ -172,7 +172,15 @@ export default function MapView({
   const [controlResult, setControlResult] = useState<{ label: string; ok: boolean; text: string } | null>(null);
   // A level link the player's character stepped onto: they're asked whether to take it (`back`: where they came from).
   const [stepPrompt, setLevelPrompt] = useState<{ id: number; to: string; back: Point } | null>(null);
-  const levelPrompt = stepPrompt ?? linkPrompt;
+  // A round's prompt waits until the replay shows them reaching the link (it was worked out before the replay plays).
+  const [, promptTick] = useState(0);
+  const linkDue = !linkPrompt?.showAt || Date.now() >= linkPrompt.showAt;
+  useEffect(() => {
+    if (linkDue || !linkPrompt?.showAt) return;
+    const t = setTimeout(() => promptTick((n) => n + 1), linkPrompt.showAt - Date.now() + 50);
+    return () => clearTimeout(t);
+  }, [linkDue, linkPrompt?.showAt]);
+  const levelPrompt = stepPrompt ?? (linkDue ? linkPrompt : null);
   const [selected, setSelected] = useState<MapLayer | null>(null); // layer whose editor is open
   const [dockWidth, setDockWidth] = useState(0); // in a session: how much of the screen edge the dock covers
   const [hiddenSet, setHidden] = useOptimistic(new Set<MapLayer>(readOnly ? [...hidden, ...GM_ONLY_LAYERS] : hidden), (set: Set<MapLayer>, [layer, visible]: [MapLayer, boolean]) => {
