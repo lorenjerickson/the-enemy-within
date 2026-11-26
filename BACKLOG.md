@@ -2,7 +2,7 @@
 
 From the code review on 2026-11-06. Roughly in the order to tackle them.
 
-## Item artwork — partially complete; eight service rejections (2026-11-22)
+## ~~Item artwork~~ — closed 2026-11-26 (Loren supplied art for the eight rejected items; every item now has art)
 
 Generated and linked 58 of the 66 missing item illustrations using built-in `image_gen`: muted detailed illustrations on ivory backgrounds, early twentieth-century equipment, preserving explicitly named models. All 9 existing item images preserved; 67/75 items now have art. Outputs: `data/images/item-*-generated.png` (Great Axe: `item-1-great-axe.png`). Database backup and original inventory: `data/item-artwork/`; exact prompts, per-item outputs and errors: `manifest.json`; checks: `verification.json`.
 
