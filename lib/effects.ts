@@ -79,28 +79,39 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
   }
 
   if (kind === "rain") {
-    ctx.strokeStyle = `rgba(190,210,255,${0.35 + 0.3 * k})`;
-    ctx.lineWidth = Math.max(1, unit * 0.025);
-    const len = unit * 0.45;
-    for (let i = 0; i < count(80, 420); i++) {
-      const speed = h * (1.1 + 0.6 * rnd(i + 0.3));
-      const px = x + rnd(i) * (w + len) - len * 0.2;
-      const py = y + mod(rnd(i + 0.7) * h + t * speed, h + len);
-      const a = fade(px, py - len / 2);
+    // Seen from above: drops land as crisp blue-white splash rings that open fast and vanish, with a bright
+    // point where each one hits. Sharp and quick, so it never reads as a soft drifting vapour.
+    ctx.lineWidth = Math.max(1, unit * 0.02);
+    for (let i = 0; i < count(60, 300); i++) {
+      const life = 0.45 + 0.3 * rnd(i + 0.8);
+      const phase = mod(t / life + rnd(i), 1);
+      const born = Math.floor(t / life + rnd(i)); // each drop lands somewhere new
+      const px = x + rnd(i * 7 + born * 13.1) * w;
+      const py = y + rnd(i * 11 + born * 17.3 + 0.5) * h;
+      const a = fade(px, py);
       if (a <= 0) continue;
-      ctx.globalAlpha = a;
+      if (phase < 0.12) {
+        ctx.fillStyle = `rgba(225,235,255,${(0.6 + 0.3 * k) * a})`;
+        ctx.beginPath();
+        ctx.arc(px, py, unit * 0.025 + 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const r = unit * (0.06 + 0.12 * rnd(i + 0.4)) * Math.sqrt(phase) + 0.5;
+      ctx.strokeStyle = `rgba(190,215,255,${(0.45 + 0.35 * k) * a * (1 - phase)})`;
       ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px - len * 0.2, py - len);
+      ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.stroke();
     }
   } else if (kind === "snow") {
+    // Seen from above: flakes fade in, drift slowly sideways together on the breeze, and fade out where they settle.
     ctx.fillStyle = `rgba(255,255,255,${0.6 + 0.3 * k})`;
+    const driftX = Math.sin(t * 0.13) * unit * 0.25 + t * unit * 0.12, driftY = Math.cos(t * 0.11) * unit * 0.2;
     for (let i = 0; i < count(60, 300); i++) {
-      const speed = unit * (0.4 + 0.5 * rnd(i + 0.3));
-      const py = y + mod(rnd(i + 0.7) * h + t * speed, h);
-      const px = x + mod(rnd(i) * w + Math.sin(t * 0.8 + i) * unit * 0.35, w);
-      const a = fade(px, py);
+      const life = 3 + 3 * rnd(i + 0.8);
+      const phase = mod(t / life + rnd(i), 1);
+      const px = x + mod(rnd(i) * w + driftX * (0.7 + 0.6 * rnd(i + 0.3)) + Math.sin(t * 0.8 + i) * unit * 0.15, w);
+      const py = y + mod(rnd(i + 0.7) * h + driftY + Math.cos(t * 0.7 + i) * unit * 0.15, h);
+      const a = fade(px, py) * Math.sin(phase * Math.PI);
       if (a <= 0) continue;
       ctx.globalAlpha = a;
       ctx.beginPath();
