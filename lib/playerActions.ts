@@ -12,10 +12,8 @@ export const PLAYER_ACTIONS = [
   { id: "attack", label: "Attack", icon: "GiCrossedSwords", kind: "action", desc: "Strike someone with your main-hand weapon (or bare hands): an attack roll against their defense, then damage." },
   { id: "use", label: "Use", icon: "GiSwapBag", kind: "action", desc: "Use something you have: in a round, an item in your hand or on your belt (Refit brings one out of a pack); out of combat, anything you carry. Consumables are used up." },
   { id: "interact", label: "Interact", icon: "GiHand", kind: "action", desc: "Handle something within reach: open or close a door, work a lever, switch or object (in a round, it happens after the round); pick a lock out of combat." },
-  { id: "disengage", label: "Disengage", icon: "GiReturnArrow", kind: "action", desc: "Slip away from close quarters (no effect yet)." },
   { id: "assist", label: "Assist", icon: "GiShakingHands", kind: "action", desc: "Help someone on your side within 5 ft (click them on the map): advantage on their next roll." },
   { id: "hide", label: "Hide", icon: "GiHoodedFigure", kind: "action", desc: "Get out of sight: unseen, roll Stealth where you are; seen, slip into a blind spot within reach first (Stealth with disadvantage); no cover, no hiding. Hidden from everyone not on your side until you act on someone, an enemy comes right next to you, you move into view, or a Search beats your Stealth." },
-  { id: "ready", label: "Ready", icon: "GiHourglass", kind: "action", desc: "Hold yourself ready to act (no effect yet)." },
   { id: "search", label: "Search", icon: "GiMagnifyingGlass", kind: "action", desc: "Look around: an Investigation check for anything hidden within 10 ft." },
   { id: "improvise", label: "Improvise", icon: "GiLightBulb", kind: "action", desc: "Do something the rules don't cover (tip a barrel, swing on a chandelier): say what you want to do, and settle it with the GM." },
   { id: "shake", label: "Shake off", icon: "GiBiceps", kind: "action", desc: "Spend your action fighting off a condition that allows it (it says so): roll its save; a success counts towards ending it." },
@@ -38,10 +36,6 @@ export const actionKind = (id: PlayerActionId): ActionKind => PLAYER_ACTIONS.fin
  * against them have disadvantage for the rest of the round.
  */
 export const REACTIONS: PlayerActionId[] = ["dodge"];
-
-/** Actions on hold (see the backlog): shown, but they can't be planned. */
-export const DEFERRED_ACTIONS: PlayerActionId[] = ["disengage", "ready"];
-export const DEFERRED_WHY = "Deferred: not in yet";
 
 /** Search: an Investigation check against this DC reveals hidden things within SEARCH_RANGE grid squares (5 ft each). */
 export const SEARCH_DC = 14;

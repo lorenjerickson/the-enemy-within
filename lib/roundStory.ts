@@ -47,7 +47,7 @@ const taken = (hurt: number, dmg?: number) => `${severity(hurt)}${dmg ? ` (-${dm
 /** How bad a wound is, from the share of their health it took. */
 export const severity = (hurt: number) => (hurt <= 0.15 ? "minor" : hurt <= 0.35 ? "moderate" : hurt <= 0.6 ? "serious" : "grievous");
 
-const ACTION_WORD: Record<string, string> = { attack: "attack", use: "use your item", interact: "do it", disengage: "disengage", assist: "help", hide: "hide", ready: "get ready", search: "search", refit: "refit" };
+const ACTION_WORD: Record<string, string> = { attack: "attack", use: "use your item", interact: "do it", assist: "help", hide: "hide", search: "search", refit: "refit" };
 
 /** Whether this event involves the token (they did it, or it was done to them). */
 const involves = (e: StoryEvent, id: number) =>

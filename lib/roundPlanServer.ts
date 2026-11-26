@@ -6,7 +6,7 @@ import { getEncounter } from "@/lib/db/encounters";
 import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { snapHeight } from "@/lib/gravity";
 import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
-import { CHASE_ACTIONS, DEFERRED_ACTIONS, DEFERRED_WHY, actionKind, type PlayerActionId } from "@/lib/playerActions";
+import { CHASE_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, onBelt, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
 import { agreedImprovisation, waitingOnTemplate } from "@/lib/improvise";
 import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/lib/combat";
@@ -60,7 +60,6 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   const run = step.kind === "move" && step.run ? p.running : undefined; // a Dash: at running speed
   if (run !== undefined && run <= 0) return "No running speed";
   if (step.kind === "action" && step.action === "shake" && !canShakeOff(p.tok.token_id, p.tok.level_id)) return "Nothing to shake off";
-  if (step.kind === "action" && DEFERRED_ACTIONS.includes(step.action) && step.use === undefined) return DEFERRED_WHY;
   // Nothing chosen: it would do nothing (the panels pick a door / lever, or an item, first).
   if (step.kind === "action" && step.action === "interact" && step.door === undefined && step.thing === undefined) return "Pick a door or something within reach";
   if (step.kind === "action" && step.action === "use" && step.use === undefined) return "Pick what to use";

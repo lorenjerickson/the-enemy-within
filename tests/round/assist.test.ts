@@ -29,7 +29,7 @@ test("help from before the round counts on their first attack", () => {
 
 test("help goes to their next d20 roll whatever it is: here Dodge's check (only once)", () => {
   const r = resolve(
-    [mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("ready"), act("dodge")])], // the Dodge comes after the help (2nd second)
+    [mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("wait"), act("dodge")])], // the Dodge comes after the help (2nd second)
     { 1: fighter(), 2: fighter({ save: 10 }) },
   );
   assert.match(r.text, /T2 is ready to dodge \(110 vs DC 12\)/, "advantage (the fake shows it as +100)");
@@ -37,7 +37,7 @@ test("help goes to their next d20 roll whatever it is: here Dodge's check (only 
 });
 
 test("unhelped, the same check fails", () => {
-  const r = resolve([mover(2, { col: 1, row: 0 }, [act("ready"), act("dodge")])], { 2: fighter({ save: 10 }) });
+  const r = resolve([mover(2, { col: 1, row: 0 }, [act("wait"), act("dodge")])], { 2: fighter({ save: 10 }) });
   assert.match(r.text, /isn't quick enough/);
 });
 
@@ -45,7 +45,7 @@ test("a player's own save mid-round, once helped: they're asked to roll it with 
   // T1 helps T2 (1st second); T2 then walks into a pit that wants an Agility save (T2 rolls its own saves).
   const pit: RoundTrap = { id: 1, name: "Pit", area: { shape: "rect" as const, x: 3, y: 0, w: 1, h: 1 }, springs: ["enter"], who: "", often: "once", damage: "6", damage_type: "piercing", save_attr: "agility", save_dc: 12, save_half: 1, effects: [], stops: 0, find_dc: 14, found: 0, sprung: [], given: [] };
   const run = (decisions: Record<string, number> = {}) => resolve(
-    [mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("ready"), { kind: "move", to: { col: 3, row: 0 }, feet: 10 }])],
+    [mover(1, { col: 0, row: 0 }, [assist(2)]), mover(2, { col: 1, row: 0 }, [act("wait"), { kind: "move", to: { col: 3, row: 0 }, feet: 10 }])],
     { 1: fighter(), 2: fighter({ hp: 20 }) },
     { traps: [pit], rollers: [2], decisions },
   );
