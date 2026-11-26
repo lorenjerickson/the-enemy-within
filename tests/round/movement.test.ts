@@ -23,17 +23,16 @@ test("a move round a wall follows the walkable route", () => {
   assert.ok(r.frames.every((f) => f.pos[1].col <= 0 || f.pos[1].row >= 1 || f.pos[1].col >= 2), "never through the wall");
 });
 
-test("someone standing in the way holds a mover back a second at a time", () => {
+test("someone standing in the way: the planned move stops short there, said once", () => {
   const r = resolve([mover(1, { col: 0, row: 0 }, [move(1, 0)])], {}, { bystanders: [{ tokenId: 9, name: "Crate", at: { col: 1, row: 0 } }] });
   assert.deepEqual(r.final.get(1), { col: 0, row: 0 });
-  assert.match(r.at(1), /T1 is held back by Crate/);
-  assert.ok(r.story.some((e) => e.k === "blocked" && e.by === 9));
+  assert.match(r.at(1), /T1 stops short: Crate is in the way/);
+  assert.equal(r.story.filter((e) => e.k === "stopShort" && e.by === 9).length, 1);
 });
 
-test("held back past the end of the round, a planned action runs out of time", () => {
+test("a move that stops short costs no time: the action after it still happens", () => {
   const r = resolve([mover(1, { col: 0, row: 0 }, [move(1, 0), act("search")])], {}, { bystanders: [{ tokenId: 9, name: "Crate", at: { col: 1, row: 0 } }] });
-  assert.match(r.text, /T1's search runs out of time this round/);
-  assert.ok(r.story.some((e) => e.k === "late"));
+  assert.doesNotMatch(r.text, /runs out of time/);
 });
 
 test("a body on the ground is stepped over, not a blocker", () => {
@@ -102,4 +101,19 @@ test("gridless maps move smoothly along a straight line", () => {
   const r = resolve([mover(1, { col: 0, row: 0 }, [move(3, 4, 25)])], {}, { gridless: true });
   assert.deepEqual(r.final.get(1), { col: 3, row: 4 });
   assert.deepEqual(r.frames[0].pos[1], { col: 0.6, row: 0.8 });
+});
+
+test("walking into someone standing in the way: they go on until they touch, and the move ends there (said once)", () => {
+  // Round 12: Rex walks north at a spider that closes in to attack. Gridless: tokens touch 1.0 apart (radius + radius).
+  const r = resolve(
+    [mover(37, { col: 10.95, row: 2 }, [attack(44)]), mover(44, { col: 10.65, row: 10.5 }, [move(10.65, 2.5, 40)])],
+    { 37: fighter({ hit: 1 }), 44: fighter() },
+    { gridless: true },
+  );
+  const spider = r.final.get(37)!, rex = r.final.get(44)!;
+  const gap = Math.hypot(spider.col - rex.col, spider.row - rex.row);
+  assert.ok(gap >= 0.99 && gap <= 1.06, `they end touching (${gap.toFixed(2)} apart)\n${r.text}`);
+  assert.equal(r.story.filter((e) => e.k === "blocked").length, 0, r.text);
+  assert.equal(r.story.filter((e) => e.k === "stopShort" && e.who === 44).length, 1, r.text);
+  assert.match(r.text, /T44 stops short: T37 is in the way/);
 });

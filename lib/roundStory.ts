@@ -9,6 +9,7 @@ export type Intent = { doing: "chase" | "evade"; target: number } | { doing: "cl
 export type StoryEvent = { sec: number } & (
   | { k: "close"; who: number; target: number; means?: string } // means: "attack", "use Bite"…
   | { k: "blocked"; who: number; by: number | null; intent?: Intent }
+  | { k: "stopShort"; who: number; by: number } // a planned move ran into someone standing in the way: it ended there
   | { k: "skip"; who: number; after?: "close" | "chase" | "evade"; target?: number | null }
   | { k: "dodge"; who: number; ok: boolean }
   | { k: "refit"; who: number; from: string | null; to: string }
@@ -73,6 +74,10 @@ export function storyFor(events: StoryEvent[], me: number, name: (id: number) =>
         add(e.sec, mine ? `You close in on ${name(e.target)}${e.means ? ` to ${deed(e.means)} them` : ""}.` : `${subj} closes in on you${means}.`);
         break;
       }
+      case "stopShort":
+        if (mine) add(e.sec, `You stop short: ${name(e.by)} is in your way.`);
+        else if (e.by === me) add(e.sec, `${cap(name(e.who))} stops short of you.`);
+        break;
       case "blocked": {
         // Who was held up, by whom, and what they were evidently trying to do (as seen from each side).
         const i = e.intent, them = (id: number) => (id === me ? "you" : name(id));
@@ -208,6 +213,7 @@ export function gmStory(events: StoryEvent[] | undefined, name: (id: number) => 
       case "ability": add(e.sec, `${who} uses ${e.name}${e.target === null ? "" : e.target === e.who ? " on themselves" : ` on ${n(e.target)}`}.`); break;
       case "trap": add(e.sec, `${who} sets off ${e.name}: ${e.outcome === "save" && !e.dmg ? "they get clear" : `${e.outcome === "half" ? "partly clear, " : ""}${hurt(e.hurt, e.dmg)}`}${e.stops ? "; it stops them" : ""}.`); break;
       case "link": add(e.sec, `${who} reaches the way to ${e.to}.`); break;
+      case "stopShort": add(e.sec, `${who} stops short: ${n(e.by)} is in the way.`); break;
       case "door": add(e.sec, `${who} ${e.open ? "opens" : "closes"} ${e.name}.`); break;
       case "worked": add(e.sec, `${who} works ${e.name}.`); break;
       case "assist": add(e.sec, `${who} helps ${n(e.target)}.`); break;

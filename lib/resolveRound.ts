@@ -808,6 +808,8 @@ export function resolveMovement(
   const followNow = new Set<number>(); // following someone this second (worked out after everyone else's move)
   const readied = new Set<Act>(); // reactions that are ready
   const skipped = new Set<number>(); // whose later planned moves were skipped (logged once)
+  const stoppedShort = new Set<number>(); // whose planned move ran into someone standing in the way: it ends where they are
+  const RADIUS = 0.5; // every token is one square (5 ft) across for now; contact is their radii added together
   // For the players' story: what each was evidently up to, who last hit them, who last held them up.
   const closingFor = new Map<number, { target: number; means: string }>();
   const lastHitBy = new Map<number, number>();
@@ -897,6 +899,7 @@ export function resolveMovement(
         }
         // A planned move: along its route, unless a body lies on the next spot (step around it) or they've been put off
         // the route (pushed aside): then they make their own way towards where the plan has them by now.
+        if (stoppedShort.has(m.tokenId)) return [m.tokenId, here]; // their move ended against someone in the way
         const planned = wants.get(m.tokenId)!, next = planned(t);
         const body = [...down].find((id) => { const p = where(id); return id !== m.tokenId && p && same(p, next); });
         if (body !== undefined || !unmoved(here, planned(t - 1))) {
@@ -939,8 +942,27 @@ export function resolveMovement(
         settled.find((s) => !down.has(s.id) && same(s.at, want)) ??
         stillUnmoved.filter((o) => !down.has(o.tokenId)).map((o) => ({ id: o.tokenId, at: pos.get(o.tokenId)! })).find((s) => same(s.at, want)) ??
         bystanders.filter((b) => !down.has(b.tokenId) && same(b.at, want)).map((b) => ({ id: b.tokenId, at: want }))[0];
-      if (blocker) {
-        const intent = intentOf(m, sec, autoPursue); // what they were up to, before being set back a second
+      const intentNow = blocker ? intentOf(m, sec, autoPursue) : null;
+      // Standing in the way, or coming to meet them (not just passing through this second, which clears: then they
+      // wait a second as before).
+      const standing = blocker && (!pos.has(blocker.id) || unmoved(pos.get(blocker.id)!, blocker.at) || dist(blocker.at, here) < dist(pos.get(blocker.id)!, here) - 1e-6);
+      if (blocker && standing && intentNow?.doing === "move") {
+        // A planned move into someone standing in the way: they go on until they touch (gridless: their radii added
+        // together; on a grid, no part-squares), and the move ends there. Said once; no time lost to the rest of the plan.
+        let at = here;
+        if (gridless) {
+          const contact = RADIUS + RADIUS, others = [...settled.filter((s) => !down.has(s.id)).map((s) => s.at), ...bystanders.filter((b) => !down.has(b.tokenId)).map((b) => b.at)];
+          for (let k = 20; k >= 1; k--) {
+            const p = { col: here.col + ((want.col - here.col) * k) / 20, row: here.row + ((want.row - here.row) * k) / 20 };
+            if (dist(p, blocker.at) >= contact - 1e-6 && !others.some((o) => same(o, p)) && clearPath({ x: here.col + 0.5, y: here.row + 0.5 }, { x: p.col + 0.5, y: p.row + 0.5 }, walls)) { at = { col: Math.round(p.col * 100) / 100, row: Math.round(p.row * 100) / 100 }; break; }
+          }
+        }
+        stoppedShort.add(m.tokenId);
+        log.push(`${sec} s: ${m.name} stops short: ${nameOf(blocker.id)} is in the way.`);
+        story.push({ sec, k: "stopShort", who: m.tokenId, by: blocker.id });
+        settled.push({ id: m.tokenId, at });
+      } else if (blocker) {
+        const intent = intentNow!; // what they were up to, before being set back a second
         lag.set(m.tokenId, lag.get(m.tokenId)! + 1);
         const who = nameOf(blocker.id);
         log.push(`${sec} s: ${m.name} is held back by ${who}.`);
