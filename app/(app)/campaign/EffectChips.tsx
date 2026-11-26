@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type EffectOption = { id: number; name: string; about: string; unavailable?: string };
 
@@ -8,8 +8,12 @@ export type EffectOption = { id: number; name: string; about: string; unavailabl
  * Picks catalog effects: type to find one, Enter or click adds it as a chip (✕ or Backspace takes it off). Each chip
  * is a hidden input `name` = its id. An option with `unavailable` is listed, greyed out with the reason, never added.
  */
-export default function EffectChips({ name, options, initial }: { name: string; options: EffectOption[]; initial: number[] }) {
+export default function EffectChips({ name, options, initial, onChange }: { name: string; options: EffectOption[]; initial: number[]; onChange?: (ids: number[]) => void }) {
   const [picked, setPicked] = useState<number[]>(initial);
+  // onChange: told of every change (the action interview keeps the picks itself; name "" then posts nothing).
+  const told = useRef(onChange);
+  told.current = onChange;
+  useEffect(() => { told.current?.(picked); }, [picked]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -26,7 +30,7 @@ export default function EffectChips({ name, options, initial }: { name: string; 
           <span key={id} className="badge badge-primary gap-1" title={byId.get(id)?.about}>
             {byId.get(id)?.name ?? `#${id}`}
             <button type="button" aria-label={`Remove ${byId.get(id)?.name}`} onClick={() => setPicked((p) => p.filter((x) => x !== id))}>✕</button>
-            <input type="hidden" name={name} value={id} />
+            {name && <input type="hidden" name={name} value={id} />}
           </span>
         ))}
         <input

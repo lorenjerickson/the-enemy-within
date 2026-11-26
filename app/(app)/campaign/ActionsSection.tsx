@@ -29,14 +29,20 @@ function summary(a: Action, conditionNames: Map<number, string>): string {
     .join(" · ");
 }
 
+/** Every catalog effect; an action can put on only those lasting rounds (and keeps any it already grants), the rest
+ * are listed greyed out with why (they're for items or creatures). */
+function effectOptions(effects: Effect[], grants: { id: number }[]): EffectOption[] {
+  return effects.map((e) => ({
+    id: e.id, name: e.name, about: describeCondition(asCondition(e)) || e.description,
+    unavailable: e.duration === "rounds" || grants.some((x) => x.id === e.id) ? undefined : e.duration === "always" ? "lasts always: for creatures" : "while equipped: for items",
+  }));
+}
+
 function ActionForm({ owner, initial, effects }: { owner: ActionOwner; initial?: Action; effects: Effect[] }) {
   // Every catalog effect; an action can put on only those lasting rounds (and keeps any it already grants), the rest
   // are listed greyed out with why (they're for items or creatures).
   const grants = initial?.conditions ?? [];
-  const options: EffectOption[] = effects.map((e) => ({
-    id: e.id, name: e.name, about: describeCondition(asCondition(e)) || e.description,
-    unavailable: e.duration === "rounds" || grants.some((x) => x.id === e.id) ? undefined : e.duration === "always" ? "lasts always: for creatures" : "while equipped: for items",
-  }));
+  const options = effectOptions(effects, grants);
   return (
     <form action={submitAction.bind(null, owner, initial?.id ?? null)} className="grid grid-cols-2 gap-2 mt-2 p-3 bg-base-200 rounded-box">
       <CardPreview conditions={effects.map(asCondition)} />
@@ -181,7 +187,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
               <span className="text-sm opacity-70">{summary(a, new Map(effects.map((c) => [c.id, c.name])))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} itemOwned={"item_id" in owner} />
+            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, a.conditions)} itemOwned={"item_id" in owner} />
             <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
               <ActionForm owner={owner} initial={a} effects={effects} />
             </details>
@@ -193,7 +199,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} itemOwned={"item_id" in owner} />
+        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, [])} itemOwned={"item_id" in owner} />
         <details className="mt-2"><summary className="link link-hover text-xs opacity-70">Older form (until the interview is finished)</summary>
           <ActionForm owner={owner} effects={effects} />
         </details>

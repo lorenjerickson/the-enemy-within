@@ -12,6 +12,7 @@ import { MODIFIER_TARGET_GROUPS, type ModifierTarget } from "@/lib/modifiers";
 const AID_GROUPS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Movement").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "defense")] as const);
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 import { AFFECTS, type Affect } from "@/lib/actionWizard";
+import EffectChips, { type EffectOption } from "./EffectChips";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
   attack: ["Attack", "Deals damage"],
@@ -75,7 +76,7 @@ function HiddenFields({ f }: { f: ActionFields }) {
 }
 
 /** One question at a time, the player's card on top filling in as it's answered; Save at the end. */
-export default function ActionInterview({ action, initial, conditions, itemOwned }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; itemOwned?: boolean }) {
+export default function ActionInterview({ action, initial, conditions, effectOptions, itemOwned }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; effectOptions: EffectOption[]; itemOwned?: boolean }) {
   const [a, setA] = useState<Answers>(() => answersFromAction(initial));
   const [at, setAt] = useState<Question>("name");
   const set = (p: Partial<Answers>) => setA((x) => ({ ...x, ...p }));
@@ -93,6 +94,7 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
     : at === "defend" ? isModifierFormula(compact(a.defend))
     : at === "heal" ? isModifierFormula(compact(a.heal))
     : at === "aid" ? !!a.aidTarget && isModifierFormula(compact(a.aid))
+    : at === "effects" ? a.effects.length > 0
     : true;
 
   return (
@@ -267,7 +269,13 @@ export default function ActionInterview({ action, initial, conditions, itemOwned
             <p className="text-xs opacity-60">For {[a.affects.includes("defend") && "the defense", a.affects.includes("aid") && "the aid", a.who === "area" && a.lasts && "the area"].filter(Boolean).join(", ")}. Effects last as the catalog says.</p>
           </>
         )}
-        {!["name", "type", "who", "targetWho", "count", "range", "shape", "areaSize", "lasts", "affects", "damage", "toHit", "defend", "heal", "aid", "duration"].includes(at) && <p className="text-sm opacity-70">This question isn&apos;t built yet; its answer stays as it was. Use the older form below to change it for now.</p>}
+        {at === "effects" && (
+          <>
+            <div className="text-sm font-semibold">Which effects does it apply{a.affects.includes("attack") ? (a.who === "area" ? " to everyone caught" : " on a hit") : ""}?</div>
+            <EffectChips name="" options={effectOptions} initial={a.effects} onChange={(effects) => set({ effects })} />
+            <p className="text-xs opacity-60">Each lasts, and is resisted, as the catalog says: its rounds, and any save as it lands. Change those in the effect itself.</p>
+          </>
+        )}
       </div>
       <HiddenFields f={fields} />
       <div className="flex items-center gap-2">
