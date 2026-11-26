@@ -218,22 +218,39 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       ctx.fillRect(px - r, py - r, 2 * r, 2 * r);
     }
   } else if (kind === "fire") {
-    // Flames rise from the lower part of the area, shrinking and cooling from yellow to red as they go.
+    // Seen from above: tongues of flame flicker in place all over the area, swelling and dying, hottest
+    // (yellow-white) towards the middle and redder towards the edge, with a few embers drifting outward.
     ctx.globalCompositeOperation = "lighter";
-    const life = 1.1;
-    const base = y + h * (area.placed ? 0.8 : 1);
-    for (let i = 0; i < count(40, 160) * (area.placed ? 1 : 0.5); i++) {
+    const cx = x + w / 2, cy = y + h / 2;
+    for (let i = 0; i < count(40, 140) * (area.placed ? 1 : 0.5); i++) {
+      const life = 0.5 + 0.6 * rnd(i + 0.8);
       const phase = mod(t / life + rnd(i), 1);
-      const spread = (rnd(i + 0.3) - 0.5) * w * (area.placed ? 0.7 : 1) * (1 - phase * 0.6);
-      const px = x + w / 2 + spread + Math.sin(t * 6 + i) * unit * 0.08;
-      const py = base - phase * h * (area.placed ? 0.65 : 0.6 + 0.3 * k);
+      const born = Math.floor(t / life + rnd(i)); // each life of a tongue appears somewhere new
+      const px = x + rnd(i * 7 + born * 13.1) * w + Math.sin(t * 7 + i) * unit * 0.05;
+      const py = y + rnd(i * 11 + born * 17.3 + 0.5) * h + Math.cos(t * 6 + i) * unit * 0.05;
+      const a = fade(px, py) * Math.sin(phase * Math.PI);
+      if (a <= 0) continue;
+      const edge = Math.min(1, Math.hypot((px - cx) / (w / 2), (py - cy) / (h / 2))); // 0 middle, 1 edge
+      const r = unit * (0.2 + 0.25 * k) * (0.6 + 0.6 * rnd(i + 0.4)) * Math.sin(phase * Math.PI) + 1;
+      const gr = Math.round(230 - 160 * edge);
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, `rgba(255,${Math.min(255, gr + 25)},${Math.round(120 * (1 - edge))},${0.6 * a})`);
+      g.addColorStop(0.5, `rgba(255,${gr},40,${0.35 * a})`);
+      g.addColorStop(1, `rgba(220,${Math.round(gr * 0.4)},20,0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(px - r, py - r, 2 * r, 2 * r);
+    }
+    // Embers: small sparks leaving the middle in every direction, fading as they go.
+    for (let i = 0; i < count(8, 30); i++) {
+      const phase = mod(t / 1.6 + rnd(i + 0.15), 1);
+      const ang = rnd(i + 0.35 + Math.floor(t / 1.6 + rnd(i + 0.15))) * Math.PI * 2;
+      const dist = phase * 0.9;
+      const px = cx + Math.cos(ang) * dist * w / 2, py = cy + Math.sin(ang) * dist * h / 2;
       const a = fade(px, py) * (1 - phase);
       if (a <= 0) continue;
-      const r = unit * (0.12 + 0.2 * k) * (1 - phase) + 1;
-      const g = Math.round(220 - 170 * phase);
-      ctx.fillStyle = `rgba(255,${g},40,${0.55 * a})`;
+      ctx.fillStyle = `rgba(255,${Math.round(200 - 120 * phase)},60,${0.8 * a})`;
       ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.arc(px, py, unit * 0.03 + 1, 0, Math.PI * 2);
       ctx.fill();
     }
   } else if (kind === "lightning") {
