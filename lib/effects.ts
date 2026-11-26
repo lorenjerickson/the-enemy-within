@@ -193,11 +193,14 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       }
     }
   } else if (kind === "radiant") {
-    // Golden motes rising, twinkling.
+    // Seen from above: golden motes twinkle where they are and drift slowly outward from the middle.
     ctx.globalCompositeOperation = "lighter";
+    const cx = x + w / 2, cy = y + h / 2;
     for (let i = 0; i < count(30, 90); i++) {
-      const phase = mod(t / 2.5 + rnd(i), 1);
-      const px = x + rnd(i + 0.3) * w + Math.sin(t * 2 + i) * unit * 0.1, py = y + h - phase * h;
+      const phase = mod(t / 3 + rnd(i), 1);
+      const ang = rnd(i + 0.3) * Math.PI * 2, d0 = Math.sqrt(rnd(i + 0.6)) * 0.85;
+      const d = d0 + phase * 0.15;
+      const px = cx + Math.cos(ang) * d * w / 2, py = cy + Math.sin(ang) * d * h / 2;
       const a = fade(px, py) * Math.sin(phase * Math.PI) * (0.6 + 0.4 * Math.sin(t * 9 + i));
       if (a <= 0) continue;
       ctx.fillStyle = `rgba(254,240,138,${0.8 * a})`;
@@ -294,9 +297,10 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
     const period = 7 - 5 * k;
     const cycle = Math.floor(t / period);
     const since = t - cycle * period;
-    const cx = x + w / 2, cy = y + h / 2;
+    // Where this strike lands; the flash is brightest there.
+    const cx = x + w * (0.35 + 0.3 * rnd(cycle + 0.1)), cy = y + h * (0.35 + 0.3 * rnd(cycle + 0.2));
     if (since < 0.35) {
-      // The flash is an oval glow over the area, brightest in the middle.
+      // The flash is an oval glow over the area, brightest where it struck.
       ctx.save();
       ctx.translate(cx, cy);
       ctx.scale(w / 2, h / 2);
@@ -310,25 +314,38 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       ctx.restore();
     }
     if (since < 0.2) {
+      // Seen from above, a bolt hits a point: jagged forks branch out from it in every direction.
       ctx.strokeStyle = "rgba(255,255,255,0.95)";
       ctx.shadowColor = "rgba(170,190,255,0.9)";
       ctx.shadowBlur = unit * 0.4;
-      ctx.lineWidth = Math.max(1.5, unit * 0.05);
       ctx.lineCap = "round";
-      let px = x + w * (0.3 + 0.4 * rnd(cycle + 0.1));
-      let py = y;
-      const steps = 12;
-      for (let s = 1; s <= steps; s++) {
-        const nx = px + (rnd(cycle * 31 + s) - 0.5) * unit * 1.2;
-        const ny = y + (h * s) / steps;
-        ctx.globalAlpha = fade((px + nx) / 2, (py + ny) / 2);
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(nx, ny);
-        ctx.stroke();
-        px = nx;
-        py = ny;
+      const sx = cx, sy = cy;
+      const forks = 5 + Math.round(3 * k);
+      for (let f = 0; f < forks; f++) {
+        const n = cycle * 97 + f * 13;
+        let ang = (f / forks) * Math.PI * 2 + (rnd(n) - 0.5) * 0.8;
+        const reach = Math.min(w, h) * (0.25 + 0.2 * rnd(n + 0.5));
+        const steps = 6;
+        let px = sx, py = sy;
+        for (let s2 = 1; s2 <= steps; s2++) {
+          ang += (rnd(n + s2) - 0.5) * 1.1;
+          const nx = px + Math.cos(ang) * reach / steps, ny = py + Math.sin(ang) * reach / steps;
+          ctx.globalAlpha = fade((px + nx) / 2, (py + ny) / 2);
+          ctx.lineWidth = Math.max(1, unit * 0.06 * (1 - s2 / (steps + 1)));
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(nx, ny);
+          ctx.stroke();
+          px = nx;
+          py = ny;
+        }
       }
+      // The bright point where it struck.
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.beginPath();
+      ctx.arc(sx, sy, unit * 0.12 + 1, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.restore();
