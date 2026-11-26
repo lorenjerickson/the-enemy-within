@@ -303,6 +303,19 @@ export function rollConditionSaveFor(levelId: number) {
 }
 
 /**
+ * An effect's own save as it lands, outside rounds (rolled by the server with their numbers): null if they resist it
+ * outright, else the effect to put on (with half its rounds on a "halves" success), and a note for the GM's log.
+ */
+export function landsOn(tokenId: number, c: Condition): { c: Condition | null; note: string } {
+  if (!c.apply_save_attr) return { c, note: "" };
+  const dc = c.apply_save_dc ?? 12, total = rollSpec(saveRollFor(tokenId, c.apply_save_attr, `${c.apply_save_attr} save against ${c.name} (DC ${dc})`)).total;
+  const vs = `${c.apply_save_attr} ${total} vs DC ${dc}`;
+  if (total < dc) return { c, note: `fails to resist ${c.name} (${vs})` };
+  if (c.apply_save_outcome !== "halves") return { c: null, note: `resists ${c.name} (${vs})` };
+  return { c: { ...c, rounds: Math.max(1, Math.floor(c.rounds / 2)) }, note: `partly resists ${c.name} (${vs})` };
+}
+
+/**
  * A condition put on by hand (the GM's sheet), out of a round: its instant parts happen now (healing, damage,
  * temporary health) and, if there's more to it, it stays on them. Returns what happened, for the log.
  */

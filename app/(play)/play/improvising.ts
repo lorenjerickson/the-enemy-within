@@ -17,7 +17,7 @@ import { fireTrigger } from "./mapTriggers";
 import { catchInArea } from "./areas";
 import { UNTIL_REMOVED, inArea } from "@/lib/aoe";
 import { rollDice } from "@/lib/dice";
-import { applyConditionNow } from "./workOutRound";
+import { applyConditionNow, landsOn } from "./workOutRound";
 
 /** One outcome, now, by `tokenId` (the improviser). What each token is told. */
 export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: number, name: string, placed?: { x: number; y: number }, crit = false): Map<number, string[]> {
@@ -51,7 +51,10 @@ export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: numbe
     if (l && (l.fires ?? []).some((f) => f !== "leave")) for (const t of listTokens(levelId)) if (inArea(l.area, { x: t.col + 0.5, y: t.row + 0.5 })) tell(t.id, catchInArea(levelId, l, t.id));
     spreadFire(levelId);
   } else if (o.kind === "effect") {
-    const c = getCondition(o.effect), on = o.on === "self" ? tokenId : o.target;
+    const found = getCondition(o.effect), on = o.on === "self" ? tokenId : o.target;
+    const landed = found && on !== undefined ? landsOn(on, found) : null; // the effect's own save as it lands
+    const c = landed?.c;
+    if (found && !c && on !== undefined) tell(on, `You shake off ${found.name.toLowerCase()}.`);
     if (c && on !== undefined && listTokens(levelId).some((t) => t.id === on)) {
       const happened = applyConditionNow(levelId, on, c);
       tell(on, `${on === tokenId ? "You're" : `${tokenLabels(levelId).get(tokenId) ?? "Someone"} leaves you`} ${c.name.toLowerCase()}${happened.length ? ` (${happened.join(", ")})` : ""}.`);

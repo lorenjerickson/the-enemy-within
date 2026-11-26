@@ -18,7 +18,7 @@ import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { severity } from "@/lib/roundStory";
 import { movementBlockers, type Point, type Segment } from "@/lib/visibility";
-import { applyConditionNow } from "./workOutRound";
+import { applyConditionNow, landsOn } from "./workOutRound";
 
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
@@ -50,9 +50,11 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
       you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
-  if (!saved) for (const c of l.conditions ?? []) {
+  if (!saved) for (const found of l.conditions ?? []) {
+    const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands
+    if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c, whileIn ? l.id : undefined);
-    gm.push(`${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
+    gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
   logSessionEvent(`${name} ${doing[0]} ${l.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);

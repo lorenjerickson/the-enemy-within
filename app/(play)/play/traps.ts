@@ -15,7 +15,7 @@ import { severity } from "@/lib/roundStory";
 import { allegianceOf } from "@/lib/sides";
 import { canSpring, inTrap, sprungByStep, sprungWhereStanding, type Trap } from "@/lib/traps";
 import type { Point } from "@/lib/visibility";
-import { applyConditionNow, witnessTrap } from "./workOutRound";
+import { applyConditionNow, landsOn, witnessTrap } from "./workOutRound";
 
 export interface Sprung {
   trap: Trap;
@@ -48,10 +48,12 @@ export function springTrap(levelId: number, trap: Trap, tokenId: number): Sprung
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
   if (!saved) for (const id of trap.effects) {
-    const c = getCondition(id);
-    if (!c) continue;
+    const found = getCondition(id);
+    if (!found) continue;
+    const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands
+    if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c);
-    gm.push(`${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
+    gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
   if (trap.stops) you.push("you stop where you are");

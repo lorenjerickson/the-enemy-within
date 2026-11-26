@@ -165,3 +165,14 @@ test("a trigger outcome sets an area off (it catches whoever is in it now) or sw
   lever("on");
   assert.equal(tokenHealth(tok)!.current, 10, "switched on: catches whoever is in it");
 });
+
+test("an effect a lasting area puts on rolls its own save as it lands, out of combat", () => {
+  const lv = level();
+  const nimble = character("Esme", { health: "20", attributes: { agility: 30 } }); // always beats DC 5
+  const choke = getCondition(saveEffectDef(null, { name: "Choking", description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 3, apply_save_attr: "agility", apply_save_dc: 5 }))!;
+  const id = addLastingArea(lv, wall({ damage: null, dc: 99, conditions: [choke] }));
+  const tok = placeCharacterToken(lv, nimble, 1, 1);
+  const told = catchInArea(lv, getLastingArea(id)!, tok);
+  assert.ok(!listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Choking"));
+  assert.match(told, /shake off choking/i);
+});

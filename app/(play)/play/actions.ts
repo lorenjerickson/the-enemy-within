@@ -1,6 +1,6 @@
 "use server";
 
-import { applyConditionNow, recordConditionSave, recordRollOff } from "./workOutRound";
+import { applyConditionNow, landsOn, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
 import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
@@ -492,11 +492,9 @@ export async function useItemNow(actionId: number, targetId?: number): Promise<{
   }
   const told: string[] = [];
   const land = (who: number, list: Condition[]) => {
-    for (const c of list) {
-      if (c.apply_save_attr) {
-        const dc = c.apply_save_dc ?? 12, total = rollSpec(saveRollFor(who, c.apply_save_attr, `${c.apply_save_attr} save against ${c.name} (DC ${dc})`)).total;
-        if (total >= dc && c.apply_save_outcome !== "halves") { told.push(`${labels.get(who) ?? "they"} resists ${c.name} (${total} vs DC ${dc})`); continue; }
-      }
+    for (const found of list) {
+      const { c, note } = landsOn(who, found); // the effect's own save as it lands (half its rounds on a "halves" success)
+      if (!c) { told.push(`${labels.get(who) ?? "they"} ${note}`); continue; }
       const happened = applyConditionNow(me.level_id, who, c);
       told.push(`${labels.get(who) ?? "they"}: ${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     }

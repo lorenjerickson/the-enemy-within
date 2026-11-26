@@ -82,3 +82,17 @@ test("a trap going off is known only to characters who could see it (and those i
   assert.ok(seen.includes(near), "in sight");
   assert.ok(!seen.includes(behind), "behind a wall: still a secret to them");
 });
+
+test("each effect a trap puts on rolls its own save as it lands: resisted, partly resisted (half its rounds), or not", () => {
+  const nimble = character("Dace", { health: "20", attributes: { agility: 30 } }); // always beats DC 5, never DC 40
+  const tok = placeCharacterToken(lv, nimble, 4, 4);
+  const make = (name: string, dc: number, outcome: "negates" | "halves") =>
+    saveEffectDef(null, { name, description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 4, apply_save_attr: "agility", apply_save_dc: dc, apply_save_outcome: outcome });
+  const s = springTrap(lv, getTrap(trapWith({ damage: "", effects: [make("Netted", 5, "negates"), make("Tangled", 5, "halves"), make("Pinned", 40, "negates")] }))!, tok);
+  const on = listAfflictions(lv).get(tok) ?? [];
+  assert.ok(!on.some((a) => a.condition.name === "Netted"), "resisted outright");
+  assert.equal(on.find((a) => a.condition.name === "Tangled")?.left, 2, "half its rounds");
+  assert.ok(on.some((a) => a.condition.name === "Pinned"), "failed to resist");
+  assert.match(s.gm, /resists Netted \(agility \d+ vs DC 5\)/);
+  assert.match(s.player, /shake off netted/i);
+});
