@@ -38,7 +38,7 @@ export function gearOf(a: ActionFields, conditionOf: (id: number) => Condition |
   return {
     id: a.id ?? 0, name: a.name, description: a.description, damageType: a.damage_type || undefined, ...(a.kind && a.kind !== "action" ? { kind: a.kind } : {}), seconds: a.seconds, range: Math.max(1, Math.round((a.range_ft || itemRange) / 5)), attack: a.attack, damage: a.damage, roll: a.roll,
     ...(a.area_shape && a.area_ft > 0
-      ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type), fires: areaFires(a.area_fires) } }
+      ? { area: { shape: a.area_shape, ft: a.area_ft, dc: a.save_dc, save: a.save_attr, half: !!a.save_half, minutes: a.area_lasts ? durationMinutes(a.duration_amount, a.duration_unit) || 0.1 : 0, look: lookOf(a.damage_type), fires: areaFires(a.area_fires), ...(a.area_shape === "circle" && a.area_at === "self" ? { at: "self" as const } : {}) } }
       : {}),
     ...statusesOf(a, conditionOf),
     ...((): { targets: "self" | "others" | "anyone"; self?: true } => {

@@ -118,7 +118,10 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
     const { source: _source, ...gear } = use ?? { source: "" };
     // An area is aimed at a spot: a circle's centre must be within the action's range of where the plan leaves them.
     let aim: { col: number; row: number } | undefined;
-    if (step.aim && use?.area) {
+    if (use?.area?.at === "self") { // centred where they'll be standing: no aiming
+      const at = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
+      aim = { col: at.col + 0.5, row: at.row + 0.5 };
+    } else if (step.aim && use?.area) {
       aim = { col: Number(step.aim.col), row: Number(step.aim.row) };
       if (!Number.isFinite(aim.col) || !Number.isFinite(aim.row)) return "Aim it on the map";
       const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });

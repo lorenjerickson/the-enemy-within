@@ -76,7 +76,7 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
   const out: string[] = [];
   if (g.area) {
     const size = `${g.area.ft}-foot ${g.area.shape === "circle" ? "radius" : g.area.shape}`;
-    out.push(g.area.shape === "circle" ? `Fills a ${size} up to ${g.range * 5} feet away.` : `Fills a ${size} from you.`);
+    out.push(g.area.shape !== "circle" ? `Fills a ${size} from you.` : g.area.at === "self" ? `Fills a ${size} around where you stand.` : `Fills a ${size} up to ${g.range * 5} feet away.`);
     const caught = t ? cap(who) : "Everyone";
     const save = `${an(cap(g.area.save))} save (DC ${g.area.dc})`;
     const theirs = does(st?.target, "them", minutes);

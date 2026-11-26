@@ -174,7 +174,7 @@ export default function CreaturePlans({ creatures, targets }: { creatures: Creat
               </ActionTip>
             ))}
           </div>
-                {kind !== "movement" && <GearActions compact gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
+                {kind !== "movement" && <GearActions compact gear={shownGear.filter((g) => (g.kind ?? "action") === kind)} enabled={!current.plan.ready} blocked={(g) => unavailable(current.plan.steps, current.plan.used, kind, g.seconds, current.forbidden)} onUse={(g) => (g.targeting?.count === "all" && !g.area && !g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.area?.at === "self" ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "attack", use: g.id })) : g.self ? run(() => gmPlanStep(current.tokenId, { kind: "action", action: "use", use: g.id })) : (setMoveMode(false), setTargetMode({ ...gearTargetMode(g, current.tokenId), visible: current.sees })))} />}
               </section>
             );
           })}

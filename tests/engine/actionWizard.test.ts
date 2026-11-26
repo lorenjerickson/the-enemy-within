@@ -15,7 +15,7 @@ test("a new action starts with name, type, who and how it affects them", () => {
 test("the questions branch on the answers", () => {
   assert.deepEqual(questions(answer({ who: "self" })), ["name", "type", "who", "affects"]);
   assert.deepEqual(questions(answer({ who: "several" })), ["name", "type", "who", "targetWho", "count", "range", "affects"]);
-  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "areaSize", "lasts", "affects", "damage", "duration"]);
+  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "place", "areaSize", "lasts", "affects", "damage", "duration"]);
   assert.deepEqual(questions(answer({ type: "reaction", affects: ["effect"] })), ["name", "type", "affects", "effects"]);
   assert.deepEqual(questions(answer({ affects: ["defend", "heal", "aid"] })), ["name", "type", "who", "targetWho", "range", "affects", "defend", "heal", "aid", "duration"]);
 });
@@ -68,7 +68,7 @@ test("every question has a short answer line", async () => {
   const a = answer({ name: "Fireball", who: "area", lasts: true, affects: ["attack", "effect"], damage: "1d10", damageType: "fire", effects: [4], rangeFt: 150, areaFt: 20 });
   const lines = questions(a).map((q) => answerLine(q, a, () => "Burning"));
   assert.deepEqual(lines, [
-    ["Name", "Fireball"], ["Type", "Action, 2 s"], ["Applies to", "Everyone in an area"], ["Shape", "Circle"],
+    ["Name", "Fireball"], ["Type", "Action, 2 s"], ["Applies to", "Everyone in an area"], ["Shape", "Circle"], ["Where it goes", "A spot you pick"],
     ["Size", "20 feet, aimed up to 150 feet away"], ["Stays on the map", "Yes"], ["How it affects them", "Attack, apply an effect"],
     ["Damage", "1d10 fire"], ["How long", "1 minute"], ["Effects", "Burning"],
   ]);
@@ -81,4 +81,17 @@ test("no attack on yourself or as a reaction: a ticked attack falls away", async
   const a = answer({ who: "self", affects: ["attack", "heal"], damage: "1d6", heal: "1d4" });
   assert.deepEqual(questions(a).slice(-2), ["affects", "heal"]);
   assert.equal(fieldsFromAnswers(a).damage, null);
+});
+
+test("a circle goes on a spot they pick, where they stand, or (not yet) moves with them", () => {
+  assert.deepEqual(questions(answer({ who: "area", affects: ["attack"] })).slice(3, 7), ["shape", "place", "areaSize", "lasts"]);
+  assert.deepEqual(questions(answer({ who: "area", shape: "cone", affects: ["attack"] })).slice(3, 6), ["shape", "areaSize", "lasts"]);
+  assert.deepEqual(questions(answer({ who: "area", place: "follow", affects: ["attack"] })).slice(3, 6), ["shape", "place", "affects"]);
+  const here = answer({ name: "Smoke bomb", who: "area", place: "here", areaFt: 10, rangeFt: 60, affects: ["effect"], effects: [2] });
+  const f = fieldsFromAnswers(here);
+  assert.equal(f.area_at, "self");
+  assert.equal(f.range_ft, 0);
+  assert.equal(answersFromAction(f).place, "here");
+  assert.equal(gearOf(f, () => undefined).area?.at, "self");
+  assert.match(card(here), /^Fills a 10-foot radius around where you stand\./);
 });

@@ -97,7 +97,7 @@ export default function PickLock({
   const run = (f: () => Promise<{ error?: string; told?: string } | void>) => { setMoveMode(false); startTransition(async () => { const r = await f(); setError(r?.error ?? null); if (r?.told) setTold(r.told); }); }; // told: a creature's check, rolled for it
   const label = (id: PlayerActionId) => PLAYER_ACTIONS.find((a) => a.id === id)?.label ?? id;
   // A gear action picked (from the gear list, or through Use): planned straight away if it needs no target, else aimed.
-  const useGear = (g: (typeof gear)[number]) => { setUsing(false); return g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }); };
+  const useGear = (g: (typeof gear)[number]) => { setUsing(false); return g.targeting?.count === "all" && !g.area && !g.self ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.area?.at === "self" ? run(() => planStep({ kind: "action", action: "attack", use: g.id })) : g.self ? run(() => planStep({ kind: "action", action: "use", use: g.id })) : startTargeting({ ...gearTargetMode(g, null), visible: targets.map((t) => t.id) }); };
   // Use: items in a hand or on a belt (in a round, a pack's need a Refit first).
   const usableItems = gear.filter((g) => g.item && (!plan || g.item.where === "hand" || g.item.where === "belt")); // out of combat: anything carried
   // Out of combat it happens now: on themselves, or on someone they pick (attacks and areas need an encounter).

@@ -69,7 +69,7 @@ function HiddenFields({ f }: { f: ActionFields }) {
     ["name", f.name], ["description", f.description], ["kind", f.kind], ["seconds", f.seconds], ["roll", f.roll],
     ["attack", f.attack], ["damage", f.damage], ["damage_type", f.damage_type], ["range_ft", f.range_ft], ["targets", f.targets],
     ["target_who", f.target_who], ["target_count", f.target_count], ["target_n", f.target_n],
-    ["area_shape", f.area_shape], ["area_ft", f.area_ft], ["save_attr", f.save_attr], ["save_dc", f.save_dc],
+    ["area_shape", f.area_shape], ["area_ft", f.area_ft], ["area_at", f.area_at], ["save_attr", f.save_attr], ["save_dc", f.save_dc],
     ["duration_amount", f.duration_amount], ["duration_unit", f.duration_unit],
   ];
   const pre = (on?: string) => (on === "target" ? "target_" : "");
@@ -110,6 +110,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
     : q === "heal" ? isModifierFormula(compact(a.heal))
     : q === "aid" ? !!a.aidTarget && isModifierFormula(compact(a.aid))
     : q === "effects" ? a.effects.length > 0
+    : q === "place" ? a.place !== "follow" // an aura isn't an area yet: built as an effect on yourself
     : true;
   const ok = valid(at);
   const allOk = qs.every(valid);
@@ -218,13 +219,25 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
             <Choices value={a.shape} options={[["circle", "Circle", "Aimed at a spot"], ["cone", "Cone", "Spreading out from you"], ["line", "Line", "Straight out from you"]]} onPick={(shape) => set({ shape })} />
           </>
         )}
+        {at === "place" && (
+          <>
+            <div className="text-sm font-semibold">Where does it go?</div>
+            <Choices value={a.place} options={[["spot", "A spot they pick", "Aimed on the map, within a distance you set"], ["here", "Where they stand", "Centred on them as they use it; it stays there if they move"], ["follow", "On them, moving with them", "Like an aura of flame around them"]]} onPick={(place) => set({ place })} />
+            {a.place === "follow" && (
+              <div className="rounded-box border border-warning p-2 text-sm">
+                An area that moves with its user isn&apos;t possible yet (it&apos;s on the backlog). For now, build it as an aura: the action applies an effect with an aura to its user (as Miasmic puts Sickly on enemies within 10 feet).
+                <button type="button" className="btn btn-xs ml-2" onClick={() => { set({ who: "self", affects: [...new Set<Affect>([...a.affects.filter((x) => x !== "attack"), "effect"])] }); setAt("affects"); }}>Make it an effect on yourself</button>
+              </div>
+            )}
+          </>
+        )}
         {at === "areaSize" && (
           <>
-            <div className="text-sm font-semibold">How big is it{a.shape === "circle" ? ", and how far away can it be aimed" : ""}?</div>
+            <div className="text-sm font-semibold">How big is it{a.shape === "circle" && a.place === "spot" ? ", and how far away can it be aimed" : ""}?</div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <NumberBox min={5} step={5} value={a.areaFt} onChange={(areaFt) => set({ areaFt })} className="input input-sm w-24" />
               feet {a.shape === "circle" ? "radius" : "long"}
-              {a.shape === "circle" && (
+              {a.shape === "circle" && a.place === "spot" && (
                 <>
                   <span className="ml-2">aimed up to</span>
                   <NumberBox min={0} step={5} value={a.rangeFt} onChange={(rangeFt) => set({ rangeFt })} className="input input-sm w-24" /> feet away

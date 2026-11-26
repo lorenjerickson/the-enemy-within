@@ -21,6 +21,7 @@ export interface AreaSpec {
   minutes?: number; // lasting: stays on the map this long (game time; a round is 6 s), catching whoever is in it each round
   look?: EffectKind; // how a lasting area looks (from the damage type)
   fires?: AreaFires[]; // lasting: when it catches someone in it (default: the end of each round)
+  at?: "self"; // a circle centred where its user stands (no aiming)
 }
 
 /**
