@@ -1889,26 +1889,8 @@ export default function MapView({
     </>
   );
 
-  // In a session: the map fills the browser, with the UI as overlays and the tools in a dock on one edge.
-  if (dockSide) {
-    const tools: DockTool[] = [...(readOnly ? [] : [{ id: "map", label: "Map layers", icon: "layers" as const, content: layersPanel }]), ...dockTools];
-    return (
-      <div className="fixed inset-0 overflow-hidden bg-base-300">
-        {surface}
-        <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockOpposite ? "left-1/2 -translate-x-1/2" : dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
-        {/* Leaving the map layers panel puts the layer editor away too, so map clicks go back to play (sheets, moves). */}
-        {/* The GM planning a creature's round sees what a player sees (its sheet on the left, planning on the right), so their own dock steps aside. */}
-        {!(dockSide === "left" && !readOnly && gmSel !== null) && <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} onOpen={(id) => id !== "map" && setSelected(null)} />}
-        {dockOpposite && <PlayDock side={dockSide === "left" ? "right" : "left"} tools={dockOpposite.tools} initial={dockOpposite.initial ?? null} />}
-      </div>
-    );
-  }
-
-  return (
-    // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
-    // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
-    <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
-      {levelPrompt && (
+  // The level link prompt ("Go to …?"): in a session as well as in the editor.
+  const levelDialog = levelPrompt && (
         <dialog open className="modal modal-open" aria-labelledby="level-link-title" data-level-prompt>
           <div className="modal-box space-y-3">
             <h3 id="level-link-title" className="font-bold">Go to {levelPrompt.to}?</h3>
@@ -1924,7 +1906,29 @@ export default function MapView({
             </div>
           </div>
         </dialog>
-      )}
+      );
+
+  // In a session: the map fills the browser, with the UI as overlays and the tools in a dock on one edge.
+  if (dockSide) {
+    const tools: DockTool[] = [...(readOnly ? [] : [{ id: "map", label: "Map layers", icon: "layers" as const, content: layersPanel }]), ...dockTools];
+    return (
+      <div className="fixed inset-0 overflow-hidden bg-base-300">
+        {surface}
+        {levelDialog}
+        <div className={`absolute bottom-2 z-10 rounded-box bg-base-200/80 p-1 backdrop-blur ${dockOpposite ? "left-1/2 -translate-x-1/2" : dockSide === "left" ? "right-2" : "left-2"}`}>{footer}</div>
+        {/* Leaving the map layers panel puts the layer editor away too, so map clicks go back to play (sheets, moves). */}
+        {/* The GM planning a creature's round sees what a player sees (its sheet on the left, planning on the right), so their own dock steps aside. */}
+        {!(dockSide === "left" && !readOnly && gmSel !== null) && <PlayDock side={dockSide} tools={tools} initial={dockInitial} onWidth={setDockWidth} onOpen={(id) => id !== "map" && setSelected(null)} />}
+        {dockOpposite && <PlayDock side={dockSide === "left" ? "right" : "left"} tools={dockOpposite.tools} initial={dockOpposite.initial ?? null} />}
+      </div>
+    );
+  }
+
+  return (
+    // Wide screens: the map fills the window's height, with the layers and the selected layer's editor in a
+    // column on the right. Narrower: the map keeps a 16:9 shape and the column goes underneath.
+    <div className="flex flex-col 2xl:flex-row gap-4 2xl:h-[calc(100dvh-14.5rem)] 2xl:in-data-focus:h-[calc(100dvh-12.5rem)] 2xl:min-h-[30rem]">
+      {levelDialog}
         <div className="flex-1 min-w-0 flex flex-col gap-1">
             <div className="relative overflow-hidden rounded-box bg-base-300 aspect-video 2xl:aspect-auto 2xl:flex-1 2xl:min-h-0">
             {surface}
