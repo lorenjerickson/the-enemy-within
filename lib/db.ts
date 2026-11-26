@@ -1295,6 +1295,7 @@ export interface MapToken {
   token_side: string | null;
   height: number; // metres
   allegiance: string | null; // party / hostile / neutral as the GM set it (null: by kind; see lib/sides.ts)
+  player_name?: string | null; // a character's player (shown on hover)
 }
 
 export function listTokens(levelId: number): MapToken[] {
@@ -1303,7 +1304,8 @@ export function listTokens(levelId: number): MapToken[] {
       `SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, COALESCE(ch.image, cr.image) AS image, t.col, t.row, t.hp,
          CASE WHEN t.character_id IS NULL THEN cr.token_overhead ELSE ch.token_overhead END AS token_overhead,
          CASE WHEN t.character_id IS NULL THEN cr.token_side ELSE ch.token_side END AS token_side,
-         CASE WHEN t.character_id IS NULL THEN cr.height ELSE ch.height END AS height, t.allegiance
+         CASE WHEN t.character_id IS NULL THEN cr.height ELSE ch.height END AS height, t.allegiance,
+         (SELECT u.name FROM users u WHERE u.id = ch.player_id) AS player_name
        FROM map_tokens t
        LEFT JOIN creatures cr ON cr.id = t.creature_id
        LEFT JOIN characters ch ON ch.id = t.character_id

@@ -246,6 +246,13 @@ export default function MapView({
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   type TokenChange = { add: MapToken } | { move: { id: number; col: number; row: number } } | { remove: number };
+  const tipRef = useRef<HTMLDivElement>(null); // the hover label: moved by hand (no re-render on every pointer move)
+  const setHoverTip = (tip: { label: string; x: number; y: number } | null) => {
+    const el = tipRef.current;
+    if (!el) return;
+    el.style.display = tip ? "block" : "none";
+    if (tip) { el.textContent = tip.label; el.style.left = `${tip.x + 14}px`; el.style.top = `${tip.y + 14}px`; }
+  };
   const movedHere = useRef(new Map<number, number>()); // tokens this screen moved (a drag, its own walk): not held for a walk
   const [optimisticTokens, changeTokens] = useOptimistic(tokens, (ts: MapToken[], c: TokenChange) =>
     "add" in c
@@ -1149,6 +1156,14 @@ export default function MapView({
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Hover: a character's name and player (creatures' names for the GM only), next to the pointer.
+    {
+      const { gx, gy } = gridAt(e);
+      const t = [...state.tokens].reverse().find((x) => gx >= x.col && gx < x.col + 1 && gy >= x.row && gy < x.row + 1 && !state.hidden?.has(x.id));
+      const label = !t ? null : t.character_id ? `${t.name}${t.player_name ? ` · ${t.player_name}` : ""}` : readOnly ? null : t.name;
+      const r = e.currentTarget.getBoundingClientRect();
+      setHoverTip(label && !draggingToken ? { label, x: e.clientX - r.left, y: e.clientY - r.top } : null);
+    }
     if (placingTemplate) { const { gx, gy } = gridAt(e); setPlaceAt({ x: gx, y: gy }); }
     if (linkDrag) {
       const at = linkPointAt(e);
@@ -1567,12 +1582,14 @@ export default function MapView({
                 }
               />
             )}
+            <div ref={tipRef} className="pointer-events-none absolute z-10 rounded bg-base-100/90 px-2 py-0.5 text-xs shadow" style={{ display: "none" }} data-token-tip />
             <canvas
               ref={canvasRef}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
+              onPointerLeave={() => setHoverTip(null)}
               onContextMenu={(e) => e.preventDefault()}
               className="absolute inset-0 size-full touch-none"
             />
