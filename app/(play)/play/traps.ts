@@ -1,12 +1,12 @@
 /**
- * Springing traps outside rounds (free movement): the damage, the effects (each with its own save as it lands), and
- * what the GM's log and the player are told. Rounds spring traps in round resolution instead.
+ * Springing traps outside rounds (free movement): the save, the damage, the effects, and what the GM's log and the
+ * player are told. Rounds spring traps in round resolution instead. Saves are rolled by the server for now.
  */
 import { getCondition } from "@/lib/db/effects";
 import { listTokens } from "@/lib/db/tokens";
 import { listTraps, markTrapSprung } from "@/lib/db/traps";
 import { logSessionEvent } from "@/lib/db/sessions";
-
+import { fightersOn } from "@/lib/combat";
 import { resistancesOf } from "@/lib/creatureChanges";
 import { afterResist, combineResist } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
@@ -25,26 +25,29 @@ export interface Sprung {
   player: string; // for whoever set it off: how bad, and their own damage
 }
 
-/** A trap springs on a token: it's spent (for them), whoever saw it knows it's there, and its damage and effects land. */
+/** A trap springs on a token: it's spent (for them), whoever saw it knows it's there, and its save, damage and effects land. */
 export function springTrap(levelId: number, trap: Trap, tokenId: number): Sprung {
   const token = listTokens(levelId).find((t) => t.id === tokenId);
   const name = token?.name ?? "Someone";
   markTrapSprung(trap.id, tokenId);
   witnessTrap(levelId, trap, [tokenId]); // no secret any more to whoever saw it
-  // No save against a trap (Q): its damage always lands; each effect it puts on has its own save as it lands.
+  const f = fightersOn(levelId).get(tokenId);
+  const save = trap.save_attr && f ? f.save(trap.save_attr as never) : null;
+  const saved = !!save && save.total >= trap.save_dc;
   const gm: string[] = [], you: string[] = [];
+  if (save) gm.push(`${trap.save_attr} ${save.total} vs DC ${trap.save_dc}${saved ? " (saved)" : ""}`);
   const h = tokenHealth(tokenId);
   if (trap.damage && h) {
-    const rolled = Math.max(0, rollDice(trap.damage)), before = rolled;
+    const rolled = Math.max(0, rollDice(trap.damage)), before = saved ? (trap.save_half ? Math.floor(rolled / 2) : 0) : rolled;
     const r = trap.damage_type ? combineResist(resistancesOf(tokenId, levelId)[trap.damage_type]) : null, n = afterResist(before, r);
     if (n > 0) {
       const next = takeDamage(h, n);
       saveTokenHealth(tokenId, next);
       gm.push(`${n}${trap.damage_type ? ` ${trap.damage_type}` : ""} damage${r ? ` (${r})` : ""}${next.current <= 0 ? ", down" : ""}`);
-      you.push(`you're hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
-    } else you.push("it does you no harm");
-  }
-  for (const id of trap.effects) {
+      you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
+    } else you.push(saved ? "you get clear" : "it does you no harm");
+  } else if (saved) you.push("you get clear");
+  if (!saved) for (const id of trap.effects) {
     const found = getCondition(id);
     if (!found) continue;
     const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands

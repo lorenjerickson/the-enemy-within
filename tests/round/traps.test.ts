@@ -29,25 +29,26 @@ test("who it's for: a party-only trap lets the GM's creatures through", () => {
   assert.equal(r.trapsSprung.length, 0);
 });
 
-test("no save against a trap (Q): its damage and effects always land, an old trap save ignored", () => {
+test("a save for half; its effects only on a failed save", () => {
   const slow = condition(5, "Hobbled", [{ kind: "speed", factor: 0.5 }], { rounds: 2 });
-  const r = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
-  assert.equal(r.hp.get(1), 14);
-  assert.ok(r.afflictions.get(1)?.some((a) => a.condition.name === "Hobbled"));
+  const saved = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
+  assert.equal(saved.hp.get(1), 17);
+  assert.ok(!saved.afflictions.get(1)?.length);
+  const failed = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 5 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
+  assert.equal(failed.hp.get(1), 14);
+  assert.ok(failed.afflictions.get(1)?.some((a) => a.condition.name === "Hobbled"));
 });
 
-test("a player's character rolls their own save against an effect a trap puts on: the round waits for it", () => {
-  const net = condition(6, "Netted", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "agility", apply_save_dc: 12 });
-  const run = (decisions: Record<string, number> = {}) => resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20 }) }, { traps: [pit({ given: [net] })], rollers: [1], decisions });
+test("a player's character rolls their own save against a trap: the round waits for it", () => {
   let key = "";
-  assert.throws(() => run(), (e: unknown) => {
+  assert.throws(() => resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter() }, { traps: [pit({ save_attr: "agility" })], rollers: [1] }), (e: unknown) => {
     assert.ok(e instanceof SaveNeeded);
+    assert.equal(e.save.condition, "Spike pit");
     key = e.save.key;
     return true;
   });
-  const r = run({ [key]: 20 });
-  assert.equal(r.hp.get(1), 14, "the trap's damage lands regardless");
-  assert.ok(!r.afflictions.get(1)?.some((a) => a.condition.name === "Netted"), "their 20 resisted the net");
+  const r = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20 }) }, { traps: [pit({ save_attr: "agility" })], rollers: [1], decisions: { [key]: 20 } });
+  assert.equal(r.hp.get(1), 17);
 });
 
 test("traps that catch whoever starts or ends the round in them", () => {
@@ -79,4 +80,6 @@ test("round stories: whoever set it off learns how bad (and their own damage); t
   const mine = [...storyFor(r.story, 1, () => "Ann").values()].flat();
   assert.deepEqual(mine, ["You set off a trap (Spike pit): moderate (-6), and it stops you in your tracks."]);
   assert.deepEqual(gmStory(r.story, () => "Ann").flatMap((x) => x.lines), ["Ann sets off Spike pit: moderate damage (6); it stops them."]);
+  const saved = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", save_half: 0, stops: 0 })] });
+  assert.deepEqual([...storyFor(saved.story, 1, () => "Ann").values()].flat(), ["You set off a trap (Spike pit): you get clear."]);
 });

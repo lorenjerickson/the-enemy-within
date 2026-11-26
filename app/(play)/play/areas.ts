@@ -5,14 +5,15 @@
  * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
 import { setLastingAreaFound, getExposures, listHazards, saveExposures } from "@/lib/db/areas";
-import { listTokens } from "@/lib/db/tokens";
+import { getCharacterPlayer, listTokens } from "@/lib/db/tokens";
 import { leaveAreaAfflictions } from "@/lib/db/effects";
 import { listStructures } from "@/lib/db/maps";
 import { logSessionEvent } from "@/lib/db/sessions";
-
+import { requestRoll } from "@/lib/db/rolls";
+import { saveRollFor } from "@/lib/creatureChanges";
 import { decayed, exposedInside, exposureExtra, harmOf } from "@/lib/exposure";
-import { caughtBy, type LastingArea } from "@/lib/aoe";
-
+import { NO_SAVE_DC, caughtBy, type LastingArea } from "@/lib/aoe";
+import { fightersOn } from "@/lib/combat";
 import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { severity } from "@/lib/roundStory";
@@ -21,27 +22,35 @@ import { applyConditionNow, landsOn } from "./workOutRound";
 
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
-/** A lasting area catches a token: its damage (always lands) and its effects (each with its own save as it lands). Returns what they're told. */
-export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false): string {
+/** A lasting area catches a token: the save, the damage (half or none on a success), effects on a failed save. Returns what they're told. */
+export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false, saveTotal?: number): string {
   const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
   setLastingAreaFound(l.id); // hidden: walking into it finds it
+  // A player's character rolls its own save: asked now, settled when the roll comes in (this again, with its total).
+  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && l.dc < NO_SAVE_DC && tok?.character_id ? getCharacterPlayer(tok.character_id) : null; // no save: nothing to roll
+  if (player && tok?.character_id) {
+    requestRoll(player, tok.character_id, saveRollFor(tokenId, l.save, `${l.name}: ${l.save} save (DC ${l.dc})`), { kind: "areaSave", levelId, areaId: l.id, tokenId, ...(leaving ? { leaving } : {}), ...(staying ? { staying } : {}) });
+    return `You ${doing[1]} ${l.name}! Roll your ${l.save} save.`;
+  }
   const exposures = l.lingers && !leaving ? getExposures(levelId) : null, extra = exposures ? exposureExtra(exposures, tokenId, harmOf(l)) : 0; // lingering: plus the build-up so far
   const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
-  // No save against an area (Q): its damage always lands.
-  const gm: string[] = [], you: string[] = [];
+  const f = fightersOn(levelId).get(tokenId);
+  const save = saveTotal !== undefined ? { total: saveTotal } : f && l.dc < NO_SAVE_DC ? f.save(l.save) : null;
+  const saved = !!save && save.total >= l.dc;
+  const gm: string[] = [save ? `${l.save} ${save.total} vs DC ${l.dc}${saved ? " (saved)" : ""}` : ""].filter(Boolean), you: string[] = [];
   const h = tokenHealth(tokenId);
   if (l.damage && h) {
-    const rolled = Math.max(0, rollDice(l.damage)) + extra, n = rolled;
+    const rolled = Math.max(0, rollDice(l.damage)) + extra, n = saved ? (l.half ? Math.floor(rolled / 2) : 0) : rolled;
     if (exposures && n > 0) { exposedInside(exposures, tokenId, l, n); saveExposures(levelId, exposures); }
     if (n > 0) {
       const next = takeDamage(h, n);
       saveTokenHealth(tokenId, next);
       gm.push(`${n} damage${next.current <= 0 ? ", down" : ""}`);
-      you.push(`you're hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
-    } else you.push("it does you no harm");
-  }
-  for (const found of l.conditions ?? []) {
+      you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
+    } else you.push(saved ? "you get clear" : "it does you no harm");
+  } else if (saved) you.push("you get clear");
+  if (!saved) for (const found of l.conditions ?? []) {
     const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands
     if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c, whileIn ? l.id : undefined);

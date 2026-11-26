@@ -7,27 +7,27 @@ import { SaveNeeded } from "@/lib/resolveRound";
 const fireball = (extra = {}) => gear({ name: "Fireball", range: 20, damage: "8", damageType: "fire", area: { shape: "circle", ft: 10, dc: 13, save: "agility", half: true }, ...extra });
 const aimAt = (col: number, row: number) => ({ col: col + 0.5, row: row + 0.5 });
 
-test("an area attack: everyone caught takes its damage, no save (Q); the attacker and those outside are spared", () => {
+test("an area attack: everyone caught saves, success halves, the attacker and those outside are spared", () => {
   const r = resolve(
     [mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball(), aim: aimAt(5, 5) })]), mover(2, { col: 5, row: 5 }), mover(3, { col: 6, row: 5 }), mover(4, { col: 9, row: 5 })],
     { 1: fighter({ dmg: 8 }), 2: fighter({ save: 15 }), 3: fighter({ save: 5 }), 4: fighter({ save: 5 }) },
   );
   assert.equal(r.hp.get(1), 20);
-  assert.equal(r.hp.get(2), 12, "a good save doesn't help: full");
-  assert.equal(r.hp.get(3), 12, "full");
+  assert.equal(r.hp.get(2), 16, "saved: half");
+  assert.equal(r.hp.get(3), 12, "failed: full");
   assert.equal(r.hp.get(4), 20, "outside");
   const fx = r.frames[1].fx!.find((f) => f.look === "area")!;
-  assert.deepEqual("hits" in fx ? fx.hits.map((h) => [h.id, h.outcome]) : [], [[2, "hit"], [3, "hit"]]);
+  assert.deepEqual("hits" in fx ? fx.hits.map((h) => [h.id, h.outcome]) : [], [[2, "half"], [3, "hit"]]);
 });
 
-test("an old area save is ignored (its damage lands); a wall shelters whoever is behind it", () => {
+test("a save that negates leaves nothing; a wall shelters whoever is behind it", () => {
   const spec = fireball({ area: { shape: "circle", ft: 10, dc: 13, save: "agility", half: false } });
   const r = resolve(
     [mover(1, { col: 0, row: 0 }, [act("attack", { use: spec, aim: aimAt(5, 5) })]), mover(2, { col: 5, row: 5 }), mover(3, { col: 5, row: 7 })],
     { 1: fighter({ dmg: 8 }), 2: fighter({ save: 15 }), 3: fighter({ save: 5 }) },
     { walls: [wall(3, 7, 8, 7)] },
   );
-  assert.equal(r.hp.get(2), 12);
+  assert.equal(r.hp.get(2), 20);
   assert.equal(r.hp.get(3), 20);
 });
 
@@ -97,9 +97,20 @@ test("a lasting area's conditions land on those who fail its save", () => {
   assert.ok(r.afflictions.get(2)?.some((a) => a.condition.name === "Burning"));
 });
 
-test("no area save is asked of a player's character: the round doesn't wait, the damage lands", () => {
-  const r = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball(), aim: aimAt(5, 5) })]), mover(2, { col: 5, row: 5 })], { 1: fighter({ dmg: 8 }), 2: fighter({ save: 1 }) }, { rollers: [2] });
-  assert.equal(r.hp.get(2), 12);
+test("a player's character rolls their own area save: the round waits for it, then uses it", () => {
+  const movers = () => [mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball(), aim: aimAt(5, 5) })]), mover(2, { col: 5, row: 5 })];
+  const fighters = () => ({ 1: fighter({ dmg: 8 }), 2: fighter({ save: 1 }) });
+  let key = "";
+  assert.throws(() => resolve(movers(), fighters(), { rollers: [2] }), (e: unknown) => {
+    assert.ok(e instanceof SaveNeeded);
+    assert.equal(e.save.tokenId, 2);
+    assert.equal(e.save.attr, "agility");
+    assert.equal(e.save.dc, 13);
+    key = e.save.key;
+    return true;
+  });
+  const r = resolve(movers(), fighters(), { rollers: [2], decisions: { [key]: 17 } });
+  assert.equal(r.hp.get(2), 16, "their 17 saved: half");
 });
 
 test("'stays in it' areas: their effects last only while inside (off as they leave); 'leaves it' areas catch whoever leaves", () => {

@@ -3,7 +3,7 @@
 import { applyConditionNow, landsOn, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
-import { skillCheckFor, speedFps } from "@/lib/creatureChanges";
+import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db/tokens";
 import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
@@ -18,9 +18,9 @@ import { getDoor, setDoorLocked, listStructures, isGridlessLevel, isPortraitLeve
 import { getOpenGameSession, logSessionEvent } from "@/lib/db/sessions";
 import { getPlayerToken, walkToken, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setAssist, listHidden, setHidden } from "@/lib/db/tokens";
 import { listSecrets, setSecretRevealed } from "@/lib/db/story";
-import { getEncounter } from "@/lib/db/encounters";
+import { getEncounter, getEncounterWaiting, setEncounterWaiting, saveEncounter } from "@/lib/db/encounters";
 import { listMapTriggers } from "@/lib/db/traps";
-
+import { getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, moveStepEnd, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -279,10 +279,10 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     outcome = improvisationRolled(a.id, { total: scored.total, natural: scored.parts?.[0]?.dice[0] ?? 0 });
   }
   if (a.kind === "areaSave") {
-    // Retired (Q: no saves against areas): a prompt still open from before lands the area now, its damage in full.
+    // A lasting area they walked into (out of combat): it lands now, with their save.
     const l = getLastingArea(a.areaId) ?? listHazards(a.levelId).find((x) => x.id === a.areaId);
-    success = false;
-    outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying) : "It's gone.";
+    success = !!l && scored.total >= l.dc;
+    outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying, scored.total) : "It's gone.";
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).

@@ -31,12 +31,12 @@ test("out of combat, walking into a lasting area (a fire wall left after a fight
   assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Scorched"));
 });
 
-test("an old area save is ignored (full damage); starting inside it or walking along inside it isn't coming into it; an expired one does nothing", () => {
+test("a save for half; starting inside it or walking along inside it isn't coming into it; an expired one does nothing", () => {
   const lv = level();
-  addLastingArea(lv, wall({ dc: 1 })); // an old save anyone would make: ignored now (Q)
+  addLastingArea(lv, wall({ dc: 1 })); // always saved: half of 6
   const a = placeCharacterToken(lv, character("Bram", { health: "20" }), 1, 1);
   walkRoute(lv, a, row(1, 1, 5));
-  assert.equal(tokenHealth(a)!.current, 14);
+  assert.equal(tokenHealth(a)!.current, 17);
   const b = placeCharacterToken(lv, character("Cole", { health: "20" }), 3, 0);
   walkRoute(lv, b, [{ x: 3, y: 0 }, { x: 3, y: 1 }, { x: 3, y: 2 }]);
   assert.equal(tokenHealth(b)!.current, 20, "already in it");
@@ -92,18 +92,21 @@ test("out of combat, lingering harm lands every 6 s walked: after walking out of
   assert.ok(w.told.some((t) => /Burning hall still hurts: .*\(-2\), and it fades/.test(t)), w.told.join(" | "));
 });
 
-test("no area save is asked of a player's character out of combat: the damage lands as they walk in", () => {
+test("a player's character rolls its own save against an area: asked as they walk in; it lands when the roll comes in", () => {
   createUser({ name: "areaP", username: "areaP", contact: "", role: "player" } as never, "pw");
   const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("areaP")!.id;
   const lv = level();
-  addLastingArea(lv, wall({ dc: 15 }));
+  const id = addLastingArea(lv, wall({ dc: 15 }));
   const ivy = character("Ivy", { health: "20" });
   db.prepare("UPDATE characters SET player_id = ? WHERE id = ?").run(pid, ivy);
   const tok = placeCharacterToken(lv, ivy, 1, 1);
   const w = walkRoute(lv, tok, row(1, 1, 5));
-  assert.ok(w.told.some((t) => /You walk into Fire wall! You're hurt: moderate \(-6\)/.test(t)), w.told.join(" | "));
-  assert.equal(tokenHealth(tok)!.current, 14);
-  assert.equal(getOpenRollRequest(pid), undefined, "nothing to roll");
+  assert.ok(w.told.some((t) => /You walk into Fire wall! Roll your agility save\./.test(t)), w.told.join(" | "));
+  assert.equal(tokenHealth(tok)!.current, 20, "nothing yet");
+  const req = getOpenRollRequest(pid)!;
+  assert.deepEqual(req.action, { kind: "areaSave", levelId: lv, areaId: id, tokenId: tok });
+  assert.match(catchInArea(lv, getLastingArea(id)!, tok, false, false, 16), /You walk into Fire wall! You partly get clear but are hurt/);
+  assert.equal(tokenHealth(tok)!.current, 17, "saved (16 vs 15): half of 6");
 });
 
 test("visibility: players see shown areas; hidden ones once found (walking into one finds it); GM-only ones never", () => {
