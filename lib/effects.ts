@@ -153,19 +153,44 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       ctx.fillRect(px - r, py - r, 2 * r, 2 * r);
     }
   } else if (kind === "acid" || kind === "oil") {
-    // A pool: bubbles that swell and pop (acid hissing yellow-green; oil slow, dark, with a rainbow glint).
-    const life = kind === "acid" ? 1.2 : 3.5;
+    // A pool: filled bubbles that swell with a glint on top, then pop (acid hissing yellow-green; oil slow,
+    // dark, with a rainbow glint). Solid domes rather than rings, so a pool never reads as rain.
+    const life = kind === "acid" ? 1.6 : 3.5;
     for (let i = 0; i < count(25, 60); i++) {
       const phase = mod(t / life + rnd(i + 0.2), 1);
-      const px = x + rnd(i) * w, py = y + rnd(i + 0.6) * h;
+      const born = Math.floor(t / life + rnd(i + 0.2));
+      const px = x + rnd(i * 7 + born * 13.1) * w, py = y + rnd(i * 11 + born * 17.3 + 0.6) * h;
       const a = fade(px, py);
       if (a <= 0) continue;
-      const r = unit * (0.05 + 0.18 * rnd(i + 0.4)) * phase + 1;
-      ctx.strokeStyle = kind === "acid" ? `rgba(217,249,157,${0.7 * a * (1 - phase)})` : `hsla(${Math.round(mod(t * 40 + i * 37, 360))},70%,60%,${0.35 * a * (1 - phase)})`;
-      ctx.lineWidth = Math.max(1, unit * 0.03);
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.stroke();
+      const r = unit * (0.05 + 0.15 * rnd(i + 0.4)) * Math.min(1, phase / 0.85) + 1;
+      if (phase < 0.85) {
+        // Swelling: a filled dome, darker at its rim, with a small highlight up and to the left.
+        const g = ctx.createRadialGradient(px - r * 0.35, py - r * 0.35, 0, px, py, r);
+        if (kind === "acid") {
+          g.addColorStop(0, `rgba(236,252,203,${0.75 * a})`);
+          g.addColorStop(0.35, `rgba(190,242,100,${0.45 * a})`);
+          g.addColorStop(1, `rgba(101,163,13,${0.55 * a})`);
+        } else {
+          const hue = Math.round(mod(t * 40 + i * 37, 360));
+          g.addColorStop(0, `hsla(${hue},70%,70%,${0.45 * a})`);
+          g.addColorStop(0.4, `rgba(41,37,36,${0.6 * a})`);
+          g.addColorStop(1, `rgba(12,10,9,${0.7 * a})`);
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Popping: a few droplets flicked outward from where the bubble was.
+        const p = (phase - 0.85) / 0.15;
+        ctx.fillStyle = kind === "acid" ? `rgba(217,249,157,${0.8 * a * (1 - p)})` : `rgba(68,64,60,${0.7 * a * (1 - p)})`;
+        for (let d = 0; d < 5; d++) {
+          const ang = (d / 5) * Math.PI * 2 + rnd(i + d);
+          ctx.beginPath();
+          ctx.arc(px + Math.cos(ang) * r * (1 + p), py + Math.sin(ang) * r * (1 + p), unit * 0.015 + 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
   } else if (kind === "radiant") {
     // Golden motes rising, twinkling.
