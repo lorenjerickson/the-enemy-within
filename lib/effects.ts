@@ -203,10 +203,22 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       const px = cx + Math.cos(ang) * d * w / 2, py = cy + Math.sin(ang) * d * h / 2;
       const a = fade(px, py) * Math.sin(phase * Math.PI) * (0.6 + 0.4 * Math.sin(t * 9 + i));
       if (a <= 0) continue;
-      ctx.fillStyle = `rgba(254,240,138,${0.8 * a})`;
+      // Small and sharp: a solid point, sized to the grid rather than the area, with a cross glint as it peaks.
+      const r = Math.max(0.8, cell * 0.025);
+      ctx.fillStyle = `rgba(254,249,195,${Math.min(1, 1.1 * a)})`;
       ctx.beginPath();
-      ctx.arc(px, py, unit * 0.06 + 1, 0, Math.PI * 2);
+      ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
+      if (a > 0.75) {
+        ctx.strokeStyle = `rgba(254,240,138,${(a - 0.75) * 3})`;
+        ctx.lineWidth = Math.max(0.6, r * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(px - r * 3, py);
+        ctx.lineTo(px + r * 3, py);
+        ctx.moveTo(px, py - r * 3);
+        ctx.lineTo(px, py + r * 3);
+        ctx.stroke();
+      }
     }
   } else if (kind === "psychic" || kind === "force") {
     // Rings spreading from the middle and fading (psychic pink and uneven; force blue and even).
@@ -322,7 +334,7 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
             ctx.stroke();
           }
         }
-        if (depth < 2 && rnd(seed + s2 + 0.5) < 0.28) {
+        if (depth < 3 && rnd(seed + s2 + 0.5) < 0.38) {
           const side = rnd(seed + s2 + 0.8) < 0.5 ? -1 : 1;
           path(seed * 3 + s2 * 7.7, nx, ny, ang + side * (0.5 + 0.6 * rnd(seed + s2 + 0.9)), Math.round(n * 0.45), (head - s2) * 1.3, tail * 0.7, width * 0.6, depth + 1);
         }
@@ -330,15 +342,22 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
         py = ny;
       }
     };
-    const arcs = 1 + Math.round(2 * k);
-    for (let i = 0; i < arcs; i++) {
-      const period = 2.4 - 0.8 * k;
-      const run = Math.floor(t / period + rnd(i + 0.1)); // each walk starts somewhere new
+    // Each discharge starts at a point and spreads out from it in several directions; the paths near the
+    // centre fade first while the tips keep walking and forking further out.
+    const bursts = 1 + Math.round(k);
+    for (let i = 0; i < bursts; i++) {
+      const period = 1.8 - 0.6 * k;
+      const run = Math.floor(t / period + rnd(i + 0.1)); // each discharge starts somewhere new
       const phase = mod(t / period + rnd(i + 0.1), 1);
       const seed = i * 101 + run * 37;
-      const n = 14, tail = 6;
-      const sx = x + w * (0.15 + 0.7 * rnd(seed + 0.2)), sy = y + h * (0.15 + 0.7 * rnd(seed + 0.4));
-      path(seed, sx, sy, rnd(seed + 0.6) * Math.PI * 2, n, phase * (n + tail), tail, Math.max(0.8, unit * 0.025), 0);
+      const n = 12, tail = 5;
+      const sx = x + w * (0.25 + 0.5 * rnd(seed + 0.2)), sy = y + h * (0.25 + 0.5 * rnd(seed + 0.4));
+      const spokes = 3 + Math.round(2 * k), turn = rnd(seed + 0.6) * Math.PI * 2;
+      for (let p = 0; p < spokes; p++) {
+        const ang = turn + (p / spokes) * Math.PI * 2 + (rnd(seed + p + 0.7) - 0.5) * 0.9;
+        const len = Math.round(n * (0.6 + 0.4 * rnd(seed + p + 0.3)));
+        path(seed + p * 11.3, sx, sy, ang, len, phase * (n + tail), tail, Math.max(0.7, unit * 0.02), 0);
+      }
     }
   }
   ctx.restore();
