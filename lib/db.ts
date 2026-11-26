@@ -53,6 +53,9 @@ export * from "@/lib/db/effects";
 import { saveEffectDef, settleEffects, LIFECYCLE_COLUMNS, type OldEffectDef, oldModifiers } from "@/lib/db/effects";
 export * from "@/lib/db/areas";
 export * from "@/lib/db/traps";
+export * from "@/lib/db/story";
+export * from "@/lib/db/rolls";
+export * from "@/lib/db/rounds";
 
 // Professions are progressions of ranks: each rank (a `professions` row) belongs to a profession (`profession_groups`),
 // and a character has one rank (`characters.rank_id`), holding every rank before it too.
@@ -137,19 +140,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS level_ambient (
   rev INTEGER NOT NULL DEFAULT 0
 )`);
 
-export type VarValue = number | string | boolean | null;
-
-export function getVars(): Record<string, VarValue> {
-  const rows = db.prepare<[], { key: string; value: string }>("SELECT key, value FROM game_vars").all();
-  return Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)]));
-}
-
-export function saveVars(vars: Record<string, VarValue>): void {
-  db.exec("DELETE FROM game_vars");
-  const insert = db.prepare<[string, string]>("INSERT INTO game_vars (key, value) VALUES (?, ?)");
-  for (const [k, v] of Object.entries(vars)) if (v !== null) insert.run(k, JSON.stringify(v));
-}
-
 /** Runs fn in a single transaction. */
 export const transaction = <T>(fn: () => T): T => db.transaction(fn)();
 
@@ -189,53 +179,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS session_members (
   status TEXT NOT NULL, -- 'gm' | 'removed'
   PRIMARY KEY (session_id, user_id)
 )`);
-
-// ---------- Triggers ----------
-
-export interface Trigger {
-  id: number;
-  prelude: string[]; // WITH lines naming what the trigger refers to
-  condition: string;
-  action: string;
-  /** Watched WITH names and their values at the last check (H.previous). */
-  watches: Record<string, VarValue>;
-  level_id: number | null; // the map level it was made on (game.locations.current)
-  created: number; // game time
-  last: boolean; // the condition held at the last check (it goes off when this turns true)
-  fired: number | null; // game time it last went off
-  error: string | null;
-}
-type TriggerRow = Omit<Trigger, "prelude" | "watches" | "last"> & { prelude: string; watches: string; last: number };
-const toTrigger = (r: TriggerRow): Trigger => ({ ...r, prelude: JSON.parse(r.prelude), watches: JSON.parse(r.watches), last: !!r.last });
-
-export function addTrigger(t: Pick<Trigger, "prelude" | "condition" | "action" | "level_id" | "created"> & { watches: Record<string, unknown> }): void {
-  db.prepare<[string, string, string, string, number | null, number]>(
-    "INSERT INTO triggers (prelude, condition, action, watches, level_id, created) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(JSON.stringify(t.prelude), t.condition, t.action, JSON.stringify(t.watches), t.level_id, t.created);
-}
-
-/** Triggers still watching (not failed), oldest first. */
-export function listActiveTriggers(): Trigger[] {
-  return db.prepare<[], TriggerRow>("SELECT * FROM triggers WHERE error IS NULL ORDER BY id").all().map(toTrigger);
-}
-
-export function listTriggers(): Trigger[] {
-  return db.prepare<[], TriggerRow>("SELECT * FROM triggers ORDER BY id").all().map(toTrigger);
-}
-
-/** Records a check: whether the condition held, the watched values seen, and the time if it went off. */
-export function setTriggerState(id: number, last: boolean, watches: Record<string, VarValue>, firedAt: number | null): void {
-  db.prepare<[number, string, number | null, number]>("UPDATE triggers SET last = ?, watches = ?, fired = COALESCE(?, fired) WHERE id = ?")
-    .run(last ? 1 : 0, JSON.stringify(watches), firedAt, id);
-}
-
-export function setTriggerError(id: number, error: string): void {
-  db.prepare<[string, number]>("UPDATE triggers SET error = ? WHERE id = ?").run(error, id);
-}
-
-export function deleteTrigger(id: number): void {
-  db.prepare<[number]>("DELETE FROM triggers WHERE id = ?").run(id);
-}
 
 // ---------- Lasting areas ----------
 
@@ -408,29 +351,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS roll_requests (
   done INTEGER NOT NULL DEFAULT 0
 )`);
 
-export interface RollRequest {
-  id: number;
-  player_id: number;
-  character_id: number;
-  spec: RollSpec;
-  action: RollAction;
-  result: { total: number; parts: RolledPart[]; outcome: string; success: boolean } | null;
-}
-
-/** What a roll is for. */
-export type RollAction =
-  | { kind: "pickLock"; doorId: number; dc: number }
-  | { kind: "search"; dc: number; at?: { col: number; row: number } } // at: where they searched from (a Search in a round: where they stood when it finished)
-  | { kind: "initiative"; levelId: number; tokenId: number }
-  | { kind: "hide"; levelId: number; tokenId: number; inRound?: boolean } // inRound: they already hid in a round; the roll only sets the total // Hide: their Stealth total is how hard they are to find (if no enemy sees them as they roll)
-  | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
-  | { kind: "conditionSave"; levelId: number; tokenId: number; key: string } // a save against a condition as it lands, mid-round
-  | { kind: "improvise"; id: number } // the roll an improvisation needs (its outcome shown when it plays out)
-  | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean }; // out of combat: a save against a lasting area they walked into (left, stayed in)
-
-type RollRequestRow = { id: number; player_id: number; character_id: number; spec: string; action: string; result: string | null };
-const parseRequest = (r: RollRequestRow): RollRequest => ({ ...r, spec: JSON.parse(r.spec), action: JSON.parse(r.action), result: r.result ? JSON.parse(r.result) : null });
-
 /** Asks a player to roll; replaces any roll they haven't made yet (and puts away one they rolled but left open). */
 // Hide: a token hidden from everyone not on its side, with its Stealth total (what a Search has to beat). Kept until revealed.
 db.exec(`CREATE TABLE IF NOT EXISTS token_hidden (
@@ -444,86 +364,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS assists (
   by_token INTEGER NOT NULL,
   by_name TEXT NOT NULL
 )`);
-
-/** A roll request for a character who was helped (Assist): advantage on it ("helped by …"), and the help is used up. Not initiative. */
-function withAssist(characterId: number, spec: RollSpec, action: RollAction): RollSpec {
-  if (action.kind === "initiative" || action.kind === "conditionSave") return spec; // a save mid-round: the round counts help itself
-  const help = db.prepare<[number], { token_id: number; by_name: string }>("SELECT a.token_id, a.by_name FROM assists a JOIN map_tokens t ON t.id = a.token_id WHERE t.character_id = ?").get(characterId);
-  if (!help) return spec;
-  clearAssist(help.token_id);
-  return { ...spec, mode: spec.mode === "disadvantage" ? "normal" : "advantage", label: `${spec.label} (helped by ${help.by_name})` };
-}
-
-/**
- * Help (Assist) given while the helped character has a roll waiting that isn't rolled yet (not initiative): it applies
- * to that one (advantage, "helped by …") and is used up. Returns whether it did.
- */
-export function assistOpenRequest(tokenId: number): boolean {
-  const r = db
-    .prepare<[number], { id: number; spec: string; action: string; character_id: number }>(
-      "SELECT r.id, r.spec, r.action, r.character_id FROM roll_requests r JOIN map_tokens t ON t.character_id = r.character_id WHERE t.id = ? AND r.done = 0 AND r.result IS NULL ORDER BY r.id DESC LIMIT 1"
-    )
-    .get(tokenId);
-  if (!r) return false;
-  const spec = withAssist(r.character_id, JSON.parse(r.spec) as RollSpec, JSON.parse(r.action) as RollAction);
-  if (spec.label === (JSON.parse(r.spec) as RollSpec).label) return false; // not helped (initiative)
-  db.prepare("UPDATE roll_requests SET spec = ? WHERE id = ?").run(JSON.stringify(spec), r.id);
-  return true;
-}
-
-export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
-  spec = withAssist(characterId, spec, action);
-  db.transaction(() => {
-    db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ?").run(playerId);
-    db.prepare("INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ?, ?)").run(playerId, characterId, JSON.stringify(spec), JSON.stringify(action));
-  })();
-}
-
-/** The roll a player is being asked for (or has just rolled and not yet closed). */
-export function getOpenRollRequest(playerId: number): RollRequest | undefined {
-  const r = db.prepare<[number], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE player_id = ? AND done = 0 ORDER BY id DESC LIMIT 1").get(playerId);
-  return r && parseRequest(r);
-}
-
-/** The open initiative roll asked of whoever plays this token, if they haven't rolled it. */
-export function openInitiativeRequest(tokenId: number): RollRequest | undefined {
-  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
-    .map(parseRequest).find((r) => r.action.kind === "initiative" && r.action.tokenId === tokenId);
-}
-
-/** The open roll-off asked of whoever plays this token, if they haven't rolled it. */
-export function openRollOffRequest(tokenId: number): RollRequest | undefined {
-  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
-    .map(parseRequest).find((r) => r.action.kind === "rolloff" && r.action.tokenId === tokenId);
-}
-
-/** The open condition save asked of whoever plays this token, if they haven't rolled it. */
-export function openConditionSaveRequest(tokenId: number): RollRequest | undefined {
-  return db.prepare<[], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE done = 0 AND result IS NULL ORDER BY id DESC").all()
-    .map(parseRequest).find((r) => r.action.kind === "conditionSave" && r.action.tokenId === tokenId);
-}
-
-/** Puts away any roll-offs still asked for (the contest was settled another way). */
-export function closeRollOffRequests(): void {
-  db.prepare("UPDATE roll_requests SET done = 1 WHERE done = 0 AND result IS NULL AND json_extract(action, '$.kind') = 'rolloff'").run();
-}
-
-/** An initiative roll lands: into the turn order, highest first (a re-roll replaces an earlier one); no longer waited on. */
-export function settleInitiative(levelId: number, tokenId: number, total: number): void {
-  const enc = getEncounter(levelId);
-  if (!enc) return;
-  const order = [...enc.order.filter((o) => o.token_id !== tokenId), { token_id: tokenId, initiative: total }].sort((x, y) => y.initiative - x.initiative);
-  saveEncounter(levelId, { ...enc, order });
-  setEncounterWaiting(levelId, getEncounterWaiting(levelId).filter((id) => id !== tokenId));
-}
-
-export function saveRollResult(id: number, result: NonNullable<RollRequest["result"]>): void {
-  db.prepare("UPDATE roll_requests SET result = ? WHERE id = ?").run(JSON.stringify(result), id);
-}
-
-export function closeRollRequest(id: number, playerId: number): void {
-  db.prepare("UPDATE roll_requests SET done = 1 WHERE id = ? AND player_id = ?").run(id, playerId);
-}
 
 // ---------- Secrets ----------
 
@@ -540,51 +380,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_secrets (
   revealed INTEGER NOT NULL DEFAULT 0
 )`);
 
-export interface MapSecret {
-  id: number;
-  x: number;
-  y: number;
-  name: string;
-  text: string;
-  discovery_id: number | null;
-  revealed: 0 | 1;
-}
-
-export function listSecrets(levelId: number): MapSecret[] {
-  return db.prepare<[number], MapSecret>("SELECT id, x, y, name, text, discovery_id, revealed FROM map_secrets WHERE level_id = ? ORDER BY id").all(levelId);
-}
-
-export function addSecret(levelId: number, s: Omit<MapSecret, "id" | "revealed">): void {
-  db.prepare("INSERT INTO map_secrets (level_id, x, y, name, text, discovery_id) VALUES (?, ?, ?, ?, ?, ?)").run(levelId, s.x, s.y, s.name, s.text, s.discovery_id);
-}
-
-export function deleteSecret(id: number): void {
-  db.prepare("DELETE FROM map_secrets WHERE id = ?").run(id);
-}
-
-export function setSecretRevealed(id: number, revealed: boolean): void {
-  db.prepare("UPDATE map_secrets SET revealed = ? WHERE id = ?").run(revealed ? 1 : 0, id);
-}
-
-/** A round stopped mid-resolution for the GM to settle a contested move: its dice seed, the calls made so far, and
- * the contest waiting on them (see lib/resolveRound.ts). */
-export interface PendingRound {
-  seed: number;
-  decisions: Record<string, number>;
-  contest?: import("@/lib/resolveRound").Contest; // a contested move waiting on the GM's call
-  save?: import("@/lib/resolveRound").SaveRequest; // or a player's save against a condition, waiting on their roll
-  rolloff?: Record<number, number | null>; // a roll-off under way: each side's d20 (null = their player hasn't rolled yet)
-}
-
-export function getPendingRound(levelId: number): PendingRound | null {
-  const row = db.prepare<[number], { pending: string | null }>("SELECT pending FROM encounters WHERE level_id = ?").get(levelId);
-  return row?.pending ? JSON.parse(row.pending) : null;
-}
-
-export function setPendingRound(levelId: number, p: PendingRound | null): void {
-  db.prepare<[string | null, number]>("UPDATE encounters SET pending = ? WHERE level_id = ?").run(p ? JSON.stringify(p) : null, levelId);
-}
-
 // ---------- Round plans ----------
 
 // What each creature in an encounter plans to do this round (steps in order) and whether its planner is ready.
@@ -596,108 +391,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS round_plans (
   PRIMARY KEY (level_id, token_id)
 )`);
 
-addColumn("round_plans", "rolled", "INTEGER NOT NULL DEFAULT 0"); // the player's dice for it: 0 not yet, 1 rolling, 2 rolled (plan set)
-
-export function getRoundPlan(levelId: number, tokenId: number): { plan: PlanStep[]; ready: boolean; rolled: 0 | 1 | 2 } {
-  const r = db.prepare<[number, number], { plan: string; ready: number; rolled: number }>("SELECT plan, ready, rolled FROM round_plans WHERE level_id = ? AND token_id = ?").get(levelId, tokenId);
-  return { plan: r ? JSON.parse(r.plan) : [], ready: !!r?.ready, rolled: (r?.rolled ?? 0) as 0 | 1 | 2 };
-}
-
-/** Sets where a plan's dice are (0 not rolled, 1 rolling, 2 rolled), keeping the plan. */
-export function setPlanRolled(levelId: number, tokenId: number, rolled: 0 | 1 | 2, plan?: PlanStep[]): void {
-  db.prepare("INSERT INTO round_plans (level_id, token_id, plan, rolled) VALUES (?, ?, ?, ?) ON CONFLICT(level_id, token_id) DO UPDATE SET rolled = excluded.rolled" + (plan ? ", plan = excluded.plan" : "")).run(
-    levelId, tokenId, JSON.stringify(plan ?? []), rolled
-  );
-}
-
-/** Which tokens on the level are rolling their plan's dice right now. */
-export function rollingTokens(levelId: number): Set<number> {
-  return new Set(db.prepare<[number], { token_id: number }>("SELECT token_id FROM round_plans WHERE level_id = ? AND rolled = 1").all(levelId).map((r) => r.token_id));
-}
-
-export function saveRoundPlan(levelId: number, tokenId: number, plan: PlanStep[], ready: boolean): void {
-  db.prepare("INSERT INTO round_plans (level_id, token_id, plan, ready) VALUES (?, ?, ?, ?) ON CONFLICT(level_id, token_id) DO UPDATE SET plan = excluded.plan, ready = excluded.ready").run(
-    levelId, tokenId, JSON.stringify(plan), ready ? 1 : 0
-  );
-}
-
-/** Which tokens on the level are ready with their round plan. */
-export function readyTokens(levelId: number): Set<number> {
-  return new Set(db.prepare<[number], { token_id: number }>("SELECT token_id FROM round_plans WHERE level_id = ? AND ready = 1").all(levelId).map((r) => r.token_id));
-}
-
-export function clearRoundPlans(levelId: number): void {
-  db.prepare("DELETE FROM round_plans WHERE level_id = ?").run(levelId);
-}
-
-export function getLastRoundLog(levelId: number): string[] {
-  const row = db.prepare<[number], { last_log: string }>("SELECT last_log FROM encounters WHERE level_id = ?").get(levelId);
-  return row ? JSON.parse(row.last_log) : [];
-}
-
-export function setLastRoundLog(levelId: number, lines: string[]): void {
-  db.prepare<[string, number]>("UPDATE encounters SET last_log = ? WHERE level_id = ?").run(JSON.stringify(lines), levelId);
-}
-
-export function getReplay(levelId: number): Replay | null {
-  const row = db.prepare<[number], { replay: string | null }>("SELECT replay FROM encounters WHERE level_id = ?").get(levelId);
-  return row?.replay ? JSON.parse(row.replay) : null;
-}
-
-export function setReplay(levelId: number, replay: Replay, log?: string[]): void {
-  db.prepare<[string, number]>("UPDATE encounters SET replay = ? WHERE level_id = ?").run(JSON.stringify(replay), levelId);
-  // Kept for the rest of the encounter, so players can look back over every round they've had.
-  const stories = [...getRoundStories(levelId).filter((r) => r.round !== replay.round), { round: replay.round, showAt: replay.starts + (replay.frames.length + 1) * 1000, story: replay.story ?? [], ...(log ? { log } : {}) }];
-  db.prepare<[string, number]>("UPDATE encounters SET stories = ? WHERE level_id = ?").run(JSON.stringify(stories), levelId);
-}
-
-/** A resolved round's events (raw: each player is only ever told their own part), and when its playback ends. */
-export interface RoundStory {
-  round: number;
-  showAt: number; // ms since epoch: the playback's end (players hear about it then)
-  story: import("@/lib/roundStory").StoryEvent[];
-  log?: string[]; // the GM's log of the round, with the numbers (never sent to players)
-}
-
-export function getRoundStories(levelId: number): RoundStory[] {
-  const row = db.prepare<[number], { stories: string }>("SELECT stories FROM encounters WHERE level_id = ?").get(levelId);
-  return row ? JSON.parse(row.stories) : [];
-}
+addColumn("round_plans", "rolled", "INTEGER NOT NULL DEFAULT 0");
 
 // ---------- The GM's map ----------
 
 // The level the GM has loaded in the session (null = follow the party). Players are unaffected.
 db.exec("CREATE TABLE IF NOT EXISTS gm_view (id INTEGER PRIMARY KEY CHECK (id = 1), level_id INTEGER)");
-
-/** Planned targeted steps on a level (who aims what at whom), for drawing on the map; optionally one token's only. */
-export type PlanTarget = { from: number; to: number; action: string; label: string; at: { col: number; row: number } | null }; // at: where they'll be (null: where they stand)
-export function listPlanTargets(levelId: number, tokenId?: number): PlanTarget[] {
-  const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
-  return rows
-    .filter((r) => tokenId === undefined || r.token_id === tokenId)
-    .flatMap((r) => {
-      // Each aimed step from where the moves before it leave them (so a move, attack, move plan aims from the middle).
-      let at: { col: number; row: number } | null = null;
-      return (JSON.parse(r.plan) as PlanStep[]).flatMap((s) => {
-        if (s.kind === "move") {
-          at = s.to;
-          return [];
-        }
-        const label = s.use?.name ?? s.action;
-        const to = s.picks?.length ? s.picks.map((p) => p.id) : s.target ? [s.target.id] : [];
-        return to.map((id) => ({ from: r.token_id, to: id, action: s.action, label, at }));
-      });
-    });
-}
-
-/** Each plan's moves as a trail of waypoints (in order), for drawing the route it takes. */
-export function listPlanRoutes(levelId: number, tokenId?: number): { token: number; points: { col: number; row: number; step?: number }[] }[] {
-  const rows = db.prepare<[number], { token_id: number; plan: string }>("SELECT token_id, plan FROM round_plans WHERE level_id = ?").all(levelId);
-  return rows
-    .filter((r) => tokenId === undefined || r.token_id === tokenId)
-    .map((r) => ({ token: r.token_id, points: (JSON.parse(r.plan) as PlanStep[]).flatMap((s, step) => (s.kind === "move" ? [{ ...s.to, step }] : [])) })) // step: which plan step it ends (dragging it changes that move)
-    .filter((r) => r.points.length);
-}
 
 // ---------- Containers ----------
 
