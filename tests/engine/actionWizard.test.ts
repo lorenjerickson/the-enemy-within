@@ -62,3 +62,14 @@ test("defend, heal and aid read on the card", () => {
     "Gives up to 3 friendlies within 30 feet +1 defense, +1d4 Persuasion for 1 minute, no roll needed. Takes 2 seconds.");
   assert.equal(card(answer({ type: "bonus", who: "self", affects: ["heal"], heal: "1d10" })), "As a bonus action: heals you for 1d10. Takes 2 seconds.");
 });
+
+test("every question has a short answer line", async () => {
+  const { answerLine } = await import("@/lib/actionWizard");
+  const a = answer({ name: "Fireball", who: "area", lasts: true, affects: ["attack", "effect"], damage: "1d10", damageType: "fire", effects: [4], rangeFt: 150, areaFt: 20 });
+  const lines = questions(a).map((q) => answerLine(q, a, () => "Burning"));
+  assert.deepEqual(lines, [
+    ["Name", "Fireball"], ["Type", "Action, 2 s"], ["Applies to", "Everyone in an area"], ["Shape", "Circle"],
+    ["Size", "20 feet, aimed up to 150 feet away"], ["Stays on the map", "Yes"], ["How it affects them", "Attack, apply an effect"],
+    ["Damage", "1d10 fire"], ["How long", "1 minute"], ["Effects", "Burning"],
+  ]);
+});

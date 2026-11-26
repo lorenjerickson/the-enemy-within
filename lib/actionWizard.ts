@@ -124,3 +124,33 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
     keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)), conditions: (f?.conditions ?? []).filter((c) => c.on !== (self ? "self" : "target")) },
   };
 }
+
+const TYPE_WORDS: Record<ActionType, string> = { action: "Action", bonus: "Bonus action", reaction: "Reaction", free: "Free" };
+const WHO_WORDS: Record<Who, string> = { self: "Yourself", one: "One creature", several: "Several creatures", area: "Everyone in an area" };
+const AFFECT_WORDS: Record<Affect, string> = { attack: "attack", defend: "defend", heal: "heal", aid: "aid", effect: "apply an effect" };
+
+/** Each answer in a few words, for the list of answers (click one to go back to it). effectName: a catalog effect's name. */
+export function answerLine(q: Question, a: Answers, effectName: (id: number) => string = (id) => `#${id}`): [string, string] {
+  switch (q) {
+    case "name": return ["Name", a.name || "—"];
+    case "type": return ["Type", `${TYPE_WORDS[a.type]}, ${a.seconds} s`];
+    case "who": return ["Applies to", WHO_WORDS[a.who]];
+    case "targetWho": return ["Who can be picked", a.targetWho === "enemy" ? "Enemies" : a.targetWho === "friendly" ? "Friends" : "Anyone"];
+    case "count": return ["How many", `${a.count === "upto" ? "Up to" : "Exactly"} ${a.n}`];
+    case "range": return ["How far", a.rangeFt === 0 ? "As far as the item reaches" : `${a.rangeFt} feet`];
+    case "shape": return ["Shape", a.shape[0].toUpperCase() + a.shape.slice(1)];
+    case "areaSize": return ["Size", `${a.areaFt} feet${a.shape === "circle" ? `, aimed up to ${a.rangeFt} feet away` : ""}`];
+    case "lasts": return ["Stays on the map", a.lasts ? "Yes" : "No"];
+    case "affects": {
+      const words = a.affects.map((x) => AFFECT_WORDS[x]).join(", ");
+      return ["How it affects them", words ? words[0].toUpperCase() + words.slice(1) : "—"];
+    }
+    case "damage": return ["Damage", a.damage ? `${a.damage}${a.damageType ? ` ${a.damageType}` : ""}` : "—"];
+    case "toHit": return ["Bonus to hit", a.attackBonus ? plus(a.attackBonus) : "None"];
+    case "defend": return ["Defense", a.defend ? plus(a.defend) : "—"];
+    case "heal": return ["Heals", a.heal || "—"];
+    case "aid": return ["Aid", a.aidTarget && a.aid ? `${plus(a.aid)} ${a.aidTarget.replace(/^\w+:/, "")}` : "—"];
+    case "duration": return ["How long", `${a.durationAmount} ${a.durationUnit}${a.durationAmount > 1 && !a.durationUnit.endsWith("rest") ? "s" : ""}`];
+    case "effects": return ["Effects", a.effects.map(effectName).join(", ") || "—"];
+  }
+}

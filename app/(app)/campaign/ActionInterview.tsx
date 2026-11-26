@@ -11,7 +11,7 @@ import { MODIFIER_TARGET_GROUPS, type ModifierTarget } from "@/lib/modifiers";
 // What Aid can raise: attributes, skills, rolls, and to-hit or damage (health and defense have their own questions).
 const AID_GROUPS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Movement").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "defense")] as const);
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
-import { AFFECTS, type Affect } from "@/lib/actionWizard";
+import { AFFECTS, answerLine, type Affect } from "@/lib/actionWizard";
 import EffectChips, { type EffectOption } from "./EffectChips";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
@@ -78,13 +78,17 @@ function HiddenFields({ f }: { f: ActionFields }) {
 /** One question at a time, the player's card on top filling in as it's answered; Save at the end. */
 export default function ActionInterview({ action, initial, conditions, effectOptions, itemOwned }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; effectOptions: EffectOption[]; itemOwned?: boolean }) {
   const [a, setA] = useState<Answers>(() => answersFromAction(initial));
-  const [at, setAt] = useState<Question>("name");
+  const [at, go] = useState<Question>("name");
+  // Answered so far: everything for a saved action; for a new one, each question once it's been reached.
+  const [seen, setSeen] = useState<Set<Question>>(() => new Set(initial ? questions(answersFromAction(initial)) : ["name"]));
+  const setAt = (q: Question) => { go(q); setSeen((x) => new Set(x).add(q)); };
   const set = (p: Partial<Answers>) => setA((x) => ({ ...x, ...p }));
   const qs = questions(a);
   const i = Math.max(0, qs.indexOf(at));
   const fields = fieldsFromAnswers(a);
   const byId = useMemo(() => new Map(conditions.map((c) => [c.id, c])), [conditions]);
   const card = gearSummary(gearOf(fields, (id) => byId.get(id)));
+  const nameOf = (id: number) => byId.get(id)?.name ?? `#${id}`;
   const last = i === qs.length - 1;
   const compact = (v: string) => v.toLowerCase().replace(/\s/g, "");
   const ok = at === "name" ? !!a.name.trim()
@@ -104,6 +108,19 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
         <p className="font-semibold">{a.name || "This action"}</p>
         {card.map((l, k) => <p key={k}>{l}</p>)}
       </div>
+      <ol className="space-y-0.5 text-sm" data-answers>
+        {qs.filter((q) => seen.has(q) && q !== at).length > 0 && qs.map((q) => {
+          if (!seen.has(q)) return null;
+          const [label, value] = answerLine(q, a, nameOf);
+          return (
+            <li key={q}>
+              <button type="button" onClick={() => setAt(q)} className={`flex w-full gap-2 rounded px-1 text-left hover:bg-base-300 ${q === at ? "bg-base-300 font-semibold" : ""}`}>
+                <span className="w-40 shrink-0 opacity-60">{label}</span><span className="truncate">{value}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
       <div className="text-xs opacity-60">Question {i + 1} of {qs.length}</div>
       <div className="space-y-2" data-question={at}>
         {at === "name" && (
