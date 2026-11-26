@@ -38,19 +38,19 @@ Bound exhausted: 66 sequential generation attempts, 58 successes, 8 rejections, 
 - **U.** **Decouple pure logic from the database before the productization refactor** (Loren, 2026-11-25; sooner than later: productization is coming). `lib/db.ts` is 3,500 lines and ~300 exports mixing SQL (≈420 prepared statements) with game rules, and 16 lib modules import it; `lib/combat.ts` and parts of `lib/resolveRound.ts` mix rules with database reads too. Goal: every rule lives in a pure, database-free module (as `lib/actionCard.ts`, `lib/templates.ts`, `lib/roundPlan.ts` already do), and `db.ts` keeps only storage (rows in, rows out). Approach, in small steps each with tests: (0) a coupling baseline (docs/productization.md, Governing Principles: surface area between modules): per module, imports in and out, export counts, cycles, from a dependency tool, re-run after each step so the numbers shrink; (1) inventory db.ts exports as storage / pure / mixed; (2) move the pure ones out, by area (areas and fire, exposure, effects and conditions parsing, traps and triggers, sight and fog, tokens), re-exporting from db.ts at first so callers don't change; (3) split mixed ones into a pure core taking plain data plus a thin loader; (4) the same for combat.ts (`fighterOf`, `gearActions`' rules) and resolveRound's database reads (pass them in); (5) drop the re-exports and point callers at the pure modules. Done when the pure modules import nothing that reaches better-sqlite3 (checked by a test), so they can become the shared engine package (docs/productization.md). Worth doing regardless of the platform move (Loren): also split what stays storage into one module per area (`lib/db/` — connection and migrations, then tokens, maps and levels, areas, traps and triggers, effects, actions, characters and items, sessions…), with `lib/db.ts` re-exporting them until callers move, so no file is thousands of lines and each area's SQL sits beside its tests.
 - **R.** **Playtest notes** (Loren, 2026-11-25). Each its own small fix or check:
   - R1. The Web action should cause no damage, only immobilize.
-  - R2. Check that sounds play correctly in each browser session.
-  - R3. Clicking a previous round's target again deselects it.
-  - R4. Targets that die in a round are deselected automatically.
-  - R5. Check that Dodge really works.
-  - R6. A trap set off out of a player's sight shows no set-off marker to them (any lasting effect it left is still seen).
-  - R7. During a round replay: a large banner, and players can't use the planning panel.
-  - R8. Check that weapon range overlays really work.
-  - R9. An action that pursues to get in range moves only so far that enough time is left to do the action.
-  - R10. A planned move's length can be changed by click-dragging the end of its overlay.
+  - R2. Check that sounds play correctly in each browser session. (Checked 2026-11-25: every sound plays only on the GM's screen; players hear nothing. Playing them for everyone: server state of what's playing, each browser plays it, positional by distance, an "Enable sound" click: ~3 steps, if players are remote.)
+  - R3. ✅ Clicking a previous round's target again deselects it.
+  - R4. ✅ Targets that die in a round are deselected automatically.
+  - R5. Check that Dodge really works. (Checked: works per rules and tests; likely invisible to players. Waiting on what Loren saw; cheap fix: the round story says so.)
+  - R6. ✅ A trap set off out of a player's sight shows no set-off marker to them (any lasting effect it left is still seen).
+  - R7. ✅ During a round replay: a large banner, and players can't use the planning panel.
+  - R8. Check that weapon range overlays really work. (Checked: consistent with resolution, refits included; waiting on what Loren saw.)
+  - R9. An action that pursues to get in range moves only so far that enough time is left to do the action. (Checked: already so; waiting on Loren's setup.)
+  - R10. ✅ A planned move's length can be changed by click-dragging the end of its overlay.
   - R11. Attack bonuses are shown in action descriptions.
-  - R12. Players can change their target at any time; targets from previous rounds don't carry over.
-  - R13. Check level transitions (they don't seem to work).
-  - R14. A token shows its player's name on hover.
+  - R12. ✅ Players can change their target at any time; targets from previous rounds don't carry over.
+  - R13. Check level transitions (they don't seem to work). (Checked: code path and tests fine; a fast mover in rounds can step over a 1-square link. Waiting on what Loren saw.)
+  - R14. ✅ A token shows its player's name on hover.
 
 Earlier:
 
