@@ -311,13 +311,14 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
     ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.shadowColor = "rgba(150,180,255,0.9)";
-    ctx.shadowBlur = unit * 0.2;
+    // Segments are collected, then drawn in a few batches by brightness and thickness, each as a wide faint
+    // stroke (the glow) under a thin bright one. A canvas blur per segment made the browser crawl.
+    const batches = new Map<string, number[]>();
     const crackle = Math.floor(t * 18); // the shape jitters 18 times a second
     const seg = unit * 0.18;
     // One path from (px, py) heading `ang`, `n` segments long. `head` is how far along its tip has walked (in
     // segments); the last `tail` segments behind the tip show, fading. Some segments fork off a smaller branch.
-    const path = (seed: number, px: number, py: number, ang: number, n: number, head: number, tail: number, width: number, depth: number) => {
+    const path = (seed: number, px: number, py: number, ang: number, n: number, head: number, tail: number, depth: number) => {
       for (let s2 = 1; s2 <= n && s2 <= head; s2++) {
         ang += (rnd(seed + s2) - 0.5) * 0.9;
         const j = (rnd(seed + s2 * 3.1 + crackle * 0.37) - 0.5) * seg * 0.6; // crackle, across the path
@@ -325,18 +326,16 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
         const behind = head - s2;
         if (behind < tail) {
           const a = fade((px + nx) / 2, (py + ny) / 2) * (1 - behind / tail) * (0.7 + 0.3 * rnd(seed + s2 + crackle));
-          if (a > 0) {
-            ctx.strokeStyle = `rgba(215,228,255,${0.9 * a})`;
-            ctx.lineWidth = width;
-            ctx.beginPath();
-            ctx.moveTo(px, py);
-            ctx.lineTo(nx, ny);
-            ctx.stroke();
+          if (a > 0.05) {
+            const key = `${Math.round(a * 5)}:${depth}`;
+            const list = batches.get(key) ?? [];
+            list.push(px, py, nx, ny);
+            batches.set(key, list);
           }
         }
         if (depth < 3 && rnd(seed + s2 + 0.5) < 0.38) {
           const side = rnd(seed + s2 + 0.8) < 0.5 ? -1 : 1;
-          path(seed * 3 + s2 * 7.7, nx, ny, ang + side * (0.5 + 0.6 * rnd(seed + s2 + 0.9)), Math.round(n * 0.45), (head - s2) * 1.3, tail * 0.7, width * 0.6, depth + 1);
+          path(seed * 3 + s2 * 7.7, nx, ny, ang + side * (0.5 + 0.6 * rnd(seed + s2 + 0.9)), Math.round(n * 0.45), (head - s2) * 1.3, tail * 0.7, depth + 1);
         }
         px = nx;
         py = ny;
@@ -356,8 +355,24 @@ export function drawEffect(ctx: CanvasRenderingContext2D, kind: EffectKind, area
       for (let p = 0; p < spokes; p++) {
         const ang = turn + (p / spokes) * Math.PI * 2 + (rnd(seed + p + 0.7) - 0.5) * 0.9;
         const len = Math.round(n * (0.6 + 0.4 * rnd(seed + p + 0.3)));
-        path(seed + p * 11.3, sx, sy, ang, len, phase * (n + tail), tail, Math.max(0.7, unit * 0.02), 0);
+        path(seed + p * 11.3, sx, sy, ang, len, phase * (n + tail), tail, 0);
       }
+    }
+    const width0 = Math.max(0.7, unit * 0.02);
+    for (const [key, list] of batches) {
+      const [level, depth] = key.split(":").map(Number);
+      const a = level / 5, width = width0 * Math.pow(0.6, depth);
+      ctx.beginPath();
+      for (let q = 0; q < list.length; q += 4) {
+        ctx.moveTo(list[q], list[q + 1]);
+        ctx.lineTo(list[q + 2], list[q + 3]);
+      }
+      ctx.strokeStyle = `rgba(150,180,255,${0.25 * a})`;
+      ctx.lineWidth = width * 4;
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(215,228,255,${0.9 * a})`;
+      ctx.lineWidth = width;
+      ctx.stroke();
     }
   }
   ctx.restore();
