@@ -10,6 +10,7 @@ import { endEncounter, gmRollInitiativeFor, resolveRound, rollInitiative, remove
 import { planView } from "@/lib/roundPlanServer";
 import type { CreaturePlan } from "./CreaturePlans";
 import TurnOrder from "./TurnOrder";
+import LevelsInPlay from "./LevelsInPlay";
 import { planClock } from "./planClock";
 import { describeStatus } from "@/lib/status";
 import RoundScrubber from "./RoundScrubber";
@@ -32,6 +33,7 @@ export default function EncounterPanel() {
   );
   return (
     <div className="space-y-3 text-sm" data-encounter-panel>
+      <LevelsInPlay />
       <form action={rollInitiative}>
         <button className="btn btn-primary btn-sm w-full">{enc ? "Roll initiative again" : "Roll initiative"}</button>
       </form>

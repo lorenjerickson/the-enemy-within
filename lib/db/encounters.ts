@@ -33,3 +33,8 @@ export function getEncounterWaiting(levelId: number): number[] {
 export function setEncounterWaiting(levelId: number, tokenIds: number[]): void {
   db.prepare<[string, number]>("UPDATE encounters SET waiting = ? WHERE level_id = ?").run(JSON.stringify(tokenIds), levelId);
 }
+
+/** Levels with an encounter running. */
+export function listEncounterLevels(): number[] {
+  return db.prepare<[], { level_id: number }>("SELECT level_id FROM encounters").all().map((r) => r.level_id);
+}
