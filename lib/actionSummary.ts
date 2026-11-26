@@ -16,17 +16,28 @@ const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1)
 /** Catalog wording made plain: "+1d4 persuasion (skill)" → "+1d4 Persuasion". */
 const plainly = (s: string) => s.replace(/ \((attribute|skill)\)/g, "").replace(/ on their /g, " on ").replace(/([+-][\dd]+) ([a-z]+)/g, (_, n, w) => `${n} ${w === "defense" || w === "damage" ? w : cap(w)}`);
 
-/** What a named condition does, in plain words: "-2 Intellect and disadvantage on attack rolls for 10 rounds". */
-export function conditionInWords(c: Condition): string {
+/** What a named condition does, and its save as it lands (if any), in plain words, for `on` (you / the target / them …). */
+export function conditionParts(c: Condition, on = "them"): { how: string; save: string } {
   const [effects = "", ...more] = describeCondition(c).split(" · ");
-  const parts = plainly(effects).split(", ").filter(Boolean);
+  const you = on === "you";
+  const parts = plainly(effects).split(", ").filter(Boolean).map((p) => (you ? p.replace(/\bthem\b/g, "you").replace(/\btheir\b/g, "your").replace(/\bthey\b/g, "you") : p));
   const how = parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   const time = more.find((m) => /^\d+ rounds?$/.test(m));
-  // Its save as it lands: "unless they make a Fortitude save (DC 12)" (halves: it lasts half as long on a success).
-  const rest = more.filter((m) => m !== time).map((m) => m.replace(/^(\w+) DC (\d+) when applied (negates|halves it)$/, (_, attr, dc, how) => how === "negates" ? `unless they make ${an(attr)} save (DC ${dc})` : `half as long on ${an(attr)} save (DC ${dc})`));
-  const save = rest.filter((m) => m.startsWith("unless ") || m.startsWith("half as long"));
-  const other = rest.filter((m) => !save.includes(m));
-  return [[how + (time ? ` for ${time}` : ""), ...other].filter(Boolean).join("; "), ...save].filter(Boolean).join(", ");
+  const saver = you ? "you make" : on === "them" ? "they make" : "it makes";
+  let save = "";
+  const other = more.filter((m) => m !== time).filter((m) => {
+    const x = m.match(/^(\w+) DC (\d+) when applied (negates|halves it)$/);
+    if (!x) return true;
+    save = x[3] === "negates" ? `unless ${saver} ${an(x[1])} save (DC ${x[2]})` : `(half as long if ${saver} ${an(x[1])} save, DC ${x[2]})`;
+    return false;
+  });
+  return { how: [how + (time ? ` for ${time}` : ""), ...other].filter(Boolean).join("; "), save };
+}
+
+/** What a named condition does, in plain words: "-2 Intellect and disadvantage on attack rolls for 10 rounds". */
+export function conditionInWords(c: Condition): string {
+  const { how, save } = conditionParts(c);
+  return [how, save].filter(Boolean).join(", ");
 }
 
 /** What a status does to `on` ("you", "the target", "them", "one creature"), as verb phrases: heals, harms, conditions put on, boosts. */
@@ -45,9 +56,13 @@ function does(s: ActionStatuses["self"], on: string, minutes: number): string[] 
       else out.push(`${describeCondition(c)} (${on})`);
     }
   }
-  // A condition that stays reads by name, with what it does right after it.
-  const named = conds.filter((c) => !once(c)).map((c) => { const w = conditionInWords(c); return w ? `${c.name} (${w})` : c.name; });
-  if (named.length) out.push(`applies ${list(named)} to ${on}`);
+  // A condition that stays reads by name, then its save, then what it does: "applies Webbed to the target unless it
+  // makes a Might save (DC 15): can't move…".
+  const pronoun = on === "you" ? "you" : on === "them" ? "them" : on;
+  for (const c of conds.filter((c) => !once(c))) {
+    const { how, save } = conditionParts(c, on === "you" ? "you" : on === "them" ? "them" : "it");
+    out.push(`applies ${c.name} to ${pronoun}${save ? ` ${save}` : ""}${how ? `: ${how}` : ""}`);
+  }
   return out;
 }
 
@@ -76,6 +91,12 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     }
     if (g.area.minutes) out.push(`The area stays ${lasting(g.area.minutes)}, catching whoever is in it.`);
   } else if (g.self) {
+    // A reaction readying one effect whose trigger does the reacting: lead with what sets it off.
+    const readied = (st?.self?.conditions ?? []).filter((c) => !once(c));
+    const trigger = g.kind === "reaction" && readied.length === 1 && !st?.self?.boosts.length ? conditionParts(readied[0], "you").how : "";
+    if (/^when /.test(trigger)) {
+      return `As a reaction, ${trigger.replace(" (reaction)", "")} (${readied[0].name}). Takes ${seconds(g.seconds)}.`;
+    }
     out.push(mine.length ? `${cap(list(mine))}.` : "Used on yourself.");
   } else if (dmg) {
     const bonus = [g.attack ? (/^[+-]/.test(g.attack) ? g.attack : `+${g.attack}`) : "", g.roll !== "normal" ? `with ${g.roll}` : ""].filter(Boolean).join(", ");
@@ -84,7 +105,9 @@ export function actionSentence(g: GearAction & { damageType?: string }): string 
     if (theirs.length) out.push(`A hit also ${list(theirs)}.`);
   } else {
     const theirs = does(st?.target, `${who} ${feet(g.range)}`, minutes);
-    out.push(theirs.length ? `${cap(list(theirs))}, no roll needed.` : `Used on ${who} ${feet(g.range)}.`);
+    const resisted = (st?.target?.conditions ?? []).some((c) => !once(c) && c.apply_save_attr);
+    const said = cap(list(theirs));
+    out.push(!theirs.length ? `Used on ${who} ${feet(g.range)}.` : resisted ? `${said}.` : said.includes(":") ? `${said}. No roll needed.` : `${said}, no roll needed.`);
   }
   if (mine.length && !g.self) out.push(`It also ${list(mine)}.`);
   out.push(`Takes ${seconds(g.seconds)}.`);

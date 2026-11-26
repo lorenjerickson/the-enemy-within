@@ -73,3 +73,12 @@ test("every question has a short answer line", async () => {
     ["Damage", "1d10 fire"], ["How long", "1 minute"], ["Effects", "Burning"],
   ]);
 });
+
+test("no attack on yourself or as a reaction: a ticked attack falls away", async () => {
+  const { affectsFor } = await import("@/lib/actionWizard");
+  assert.ok(!affectsFor(answer({ who: "self" })).includes("attack"));
+  assert.ok(!affectsFor(answer({ type: "reaction" })).includes("attack"));
+  const a = answer({ who: "self", affects: ["attack", "heal"], damage: "1d6", heal: "1d4" });
+  assert.deepEqual(questions(a).slice(-2), ["affects", "heal"]);
+  assert.equal(fieldsFromAnswers(a).damage, null);
+});

@@ -45,6 +45,12 @@ export type Question =
   | "name" | "type" | "who" | "targetWho" | "count" | "range" | "shape" | "areaSize" | "lasts"
   | "affects" | "damage" | "toHit" | "defend" | "heal" | "aid" | "duration" | "effects";
 
+const isSelf = (a: Answers) => a.type === "reaction" || a.who === "self";
+/** What it can do to whoever it's on: anything but attack, on yourself (or a reaction, which is on yourself). */
+export const affectsFor = (a: Answers): Affect[] => (isSelf(a) ? AFFECTS.filter((x) => x !== "attack") : AFFECTS);
+/** What's ticked and still possible (attack falls away when it becomes something on yourself). */
+const affected = (a: Answers) => a.affects.filter((x) => affectsFor(a).includes(x));
+
 /** The questions, in order, for these answers (answering one can add or remove the ones after it). */
 export function questions(a: Answers): Question[] {
   const q: Question[] = ["name", "type"];
@@ -54,23 +60,22 @@ export function questions(a: Answers): Question[] {
     if (a.who === "area") q.push("shape", "areaSize", "lasts");
   }
   q.push("affects");
+  const has = (x: Affect) => affected(a).includes(x);
   // An area only decides who is caught: its damage always lands (saves belong to the effects it applies).
-  if (a.affects.includes("attack")) q.push("damage", ...(a.who === "area" && a.type !== "reaction" ? [] : (["toHit"] as const)));
-  if (a.affects.includes("defend")) q.push("defend");
-  if (a.affects.includes("heal")) q.push("heal");
-  if (a.affects.includes("aid")) q.push("aid");
-  if (a.affects.includes("defend") || a.affects.includes("aid") || (a.who === "area" && a.lasts)) q.push("duration");
-  if (a.affects.includes("effect")) q.push("effects");
+  if (has("attack")) q.push("damage", ...(a.who === "area" && a.type !== "reaction" ? [] : (["toHit"] as const)));
+  if (has("defend")) q.push("defend");
+  if (has("heal")) q.push("heal");
+  if (has("aid")) q.push("aid");
+  if (has("defend") || has("aid") || (a.who === "area" && a.lasts && a.type !== "reaction")) q.push("duration");
+  if (has("effect")) q.push("effects");
   return q;
 }
 
 const plus = (v: string) => (/^[+-]/.test(v) ? v : `+${v}`);
-const isSelf = (a: Answers) => a.type === "reaction" || a.who === "self";
-
 /** The action's saved fields from the answers. */
 export function fieldsFromAnswers(a: Answers): ActionFields {
   const on = isSelf(a) ? ("self" as const) : ("target" as const);
-  const has = (x: Affect) => a.affects.includes(x);
+  const has = (x: Affect) => affected(a).includes(x);
   const asked: Boost[] = [
     ...(has("heal") && a.heal ? [{ target: "health" as const, value: plus(a.heal), on }] : []),
     ...(has("defend") && a.defend ? [{ target: "defense" as const, value: plus(a.defend), on }] : []),
@@ -142,7 +147,7 @@ export function answerLine(q: Question, a: Answers, effectName: (id: number) => 
     case "areaSize": return ["Size", `${a.areaFt} feet${a.shape === "circle" ? `, aimed up to ${a.rangeFt} feet away` : ""}`];
     case "lasts": return ["Stays on the map", a.lasts ? "Yes" : "No"];
     case "affects": {
-      const words = a.affects.map((x) => AFFECT_WORDS[x]).join(", ");
+      const words = affected(a).map((x) => AFFECT_WORDS[x]).join(", ");
       return ["How it affects them", words ? words[0].toUpperCase() + words.slice(1) : "—"];
     }
     case "damage": return ["Damage", a.damage ? `${a.damage}${a.damageType ? ` ${a.damageType}` : ""}` : "—"];

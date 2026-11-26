@@ -11,7 +11,8 @@ import { MODIFIER_TARGET_GROUPS, type ModifierTarget } from "@/lib/modifiers";
 // What Aid can raise: attributes, skills, rolls, and to-hit or damage (health and defense have their own questions).
 const AID_GROUPS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Movement").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "defense")] as const);
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
-import { AFFECTS, answerLine, type Affect } from "@/lib/actionWizard";
+import { AFFECTS, affectsFor, answerLine, type Affect } from "@/lib/actionWizard";
+import { NO_SAVE_DC } from "@/lib/aoe";
 import EffectChips, { type EffectOption } from "./EffectChips";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
@@ -50,7 +51,17 @@ function Choices<T extends string>({ value, options, onPick }: { value: T; optio
   );
 }
 
-const num = (v: string, min: number, d: number) => Math.max(min, Number(v) || d);
+/** A number box that lets you type freely (30 goes through 3): it takes the number once it's at least `min`, and
+ * puts back the last good one when you leave it. */
+function NumberBox({ value, min, max, step, onChange, className }: { value: number; min: number; max?: number; step?: number; onChange: (n: number) => void; className: string }) {
+  const [text, setText] = useState(String(value));
+  const good = (t: string) => t.trim() !== "" && Number.isFinite(Number(t)) && Number(t) >= min && (max === undefined || Number(t) <= max);
+  return (
+    <input type="number" min={min} max={max} step={step} value={text} className={`${className} ${good(text) ? "" : "input-error"}`}
+      onChange={(e) => { setText(e.target.value); if (good(e.target.value)) onChange(Number(e.target.value)); }}
+      onBlur={() => { if (!good(text)) setText(String(value)); }} />
+  );
+}
 
 /** The saved fields as the form posts them (the server action reads these names). */
 function HiddenFields({ f }: { f: ActionFields }) {
@@ -91,18 +102,30 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
   const nameOf = (id: number) => byId.get(id)?.name ?? `#${id}`;
   const last = i === qs.length - 1;
   const compact = (v: string) => v.toLowerCase().replace(/\s/g, "");
-  const ok = at === "name" ? !!a.name.trim()
-    : at === "affects" ? a.affects.length > 0
-    : at === "damage" ? isDiceFormula(compact(a.damage))
-    : at === "toHit" ? !a.attackBonus || isModifierFormula(compact(a.attackBonus))
-    : at === "defend" ? isModifierFormula(compact(a.defend))
-    : at === "heal" ? isModifierFormula(compact(a.heal))
-    : at === "aid" ? !!a.aidTarget && isModifierFormula(compact(a.aid))
-    : at === "effects" ? a.effects.length > 0
+  const valid = (q: Question) => q === "name" ? !!a.name.trim()
+    : q === "affects" ? a.affects.some((x) => affectsFor(a).includes(x))
+    : q === "damage" ? isDiceFormula(compact(a.damage))
+    : q === "toHit" ? !a.attackBonus || isModifierFormula(compact(a.attackBonus))
+    : q === "defend" ? isModifierFormula(compact(a.defend))
+    : q === "heal" ? isModifierFormula(compact(a.heal))
+    : q === "aid" ? !!a.aidTarget && isModifierFormula(compact(a.aid))
+    : q === "effects" ? a.effects.length > 0
     : true;
+  const ok = valid(at);
+  const allOk = qs.every(valid);
+  const next = () => { if (ok && !last) setAt(qs[i + 1]); };
+  // An older area with its own save loses it on saving: saves belong to the effects an area applies.
+  const loses = !!initial?.area_shape && (initial.area_ft ?? 0) > 0 && initial.save_dc < NO_SAVE_DC && a.who === "area" && a.type !== "reaction";
 
   return (
-    <form action={action} className="mt-2 space-y-3 rounded-box bg-base-200 p-3" data-action-interview>
+    <form action={action} className="mt-2 space-y-3 rounded-box bg-base-200 p-3" data-action-interview
+      onKeyDown={(e) => {
+        // Enter goes on to the next question; it saves only at the last one, with every answer good.
+        if (e.key !== "Enter" || e.defaultPrevented || (e.target as HTMLElement).tagName === "TEXTAREA" || (e.target as HTMLElement).tagName === "BUTTON") return;
+        e.preventDefault();
+        if (!last) next();
+        else if (allOk) e.currentTarget.requestSubmit();
+      }}>
       <div className="rounded-box border border-base-300 bg-base-100 p-3 text-sm" aria-live="polite">
         <div className="mb-1 text-xs uppercase opacity-60">The card reads</div>
         <p className="font-semibold">{a.name || "This action"}</p>
@@ -143,7 +166,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
             </div>
             <label className="flex items-center gap-2 text-sm">
               Takes
-              <input type="number" min="0.5" max="6" step="0.5" value={a.seconds} onChange={(e) => set({ seconds: Math.min(6, Math.max(0.5, Number(e.target.value) || 2)) })} className="input input-sm w-20" />
+              <NumberBox min={0.5} max={6} step={0.5} value={a.seconds} onChange={(seconds) => set({ seconds })} className="input input-sm w-20" />
               seconds of the six-second round
             </label>
           </>
@@ -168,7 +191,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
                 <option value="exactly">Exactly</option>
                 <option value="upto">Up to</option>
               </select>
-              <input type="number" min="2" value={a.n} onChange={(e) => set({ n: Math.round(num(e.target.value, 2, 2)) })} className="input input-sm w-20" />
+              <NumberBox min={2} value={a.n} onChange={(n) => set({ n: Math.round(n) })} className="input input-sm w-20" />
               creatures
             </div>
           </>
@@ -182,7 +205,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
               )}
               {!(itemOwned && a.rangeFt === 0) && (
                 <>
-                  <input type="number" min="5" step="5" value={a.rangeFt || 5} onChange={(e) => set({ rangeFt: num(e.target.value, 5, 5) })} className="input input-sm w-24" /> feet
+                  <NumberBox min={5} step={5} value={a.rangeFt || 5} onChange={(rangeFt) => set({ rangeFt })} className="input input-sm w-24" /> feet
                   <span className="text-xs opacity-60">(5 = within reach)</span>
                 </>
               )}
@@ -199,12 +222,12 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
           <>
             <div className="text-sm font-semibold">How big is it{a.shape === "circle" ? ", and how far away can it be aimed" : ""}?</div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <input type="number" min="5" step="5" value={a.areaFt} onChange={(e) => set({ areaFt: num(e.target.value, 5, 10) })} className="input input-sm w-24" />
+              <NumberBox min={5} step={5} value={a.areaFt} onChange={(areaFt) => set({ areaFt })} className="input input-sm w-24" />
               feet {a.shape === "circle" ? "radius" : "long"}
               {a.shape === "circle" && (
                 <>
                   <span className="ml-2">aimed up to</span>
-                  <input type="number" min="0" step="5" value={a.rangeFt} onChange={(e) => set({ rangeFt: num(e.target.value, 0, 0) })} className="input input-sm w-24" /> feet away
+                  <NumberBox min={0} step={5} value={a.rangeFt} onChange={(rangeFt) => set({ rangeFt })} className="input input-sm w-24" /> feet away
                 </>
               )}
             </div>
@@ -220,7 +243,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
           <>
             <div className="text-sm font-semibold">How does it affect {a.who === "self" || a.type === "reaction" ? "you" : "them"}? (pick any)</div>
             <div className="grid gap-1 sm:grid-cols-2">
-              {AFFECTS.map((x) => (
+              {affectsFor(a).map((x) => (
                 <label key={x} className={`flex cursor-pointer gap-2 rounded-box border p-2 text-sm ${a.affects.includes(x) ? "border-primary" : "border-base-300"}`}>
                   <input type="checkbox" className="checkbox checkbox-sm" checked={a.affects.includes(x)} onChange={(e) => set({ affects: AFFECTS.filter((y) => (y === x ? e.target.checked : a.affects.includes(y))) })} />
                   <span><span className="font-medium">{AFFECT_LABELS[x][0]}</span><span className="block text-xs opacity-70">{AFFECT_LABELS[x][1]}</span></span>
@@ -278,7 +301,7 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
           <>
             <div className="text-sm font-semibold">How long does it last?</div>
             <div className="flex items-center gap-2 text-sm">
-              <input type="number" min="1" value={a.durationAmount} onChange={(e) => set({ durationAmount: Math.round(num(e.target.value, 1, 1)) })} className="input input-sm w-20" />
+              <NumberBox min={1} value={a.durationAmount} onChange={(n) => set({ durationAmount: Math.round(n) })} className="input input-sm w-20" />
               <select value={a.durationUnit} onChange={(e) => set({ durationUnit: e.target.value as Answers["durationUnit"] })} className="select select-sm w-auto">
                 {DURATION_UNITS.filter(Boolean).map((u) => <option key={u} value={u}>{u}{a.durationAmount > 1 && !u.endsWith("rest") ? "s" : ""}</option>)}
               </select>
@@ -295,10 +318,11 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
         )}
       </div>
       <HiddenFields f={fields} />
+      {loses && <p className="text-xs text-warning">This area had its own save. Saves now belong to the effects it applies, so saving removes it (the card shows the result).</p>}
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => setAt(qs[i - 1])}>Back</button>
-        {!last && <button type="button" className="btn btn-sm" disabled={!ok} onClick={() => setAt(qs[i + 1])}>Next</button>}
-        <button className={`btn btn-sm ${last ? "btn-primary" : "btn-ghost"}`} disabled={!a.name.trim() || !ok}>Save action</button>
+        {!last && <button type="button" className="btn btn-sm" disabled={!ok} onClick={next}>Next</button>}
+        <button className={`btn btn-sm ${last ? "btn-primary" : "btn-ghost"}`} disabled={!allOk} title={allOk ? undefined : "Some answers still need filling in"}>Save action</button>
       </div>
     </form>
   );

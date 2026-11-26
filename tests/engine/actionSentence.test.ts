@@ -37,7 +37,7 @@ test("a plain melee attack reads in one sentence", () => {
 test("a named effect is said in plain words, once", () => {
   const mesmerized = { name: "Mesmerized", id: 5, rounds: 10, duration: "rounds", effects: [{ id: 5, name: "Mesmerized", description: "", modifiers: [{ kind: "boost", target: "attribute:intellect", value: "-2" }, { kind: "roll", roll: "attack", mode: "disadvantage" }] }] };
   const g = { ...base, name: "Mesmerize", range: 6, statuses: { minutes: 1, target: status({ conditions: [mesmerized] }) } };
-  assert.equal(actionSentence(g), "Applies Mesmerized (-2 Intellect and disadvantage on attack rolls for 10 rounds) to one creature within 30 feet, no roll needed. Takes 2 seconds.");
+  assert.equal(actionSentence(g), "Applies Mesmerized to one creature within 30 feet: -2 Intellect and disadvantage on attack rolls for 10 rounds. No roll needed. Takes 2 seconds.");
 });
 
 test("a reaction on yourself", () => {
@@ -68,11 +68,19 @@ test("an effect's own save reads plainly (a spider's bite)", () => {
   const poisoned = { name: "Poisoned", id: 12, rounds: 3, duration: "rounds", apply_save_attr: "fortitude", apply_save_dc: 12, apply_save_outcome: "negates",
     effects: [{ id: 12, name: "Poisoned", description: "", modifiers: [{ kind: "roll", roll: "attack", mode: "disadvantage" }] }] };
   const g = { ...base, name: "Bite", damage: "1d4", damageType: "piercing", statuses: { minutes: 0.1, target: status({ conditions: [poisoned] }) } };
-  assert.match(actionSentence(g), /A hit also applies Poisoned \(disadvantage on attack rolls for 3 rounds, unless they make a Fortitude save \(DC 12\)\) to the target\./);
+  assert.match(actionSentence(g), /A hit also applies Poisoned to the target unless it makes a Fortitude save \(DC 12\): disadvantage on attack rolls for 3 rounds\./);
 });
 
 test("an area's damage always lands; its effects carry the saves", () => {
   const g = { ...base, name: "Fireball", range: 30, damage: "1d10", damageType: "fire", area: { shape: "circle" as const, ft: 20, dc: 99, save: "agility" as const, half: false },
     statuses: { minutes: 0.1, target: status({ conditions: [{ name: "Burning", id: 4, effects: [] }] }) } };
   assert.equal(actionSentence(g), "Fills a 20-foot radius up to 150 feet away. Everyone in it takes 1d10 fire damage. It also applies Burning to them. Takes 2 seconds.");
+});
+
+test("a web: an effect with its own save, no attack", () => {
+  const webbed = { name: "Webbed", id: 40, rounds: 1, duration: "rounds", apply_save_attr: "might", apply_save_dc: 15, apply_save_outcome: "negates",
+    effects: [{ id: 40, name: "Webbed", description: "", modifiers: [{ kind: "roll", roll: "attack", mode: "disadvantage" }] }] };
+  const g = { ...base, name: "Web", range: 6, statuses: { minutes: 0.1, target: status({ conditions: [webbed] }) } };
+  assert.match(actionSentence(g), /^Applies Webbed to one creature within 30 feet unless it makes a Might save \(DC 15\)/);
+  assert.doesNotMatch(actionSentence(g), /no roll/);
 });
