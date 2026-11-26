@@ -2,6 +2,7 @@
 // Every lib/db/* module and lib/db.ts use \`db\` from here (backlog U: lib/db.ts is being split by area).
 import Database from "better-sqlite3";
 import fs from "node:fs";
+import type { Lifecycle } from "@/lib/conditions";
 
 // Where the database and uploaded media live: ./data locally, a mounted volume when deployed (DATA_DIR=/data).
 export const DATA_DIR = process.env.DATA_DIR ?? "data";
@@ -416,3 +417,379 @@ db.exec(`
       WHERE json_extract(map_image, '$.image') IS NOT NULL;
   DELETE FROM assets WHERE id NOT IN (SELECT MIN(id) FROM assets GROUP BY url);
 `);
+
+// ---------- Later tables (in the order they were added) ----------
+
+// a built-in effect's key (lib/builtinConditions.ts): its rules follow the code
+export const LIFECYCLE_COLUMNS: [keyof Lifecycle | "duration", string][] = [
+  ["duration", "TEXT NOT NULL DEFAULT 'rounds'"], // rounds | equipped | always
+  ["rounds", "INTEGER NOT NULL DEFAULT 1"],
+  ["save_attr", "TEXT NOT NULL DEFAULT ''"], // the save that ends it ('' = none)
+  ["save_dc", "INTEGER NOT NULL DEFAULT 12"],
+  ["apply_save_attr", "TEXT NOT NULL DEFAULT ''"], // a save as it lands ('' = none)
+  ["apply_save_dc", "INTEGER NOT NULL DEFAULT 12"],
+  ["apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"], // on a success: negates | halves (its rounds)
+  ["save_when", "TEXT NOT NULL DEFAULT 'end'"], // when the save to end it is rolled: end | start | damaged
+  ["save_action", "INTEGER NOT NULL DEFAULT 0"], // 1: Shake off (an action) rolls it too
+  ["saves_needed", "INTEGER NOT NULL DEFAULT 1"], // successful saves to end it
+  ["ends_on_damage", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when hurt
+  ["ends_on_attack", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when they attack
+  ["ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"], // 1: ends once its trigger fires
+  ["concentration", "INTEGER NOT NULL DEFAULT 0"], // 1: needs whoever put it on to keep concentrating
+  ["reapply", "TEXT NOT NULL DEFAULT 'refresh'"], // put on again: refresh | stack | ignore
+  ["stack_limit", "INTEGER NOT NULL DEFAULT 0"], // stacking: at most this many (0 = no limit)
+];
+
+// Professions are progressions of ranks: each rank (a `professions` row) belongs to a profession (`profession_groups`),
+// and a character has one rank (`characters.rank_id`), holding every rank before it too.
+db.exec("CREATE TABLE IF NOT EXISTS profession_groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '')");
+
+addColumn("professions", "group_id", "INTEGER");
+
+ // its profession (profession_groups)
+addColumn("characters", "rank_id", "INTEGER");
+
+db.exec(`CREATE TABLE IF NOT EXISTS token_follows (
+  token_id INTEGER PRIMARY KEY,
+  target_id INTEGER NOT NULL,
+  mode TEXT NOT NULL
+)`);
+
+// Walks out of encounters (free moves, followers), so every map on the level plays them, not just the walker's.
+// Kept a few seconds: a map polls each second and only plays what's fresh.
+db.exec(`CREATE TABLE IF NOT EXISTS token_walks (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  route TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  at INTEGER NOT NULL
+)`);
+
+addColumn("token_walks", "fps", "REAL NOT NULL DEFAULT 5");
+
+ // how fast it went (feet per second): played back in real time
+addColumn("token_walks", "times", "TEXT");
+
+// A level link a token came onto in a round: its player is asked (before planning again) whether to take it;
+// `back` is where they stepped from (where "Stay" puts them).
+db.exec(`CREATE TABLE IF NOT EXISTS link_prompts (
+  token_id INTEGER PRIMARY KEY,
+  link_id INTEGER NOT NULL,
+  back_col REAL NOT NULL,
+  back_row REAL NOT NULL
+)`);
+
+addColumn("link_prompts", "show_at", "INTEGER NOT NULL DEFAULT 0");
+
+// Fog of war: every spot a character's token has stood on a level (its centre, grid units); what was seen from them stays explored.
+db.exec(`CREATE TABLE IF NOT EXISTS sightings (
+  character_id INTEGER NOT NULL,
+  level_id INTEGER NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  PRIMARY KEY (character_id, level_id, x, y)
+)`);
+
+// What the GM is playing on a level (ambient), shared with every player's browser on it. rev changes with each new
+// play (or stop), so browsers start it again; volume can change without a new rev.
+db.exec(`CREATE TABLE IF NOT EXISTS level_ambient (
+  level_id INTEGER PRIMARY KEY,
+  sound_id INTEGER,          -- null: nothing playing
+  clip_id INTEGER,           -- a single clip played once (else the sound's loop and layer clips)
+  volume REAL NOT NULL DEFAULT 1,
+  rev INTEGER NOT NULL DEFAULT 0
+)`);
+
+/** Runs fn in a single transaction. */
+export const transaction = <T>(fn: () => T): T => db.transaction(fn)();
+
+// ---------- Sessions (game nights) ----------
+
+// Not "sessions": that table holds login tokens.
+db.exec(`CREATE TABLE IF NOT EXISTS game_sessions (
+  id INTEGER PRIMARY KEY,
+  started_at TEXT NOT NULL,   -- real date and time (ISO)
+  game_time REAL NOT NULL     -- game time when it started, in minutes
+)`);
+
+addColumn("game_sessions", "ended_at", "TEXT");
+
+ // real time it ended; null while it's running
+addColumn("game_sessions", "start_state", "TEXT");
+
+ // JSON snapshot of game state when it started (lib/sessionLog.ts)
+addColumn("game_sessions", "summary", "TEXT");
+
+ // JSON summary written when it ended
+addColumn("game_sessions", "began_at", "TEXT");
+
+ // when the GM began play; until then the session is in its lobby
+db.exec("UPDATE game_sessions SET began_at = started_at WHERE began_at IS NULL AND ended_at IS NOT NULL");
+
+ // sessions from before lobbies
+// Who's in a session's lobby (or game): a player is present while their page keeps checking in.
+db.exec(`CREATE TABLE IF NOT EXISTS session_presence (
+  session_id INTEGER NOT NULL REFERENCES game_sessions(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  last_seen INTEGER NOT NULL, -- epoch ms
+  PRIMARY KEY (session_id, user_id)
+)`);
+
+// Things that happened during a session that its start and end states can't show (e.g. triggers going off).
+db.exec(`CREATE TABLE IF NOT EXISTS session_events (
+  id INTEGER PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES game_sessions(id),
+  game_time REAL NOT NULL,
+  text TEXT NOT NULL
+)`);
+
+// Who the GM put in or took out of a session (its lobby): "gm" = an absent player the GM plays; "removed" = kept out.
+// Anyone else is in the session by being present.
+db.exec(`CREATE TABLE IF NOT EXISTS session_members (
+  session_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  status TEXT NOT NULL, -- 'gm' | 'removed'
+  PRIMARY KEY (session_id, user_id)
+)`);
+
+// ---------- Lasting areas ----------
+
+// An area an action left on the map for a while (a fire wall); it's gone once game time passes `ends`.
+db.exec(`CREATE TABLE IF NOT EXISTS lasting_areas (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  ends REAL NOT NULL,
+  spec TEXT NOT NULL
+)`);
+
+// Exposure to lingering areas' harm, per level: who is still burning, poisoned… (lib/exposure.ts), as JSON.
+db.exec("CREATE TABLE IF NOT EXISTS level_exposure (level_id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
+
+// ---------- Statuses ----------
+
+// What an action left on a token for a while (disadvantage on its attacks, +2 defense); gone once game time passes `ends`.
+db.exec(`CREATE TABLE IF NOT EXISTS token_statuses (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  ends REAL NOT NULL,
+  status TEXT NOT NULL
+)`);
+
+// The catalog: effects. An effect is a name, its rules (modifiers) and how long it lasts: so many rounds (with its
+// saves and what ends it), while equipped, or always. Actions, the GM, items, creatures and professions grant them.
+// See lib/conditions.ts.
+db.exec(`CREATE TABLE IF NOT EXISTS effects (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  modifiers TEXT NOT NULL DEFAULT '[]'
+)`);
+
+addColumn("effects", "builtin", "TEXT NOT NULL DEFAULT ''");
+
+for (const [column, definition] of LIFECYCLE_COLUMNS) addColumn("effects", column, definition);
+
+// Retired 2026-11-13: conditions (an effect's lifecycle lived here, applying effects by id). Kept, empty, so an older
+// campaign export can still be imported: its rows become effects (migrateConditions, below).
+db.exec(`CREATE TABLE IF NOT EXISTS conditions (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  effects TEXT NOT NULL DEFAULT '[]',
+  rounds INTEGER NOT NULL DEFAULT 1,
+  save_attr TEXT NOT NULL DEFAULT '',
+  save_dc INTEGER NOT NULL DEFAULT 12
+)`);
+
+for (const [column, definition] of LIFECYCLE_COLUMNS) if (column !== "duration") addColumn("conditions", column, definition);
+
+addColumn("conditions", "builtin", "TEXT NOT NULL DEFAULT ''");
+
+// Catalog effects added once each (lib/seedEffects.ts), by name: after that they're the GM's to edit, rename or delete.
+db.exec("CREATE TABLE IF NOT EXISTS seeded_effects (name TEXT PRIMARY KEY)");
+
+// Strain: points on a creature's attributes (each −1 to it, never below half), left by conditions; they outlast them
+// and drain with rest. A character's follow them from map to map ("c:<character id>"); a creature's stay with its
+// token ("t:<token id>").
+db.exec(`CREATE TABLE IF NOT EXISTS strain (
+  owner TEXT NOT NULL,
+  attribute TEXT NOT NULL,
+  points INTEGER NOT NULL,
+  PRIMARY KEY (owner, attribute)
+)`);
+
+// Conditions on creatures right now: a copy of the condition (and its effects) as it was put on, the rounds it has
+// left, and who put it there.
+db.exec(`CREATE TABLE IF NOT EXISTS token_afflictions (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  effect_id INTEGER NOT NULL, -- the condition's id
+  effect TEXT NOT NULL, -- JSON Condition
+  rounds_left INTEGER NOT NULL,
+  by_token INTEGER
+)`);
+
+addColumn("token_afflictions", "saved", "INTEGER NOT NULL DEFAULT 0");
+
+ // successful saves so far
+addColumn("token_afflictions", "aura", "INTEGER");
+
+ // given by this token's aura (while within it)
+addColumn("token_afflictions", "area", "INTEGER");
+
+ // given by this lasting area (while in it)
+
+// Creatures that passed the save against an aura's condition as they came within it: safe until they leave.
+db.exec(`CREATE TABLE IF NOT EXISTS aura_passes (
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  condition_id INTEGER NOT NULL,
+  PRIMARY KEY (level_id, token_id, condition_id)
+)`);
+
+// ---------- Effects played by scripts ----------
+
+// A one-off visual effect a script played (fx('arrow', A, B)): every map in the session draws it from `starts` (ms).
+db.exec(`CREATE TABLE IF NOT EXISTS map_fx (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  starts INTEGER NOT NULL,
+  fx TEXT NOT NULL
+)`);
+
+// ---------- Pings ----------
+
+// Someone pressed and held on the map to point at a spot; everyone in the session sees it for a few seconds.
+db.exec(`CREATE TABLE IF NOT EXISTS pings (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  gm INTEGER NOT NULL,
+  created INTEGER NOT NULL
+)`);
+
+// ---------- Roll requests ----------
+
+// A roll a player has to make (e.g. picking a lock): shown to them as a prompt until they roll it and close it.
+// `action` says what the result is for, so the server settles it once rolled.
+db.exec(`CREATE TABLE IF NOT EXISTS roll_requests (
+  id INTEGER PRIMARY KEY,
+  player_id INTEGER NOT NULL REFERENCES users(id),
+  character_id INTEGER NOT NULL,
+  spec TEXT NOT NULL,
+  action TEXT NOT NULL,
+  result TEXT,
+  done INTEGER NOT NULL DEFAULT 0
+)`);
+
+/** Asks a player to roll; replaces any roll they haven't made yet (and puts away one they rolled but left open). */
+// Hide: a token hidden from everyone not on its side, with its Stealth total (what a Search has to beat). Kept until revealed.
+db.exec(`CREATE TABLE IF NOT EXISTS token_hidden (
+  token_id INTEGER PRIMARY KEY,
+  stealth INTEGER NOT NULL
+)`);
+
+// Assist: whoever was helped has advantage on their next roll (one help at a time; a new one replaces it). Kept until used.
+db.exec(`CREATE TABLE IF NOT EXISTS assists (
+  token_id INTEGER PRIMARY KEY,
+  by_token INTEGER NOT NULL,
+  by_name TEXT NOT NULL
+)`);
+
+// ---------- Secrets ----------
+
+// Hidden things on a map (a trapdoor, a note under the rug), optionally a story discovery. The GM sees them all;
+// players see one once it's revealed (by a successful Search nearby, or by the GM).
+db.exec(`CREATE TABLE IF NOT EXISTS map_secrets (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  name TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  discovery_id INTEGER,
+  revealed INTEGER NOT NULL DEFAULT 0
+)`);
+
+// ---------- Round plans ----------
+
+// What each creature in an encounter plans to do this round (steps in order) and whether its planner is ready.
+db.exec(`CREATE TABLE IF NOT EXISTS round_plans (
+  level_id INTEGER NOT NULL,
+  token_id INTEGER NOT NULL,
+  plan TEXT NOT NULL DEFAULT '[]',
+  ready INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (level_id, token_id)
+)`);
+
+addColumn("round_plans", "rolled", "INTEGER NOT NULL DEFAULT 0");
+
+// ---------- The GM's map ----------
+
+// The level the GM has loaded in the session (null = follow the party). Players are unaffected.
+db.exec("CREATE TABLE IF NOT EXISTS gm_view (id INTEGER PRIMARY KEY CHECK (id = 1), level_id INTEGER)");
+
+// ---------- Containers ----------
+
+// What's in a character's containers (a belt, a pack…): each container they own has its own inventory, kept with
+// the container (unequip it and equip it again, and its contents are still there). A stack fills one of the
+// container's slots (its capacity), up to the item's max stack.
+db.exec(`CREATE TABLE IF NOT EXISTS container_items (
+  id INTEGER PRIMARY KEY,
+  character_id INTEGER NOT NULL,
+  container_id INTEGER NOT NULL, -- the container item
+  item_id INTEGER NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 1
+)`);
+
+// ---------- Traps (lib/traps.ts) ----------
+
+// Hazards the GM places on a level, hidden from players until found; `sprung`: the tokens each has sprung on.
+db.exec(`CREATE TABLE IF NOT EXISTS map_traps (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  name TEXT NOT NULL DEFAULT 'Trap',
+  area TEXT NOT NULL, -- JSON TrapArea
+  springs TEXT NOT NULL DEFAULT 'enter', -- enter,start,end
+  who TEXT NOT NULL DEFAULT '', -- '' | party | hostile
+  often TEXT NOT NULL DEFAULT 'once', -- once | each | always
+  damage TEXT,
+  damage_type TEXT NOT NULL DEFAULT '',
+  save_attr TEXT NOT NULL DEFAULT 'agility',
+  save_dc INTEGER NOT NULL DEFAULT 12,
+  save_half INTEGER NOT NULL DEFAULT 1,
+  effects TEXT NOT NULL DEFAULT '[]', -- JSON catalog effect ids
+  stops INTEGER NOT NULL DEFAULT 1,
+  find_dc INTEGER NOT NULL DEFAULT 14,
+  found INTEGER NOT NULL DEFAULT 0,
+  sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
+)`);
+
+addColumn("map_traps", "seen_by", "TEXT NOT NULL DEFAULT '[]'");
+
+// ---------- Map triggers (lib/triggers.ts) ----------
+
+// Zones that make things happen when someone comes into one (and the like); always hidden from players.
+db.exec(`CREATE TABLE IF NOT EXISTS map_triggers (
+  id INTEGER PRIMARY KEY,
+  level_id INTEGER NOT NULL REFERENCES map_levels(id),
+  name TEXT NOT NULL DEFAULT 'Trigger',
+  area TEXT NOT NULL, -- JSON TrapArea
+  springs TEXT NOT NULL DEFAULT 'enter', -- enter,start,end
+  who TEXT NOT NULL DEFAULT '', -- '' | party | hostile
+  often TEXT NOT NULL DEFAULT 'once', -- once | each | always
+  outcomes TEXT NOT NULL DEFAULT '[]', -- JSON TriggerOutcome[]
+  sprung TEXT NOT NULL DEFAULT '[]' -- JSON token ids
+)`);
+
+addColumn("map_triggers", "interact", "INTEGER NOT NULL DEFAULT 0");
+
+// One-time data migrations already run (lib/db/migrations.ts), by name.
+db.exec("CREATE TABLE IF NOT EXISTS migrations_done (name TEXT PRIMARY KEY)");

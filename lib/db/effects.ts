@@ -1,4 +1,4 @@
-import { db } from "@/lib/db/connection";
+import { LIFECYCLE_COLUMNS, db } from "@/lib/db/connection";
 import { asCondition, DEFAULT_LIFECYCLE, reapplied } from "@/lib/conditions";
 import type { Effect, Modifier, Condition, Lifecycle, Duration, Affliction } from "@/lib/conditions";
 import { BUILTIN_PIECES, BUILTIN_CONDITIONS, BUILTIN_EFFECTS } from "@/lib/builtinConditions";
@@ -21,26 +21,7 @@ export function setStandingEffects(owner: { item_id: number } | { creature_id: n
   db.prepare<[string, number]>(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(effects), id);
 }
 
- // a built-in effect's key (lib/builtinConditions.ts): its rules follow the code
-export const LIFECYCLE_COLUMNS: [keyof Lifecycle | "duration", string][] = [
-  ["duration", "TEXT NOT NULL DEFAULT 'rounds'"], // rounds | equipped | always
-  ["rounds", "INTEGER NOT NULL DEFAULT 1"],
-  ["save_attr", "TEXT NOT NULL DEFAULT ''"], // the save that ends it ('' = none)
-  ["save_dc", "INTEGER NOT NULL DEFAULT 12"],
-  ["apply_save_attr", "TEXT NOT NULL DEFAULT ''"], // a save as it lands ('' = none)
-  ["apply_save_dc", "INTEGER NOT NULL DEFAULT 12"],
-  ["apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"], // on a success: negates | halves (its rounds)
-  ["save_when", "TEXT NOT NULL DEFAULT 'end'"], // when the save to end it is rolled: end | start | damaged
-  ["save_action", "INTEGER NOT NULL DEFAULT 0"], // 1: Shake off (an action) rolls it too
-  ["saves_needed", "INTEGER NOT NULL DEFAULT 1"], // successful saves to end it
-  ["ends_on_damage", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when hurt
-  ["ends_on_attack", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when they attack
-  ["ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"], // 1: ends once its trigger fires
-  ["concentration", "INTEGER NOT NULL DEFAULT 0"], // 1: needs whoever put it on to keep concentrating
-  ["reapply", "TEXT NOT NULL DEFAULT 'refresh'"], // put on again: refresh | stack | ignore
-  ["stack_limit", "INTEGER NOT NULL DEFAULT 0"], // stacking: at most this many (0 = no limit)
-];
-
+ 
 type EffectRow = Omit<Effect, "modifiers"> & { modifiers: string };
 
 const parseEffect = (r: EffectRow): Effect => ({ ...r, modifiers: JSON.parse(r.modifiers) as Modifier[] });
