@@ -13,6 +13,7 @@ import SoundsEditor, { type PositionalTool } from "./SoundsEditor";
 import LightingEditor, { type LightTool } from "./LightingEditor";
 import NotesEditor from "./NotesEditor";
 import PlayDock, { type DockTool } from "../../../../(play)/play/PlayDock";
+import { expired, pageMoved, walksEnded, walksStarted, type At, type Holds } from "@/lib/walkHold";
 import { assistNow, freeMove, hideAt, fxSince, planStep, pingsSince, selectTarget, sendPing, takeLevelLink, walksSince } from "../../../../(play)/play/actions";
 import type { Fx } from "@/lib/vfx";
 import { setMoveMode, useMoveMode, useRunMode } from "../../../../(play)/play/moveMode";
@@ -245,11 +246,12 @@ export default function MapView({
   const [tokenCreature, setTokenCreature] = useState<TokenCreature | null>(null);
   const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
   type TokenChange = { add: MapToken } | { move: { id: number; col: number; row: number } } | { remove: number };
+  const movedHere = useRef(new Map<number, number>()); // tokens this screen moved (a drag, its own walk): not held for a walk
   const [optimisticTokens, changeTokens] = useOptimistic(tokens, (ts: MapToken[], c: TokenChange) =>
     "add" in c
       ? [...ts, c.add]
       : "move" in c
-        ? ts.map((t) => (t.id === c.move.id ? { ...t, col: c.move.col, row: c.move.row } : t))
+        ? (movedHere.current.set(c.move.id, Date.now()), ts).map((t) => (t.id === c.move.id ? { ...t, col: c.move.col, row: c.move.row } : t))
         : ts.filter((t) => t.id !== c.remove)
   );
   // Dragging a token: which one, and the cell it's currently over.
@@ -512,8 +514,23 @@ export default function MapView({
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   // Several at once: a walker and those following them, or anyone's walk another map recorded.
   const [walks, setWalks] = useState<Record<number, { route: Point[]; started: number; fps: number; times?: number[] }>>({});
+  // Holds: a token drawn where it was (its walk may be on its way) or where its walk ended (the page hasn't caught up).
+  const [holds, setHolds] = useState<Holds>({});
+  const pageSaid = useRef<Record<number, At>>({});
+  useEffect(() => {
+    if (!dockSide || replay) { pageSaid.current = Object.fromEntries(tokens.map((t) => [t.id, { col: t.col, row: t.row }])); return; } // in sessions only, not during replays
+    const mine = new Set([...movedHere.current].filter(([, at]) => Date.now() - at < 5000).map(([id]) => id));
+    setHolds((h) => { const r = pageMoved(pageSaid.current, tokens, new Set([...Object.keys(walks).map(Number), ...mine]), h, performance.now()); pageSaid.current = r.seen; return r.holds; });
+  }, [tokens]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!Object.keys(holds).length) return;
+    const soonest = Math.min(...Object.values(holds).map((h) => h.until)) - performance.now();
+    const t = setTimeout(() => setHolds((h) => expired(h, performance.now())), Math.max(16, soonest));
+    return () => clearTimeout(t);
+  }, [holds]);
   const startWalks = (ws: { tokenId: number; route: Point[]; fps?: number; times?: number[] }[]) => {
     const now = performance.now();
+    setHolds((h) => walksStarted(h, ws.map((w) => w.tokenId)));
     setWalks((cur) => ({ ...cur, ...Object.fromEntries(ws.filter((w) => w.route.length > 1).map((w) => [w.tokenId, { route: w.route, started: now, fps: w.fps && w.fps > 0 ? w.fps : 5, ...(w.times ? { times: w.times } : {}) }])) }));
   };
   // Real time: a square (or gridless unit, 5 ft) takes 5 ÷ their speed (feet per second) seconds.
@@ -541,7 +558,11 @@ export default function MapView({
     if (!Object.keys(walks).length) return;
     const t = setInterval(() => {
       const left = Object.entries(walks).filter(([, w]) => !walkDone(w));
-      if (left.length < Object.keys(walks).length) setWalks(Object.fromEntries(left));
+      if (left.length < Object.keys(walks).length) {
+        const ended = Object.entries(walks).filter(([, w]) => walkDone(w)).map(([id, w]) => ({ id: Number(id), at: { col: w.route[w.route.length - 1].x, row: w.route[w.route.length - 1].y } }));
+        setHolds((h) => walksEnded(h, ended, pageSaid.current, performance.now()));
+        setWalks(Object.fromEntries(left));
+      }
       else setFlickerTick((n) => n + 1);
     }, 16);
     return () => clearInterval(t);
@@ -620,6 +641,8 @@ export default function MapView({
     // The GM sees the whole map fully lit; darkness and fog are for players.
     tokens: (fogged ? fogged.tokens : drawnTokens).map((t) => {
       const w = walks[t.id];
+      const held = !w && !replayFrame && draggingToken?.id !== t.id ? holds[t.id] : undefined;
+      if (held) return { ...t, col: held.col, row: held.row };
       if (!w) return t;
       const at = walkAt(w);
       return { ...t, col: at.x, row: at.y };
