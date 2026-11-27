@@ -169,12 +169,12 @@ function drawSweep(ctx: CanvasRenderingContext2D, fx: AreaFx, o: P, grow: number
 }
 
 /** A lasting area on the map (a fire wall): its effect (fire, fog…) filling the shape, kept out from behind walls by `clip`. */
-export function drawLasting(ctx: CanvasRenderingContext2D, l: Pick<LastingArea, "area" | "look"> & { noLook?: boolean }, toPx: (p: P) => P, cell: number, t: number, clip?: P[]) {
+export function drawLasting(ctx: CanvasRenderingContext2D, l: Pick<LastingArea, "area" | "look"> & { noLook?: boolean; off?: boolean }, toPx: (p: P) => P, cell: number, t: number, clip?: P[]) {
   const pts = areaPolygon(l.area).map(toPx);
-  if (l.noLook) { // a pit, a tripwire: an outline, no animated look
+  if (l.noLook || l.off) { // a pit, a tripwire: an outline, no animated look; switched off (GM only): a faint one
     ctx.save();
-    ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = "rgba(220,38,38,0.8)";
+    ctx.setLineDash(l.off ? [3, 5] : [6, 4]);
+    ctx.strokeStyle = l.off ? "rgba(148,163,184,0.5)" : "rgba(220,38,38,0.8)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
