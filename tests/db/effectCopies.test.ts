@@ -45,3 +45,18 @@ test("the migration copies older uses (bare ids, actions without copies); removi
   assert.equal(getEffectDef(id), undefined);
   assert.equal(getStandingUses({ item_id: dagger })[0]?.copy?.name, "Poisoned", "the dagger keeps its poison");
 });
+
+test("a +1 ring tuned to +2: the item's tuned copy is what its wearer gets; the catalog's stays +1", async () => {
+  const { catalogCopy } = await import("@/lib/db/effects");
+  const { tune } = await import("@/lib/effectCopy");
+  const { standingEffects } = await import("@/lib/creatureChanges");
+  const { level, character } = await import("./seed");
+  const { placeCharacterToken } = await import("@/lib/db/tokens");
+  const plus = saveEffectDef(null, { name: "Warded", description: "", modifiers: [{ kind: "boost", target: "defense", value: "+1" }] as Modifier[], duration: "equipped" });
+  const ring = item({ name: "Ring of warding" });
+  setStandingEffects({ item_id: ring }, [{ id: plus, copy: tune(catalogCopy(plus)!, { "modifiers.0.value": "+2" }) }]);
+  const wearer = placeCharacterToken(level("Hall"), character("Ada"), 1, 1);
+  const got = standingEffects(wearer, { "left hand": ring } as never).find((e) => e.name === "Warded");
+  assert.equal(valueOf(got?.modifiers[0]), "+2");
+  assert.equal(valueOf(getEffectDef(plus)!.modifiers[0]), "+1");
+});
