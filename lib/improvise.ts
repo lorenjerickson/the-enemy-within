@@ -12,6 +12,7 @@ import type { TriggerOutcome } from "@/lib/triggers";
 import type { Template } from "@/lib/templates";
 export { templateArea, shifted, type Template } from "@/lib/templates";
 import type { AreaAt, LastingArea } from "@/lib/aoe";
+import type { Effect } from "@/lib/conditions";
 
 db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
   id INTEGER PRIMARY KEY,
@@ -34,7 +35,7 @@ export type ImproviseOutcome =
   | { kind: "narrative"; text: string }
   | { kind: "script"; script: string }
   | { kind: "map"; outcomes: TriggerOutcome[] }
-  | { kind: "effect"; effect: number; on: "self" | "target"; target?: number }
+  | { kind: "effect"; effect: number; on: "self" | "target"; target?: number; copy?: Effect } // copy: the agreed effect as tuned (backlog W)
   | { kind: "area"; template: Template; settings: AreaSettings }; // place an area: the player places the template, the GM can move it
 
 /** What a placed area does: as the GM's Areas settings (name, look, damage, save, effects, timings, lingering, flammable, who sees it), lasting `minutes` (0: until removed). */

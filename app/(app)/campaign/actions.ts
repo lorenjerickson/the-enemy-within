@@ -6,11 +6,12 @@ import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { revalidatePath } from "next/cache";
 import { requireGm, requireUser } from "@/lib/auth";
 import { addAsset, type AssetUsage } from "@/lib/db/media";
-import { ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, ACTION_TARGETS, type ActionTargets } from "@/lib/db/catalog";
+import { listActions, ownerOf, removeAction, saveAction, type ActionOwner, type ActionOwnerColumn, ACTION_TARGETS, type ActionTargets } from "@/lib/db/catalog";
 import { generateImage } from "@/lib/images";
 import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, type RollGrant, isRollKind, type DurationUnit, type RollMode } from "@/lib/actions";
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
+import { withCopies } from "@/lib/db/effects";
 
 export type ArtworkKind = "item" | "creature" | "texture" | "map" | "tile" | "overhead token" | "side token";
 
@@ -105,7 +106,9 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     roll_grants,
     duration_amount,
     duration_unit,
-    conditions: (["self", "target"] as const).flatMap((on) => formData.getAll(`condition_${on}`).map((v) => ({ id: Number(v), on })).filter((c) => Number.isInteger(c.id) && c.id > 0)),
+    // Each effect a copy (backlog W): kept ones keep theirs, new ones are copied from the catalog as it is now.
+    conditions: withCopies((["self", "target"] as const).flatMap((on) => formData.getAll(`condition_${on}`).map((v) => ({ id: Number(v), on })).filter((c) => Number.isInteger(c.id) && c.id > 0)),
+      actionId === null ? [] : listActions(owner).find((x) => x.id === actionId)?.conditions ?? [], (was, now) => was.id === now.id && (was as { on?: string }).on === now.on),
   });
   revalidatePath(ownerPath(owner));
 }

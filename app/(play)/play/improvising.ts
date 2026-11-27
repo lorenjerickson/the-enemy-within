@@ -18,6 +18,7 @@ import { catchInArea } from "./areas";
 import { UNTIL_REMOVED, inArea } from "@/lib/aoe";
 import { rollDice } from "@/lib/dice";
 import { landEffects } from "./workOutRound";
+import { asCondition } from "@/lib/conditions";
 
 /** One outcome, now, by `tokenId` (the improviser). What each token is told. */
 export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: number, name: string, placed?: { x: number; y: number }, crit = false): Map<number, string[]> {
@@ -51,7 +52,7 @@ export function playOutcome(levelId: number, o: ImproviseOutcome, tokenId: numbe
     if (l && (l.fires ?? []).some((f) => f !== "leave")) for (const t of listTokens(levelId)) if (inArea(l.area, { x: t.col + 0.5, y: t.row + 0.5 })) tell(t.id, catchInArea(levelId, l, t.id));
     spreadFire(levelId);
   } else if (o.kind === "effect") {
-    const found = getCondition(o.effect), on = o.on === "self" ? tokenId : o.target;
+    const found = o.copy ? asCondition(o.copy) : getCondition(o.effect), on = o.on === "self" ? tokenId : o.target; // its own copy (backlog W), else the catalog's
     if (found && on !== undefined && listTokens(levelId).some((t) => t.id === on)) {
       // Its own save as it lands: a player's character is asked to roll (it lands when they do).
       const r = landEffects(levelId, on, found.name, [found]);

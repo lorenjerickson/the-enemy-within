@@ -7,6 +7,7 @@ import type { Attributes, Attribute } from "@/lib/attributes";
 import type { ModifierTarget } from "@/lib/modifiers";
 import type { RollMode, DamageType, Boost, RollGrant, DurationUnit } from "@/lib/actions";
 import type { AreaShape } from "@/lib/aoe";
+import type { Effect } from "@/lib/conditions";
 import type { TargetWho, TargetCount } from "@/lib/sides";
 import { asSpeed } from "@/lib/speed";
 
@@ -421,7 +422,7 @@ export interface Action extends Record<ActionOwnerColumn, number | null> {
   target_count: TargetCount; // one, exactly N, up to N, or all
   target_n: number;
   targets: ActionTargets; // who it can be used on ('' = worked out: damage or effects on a target → others, else self)
-  conditions: { id: number; on: "self" | "target" }[]; // catalog effects it puts on its user / its target (on a hit, or a failed save); the column kept its old name
+  conditions: { id: number; on: "self" | "target"; copy?: Effect }[]; // catalog effects it puts on its user / its target (on a hit, or a failed save); the column kept its old name
   kind?: "action" | "bonus" | "reaction" | "free"; // a reaction is planned as the round's reaction and only affects its user: it readies conditions whose triggers do the reacting
 }
 

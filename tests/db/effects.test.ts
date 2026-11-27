@@ -101,7 +101,7 @@ test("every built-in is seeded once, as a single effect lasting rounds", () => {
   }
 });
 
-test("saving an effect keeps lifecycle fields it isn't given; removing one takes it off what grants it", () => {
+test("saving an effect keeps lifecycle fields it isn't given; removing one from the catalog: uses with a copy keep it, older ones without lose it", () => {
   const id = saveEffectDef(null, { name: "Hasted", description: "", modifiers: [{ kind: "speed", factor: 2 }], rounds: 10, concentration: 1 });
   saveEffectDef(id, { name: "Hasted!", description: "Quick", modifiers: [{ kind: "speed", factor: 2 }] });
   const e = getEffectDef(id)!;
@@ -109,6 +109,6 @@ test("saving an effect keeps lifecycle fields it isn't given; removing one takes
   const a = action([{ id, on: "self" }]);
   setStandingEffects({ item_id: lantern }, [...getStandingEffects({ item_id: lantern }), id]);
   removeEffectDef(id);
-  assert.deepEqual(listActions({ item_id: lantern }).find((x) => x.id === a)!.conditions, []);
-  assert.ok(!getStandingEffects({ item_id: lantern }).includes(id));
+  assert.deepEqual(listActions({ item_id: lantern }).find((x) => x.id === a)!.conditions, [], "saved before copies: no copy to keep");
+  assert.ok(getStandingEffects({ item_id: lantern }).includes(id), "the lantern's own copy stays (backlog W)");
 });

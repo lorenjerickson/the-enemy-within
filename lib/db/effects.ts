@@ -11,14 +11,32 @@ import type { DamageType, Boost, RollGrant } from "@/lib/actions";
 // ---------- Conditions, effects and modifiers (Poisoned…) ----------
 
 /** The catalog effects an item gives whoever has it equipped, or a creature always has (its "standing" effects). */
-export function getStandingEffects(owner: { item_id: number } | { creature_id: number }): number[] {
-  const [table, id] = "item_id" in owner ? ["items", owner.item_id] : ["creatures", owner.creature_id];
-  return JSON.parse(db.prepare<[number], { effects: string }>(`SELECT effects FROM ${table} WHERE id = ?`).get(id)?.effects ?? "[]");
+/** An effect a use holds (backlog W): the catalog effect it came from, and its own copy (tuned, maybe). */
+export type EffectUse = { id: number; copy?: Effect };
+/** A use's effects as stored: older ones are bare catalog ids. */
+export const usesOf = (json: string): EffectUse[] => (JSON.parse(json || "[]") as (number | EffectUse)[]).map((u) => (typeof u === "number" ? { id: u } : u));
+/** A literal copy of a catalog effect as it is now (nothing shared with the catalog's). */
+export const catalogCopy = (id: number): Effect | undefined => { const e = getEffectDef(id); return e ? (JSON.parse(JSON.stringify(e)) as Effect) : undefined; };
+/** Uses keep the copies they had; ones newly added get a copy of the catalog effect as it is now. */
+export const withCopies = <T extends EffectUse>(next: T[], was: EffectUse[] = [], same: (a: EffectUse, b: T) => boolean = (a, b) => a.id === b.id): (T & { copy?: Effect })[] =>
+  next.map((u) => { const had = was.find((w) => same(w, u))?.copy; const copy = u.copy ?? had ?? catalogCopy(u.id); return copy ? { ...u, copy } : u; });
+
+const standingTable = (owner: { item_id: number } | { creature_id: number }) => ("item_id" in owner ? ["items", owner.item_id] : ["creatures", owner.creature_id]) as [string, number];
+
+/** An item's (while equipped) or a creature's (always) effects, each with its copy. */
+export function getStandingUses(owner: { item_id: number } | { creature_id: number }): EffectUse[] {
+  const [table, id] = standingTable(owner);
+  return usesOf(db.prepare<[number], { effects: string }>(`SELECT effects FROM ${table} WHERE id = ?`).get(id)?.effects ?? "[]");
 }
 
-export function setStandingEffects(owner: { item_id: number } | { creature_id: number }, effects: number[]): void {
-  const [table, id] = "item_id" in owner ? ["items", owner.item_id] : ["creatures", owner.creature_id];
-  db.prepare<[string, number]>(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(effects), id);
+/** Their catalog ids (what the editors pick). */
+export const getStandingEffects = (owner: { item_id: number } | { creature_id: number }): number[] => getStandingUses(owner).map((u) => u.id);
+
+/** Sets them by catalog id: kept ones keep their copies, new ones are copied from the catalog now. */
+export function setStandingEffects(owner: { item_id: number } | { creature_id: number }, effects: number[] | EffectUse[]): void {
+  const [table, id] = standingTable(owner);
+  const next = (effects as (number | EffectUse)[]).map((u) => (typeof u === "number" ? { id: u } : u));
+  db.prepare<[string, number]>(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(withCopies(next, getStandingUses(owner))), id);
 }
 
  
@@ -59,16 +77,19 @@ export function saveEffectDef(id: number | null, e: Pick<Effect, "name" | "descr
   return id;
 }
 
-/** Removes an effect, and takes it off the actions that grant it and the items and creatures that have it. */
+/**
+ * Removes an effect from the catalog. Actions, items and creatures that have it keep their own copies (backlog W);
+ * one without a copy (from before copies) loses it.
+ */
 export function removeEffectDef(id: number): void {
   db.transaction(() => {
     db.prepare<[number]>("DELETE FROM effects WHERE id = ?").run(id);
     for (const a of db.prepare<[], { id: number; conditions: string }>("SELECT id, conditions FROM actions WHERE conditions != '[]'").all()) {
-      const list = (JSON.parse(a.conditions) as { id: number; on: string }[]).filter((c) => c.id !== id);
+      const list = (JSON.parse(a.conditions) as (EffectUse & { on: string })[]).filter((c) => c.id !== id || c.copy);
       db.prepare("UPDATE actions SET conditions = ? WHERE id = ?").run(JSON.stringify(list), a.id);
     }
     for (const table of ["items", "creatures"]) for (const r of db.prepare<[], { id: number; effects: string }>(`SELECT id, effects FROM ${table} WHERE effects != '[]'`).all()) {
-      db.prepare(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify((JSON.parse(r.effects) as number[]).filter((x) => x !== id)), r.id);
+      db.prepare(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(usesOf(r.effects).filter((u) => u.id !== id || u.copy)), r.id);
     }
   })();
 }
@@ -141,7 +162,7 @@ export function migrateConditions(): number {
       if (id) db.prepare("INSERT OR IGNORE INTO aura_passes (level_id, token_id, condition_id) VALUES (?, ?, ?)").run(p.level_id, p.token_id, id);
     }
     // What's left that only conditions used: effects merged into nothing are given a duration from what has them now.
-    const standing = (table: string) => new Set(db.prepare<[], { effects: string }>(`SELECT effects FROM ${table}`).all().flatMap((r) => JSON.parse(r.effects) as number[]));
+    const standing = (table: string) => new Set(db.prepare<[], { effects: string }>(`SELECT effects FROM ${table}`).all().flatMap((r) => usesOf(r.effects).map((u) => u.id)));
     const onItems = standing("items"), onCreatures = standing("creatures");
     const givenByRules = new Set(db.prepare<[], { modifiers: string }>("SELECT modifiers FROM effects").all().flatMap((r) => (JSON.parse(r.modifiers) as Modifier[]).flatMap((m) => (m.kind === "trigger" || m.kind === "aura" ? [m.condition] : []))));
     for (const e of effects) {

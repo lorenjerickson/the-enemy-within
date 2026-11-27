@@ -5,7 +5,7 @@ import { db } from "@/lib/db/connection";
 import { listProfessions, rankChain, saveProfessionGroup, setCharacterRank } from "@/lib/db/catalog";
 import { oldModifiers, saveEffectDef, settleEffects, type OldEffectDef } from "@/lib/db/effects";
 import type { Modifier } from "@/lib/conditions";
-import { getCondition } from "@/lib/db/effects";
+import { getCondition, usesOf, withCopies, type EffectUse } from "@/lib/db/effects";
 import { hazardFromTrap } from "@/lib/hazards";
 import type { Trap } from "@/lib/traps";
 import type { Boost, RollGrant } from "@/lib/actions";
@@ -101,6 +101,21 @@ export function runMigrations(): void {
   // Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
   settleEffects();
   trapsToHazards(); // traps become dormant hazards (backlog X): nothing to do once map_traps is empty
+  // Effects copied into each use (backlog W): every action, item and creature gets its own copy of the catalog effects
+  // it has, as they are now, so later catalog edits don't reach it. Once; after an import, uses without one get one too.
+  once("effect-copies", effectCopies);
+}
+
+/** Every action's, item's and creature's effects without a copy get one (the catalog effect as it is now). */
+export function effectCopies(): void {
+  db.transaction(() => {
+    for (const a of db.prepare<[], { id: number; conditions: string }>("SELECT id, conditions FROM actions WHERE conditions != '[]'").all()) {
+      db.prepare("UPDATE actions SET conditions = ? WHERE id = ?").run(JSON.stringify(withCopies(JSON.parse(a.conditions) as EffectUse[])), a.id);
+    }
+    for (const table of ["items", "creatures"]) for (const r of db.prepare<[], { id: number; effects: string }>(`SELECT id, effects FROM ${table} WHERE effects != '[]'`).all()) {
+      db.prepare(`UPDATE ${table} SET effects = ? WHERE id = ?`).run(JSON.stringify(withCopies(usesOf(r.effects))), r.id);
+    }
+  })();
 }
 
 /**

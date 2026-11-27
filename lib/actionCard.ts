@@ -1,7 +1,7 @@
 // Client-safe: turns a saved action into the card a player sees (no database here: the action editor builds it live).
 import { areaFires } from "@/lib/aoe";
 import type { Action } from "@/lib/db/catalog"; // type only
-import type { Condition } from "@/lib/conditions";
+import { asCondition, type Condition } from "@/lib/conditions";
 import type { EffectKind } from "@/lib/effects";
 import type { GearAction } from "@/lib/roundPlan";
 import type { ActionStatuses, Status } from "@/lib/status";
@@ -25,7 +25,7 @@ function statusesOf(a: ActionFields, conditionOf: (id: number) => Condition | un
   const on = (who: "self" | "target"): Status | undefined => {
     // (Actions' own boosts and roll effects were folded into catalog conditions; any left over still count.)
     const boosts = a.boosts.filter((b) => (b.on ?? "self") === who), grants = a.roll_grants.filter((g) => (g.on ?? "self") === who);
-    const conditions = (a.conditions ?? []).filter((c) => c.on === who).flatMap((c) => conditionOf(c.id) ?? []); // as they are now in the catalog
+    const conditions = (a.conditions ?? []).filter((c) => c.on === who).flatMap((c) => (c.copy ? [asCondition(c.copy)] : conditionOf(c.id) ?? [])); // the action's own copy (backlog W), else the catalog's
     return boosts.length || grants.length || conditions.length ? { source: a.name, boosts, grants, ...(conditions.length ? { conditions } : {}) } : undefined;
   };
   const self = on("self"), target = on("target");

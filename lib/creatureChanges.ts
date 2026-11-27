@@ -4,7 +4,7 @@ import { asSpeed, feetPerSecond, speedChangeFtPerRound } from "@/lib/speed";
  * thing: statuses left by actions, conditions on it (their effects' modifiers), and a character's profession
  * modifiers (always on).
  */
-import { getStrain } from "@/lib/db/effects";
+import { getStrain, getStandingUses, type EffectUse } from "@/lib/db/effects";
 import { db } from "@/lib/db/connection";
 import { getItem, getProfession, listCharacterProfessionIds, listProfessionModifiers, type Equipment } from "@/lib/db/catalog";
 import { getStandingEffects, listAfflictions, listEffectDefs } from "@/lib/db/effects";
@@ -35,14 +35,14 @@ export function professionStatuses(characterId: number | null): Status[] {
 export function standingEffects(tokenId: number, equipment?: Equipment): (EffectDef & { from: string })[] {
   const t = db.prepare<[number], { creature_id: number | null; character_id: number | null; equipment: string | null }>("SELECT creature_id, character_id, equipment FROM map_tokens WHERE id = ?").get(tokenId);
   if (!t) return [];
-  const all = listEffectDefs(), byId = (ids: number[], from: string) => ids.flatMap((id) => { const e = all.find((x) => x.id === id); return e ? [{ ...e, from }] : []; });
+  const all = listEffectDefs(), byId = (uses: EffectUse[], from: string) => uses.flatMap((u) => { const e = u.copy ?? all.find((x) => x.id === u.id); return e ? [{ ...e, from }] : []; }); // each use's own copy (backlog W), else the catalog's
   const creature = t.creature_id ? db.prepare<[number], { name: string; equipment: string }>("SELECT name, equipment FROM creatures WHERE id = ?").get(t.creature_id) : undefined;
   const worn: Equipment = equipment ?? JSON.parse(
     (t.character_id ? db.prepare<[number], { equipment: string }>("SELECT equipment FROM characters WHERE id = ?").get(t.character_id)?.equipment : t.equipment ?? creature?.equipment) ?? "{}",
   );
   return [
-    ...(t.creature_id && creature ? byId(getStandingEffects({ creature_id: t.creature_id }), creature.name) : []),
-    ...[...new Set(Object.values(worn).filter((id): id is number => !!id))].flatMap((id) => { const item = getItem(id); return item ? byId(getStandingEffects({ item_id: id }), item.name) : []; }),
+    ...(t.creature_id && creature ? byId(getStandingUses({ creature_id: t.creature_id }), creature.name) : []),
+    ...[...new Set(Object.values(worn).filter((id): id is number => !!id))].flatMap((id) => { const item = getItem(id); return item ? byId(getStandingUses({ item_id: id }), item.name) : []; }),
   ];
 }
 
