@@ -327,6 +327,26 @@ export function throwFor(levelId: number, tokenId: number, name: string, checks:
 }
 
 /**
+ * Effects landing on someone out of combat from one cause (an item used, an improvisation): their own saves as they
+ * land are one throw (`throwFor`): a player's character is asked (`waiting`; it lands when the roll comes in, with
+ * `rolled`), the GM's creatures roll now. What happened, a line each, for the log.
+ */
+export function landEffects(levelId: number, tokenId: number, source: string, effects: Condition[], rolled?: number): { lines: string[]; waiting: boolean; landed: { name: string; happened: string[] }[] } {
+  if (!effects.length) return { lines: [], waiting: false, landed: [] };
+  const totalOf = throwFor(levelId, tokenId, source, effects.flatMap(effectCheck), { kind: "landSave", levelId, tokenId, source, effects: effects.map((c) => c.id) }, rolled);
+  if (!totalOf) return { lines: [`must roll to resist ${effects.map((c) => c.name).join(", ")}`], waiting: true, landed: [] };
+  const landed: { name: string; happened: string[] }[] = [];
+  const lines = effects.map((found) => {
+    const { c, note } = landsOn(tokenId, found, totalOf);
+    if (!c) return note;
+    const happened = applyConditionNow(levelId, tokenId, c);
+    landed.push({ name: c.name, happened });
+    return `${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`;
+  });
+  return { lines, waiting: false, landed };
+}
+
+/**
  * An effect's own save as it lands, outside rounds (rolled by the server with their numbers): null if they resist it
  * outright, else the effect to put on (with half its rounds on a "halves" success), and a note for the GM's log.
  */

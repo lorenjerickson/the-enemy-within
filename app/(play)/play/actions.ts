@@ -1,6 +1,6 @@
 "use server";
 
-import { applyConditionNow, landsOn, recordConditionSave, recordRollOff } from "./workOutRound";
+import { landEffects, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
 import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
@@ -30,6 +30,7 @@ import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { getTrap, listTraps, setTrapFound } from "@/lib/db/traps";
 import { springTrap } from "./traps";
+import { getCondition } from "@/lib/db/effects";
 import { distanceToTrap } from "@/lib/traps";
 import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
@@ -285,6 +286,14 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     success = !!l && scored.total >= l.dc;
     outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying, scored.total) : "It's gone.";
   }
+  if (a.kind === "landSave") {
+    // Effects landing on them from an item or improvisation (out of combat): their own saves, with this throw.
+    const effects = a.effects.flatMap((id) => { const c = getCondition(id); return c ? [c] : []; });
+    const lines = landEffects(a.levelId, a.tokenId, a.source, effects, scored.total).lines;
+    success = true;
+    outcome = `${a.source}: ${lines.join("; ") || "no effect"}.`;
+    logSessionEvent(`${me0?.name ?? who} rolls against ${a.source}: ${lines.join("; ")}.`);
+  }
   if (a.kind === "trapSave") {
     // A trap that sprang on them (out of combat): it lands now, with their throw.
     const t = getTrap(a.trapId);
@@ -498,13 +507,9 @@ export async function useItemNow(actionId: number, targetId?: number): Promise<{
     if (gap > g.range + 0.05) return { error: `Out of reach (${g.range * FEET_PER_SQUARE} ft)` };
   }
   const told: string[] = [];
+  // Each one's effects: their own saves as one throw (a player's character is asked; it lands when they roll).
   const land = (who: number, list: Condition[]) => {
-    for (const found of list) {
-      const { c, note } = landsOn(who, found); // the effect's own save as it lands (half its rounds on a "halves" success)
-      if (!c) { told.push(`${labels.get(who) ?? "they"} ${note}`); continue; }
-      const happened = applyConditionNow(me.level_id, who, c);
-      told.push(`${labels.get(who) ?? "they"}: ${c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
-    }
+    for (const line of landEffects(me.level_id, who, g.name, list).lines) told.push(`${labels.get(who) ?? "they"}: ${line}`);
   };
   land(me.token_id, g.statuses?.self?.conditions ?? []);
   land(target, g.statuses?.target?.conditions ?? []);

@@ -123,3 +123,24 @@ test("a player's character rolls its own throw for a trap out of combat: one pro
   assert.ok(on.some((a) => a.condition.name === "Venom"), "the same throw falls short of 30");
   assert.match(done.player, /shake off netted/i);
 });
+
+test("effects landing from an item or improvisation out of combat: a player's character is asked for the one throw; a creature rolls now", async () => {
+  const { landEffects } = await import("@/app/(play)/play/workOutRound");
+  const { getCondition } = await import("@/lib/db/effects");
+  createUser({ name: "useP", username: "useP", contact: "", role: "player" } as never, "pw");
+  const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("useP")!.id;
+  const gil = character("Gil", { health: "20" });
+  db.prepare("UPDATE characters SET player_id = ? WHERE id = ?").run(pid, gil);
+  const tok = placeCharacterToken(lv, gil, 9, 9);
+  const dazed = getCondition(saveEffectDef(null, { name: "Dazed", description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 2, apply_save_attr: "wisdom", apply_save_dc: 14 }))!;
+  const asked = landEffects(lv, tok, "Smelling salts", [dazed]);
+  assert.equal(asked.waiting, true);
+  const req = getOpenRollRequest(pid)!;
+  assert.deepEqual(req.action, { kind: "landSave", levelId: lv, tokenId: tok, source: "Smelling salts", effects: [dazed.id] });
+  assert.match(req.spec.label, /Smelling salts: Wisdom vs DC 14 keeps out Dazed/);
+  assert.ok(!listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Dazed"), "nothing until they roll");
+  landEffects(lv, tok, "Smelling salts", [dazed], 5);
+  assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Dazed"), "5 vs 14: it lands");
+  const rat = addCreatureToken(lv, creature("Rat", { health: "5" }), 10, 10);
+  assert.equal(landEffects(lv, rat, "Smelling salts", [dazed]).waiting, false, "the GM's creature rolls now");
+});
