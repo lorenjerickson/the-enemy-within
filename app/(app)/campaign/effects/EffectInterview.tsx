@@ -16,6 +16,8 @@ const DURATIONS: [Duration, string, string][] = [
 ];
 
 type Saved = Partial<Answers> & Record<string, unknown>;
+const SHAKE_WHEN: Record<Answers["shakeWhen"], string> = { end: "at the end of each round", start: "at the start of each round", damaged: "whenever they take damage" };
+const WHY: Partial<Record<Question, string>> = { name: "Give it a name.", rules: "Finish or remove the unfinished rule.", duration: "Say how many rounds." };
 
 /** An ability to save with. */
 function Ability({ value, onChange }: { value: Attribute; onChange: (a: Attribute) => void }) {
@@ -74,7 +76,7 @@ export default function EffectInterview({ action, initial, initialRules, builtin
         <p className="font-semibold">{a.name || "This effect"}</p>
         <p>{how ? how[0].toUpperCase() + how.slice(1) : "Does nothing yet."}{save ? `, ${save}` : ""}.</p>
         {a.duration === "rounds" && (a.shake || a.endsOn.length > 0) && (
-          <p>{[a.shake ? `They can end it with a ${answerLine("shake", a)[1]}` : "", a.endsOn.length ? `It ends early when ${answerLine("ends", a)[1]}` : ""].filter(Boolean).join(". ")}.</p>
+          <p>{[a.shake ? `They can end it with ${a.shakeAttr === "agility" || a.shakeAttr === "intellect" ? "an" : "a"} ${a.shakeAttr[0].toUpperCase() + a.shakeAttr.slice(1)} save (DC ${a.shakeDc}) ${SHAKE_WHEN[a.shakeWhen]}${a.shakeAction ? " or by spending their action" : ""}${a.shakeNeeded > 1 ? `, ${a.shakeNeeded} successes needed` : ""}` : "", a.endsOn.length ? `It ends early when ${answerLine("ends", a)[1]}` : ""].filter(Boolean).join(". ")}.</p>
         )}
       </div>
       <ol className="space-y-0.5 text-sm" data-answers>
@@ -84,7 +86,7 @@ export default function EffectInterview({ action, initial, initialRules, builtin
           return (
             <li key={q}>
               <button type="button" onClick={() => setAt(q)} className={`flex w-full gap-2 rounded px-1 text-left hover:bg-base-300 ${q === at ? "bg-base-300 font-semibold" : ""}`}>
-                <span className="w-40 shrink-0 opacity-60">{label}</span><span className="truncate">{value}</span>
+                <span className="w-40 shrink-0 opacity-60">{label}</span><span className={q === "rules" ? "" : "truncate"}>{value}</span>
               </button>
             </li>
           );
@@ -187,6 +189,7 @@ export default function EffectInterview({ action, initial, initialRules, builtin
         {i > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAt(qs[i - 1])}>Back</button>}
         {!last && <button type="button" className="btn btn-sm" disabled={!ok} onClick={next}>Next</button>}
         <button className="btn btn-primary btn-sm" disabled={!allOk}>{initial ? "Save effect" : "Create effect"}</button>
+        {!allOk && <span className="text-xs text-warning">{WHY[qs.find((q) => !valid(q))!]}</span>}
       </div>
     </form>
   );
