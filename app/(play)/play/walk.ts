@@ -9,7 +9,6 @@ import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
 import { linkEntered } from "@/lib/levelLinks";
 import type { Point } from "@/lib/visibility";
-import { trapsOnStep, trapsWhereStopped } from "./traps";
 import { hazardsStep, hazardsWhereStopped } from "./hazards";
 import { triggersOnStep, triggersWhereStopped } from "./mapTriggers";
 import { exposureTick } from "./areas";
@@ -41,9 +40,6 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
     moveToken(tokenId, step.x, step.y); // also remembers what they saw from here
     walked.push(step);
     told.push(...revealAfterStep(levelId, tokenId)); // hidden ones given away (moving into view, or right next to an enemy)
-    const sprung = trapsOnStep(levelId, tokenId, from, step); // (traps until they're moved to hazards)
-    told.push(...sprung.map((t) => t.player));
-    if (sprung.some((t) => t.stops)) { stopped = true; break; }
     const hz = hazardsStep(levelId, tokenId, from, step); // hazards: dormant ones set off, active ones (a fire wall) catching
     told.push(...hz.told);
     if (hz.stops) { stopped = true; break; }
@@ -66,7 +62,7 @@ export function walkRoute(levelId: number, tokenId: number, route: Point[]): Wal
   }
   if (!stopped && walked.length > 1) {
     const end = walked[walked.length - 1];
-    told.push(...[...trapsWhereStopped(levelId, tokenId, end), ...hazardsWhereStopped(levelId, tokenId, end)].map((t) => t.player)); // ending a move in one
+    told.push(...hazardsWhereStopped(levelId, tokenId, end).map((t) => t.player)); // ending a move in one
     for (const f of triggersWhereStopped(levelId, tokenId, end)) told.push(...(f.told.get(tokenId) ?? []));
   }
   syncAurasOn(levelId); // walked into (or out of) an aura

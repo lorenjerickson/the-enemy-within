@@ -100,12 +100,13 @@ export function runMigrations(): void {
 
   // Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
   settleEffects();
+  trapsToHazards(); // traps become dormant hazards (backlog X): nothing to do once map_traps is empty
 }
 
 /**
  * Traps become hazards (backlog X, claude/hazards-design.md): each trap a dormant hazard on its level (a spent "once"
- * trap is dropped), trigger outcomes that set one off now set off its hazard, and `map_traps` is left empty (an older
- * export's traps are moved again after an import). Wired into start-up once play reads hazards for traps.
+ * trap is dropped), trigger outcomes that set one off now set off its hazard, and `map_traps` is left empty. Runs at
+ * start-up and after an import (an older export's traps); nothing to do once the table is empty.
  */
 export function trapsToHazards(): void {
   db.transaction(() => {

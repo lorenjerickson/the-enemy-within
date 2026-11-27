@@ -33,8 +33,8 @@ import { rollDice } from "@/lib/dice";
 import { addAffliction, addStrain } from "@/lib/db/effects";
 import { clearTokenTargets, recordSightingAt } from "@/lib/db/tokens";
 import { openConditionSaveRequest } from "@/lib/db/rolls";
-import { getCondition } from "@/lib/db/effects";
-import { listTraps, listMapTriggers, markTrapSprung, trapSeenBy } from "@/lib/db/traps";
+
+import { listMapTriggers, trapSeenBy } from "@/lib/db/traps";
 import { seesSpot } from "@/lib/sight";
 import { trapCentre, type Trap } from "@/lib/traps";
 import { fireTrigger } from "./mapTriggers";
@@ -44,10 +44,7 @@ import { getDoor, setDoorOpen } from "@/lib/db/maps";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
-const roundTraps = (levelId: number): RoundTrap[] => [
-  ...listTraps(levelId).map((t) => ({ ...t, given: t.effects.flatMap((id) => getCondition(id) ?? []) })),
-  ...(listLastingAreas(levelId) as Hazard[]).filter((h) => h.activation === "dormant" && !h.off && !h.spent).map(asRoundTrap), // dormant hazards spring like traps (negative ids)
-];
+const roundTraps = (levelId: number): RoundTrap[] => (listLastingAreas(levelId) as Hazard[]).filter((h) => h.activation === "dormant" && !h.off && !h.spent).map(asRoundTrap); // dormant hazards spring as the engine's traps (negative ids)
 
 /**
  * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
@@ -151,10 +148,8 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const s of result.strains) addStrain(s.tokenId, s.attribute, s.points); // strain outlasts the round (and the condition)
   // Spent (for them), and no secret any more to whoever saw it go off (from where they ended the round).
   for (const t of result.trapsSprung) {
-    if (t.trapId < 0) { const h = getLastingArea(-t.trapId) as Hazard | undefined; if (h) markHazardSprung(levelId, h, t.tokenId); continue; } // a dormant hazard
-    markTrapSprung(t.trapId, t.tokenId);
-    const trap = listTraps(levelId).find((x) => x.id === t.trapId);
-    if (trap) witnessTrap(levelId, trap, [t.tokenId]);
+    const h = getLastingArea(-t.trapId) as Hazard | undefined; // a dormant hazard (the engine's trap ids are negated)
+    if (h) markHazardSprung(levelId, h, t.tokenId);
   }
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {

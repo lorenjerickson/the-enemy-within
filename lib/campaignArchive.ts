@@ -10,6 +10,7 @@ import { db } from "@/lib/db/connection";
 import { settleEffects } from "@/lib/db/effects";
 import { IMAGE_DIR } from "@/lib/images";
 import "@/lib/scriptLibrary"; // its table, so it goes into (and comes out of) the archive
+import { trapsToHazards } from "@/lib/db/migrations";
 
 export const ARCHIVE_FORMAT = "the-enemy-within/campaign/1";
 
@@ -78,6 +79,7 @@ export async function importCampaignFile(zipPath: string): Promise<{ tables: num
   const json = JSON.parse(Buffer.concat(jsonParts).toString("utf8")) as CampaignJson;
   const counts = replaceTables(json);
   settleEffects(); // an older export's conditions become effects
+  trapsToHazards(); // and its traps dormant hazards
   return { ...counts, files };
 }
 
