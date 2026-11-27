@@ -24,7 +24,7 @@ export interface TriggerThings {
   area: { id: number; name: string }[];
 }
 type Pickable = keyof TriggerThings;
-const PICKS: Pickable[] = ["door", "light", "effect", "secret", "trap", "discovery", "area"];
+const PICKS: Pickable[] = ["door", "light", "effect", "secret", "discovery", "area"];
 
 /** Adding one outcome: what kind, which thing, and (doors, lights, effects) what happens to it. */
 export function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThings; scripts?: string[]; onAdd: (o: TriggerOutcome) => void }) {
@@ -39,7 +39,7 @@ export function AddOutcome({ things, scripts = [], onAdd }: { things: TriggerThi
     const n = Number(id);
     const o: TriggerOutcome =
       kind === "door" ? { kind, door: n, to: to as "open" } : kind === "light" ? { kind, light: n, on: on === "on" } : kind === "effect" ? { kind, effect: n, on: on === "on" }
-      : kind === "secret" ? { kind, secret: n } : kind === "discovery" ? { kind, discovery: n } : kind === "trap" ? { kind, trap: n } : kind === "area" ? { kind, area: n, to: (["on", "off", "set off"].includes(to) ? to : "set off") as "on" } : kind === "stop" ? { kind } : { kind, script };
+      : kind === "secret" ? { kind, secret: n } : kind === "discovery" ? { kind, discovery: n } : kind === "area" ? { kind, area: n, to: (["on", "off", "set off"].includes(to) ? to : "set off") as "on" } : kind === "stop" ? { kind } : { kind, script };
     onAdd(o);
     setId("");
     setScript("");

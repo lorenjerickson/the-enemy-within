@@ -11,7 +11,7 @@ test("a placed trigger: defaults, saved outcomes, firing and re-arming, removal"
   const id = addMapTrigger(lv, { shape: "line", x1: 6, y1: -2, x2: 6, y2: 2 });
   let t = getMapTrigger(id)!;
   assert.deepEqual([t.name, t.springs, t.who, t.often, t.outcomes, t.sprung], ["Trigger", ["enter"], "", "once", [], []]);
-  const outcomes: TriggerOutcome[] = [{ kind: "door", door: 3, to: "lock" }, { kind: "trap", trap: 2 }, { kind: "stop" }, { kind: "script", script: "game.vars.alarm = true" }];
+  const outcomes: TriggerOutcome[] = [{ kind: "door", door: 3, to: "lock" }, { kind: "area", area: 2, to: "set off" }, { kind: "stop" }, { kind: "script", script: "game.vars.alarm = true" }];
   saveMapTrigger(id, { name: "Alarm wire", springs: ["enter"], who: "party", often: "each", outcomes });
   markMapTriggerSprung(id, 7);
   t = getMapTrigger(id)!;
@@ -36,6 +36,6 @@ test("outcomes in words", () => {
   assert.equal(describeOutcome({ kind: "door", door: 1, to: "close" }, name), "closes door 1");
   assert.equal(describeOutcome({ kind: "door", door: 1, to: "unlock" }, name), "unlocks door 1");
   assert.equal(describeOutcome({ kind: "light", light: 2, on: false }, name), "turns light 2 off");
-  assert.equal(describeOutcome({ kind: "trap", trap: 4 }, name), "sets off trap 4");
+  assert.equal(describeOutcome({ kind: "area", area: 4, to: "set off" }, name), "sets off area 4");
   assert.equal(describeOutcome({ kind: "stop" }), "stops them");
 });

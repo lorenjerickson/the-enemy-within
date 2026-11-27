@@ -15,8 +15,7 @@ export type TriggerOutcome =
   | { kind: "effect"; effect: number; on: boolean } // a placed map effect (rain, fog…)
   | { kind: "secret"; secret: number } // revealed to the players
   | { kind: "discovery"; discovery: number } // into the party's journals
-  | { kind: "area"; area: number; to: "on" | "off" | "set off" } // a lasting area: switched on (catching whoever is in it) or off, or set off now (it catches whoever is in it, whatever its timings)
-  | { kind: "trap"; trap: number } // sets it off: it springs on whoever is in it (it goes off, and is found, even if no one is)
+  | { kind: "area"; area: number; to: "on" | "off" | "set off" } // a hazard: switched on (an active one catches whoever is in it) or off, or set off (a dormant one springs on whoever is in it, going off even if no one is; an active one catches whoever is in it, whatever its timings)
   | { kind: "stop" } // stops whoever set it off where they are
   | { kind: "script"; script: string }; // a game script, run on this level
 
@@ -34,7 +33,7 @@ export interface MapTrigger {
 
 export const OUTCOME_KINDS: [TriggerOutcome["kind"], string][] = [
   ["door", "a door"], ["light", "a light"], ["effect", "a map effect"], ["secret", "reveal a secret"], ["discovery", "reveal a discovery"],
-  ["area", "an area"], ["trap", "set off a trap"], ["stop", "stop them"], ["script", "run a script"],
+  ["area", "a hazard"], ["stop", "stop them"], ["script", "run a script"],
 ];
 
 /** "opens Cellar door", "turns Lamp off", "sets off Spike pit"… (`name` names the thing by id). */
@@ -46,7 +45,6 @@ export function describeOutcome(o: TriggerOutcome, name: (kind: TriggerOutcome["
     case "secret": return `reveals ${name("secret", o.secret)}`;
     case "discovery": return `reveals ${name("discovery", o.discovery)}`;
     case "area": return o.to === "set off" ? `sets off ${name("area", o.area)}` : `turns ${name("area", o.area)} ${o.to}`;
-    case "trap": return `sets off ${name("trap", o.trap)}`;
     case "stop": return "stops them";
     case "script": return "runs a script";
   }

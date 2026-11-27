@@ -21,7 +21,7 @@ test("traps become dormant hazards: what set them off, who, how often, stops, fo
   saveTrap(spent, { name: "Floor", springs: ["enter"], who: "", often: "once", damage: "1d6", damage_type: "", save_attr: "", save_dc: 12, save_half: 1, effects: [], stops: 1, find_dc: 14 });
   markTrapSprung(spent, 3);
   const trig = addMapTrigger(lv, { shape: "rect", x: 9, y: 9, w: 1, h: 1 }, "Plate");
-  saveMapTrigger(trig, { name: "Plate", springs: ["enter"], who: "", often: "always", outcomes: [{ kind: "trap", trap: lever }, { kind: "trap", trap: spent }, { kind: "stop" }], interact: false });
+  saveMapTrigger(trig, { name: "Plate", springs: ["enter"], who: "", often: "always", outcomes: [{ kind: "trap", trap: lever }, { kind: "trap", trap: spent }, { kind: "stop" }] as never, interact: false }); // outcomes as an older campaign had them
 
   trapsToHazards();
 

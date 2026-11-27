@@ -1,8 +1,11 @@
 import { test } from "node:test";
+import { addLastingArea, getLastingArea } from "@/lib/db/areas";
+import { UNTIL_REMOVED, areaFromDrawn } from "@/lib/aoe";
+import type { Hazard } from "@/lib/hazards";
 import assert from "node:assert/strict";
 import { character, level } from "./seed";
 import { addLight, listLights } from "@/lib/db/mapThings";
-import { addMapTrigger, addTrap, getMapTrigger, getTrap, saveMapTrigger, saveTrap } from "@/lib/db/traps";
+import { addMapTrigger, getMapTrigger, saveMapTrigger } from "@/lib/db/traps";
 import { addSecret, getVars, listSecrets } from "@/lib/db/story";
 import { addStructure, getDoor, listStructures, setDoorLocked } from "@/lib/db/maps";
 import { placeCharacterToken } from "@/lib/db/tokens";
@@ -12,6 +15,7 @@ import type { TriggerOutcome } from "@/lib/triggers";
 import { LIGHT_KINDS } from "@/lib/maps";
 
 const lv = level();
+const stones = (o: Partial<Hazard>): Omit<Hazard, "id"> => ({ name: "Falling stones", look: "fog", noLook: true, area: o.area!, ends: UNTIL_REMOVED, damage: "5", damageType: "bludgeoning", save: "agility", dc: 99, half: true, activation: "dormant", setOffBy: [], byTrigger: true, activeFor: "instant", often: "once", visibility: "hidden", findDc: 18, ...o });
 const wire = { shape: "line" as const, x1: 3, y1: -2, x2: 3, y2: 3 };
 const trigger = (outcomes: TriggerOutcome[], t: Partial<{ springs: ("enter" | "start" | "end")[]; who: "" | "party" | "hostile"; often: "once" | "each" | "always" }> = {}, area: typeof wire | { shape: "rect"; x: number; y: number; w: number; h: number } = wire) => {
   const id = addMapTrigger(lv, area);
@@ -47,30 +51,31 @@ test("crossing a tripwire fires it once, and it can stop them", () => {
   assert.equal(triggersOnStep(lv, tok, { x: 2, y: 0 }, { x: 3, y: 0 }).filter((f) => f.trigger.id === t.id).length, 0, "once");
 });
 
-test("a pressure plate sets off a trap elsewhere: it springs on whoever stands in it, and they're told", () => {
+test("a pressure plate sets off a dormant hazard elsewhere: it springs on whoever stands in it, and they're told", () => {
   const l2 = level("Hall");
   const victim = placeCharacterToken(l2, character("Bram", { health: "20" }), 10, 10);
   const walker = placeCharacterToken(l2, character("Cass", { health: "20" }), 0, 0);
-  const trapId = addTrap(l2, { shape: "rect", x: 9, y: 9, w: 3, h: 3 });
-  saveTrap(trapId, { name: "Falling stones", springs: [], who: "", often: "once", damage: "5", damage_type: "bludgeoning", save_attr: "", save_dc: 12, save_half: 1, effects: [], stops: 0, find_dc: 18 });
+  const hz = addLastingArea(l2, stones({ area: areaFromDrawn({ shape: "rect", x: 9, y: 9, w: 3, h: 3 }) }));
   const plate = addMapTrigger(l2, { shape: "rect", x: 1, y: 0, w: 1, h: 1 });
-  saveMapTrigger(plate, { name: "Plate", springs: ["enter"], who: "", often: "once", outcomes: [{ kind: "trap", trap: trapId }] });
+  saveMapTrigger(plate, { name: "Plate", springs: ["enter"], who: "", often: "once", outcomes: [{ kind: "area", area: hz, to: "set off" }] });
   const fired = triggersOnStep(l2, walker, { x: 0, y: 0 }, { x: 1, y: 0 });
   assert.equal(fired.length, 1);
   assert.equal(tokenHealth(victim)!.current, 15);
   assert.equal(tokenHealth(walker)!.current, 20);
   assert.match(fired[0].told.get(victim)![0], /Falling stones/);
-  assert.ok(getTrap(trapId)!.seen_by?.includes(victim), "whoever it caught knows it's there");
-  assert.equal(getTrap(trapId)!.found, 0, "not found by everyone: only by those who saw it");
+  const h = getLastingArea(hz) as Hazard;
+  assert.ok(h.seenBy?.includes(victim), "whoever it caught knows it's there");
+  assert.ok(!h.found, "not found by everyone: only by those who saw it");
 });
 
-test("set off with no one in it, a once-only trap still goes off and is spent", () => {
+test("set off with no one in it, a once-only hazard still goes off and is spent", () => {
   const l3 = level("Empty");
-  const trapId = addTrap(l3, { shape: "rect", x: 9, y: 9, w: 1, h: 1 });
-  fireTrigger(l3, { id: 0, name: "Lever", area: wire, springs: [], who: "", often: "always", outcomes: [{ kind: "trap", trap: trapId }], sprung: [] }, null);
-  assert.deepEqual(getTrap(trapId)!.sprung, [0]);
-  assert.equal(getTrap(trapId)!.found, 0, "gone off with no one there to see: still a secret");
-  assert.deepEqual(getTrap(trapId)!.seen_by, []);
+  const hz = addLastingArea(l3, stones({ area: areaFromDrawn({ shape: "rect", x: 9, y: 9, w: 1, h: 1 }) }));
+  fireTrigger(l3, { id: 0, name: "Lever", area: wire, springs: [], who: "", often: "always", outcomes: [{ kind: "area", area: hz, to: "set off" }], sprung: [] }, null);
+  const h = getLastingArea(hz) as Hazard;
+  assert.deepEqual(h.sprung, [0]);
+  assert.equal(h.spent, true);
+  assert.deepEqual(h.seenBy, [], "gone off with no one there to see: still a secret");
 });
 
 test("a trigger that fires when a move ends in it", () => {

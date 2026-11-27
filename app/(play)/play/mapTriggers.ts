@@ -16,7 +16,9 @@ import { describeOutcome, type MapTrigger } from "@/lib/triggers";
 import type { Point } from "@/lib/visibility";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
-import { setOffTrap } from "./traps";
+import { setOffHazard } from "./hazards";
+import { isActive, type Hazard } from "@/lib/hazards";
+import { getGameTime } from "@/lib/db/calendar";
 import { catchInArea } from "./areas";
 import { getLastingArea, setLastingAreaOff, spreadFire } from "@/lib/db/areas";
 import { inArea } from "@/lib/aoe";
@@ -44,12 +46,14 @@ export function fireTrigger(levelId: number, t: MapTrigger, tokenId: number | nu
       if (d) revealDiscovery(d);
     } else if (o.kind === "discovery") revealDiscovery(o.discovery);
     else if (o.kind === "area") {
-      // On or off; on, or set off: it catches whoever is in it now.
+      // A hazard: switched off; switched on (an active one catches whoever is in it now); set off (a dormant one
+      // springs, an active one catches whoever is in it now, whatever its timings).
       if (o.to !== "set off") setLastingAreaOff(o.area, o.to === "off");
-      const l = o.to === "off" ? undefined : getLastingArea(o.area);
-      if (l && !l.off) for (const tok of listTokens(levelId)) if (inArea(l.area, { x: tok.col + 0.5, y: tok.row + 0.5 })) told.set(tok.id, [...(told.get(tok.id) ?? []), catchInArea(levelId, l, tok.id)]);
+      const l = o.to === "off" ? undefined : (getLastingArea(o.area) as Hazard | undefined);
+      if (l && !l.off && l.activation === "dormant" && o.to === "set off") for (const s of setOffHazard(levelId, l)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
+      else if (l && isActive(l, getGameTime())) for (const tok of listTokens(levelId)) if (inArea(l.area, { x: tok.col + 0.5, y: tok.row + 0.5 })) told.set(tok.id, [...(told.get(tok.id) ?? []), catchInArea(levelId, l, tok.id)]);
       spreadFire(levelId);
-    } else if (o.kind === "trap") for (const s of setOffTrap(levelId, o.trap)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
+    }
     else if (o.kind === "script") {
       try { runGameScript(o.script, levelId); } catch (e) {
         if (!(e instanceof ScriptError)) throw e;

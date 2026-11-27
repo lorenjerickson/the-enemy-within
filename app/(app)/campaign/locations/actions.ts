@@ -764,7 +764,6 @@ function cleanOutcome(v: unknown): TriggerOutcome | null {
     case "effect": return id("effect") ? { kind: "effect", effect: id("effect")!, on: !!o.on } : null;
     case "secret": return id("secret") ? { kind: "secret", secret: id("secret")! } : null;
     case "discovery": return id("discovery") ? { kind: "discovery", discovery: id("discovery")! } : null;
-    case "trap": return id("trap") ? { kind: "trap", trap: id("trap")! } : null;
     case "stop": return { kind: "stop" };
     case "script": {
       const script = String(o.script ?? "").trim();
