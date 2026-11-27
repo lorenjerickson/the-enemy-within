@@ -8,7 +8,9 @@ import { listTraps, markTrapSprung } from "@/lib/db/traps";
 import { logSessionEvent } from "@/lib/db/sessions";
 import { fightersOn } from "@/lib/combat";
 import { resistancesOf } from "@/lib/creatureChanges";
-import { afterResist, combineResist } from "@/lib/conditions";
+import { afterResist, combineResist, type Condition } from "@/lib/conditions";
+import { NO_SAVE_DC } from "@/lib/aoe";
+import type { RollAction } from "@/lib/db/rolls";
 import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { severity } from "@/lib/roundStory";
@@ -26,54 +28,63 @@ export interface Sprung {
   player: string; // for whoever set it off: how bad, and their own damage
 }
 
+/** What springing does, whatever sprang (a trap, a dormant hazard): its damage and save against it, its effects, whether it stops them. */
+export type SpringSpec = { name: string; damage: string | null; damageType: string; saveAttr: string; dc: number; half: boolean; effects: Condition[]; stops: boolean };
+
 /**
- * A trap springs on a token: it's spent (for them), whoever saw it knows it's there, and its save, damage and effects
- * land. Its checks (its damage save; or, without one, its effects' own saves) are one throw: a player is asked for it
- * and it lands when the roll comes in (this again, with `rolled`); the GM's creatures roll now.
+ * Something sprang on a token: its checks (its damage save; or, without one, its effects' own saves) are one throw (a
+ * player is asked and it lands when the roll comes in: this again, with `rolled`; the GM's creatures roll now), then
+ * its damage and effects land. What the GM's log and the player are told.
  */
-export function springTrap(levelId: number, trap: Trap, tokenId: number, rolled?: number): Sprung {
-  const token = listTokens(levelId).find((t) => t.id === tokenId);
-  const name = token?.name ?? "Someone";
-  if (rolled === undefined) {
-    markTrapSprung(trap.id, tokenId);
-    witnessTrap(levelId, trap, [tokenId]); // no secret any more to whoever saw it
-  }
-  const effects = trap.effects.flatMap((id) => { const c = getCondition(id); return c ? [c] : []; });
-  const hasSave = !!trap.save_attr && !!trap.damage, attr = trap.save_attr as Attribute;
-  const checks: Check[] = hasSave ? [{ attr, dc: trap.save_dc, decides: trap.save_half ? "halves the damage" : "avoids the damage" }] : effects.flatMap(effectCheck);
-  const totalOf = throwFor(levelId, tokenId, trap.name, checks, { kind: "trapSave", levelId, trapId: trap.id, tokenId }, rolled);
+export function landSprung(levelId: number, tokenId: number, t: SpringSpec, action: RollAction, rolled?: number): { gm: string; player: string } {
+  const name = listTokens(levelId).find((x) => x.id === tokenId)?.name ?? "Someone";
+  const hasSave = !!t.saveAttr && !!t.damage && t.dc < NO_SAVE_DC, attr = t.saveAttr as Attribute;
+  const checks: Check[] = hasSave ? [{ attr, dc: t.dc, decides: t.half ? "halves the damage" : "avoids the damage" }] : t.effects.flatMap(effectCheck);
+  const totalOf = throwFor(levelId, tokenId, t.name, checks, action, rolled);
   if (!totalOf) {
-    const line = `${name} sets off ${trap.name} (waiting for their roll).`;
+    const line = `${name} sets off ${t.name} (waiting for their roll).`;
     logSessionEvent(line);
-    return { trap, tokenId, stops: !!trap.stops, gm: line, player: `You set off a trap (${trap.name})! Roll your ${checks[0].attr} save.${trap.stops ? " You stop where you are." : ""}` };
+    return { gm: line, player: `You set off a trap (${t.name})! Roll your ${checks[0].attr} save.${t.stops ? " You stop where you are." : ""}` };
   }
   const save = hasSave ? { total: totalOf(attr) } : null;
-  const saved = !!save && save.total >= trap.save_dc;
+  const saved = !!save && save.total >= t.dc;
   const gm: string[] = [], you: string[] = [];
-  if (save) gm.push(`${trap.save_attr} ${save.total} vs DC ${trap.save_dc}${saved ? " (saved)" : ""}`);
+  if (save) gm.push(`${t.saveAttr} ${save.total} vs DC ${t.dc}${saved ? " (saved)" : ""}`);
   const h = tokenHealth(tokenId);
-  if (trap.damage && h) {
-    const rolled = Math.max(0, rollDice(trap.damage)), before = saved ? (trap.save_half ? Math.floor(rolled / 2) : 0) : rolled;
-    const r = trap.damage_type ? combineResist(resistancesOf(tokenId, levelId)[trap.damage_type]) : null, n = afterResist(before, r);
+  if (t.damage && h) {
+    const dice = Math.max(0, rollDice(t.damage)), before = saved ? (t.half ? Math.floor(dice / 2) : 0) : dice;
+    const r = t.damageType ? combineResist(resistancesOf(tokenId, levelId)[t.damageType]) : null, n = afterResist(before, r);
     if (n > 0) {
       const next = takeDamage(h, n);
       saveTokenHealth(tokenId, next);
-      gm.push(`${n}${trap.damage_type ? ` ${trap.damage_type}` : ""} damage${r ? ` (${r})` : ""}${next.current <= 0 ? ", down" : ""}`);
+      gm.push(`${n}${t.damageType ? ` ${t.damageType}` : ""} damage${r ? ` (${r})` : ""}${next.current <= 0 ? ", down" : ""}`);
       you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
   // Effects hang off its damage save when it has one (they land if the damage did, no saves of their own); else each rolls its own.
-  const hangs = hasSave, lands = !hangs || !saved || !!trap.save_half;
-  if (lands) for (const found of effects) {
+  const hangs = hasSave, lands = !hangs || !saved || t.half;
+  if (lands) for (const found of t.effects) {
     const { c, note } = hangs ? { c: found, note: "" } : landsOn(tokenId, found, totalOf); // else the effect's own save, from the same throw
     if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c);
     gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
     you.push(`you're ${c.name.toLowerCase()}`);
   }
-  if (trap.stops) you.push("you stop where you are");
-  logSessionEvent(`${name} sets off ${trap.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`);
-  return { trap, tokenId, stops: !!trap.stops, gm: `${name} sets off ${trap.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`, player: `You set off a trap (${trap.name})! ${you.join(", ").replace(/^./, (c) => c.toUpperCase()) || "Nothing seems to happen"}.` };
+  if (t.stops) you.push("you stop where you are");
+  const line = `${name} sets off ${t.name}${gm.length ? `: ${gm.join("; ")}` : ""}.`;
+  logSessionEvent(line);
+  return { gm: line, player: `You set off a trap (${t.name})! ${you.join(", ").replace(/^./, (c) => c.toUpperCase()) || "Nothing seems to happen"}.` };
+}
+
+/** A trap springs on a token: it's spent (for them), whoever saw it knows it's there, and it lands (`landSprung`). */
+export function springTrap(levelId: number, trap: Trap, tokenId: number, rolled?: number): Sprung {
+  if (rolled === undefined) {
+    markTrapSprung(trap.id, tokenId);
+    witnessTrap(levelId, trap, [tokenId]); // no secret any more to whoever saw it
+  }
+  const effects = trap.effects.flatMap((id) => { const c = getCondition(id); return c ? [c] : []; });
+  const r = landSprung(levelId, tokenId, { name: trap.name, damage: trap.damage, damageType: trap.damage_type, saveAttr: trap.save_attr, dc: trap.save_dc, half: !!trap.save_half, effects, stops: !!trap.stops }, { kind: "trapSave", levelId, trapId: trap.id, tokenId }, rolled);
+  return { trap, tokenId, stops: !!trap.stops, ...r };
 }
 
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre

@@ -30,6 +30,7 @@ import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { getTrap, listTraps, setTrapFound } from "@/lib/db/traps";
 import { springTrap } from "./traps";
+import { hazardRolled } from "./hazards";
 import { getCondition } from "@/lib/db/effects";
 import { distanceToTrap } from "@/lib/traps";
 import { interactablesNear } from "@/lib/triggers";
@@ -293,6 +294,11 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     success = true;
     outcome = `${a.source}: ${lines.join("; ") || "no effect"}.`;
     logSessionEvent(`${me0?.name ?? who} rolls against ${a.source}: ${lines.join("; ")}.`);
+  }
+  if (a.kind === "hazardSave") {
+    // A dormant hazard that sprang on them (out of combat): it lands now, with their throw.
+    success = true;
+    outcome = hazardRolled(a.levelId, a.hazardId, a.tokenId, scored.total);
   }
   if (a.kind === "trapSave") {
     // A trap that sprang on them (out of combat): it lands now, with their throw.

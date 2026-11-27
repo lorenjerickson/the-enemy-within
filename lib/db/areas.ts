@@ -4,6 +4,7 @@ import { db } from "@/lib/db/connection";
 import { getGameTime } from "@/lib/db/calendar";
 import type { Exposures, Exposure } from "@/lib/exposure";
 import { listEffects } from "@/lib/db/mapThings";
+import { isActive, type Hazard } from "@/lib/hazards";
 
 export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): number {
   const { name, ends, ...spec } = a;
@@ -35,7 +36,8 @@ export function inFog(levelId: number, p: { x: number; y: number }): boolean {
  * areas design, Q7). A fire effect's area is the circle inside its rectangle; its id is the effect's, negated.
  */
 export function listHazards(levelId: number): LastingArea[] {
-  return [...listLastingAreas(levelId).filter((l) => !l.off), ...fireHazards(listEffects(levelId))];
+  const now = getGameTime(); // those doing something now: switched on, not spent, always active or triggered and still active (dormant ones wait in hazards.ts)
+  return [...listLastingAreas(levelId).filter((l) => isActive(l, now)), ...fireHazards(listEffects(levelId))];
 }
 
 /** One lasting area (or none, gone or run out). */
@@ -80,7 +82,7 @@ export function setLastingAreaFound(id: number): void {
 }
 
 /** The GM changes a lasting area (everything but where it is). */
-export function updateLastingArea(id: number, a: Omit<LastingArea, "id">): void {
+export function updateLastingArea(id: number, a: Omit<Hazard, "id">): void {
   const { name, ends, ...spec } = a;
   db.prepare<[string, number, string, number]>("UPDATE hazards SET name = ?, ends = ?, spec = ? WHERE id = ?").run(name, ends, JSON.stringify(spec), id);
 }

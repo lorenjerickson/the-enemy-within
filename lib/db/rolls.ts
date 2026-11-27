@@ -23,7 +23,8 @@ export type RollAction =
   | { kind: "improvise"; id: number } // the roll an improvisation needs (its outcome shown when it plays out)
   | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean }
   | { kind: "trapSave"; levelId: number; trapId: number; tokenId: number } // out of combat: the one throw for a trap that sprang on them
-  | { kind: "landSave"; levelId: number; tokenId: number; source: string; effects: number[] }; // out of combat: the one throw against effects landing from an item or improvisation
+  | { kind: "landSave"; levelId: number; tokenId: number; source: string; effects: number[] }
+  | { kind: "hazardSave"; levelId: number; hazardId: number; tokenId: number }; // out of combat: the one throw for a dormant hazard that sprang on them // out of combat: the one throw against effects landing from an item or improvisation
 
  // out of combat: a save against a lasting area they walked into (left, stayed in)
 
