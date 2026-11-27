@@ -12,7 +12,7 @@ import { mayCatch, setsOff, spring, type Hazard } from "@/lib/hazards";
 import { seesSpot } from "@/lib/sight";
 import { allegianceOf } from "@/lib/sides";
 import { movementBlockers, type Point } from "@/lib/visibility";
-import { stepsInto } from "./areas";
+import { areasOnStep, stepsInto } from "./areas";
 import { landSprung } from "./traps";
 
 export interface HazardSprung { hazard: Hazard; tokenId: number; stops: boolean; gm: string; player: string }
@@ -54,4 +54,14 @@ export function hazardsWhereStopped(levelId: number, tokenId: number, at: Point)
   if (!token) return [];
   const walls = movementBlockers(listStructures(levelId)), side = allegianceOf(token);
   return dormant(levelId).filter((h) => setsOff(h, "end") && mayCatch(h, tokenId, side) && caughtBy(h.area, centre(at), walls)).map((h) => springHazard(levelId, h, tokenId));
+}
+
+/**
+ * One step of a walk through every hazard on the level: dormant ones it sets off spring (and may stop the walk); if it
+ * goes on, active ones it comes into, or leaves, catch the walker (areas.ts). What they're told, and whether it stops.
+ */
+export function hazardsStep(levelId: number, tokenId: number, from: Point, to: Point): { told: string[]; stops: boolean } {
+  const sprung = hazardsOnStep(levelId, tokenId, from, to), told = sprung.map((s) => s.player);
+  if (sprung.some((s) => s.stops)) return { told, stops: true };
+  return { told: [...told, ...areasOnStep(levelId, tokenId, from, to)], stops: false };
 }
