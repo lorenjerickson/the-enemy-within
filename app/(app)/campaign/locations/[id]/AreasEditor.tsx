@@ -2,7 +2,7 @@
 
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
-import { AREA_FIRES, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
+import { AREA_FIRES, NO_SAVE_DC, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
 import { removeArea, saveAreaSettings, setAreaAlight, switchArea } from "../actions";
 import type { TrapShape } from "./trapDraw";
@@ -36,14 +36,14 @@ function AreaSettings({ locationId, area: a, effects, now, sounds }: { locationI
         <select name="look" defaultValue={a.drawn && !a.damageType ? a.look : ""} className="select select-xs w-auto"><option value="">from the damage type</option>{EFFECT_KINDS.map((k) => <option key={k} value={k}>{EFFECT_LABELS[k]}</option>)}</select>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="opacity-70">Save</span>
-        <select name="save" defaultValue={a.save} className="select select-xs w-auto">{ATTRIBUTES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}</select>
+        <span className="opacity-70">Save against its damage</span>
+        <select name="save" defaultValue={a.dc >= NO_SAVE_DC ? "" : a.save} className="select select-xs w-auto"><option value="">none (the damage always lands)</option>{ATTRIBUTES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}</select>
         <span className="opacity-70">DC</span>
-        <input name="dc" type="number" min={1} max={40} defaultValue={a.dc} className="input input-xs w-16" />
+        <input name="dc" type="number" min={1} max={40} defaultValue={a.dc >= NO_SAVE_DC ? 12 : a.dc} className="input input-xs w-16" />
         <label className="flex items-center gap-1"><input type="checkbox" name="half" defaultChecked={a.half} className="checkbox checkbox-xs" />half on a success (else none)</label>
       </div>
       <fieldset className="space-y-1">
-        <legend className="opacity-70">Puts on whoever fails the save</legend>
+        <legend className="opacity-70">Puts on: with damage and a save against it, when the damage lands (full or half); otherwise each effect rolls its own save</legend>
         {effects.length ? (
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {effects.map((e) => <label key={e.id} className="flex items-center gap-1"><input type="checkbox" name="effect" value={e.id} defaultChecked={has.has(e.id)} className="checkbox checkbox-xs" />{e.name}</label>)}

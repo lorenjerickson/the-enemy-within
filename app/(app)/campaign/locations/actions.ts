@@ -18,7 +18,7 @@ import { revealAfterStep } from "../../../(play)/play/hiding";
 import { audioFromForm, imageFromForm } from "@/lib/images";
 import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, resetTrap, saveTrap, setTrapFound } from "@/lib/db/traps";
 import { listEffectDefs } from "@/lib/db/effects";
-import { AREA_FIRES, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires } from "@/lib/aoe";
+import { AREA_FIRES, NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires } from "@/lib/aoe";
 import { db } from "@/lib/db/connection";
 import { addLastingArea, getLastingArea, igniteAreas, removeLastingArea, setLastingAreaOff, spreadFire, updateLastingArea } from "@/lib/db/areas";
 import { getCondition } from "@/lib/db/effects";
@@ -668,7 +668,7 @@ export async function saveAreaSettings(locationId: number, id: number, formData:
     damageType,
     look,
     save: ((ATTRIBUTES as readonly string[]).includes(text("save")) ? text("save") : "agility") as never,
-    dc: int("dc", 1, 40, 12),
+    dc: text("save") ? int("dc", 1, 40, 12) : NO_SAVE_DC, // no save against its damage: it always lands
     half: !!formData.get("half"),
     fires: fires.length ? fires : ["enter"],
     lingers: !!formData.get("lingers"),

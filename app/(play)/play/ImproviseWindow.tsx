@@ -6,7 +6,7 @@ import { describeOutcome, type TriggerOutcome } from "@/lib/triggers";
 import type { Agreed, ImproviseOutcome, ImproviseRoll } from "@/lib/improvise";
 import { AddOutcome, type TriggerThings } from "../../(app)/campaign/locations/[id]/TriggersEditor";
 import { gmAgreeImprovisation, gmDropImprovisation } from "./gmActions";
-import { AREA_FIRES } from "@/lib/aoe";
+import { AREA_FIRES, NO_SAVE_DC } from "@/lib/aoe";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
 import type { AreaSettings, Template } from "@/lib/improvise";
@@ -103,10 +103,9 @@ function AreaOutcome({ value, onChange, c }: { value: Extract<ImproviseOutcome, 
         <span className="opacity-70">Damage</span>
         <input className="input input-xs w-16" placeholder="1d6" value={s.damage ?? ""} onChange={(e) => set({ damage: e.target.value.trim() || null })} />
         <select className="select select-xs w-auto" value={s.damageType ?? ""} onChange={(e) => set({ damageType: e.target.value || undefined })}><option value="">untyped</option>{DAMAGE_TYPES.map((d) => <option key={d} value={d}>{d}</option>)}</select>
-        <span className="opacity-70">save</span>
-        <select className="select select-xs w-auto" value={s.save} onChange={(e) => set({ save: e.target.value as AreaSettings["save"] })}>{ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)}</option>)}</select>
-        <span className="opacity-70">DC</span>
-        <input type="number" min={1} max={40} className="input input-xs w-14" value={s.dc} onChange={(e) => set({ dc: Number(e.target.value) })} />
+        <span className="opacity-70">save against it</span>
+        <select className="select select-xs w-auto" value={s.dc >= NO_SAVE_DC ? "" : s.save} onChange={(e) => set(e.target.value ? { save: e.target.value as AreaSettings["save"], dc: s.dc >= NO_SAVE_DC ? 12 : s.dc } : { dc: NO_SAVE_DC })}><option value="">none</option>{ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)}</option>)}</select>
+        {s.dc < NO_SAVE_DC && <><span className="opacity-70">DC</span><input type="number" min={1} max={40} className="input input-xs w-14" value={s.dc} onChange={(e) => set({ dc: Number(e.target.value) })} /></>}
       </div>
       <div className="flex flex-wrap items-center gap-x-2">
         <span className="opacity-70">Catches whoever</span>

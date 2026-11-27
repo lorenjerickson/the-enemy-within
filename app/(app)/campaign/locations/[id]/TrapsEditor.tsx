@@ -37,14 +37,14 @@ function TrapSettings({ locationId, trap: t, effects }: { locationId: number; tr
         <select name="damage_type" defaultValue={t.damage_type} className="select select-xs w-auto"><option value="">untyped</option>{DAMAGE_TYPES.map((d) => <option key={d} value={d}>{d}</option>)}</select>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="opacity-70">Save</span>
-        <select name="save_attr" defaultValue={t.save_attr} className="select select-xs w-auto"><option value="">none (it always lands)</option>{ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)}</option>)}</select>
+        <span className="opacity-70">Save against its damage</span>
+        <select name="save_attr" defaultValue={t.save_attr} className="select select-xs w-auto"><option value="">none (the damage always lands)</option>{ATTRIBUTES.map((a) => <option key={a} value={a}>{cap(a)}</option>)}</select>
         <span className="opacity-70">DC</span>
         <input name="save_dc" type="number" min={1} max={40} defaultValue={t.save_dc} className="input input-xs w-16" />
         <label className="flex items-center gap-1"><input type="checkbox" name="save_half" defaultChecked={!!t.save_half} className="checkbox checkbox-xs" />half on a success (else none)</label>
       </div>
       <fieldset className="space-y-1">
-        <legend className="opacity-70">Puts on whoever fails the save (or anyone it springs on, with no save)</legend>
+        <legend className="opacity-70">Puts on: with damage and a save against it, when the damage lands (full or half); otherwise each effect rolls its own save</legend>
         {effects.length ? (
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {effects.map((e) => <label key={e.id} className="flex items-center gap-1"><input type="checkbox" name="effect" value={e.id} defaultChecked={t.effects.includes(e.id)} className="checkbox checkbox-xs" />{e.name}</label>)}
