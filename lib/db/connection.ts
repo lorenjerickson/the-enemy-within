@@ -553,10 +553,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS session_members (
   PRIMARY KEY (session_id, user_id)
 )`);
 
-// ---------- Lasting areas ----------
+// ---------- Hazards (lib/hazards.ts; claude/hazards-design.md) ----------
 
-// An area an action left on the map for a while (a fire wall); it's gone once game time passes `ends`.
-db.exec(`CREATE TABLE IF NOT EXISTS lasting_areas (
+// A place on the map that does something to whoever is in it: drawn by the GM, left by an action (a fire wall) or an
+// improvisation; gone once game time passes `ends`. Was `lasting_areas` (renamed 2026-11-27, backlog X).
+const tableExists = (t: string) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+if (tableExists("lasting_areas") && !tableExists("hazards")) db.exec("ALTER TABLE lasting_areas RENAME TO hazards");
+db.exec(`CREATE TABLE IF NOT EXISTS hazards (
   id INTEGER PRIMARY KEY,
   level_id INTEGER NOT NULL,
   name TEXT NOT NULL,

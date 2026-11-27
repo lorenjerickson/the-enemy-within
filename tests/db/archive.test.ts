@@ -52,3 +52,13 @@ test("an import with extra or missing columns still loads; other formats are ref
   const empty = zipAt("empty.zip", zipSync({ "readme.txt": strToU8("hi") }));
   await assert.rejects(importCampaignFile(empty), /campaign.json is missing/);
 });
+
+test("an older export's lasting_areas come back as hazards (the table was renamed)", async () => {
+  const files = unzipSync(exportCampaign());
+  const json = JSON.parse(new TextDecoder().decode(files["campaign.json"]));
+  delete json.tables.hazards;
+  json.tables.lasting_areas = [{ id: 41, level_id: 1, name: "Old smoke", ends: 1e9, spec: JSON.stringify({ name: "Old smoke", look: "fog" }) }];
+  files["campaign.json"] = strToU8(JSON.stringify(json));
+  await importCampaignFile(zipAt("old.zip", zipSync(files)));
+  assert.equal(db.prepare<[], { name: string }>("SELECT name FROM hazards WHERE id = 41").get()?.name, "Old smoke");
+});

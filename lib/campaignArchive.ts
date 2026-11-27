@@ -82,6 +82,9 @@ export async function importCampaignFile(zipPath: string): Promise<{ tables: num
 }
 
 /** Empties every campaign table and refills it from an export (and logs everyone out). */
+/** Tables renamed since older exports were made: old name → new. */
+const RENAMED: Record<string, string> = { lasting_areas: "hazards" };
+
 function replaceTables(json: CampaignJson): { tables: number; rows: number } {
   if (json.format !== ARCHIVE_FORMAT) throw new Error(`Unknown export format "${json.format}"`);
   const here = new Set(campaignTables());
@@ -91,7 +94,8 @@ function replaceTables(json: CampaignJson): { tables: number; rows: number } {
   try {
     db.transaction(() => {
       for (const t of here) db.prepare(`DELETE FROM "${t}"`).run();
-      for (const [t, list] of Object.entries(json.tables)) {
+      for (const [was, list] of Object.entries(json.tables)) {
+        const t = RENAMED[was] ?? was; // an older export's table under its new name
         if (!here.has(t)) continue;
         const cols = columnsOf(t);
         tables++;
