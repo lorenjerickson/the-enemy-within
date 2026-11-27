@@ -112,3 +112,12 @@ test("an area attack can have a save against its damage: kept on saving and open
   assert.equal(fieldsFromAnswers(answer({ ...a, damageSave: false })).save_dc, 99, "no save: everyone caught takes it");
   assert.match(card(a), /agility save \(DC 13\)|Agility save/i);
 });
+
+test("an effect's tuned copy is kept with the action, comes back when it's opened, and the card reads it", () => {
+  const severe = { id: 7, name: "Severe poison", description: "", modifiers: [], duration: "rounds" as const, rounds: 6, save_attr: "" as const, save_dc: 12 } as never;
+  const a = answer({ affects: ["effect"], effects: [7], copies: { 7: severe } });
+  const f = fieldsFromAnswers(a);
+  assert.equal(f.conditions[0].copy?.name, "Severe poison");
+  assert.equal(answersFromAction(f).copies[7]?.name, "Severe poison");
+  assert.match(card(a), /Severe poison/);
+});

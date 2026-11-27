@@ -37,3 +37,11 @@ test("locked parts can't change: which save, damage types, what kind of rule; ba
   assert.throws(() => tune(poisoned, { save_dc: 99 }), /from 1 to 40/);
   assert.throws(() => tune(poisoned, { name: "  " }), /blank/);
 });
+
+test("retune: the server keeps only the tunable parts of a copy a form sent", async () => {
+  const { retune } = await import("@/lib/effectCopy");
+  const posted = { ...poisoned, name: "Severe poison", rounds: 6, apply_save_attr: "agility" as const, modifiers: [{ ...poisoned.modifiers[0], value: "2d6", damage_type: "fire" }, poisoned.modifiers[1]] as Modifier[] };
+  const kept = retune(poisoned, posted);
+  assert.deepEqual([kept.name, kept.rounds, kept.apply_save_attr], ["Severe poison", 6, "fortitude"], "the save's ability stays");
+  assert.deepEqual([(kept.modifiers[0] as { value: string }).value, (kept.modifiers[0] as { damage_type: string }).damage_type], ["2d6", "poison"], "the damage type stays");
+});

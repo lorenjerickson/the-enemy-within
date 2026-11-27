@@ -32,7 +32,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
               <span className="text-sm opacity-70">{actionSentence(gearOf(a, (id) => conditions.get(id)))}</span>
               {a.description && <div className="text-sm opacity-60">{a.description}</div>}
             </summary>
-            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, a.conditions)} itemOwned={"item_id" in owner} />
+            <ActionInterview action={submitAction.bind(null, owner, a.id)} initial={a} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, a.conditions)} itemOwned={"item_id" in owner} catalog={effects} />
           </details>
           <form action={deleteAction.bind(null, owner, a.id)}>
             <button className="btn btn-ghost btn-xs">Remove</button>
@@ -41,7 +41,7 @@ export default function ActionsSection({ owner, actions }: { owner: ActionOwner;
       ))}
       <details key={actions.length}>
         <summary className="btn btn-ghost btn-xs">+ Add action</summary>
-        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, [])} itemOwned={"item_id" in owner} />
+        <ActionInterview action={submitAction.bind(null, owner, null)} conditions={effects.map(asCondition)} effectOptions={effectOptions(effects, [])} itemOwned={"item_id" in owner} catalog={effects} />
       </details>
     </div>
   );

@@ -76,3 +76,13 @@ export function tune<T extends Tuned>(e: T, changes: Record<string, string | num
 
 /** Whether a copy differs from the catalog effect it came from (in anything it may change). */
 export const isTuned = (copy: Tuned, catalog: Tuned): boolean => tunablesOf(copy).some((t, i) => tunablesOf(catalog)[i]?.value !== t.value);
+
+/**
+ * A copy as the server keeps it from one a form sent: only what a copy may change is taken from `posted` (each checked
+ * by `tune`), onto `base` (the use's copy so far, or the catalog's). Anything else in `posted` is ignored.
+ */
+export function retune<T extends Tuned>(base: T, posted: Tuned): T {
+  const now = new Map(tunablesOf(posted).map((t) => [t.path, t.value]));
+  const changes = Object.fromEntries(tunablesOf(base).filter((t) => now.has(t.path) && now.get(t.path) !== t.value).map((t) => [t.path, now.get(t.path)!]));
+  return tune(base, changes);
+}

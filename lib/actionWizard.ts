@@ -4,6 +4,7 @@ import type { Boost } from "@/lib/actions";
 import { NO_SAVE_DC } from "@/lib/aoe";
 import type { ActionFields } from "@/lib/actionCard";
 import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
+import type { Effect } from "@/lib/conditions";
 
 export type ActionType = "action" | "bonus" | "reaction" | "free";
 export type Who = "self" | "one" | "several" | "area";
@@ -38,7 +39,8 @@ export interface Answers {
   aid: string;
   durationAmount: number; // defend, aid, a lasting area
   durationUnit: ActionFields["duration_unit"];
-  effects: number[]; // catalog effects (each lasts as the catalog says)
+  effects: number[]; // catalog effects, each held as this action's own copy
+  copies: Record<number, Effect>; // those copies (tuned, maybe; backlog W); one not here is copied from the catalog when saved
   // Kept as they were (not asked): an older action's other bonuses, roll mode, when a lasting area catches.
   keep: Pick<ActionFields, "roll" | "area_fires" | "roll_grants" | "conditions"> & { boosts: Boost[] }; // conditions: on the other side (an attack that also helps its user)
 }
@@ -101,7 +103,7 @@ export function fieldsFromAnswers(a: Answers): ActionFields {
     area_lasts: area && a.lasts ? 1 : 0, area_fires: a.keep.area_fires, area_at: area && a.shape === "circle" && a.place === "here" ? "self" : "",
     target_who: isSelf(a) ? "" : a.targetWho, target_count: several ? a.count : "one", target_n: several ? a.n : 1,
     targets: isSelf(a) ? "self" : a.targetWho === "enemy" || attack ? "others" : "anyone",
-    conditions: [...(has("effect") ? a.effects.map((id) => ({ id, on })) : []), ...a.keep.conditions.filter((c) => c.on !== on)],
+    conditions: [...(has("effect") ? a.effects.map((id) => ({ id, on, ...(a.copies[id] ? { copy: a.copies[id] } : {}) })) : []), ...a.keep.conditions.filter((c) => c.on !== on)],
   };
 }
 
@@ -128,6 +130,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
     aidTarget: aid?.target ?? "", aid: aid?.value.replace(/^\+/, "") ?? "",
     durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit || "minute",
     effects: (f?.conditions ?? []).filter((c) => c.on === (self ? "self" : "target")).map((c) => c.id),
+    copies: Object.fromEntries((f?.conditions ?? []).filter((c) => c.on === (self ? "self" : "target") && c.copy).map((c) => [c.id, c.copy!])),
     keep: { roll: f?.roll ?? "normal", area_fires: f?.area_fires ?? "", roll_grants: f?.roll_grants ?? [], boosts: boosts.filter((b) => !used.has(b)), conditions: (f?.conditions ?? []).filter((c) => c.on !== (self ? "self" : "target")) },
   };
 }

@@ -12,6 +12,8 @@ import { DAMAGE_TYPES, DURATION_UNITS, ROLL_MODES, type Boost, type DamageType, 
 import { isModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 import { withCopies } from "@/lib/db/effects";
+import { retune } from "@/lib/effectCopy";
+import type { Effect } from "@/lib/conditions";
 
 export type ArtworkKind = "item" | "creature" | "texture" | "map" | "tile" | "overhead token" | "side token";
 
@@ -84,6 +86,7 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
   if (!DURATION_UNITS.includes(duration_unit)) throw new Error("Invalid duration unit");
   const duration_amount = Math.max(1, Math.round(Number(formData.get("duration_amount")) || 1));
 
+  const postedCopies = (() => { try { return JSON.parse(String(formData.get("condition_copies") ?? "{}")) as Record<string, Effect>; } catch { return {}; } })();
   saveAction(actionId, owner, {
     name: text("name"),
     description: text("description"),
@@ -107,8 +110,10 @@ export async function submitAction(owner: ActionOwner, actionId: number | null, 
     duration_amount,
     duration_unit,
     // Each effect a copy (backlog W): kept ones keep theirs, new ones are copied from the catalog as it is now.
+    // A copy tuned in the form: only what a copy may change is taken from it (retune), onto the copy so far.
     conditions: withCopies((["self", "target"] as const).flatMap((on) => formData.getAll(`condition_${on}`).map((v) => ({ id: Number(v), on })).filter((c) => Number.isInteger(c.id) && c.id > 0)),
-      actionId === null ? [] : listActions(owner).find((x) => x.id === actionId)?.conditions ?? [], (was, now) => was.id === now.id && (was as { on?: string }).on === now.on),
+      actionId === null ? [] : listActions(owner).find((x) => x.id === actionId)?.conditions ?? [], (was, now) => was.id === now.id && (was as { on?: string }).on === now.on)
+      .map((c) => { const sent = postedCopies[`${c.on}:${c.id}`]; return sent && c.copy ? { ...c, copy: retune(c.copy, sent) } : c; }),
   });
   revalidatePath(ownerPath(owner));
 }

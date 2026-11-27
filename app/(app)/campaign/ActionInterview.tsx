@@ -15,6 +15,8 @@ import { AFFECTS, affectsFor, answerLine, type Affect } from "@/lib/actionWizard
 import { ATTRIBUTES } from "@/lib/attributes";
 import EffectChips, { type EffectOption } from "./EffectChips";
 import { Choices, NumberBox } from "./interviewParts";
+import TuneEffect from "./TuneEffect";
+import type { Effect } from "@/lib/conditions";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
   attack: ["Attack", "Deals damage"],
@@ -57,12 +59,13 @@ function HiddenFields({ f }: { f: ActionFields }) {
       {f.boosts.map((b, i) => <span key={`b${i}`}><input type="hidden" name={`${pre(b.on)}boost_target`} value={b.target} /><input type="hidden" name={`${pre(b.on)}boost_value`} value={b.value} /></span>)}
       {f.roll_grants.map((g, i) => <span key={`g${i}`}><input type="hidden" name={`${pre(g.on)}grant_roll`} value={g.roll} /><input type="hidden" name={`${pre(g.on)}grant_mode`} value={g.mode} /></span>)}
       {f.conditions.map((c, i) => <input key={`c${i}`} type="hidden" name={`condition_${c.on}`} value={c.id} />)}
+      <input type="hidden" name="condition_copies" value={JSON.stringify(Object.fromEntries(f.conditions.filter((c) => c.copy).map((c) => [`${c.on}:${c.id}`, c.copy])))} />
     </>
   );
 }
 
 /** One question at a time, the player's card on top filling in as it's answered; Save at the end. */
-export default function ActionInterview({ action, initial, conditions, effectOptions, itemOwned }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; effectOptions: EffectOption[]; itemOwned?: boolean }) {
+export default function ActionInterview({ action, initial, conditions, effectOptions, itemOwned, catalog = [] }: { action: (f: FormData) => void; initial?: ActionFields; conditions: Condition[]; effectOptions: EffectOption[]; itemOwned?: boolean; catalog?: Effect[] }) {
   const [a, setA] = useState<Answers>(() => answersFromAction(initial));
   const [at, go] = useState<Question>("name");
   // Answered so far: everything for a saved action; for a new one, each question once it's been reached.
@@ -312,6 +315,15 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
           <>
             <div className="text-sm font-semibold">Which effects does it apply{a.affects.includes("attack") ? (a.who === "area" ? " to everyone caught" : " on a hit") : ""}?</div>
             <EffectChips name="" options={effectOptions} initial={a.effects} onChange={(effects) => set({ effects })} />
+            {a.effects.map((id) => {
+              const from = catalog.find((e) => e.id === id), copy = a.copies[id] ?? from;
+              return copy ? (
+                <details key={id} className="text-sm">
+                  <summary className="cursor-pointer">Tune {copy.name} for this action</summary>
+                  <TuneEffect copy={copy} catalog={from} onChange={(c) => set({ copies: { ...a.copies, [id]: c } })} />
+                </details>
+              ) : null;
+            })}
             <p className="text-xs opacity-60">Each lasts, and is resisted, as the catalog says: its rounds, and any save as it lands. Change those in the effect itself.</p>
           </>
         )}
