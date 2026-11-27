@@ -4,6 +4,7 @@ import { UNTIL_REMOVED } from "@/lib/aoe";
 
 import { rearmHazard, removeArea, setAreaAlight, switchArea } from "../actions";
 import type { Hazard } from "@/lib/hazards";
+import type { Effect } from "@/lib/conditions";
 import HazardInterview from "./HazardInterview";
 import type { TrapShape } from "./trapDraw";
 
@@ -14,7 +15,7 @@ const SHAPES: [TrapShape, string, string][] = [
 ];
 
 /** Hazards layer editor: drag a hazard out on the map (a pit, a burning hallway, a pocket of gas); set what it does; switch it on or off, re-arm it, remove it. */
-export default function AreasEditor({ locationId, shape, onShape, areas, effects, now, sounds = [] }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; areas: Hazard[]; effects: { id: number; name: string }[]; now: number; sounds?: { id: number; name: string }[] }) {
+export default function AreasEditor({ locationId, shape, onShape, areas, effects, now, sounds = [] }: { locationId: number; shape: TrapShape; onShape: (s: TrapShape) => void; areas: Hazard[]; effects: Effect[]; now: number; sounds?: { id: number; name: string }[] }) {
   return (
     <div className="space-y-3 text-sm" data-areas-editor>
       <div className="join" role="radiogroup" aria-label="Hazard shape">

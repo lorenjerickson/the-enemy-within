@@ -9,13 +9,15 @@ import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
 import { isDiceFormula } from "@/lib/itemTypes";
 import { Choices, NumberBox } from "../../interviewParts";
 import { saveHazardAnswers } from "../actions";
+import TuneEffect from "../../TuneEffect";
+import type { Effect } from "@/lib/conditions";
 
 /**
  * A hazard as an interview (backlog X), part 1: the card on top in plain words, the answers so far (click one to go
  * back), then one question at a time: name, a preset (new ones), activation, how long it stays active, whom it
  * catches, who it's for, how often, whether it stops them. Saves only these; the rest of the hazard is kept.
  */
-export default function HazardInterview({ locationId, hazard, isNew, effects, sounds, now }: { locationId: number; hazard: Hazard; isNew: boolean; effects: { id: number; name: string }[]; sounds: { id: number; name: string }[]; now: number }) {
+export default function HazardInterview({ locationId, hazard, isNew, effects, sounds, now }: { locationId: number; hazard: Hazard; isNew: boolean; effects: Effect[]; sounds: { id: number; name: string }[]; now: number }) {
   const [a, setA] = useState<Answers>(() => answersFromHazard(hazard, now));
   const [at, go] = useState<Question>("name");
   const [seen, setSeen] = useState<Set<Question>>(() => new Set(isNew ? ["name"] : questions(answersFromHazard(hazard))));
@@ -174,6 +176,15 @@ export default function HazardInterview({ locationId, hazard, isNew, effects, so
             <div className="flex max-h-48 flex-wrap gap-x-3 gap-y-1 overflow-y-auto">
               {effects.map((e) => <label key={e.id} className="flex items-center gap-1"><input type="checkbox" className="checkbox checkbox-xs" checked={a.effectIds.includes(e.id)} onChange={(ev) => set({ effectIds: toggle(a.effectIds, e.id, ev.target.checked) })} />{e.name}</label>)}
             </div>
+            {a.effectIds.map((id) => {
+              const from = effects.find((e) => e.id === id), copy = a.effectCopies[id] ?? from;
+              return copy ? (
+                <details key={id}>
+                  <summary className="cursor-pointer">Tune {copy.name} for this hazard</summary>
+                  <TuneEffect copy={copy} catalog={from} onChange={(c) => set({ effectCopies: { ...a.effectCopies, [id]: c } })} />
+                </details>
+              ) : null;
+            })}
             <p className="text-xs opacity-60">With a save against its damage, they land when the damage does (full or half); otherwise each rolls its own save as it lands.</p>
           </>
         )}

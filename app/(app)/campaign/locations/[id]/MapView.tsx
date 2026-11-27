@@ -9,6 +9,7 @@ import { DARK_BELOW, brightEnough } from "@/lib/light";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { snapWallEnd } from "@/lib/wallSnap";
 import type { MapSecret } from "@/lib/db/story";
+import type { Effect } from "@/lib/conditions";
 import type { MapEffect, LightSource, MapControl, MapNote } from "@/lib/db/mapThings";
 import type { AmbientSound, Asset, PositionalSound } from "@/lib/db/media";
 import type { MapStructure, MapTile } from "@/lib/db/maps";
@@ -152,7 +153,7 @@ export default function MapView({
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
-  trapEffects?: { id: number; name: string }[]; // catalog effects lasting rounds, for what traps put on
+  trapEffects?: Effect[]; // catalog effects lasting rounds, for what hazards put on (tuned in place: backlog W)
   triggers?: MapTrigger[]; // the GM's map triggers (players get none)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
   hideWalls: boolean; // the GM has hidden wall lines from their view

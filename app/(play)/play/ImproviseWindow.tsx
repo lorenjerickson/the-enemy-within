@@ -10,11 +10,13 @@ import { AREA_FIRES, NO_SAVE_DC } from "@/lib/aoe";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
 import type { AreaSettings, Template } from "@/lib/improvise";
+import TuneEffect from "@/app/(app)/campaign/TuneEffect";
+import type { Effect } from "@/lib/conditions";
 
 export type ImproviseChoices = {
   things: TriggerThings; // what map changes can work on
   scripts: string[]; // library scripts
-  effects: { id: number; name: string }[]; // catalogue effects (lasting rounds)
+  effects: Effect[]; // catalogue effects (lasting rounds), tuned in place for this improvisation
   tokens: { id: number; name: string }[]; // who an effect can go on
 };
 
@@ -63,7 +65,7 @@ function OutcomeEditor({ value, onChange, c }: { value: ImproviseOutcome; onChan
       {value.kind === "area" && <AreaOutcome value={value} onChange={onChange} c={c} />}
       {value.kind === "effect" && (
         <div className="flex flex-wrap items-center gap-1">
-          <select className="select select-xs w-auto" value={value.effect || ""} onChange={(e) => onChange({ ...value, effect: Number(e.target.value) })}>
+          <select className="select select-xs w-auto" value={value.effect || ""} onChange={(e) => onChange({ ...value, effect: Number(e.target.value), copy: undefined })}>
             <option value="">which effect…</option>
             {c.effects.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
@@ -72,6 +74,15 @@ function OutcomeEditor({ value, onChange, c }: { value: ImproviseOutcome; onChan
             <option value="self">themselves</option>
             {c.tokens.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+          {(() => {
+            const from = c.effects.find((x) => x.id === value.effect), copy = value.copy ?? from;
+            return copy ? (
+              <details className="w-full">
+                <summary className="cursor-pointer text-xs">Tune {copy.name} for this</summary>
+                <TuneEffect copy={copy} catalog={from} onChange={(t) => onChange({ ...value, copy: t })} />
+              </details>
+            ) : null;
+          })()}
         </div>
       )}
     </div>

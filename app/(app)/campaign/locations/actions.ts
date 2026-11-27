@@ -37,6 +37,9 @@ import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
 import { rearm, type Hazard } from "@/lib/hazards";
+import { effectOfCondition, retune } from "@/lib/effectCopy";
+import { catalogCopy } from "@/lib/db/effects";
+import { asCondition, type Effect } from "@/lib/conditions";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -677,7 +680,14 @@ export async function saveHazardAnswers(locationId: number, id: number, patchJso
       return { damage: damage || null, damageType, save: pick(p.save, ATTRIBUTES, "agility"), dc: damage && Number(p.dc) < NO_SAVE_DC ? clampInt(p.dc, 1, 40, 12) : NO_SAVE_DC, half: p.half === true };
     })() : {}),
     ...("buildUp" in p ? { buildUp: clampInt(p.buildUp, 0, 20, 1), decay: clampInt(p.decay, 1, 20, 2), flammable: p.flammable === true } : {}),
-    ...(Array.isArray(p.effectIds) ? { conditions: [...new Set(p.effectIds.map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }) } : {}),
+    // Each effect the hazard's own copy (backlog W): the one it had, or the catalog's now; a tuned one sent from the
+    // interview keeps only what a copy may change (retune).
+    ...(Array.isArray(p.effectIds) ? { conditions: [...new Set(p.effectIds.map(Number))].flatMap((e) => {
+      const had = (h.conditions ?? []).find((c) => c.id === e), base = had ? effectOfCondition(had) : catalogCopy(e);
+      if (!base) return [];
+      const sent = (p.effectCopies as Record<string, Effect> | undefined)?.[e];
+      return [asCondition(sent ? retune(base, sent) : base)];
+    }) } : {}),
     ...("lasts" in p ? { ends: Number(p.lasts) > 0 ? Math.round((getGameTime() + Math.min(100000, Number(p.lasts))) * 1e6) / 1e6 : UNTIL_REMOVED } : {}),
   });
   spreadFire(h.level_id); // a fire now, or flammable next to one

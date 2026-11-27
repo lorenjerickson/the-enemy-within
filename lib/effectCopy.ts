@@ -86,3 +86,9 @@ export function retune<T extends Tuned>(base: T, posted: Tuned): T {
   const changes = Object.fromEntries(tunablesOf(base).filter((t) => now.has(t.path) && now.get(t.path) !== t.value).map((t) => [t.path, now.get(t.path)!]));
   return tune(base, changes);
 }
+
+/** An effect as it was put on (a hazard keeps these) back as the catalog shape that tuning works on. */
+export function effectOfCondition(c: Condition): Effect {
+  const { effects, builtin: _b, ...rest } = c;
+  return { ...rest, duration: "rounds", modifiers: (effects ?? []).flatMap((e) => e.modifiers ?? []) } as Effect;
+}

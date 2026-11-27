@@ -45,3 +45,12 @@ test("retune: the server keeps only the tunable parts of a copy a form sent", as
   assert.deepEqual([kept.name, kept.rounds, kept.apply_save_attr], ["Severe poison", 6, "fortitude"], "the save's ability stays");
   assert.deepEqual([(kept.modifiers[0] as { value: string }).value, (kept.modifiers[0] as { damage_type: string }).damage_type], ["2d6", "poison"], "the damage type stays");
 });
+
+test("an effect as a hazard keeps it (put on) tunes the same as the catalog's", async () => {
+  const { effectOfCondition } = await import("@/lib/effectCopy");
+  const { asCondition } = await import("@/lib/conditions");
+  const e = { id: 4, description: "", ...poisoned } as never;
+  const back = effectOfCondition(asCondition(e));
+  assert.deepEqual(tunablesOf(back).map((t) => [t.path, t.value]), tunablesOf(poisoned).map((t) => [t.path, t.value]));
+  assert.equal(asCondition(tune(back, { rounds: 7 }) as never).rounds, 7);
+});

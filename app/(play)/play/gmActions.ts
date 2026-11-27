@@ -31,6 +31,8 @@ import { ALLEGIANCES } from "@/lib/sides";
 import { setTokenAllegiance } from "@/lib/db/tokens";
 import { syncAurasOn } from "@/lib/auraSync";
 import { addPlanStep, setReady, tokenPlanner, removePlanStep, type StepRequest } from "@/lib/roundPlanServer";
+import { catalogCopy } from "@/lib/db/effects";
+import { retune } from "@/lib/effectCopy";
 
 /**
  * Starts an encounter on the party's map: every player character there is asked to roll initiative, and the GM's
@@ -283,7 +285,13 @@ export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<
     if (o?.kind === "effect" && !o.effect) return { error: "Pick the effect" };
     if (o?.kind === "map" && !o.outcomes.length) return { error: "Add what changes on the map" };
   }
-  agreeImprovisation(Number(id), { ...agreed, seconds: Math.max(0, Math.min(6, Number(agreed.seconds) || 0)) });
+  // An agreed effect is its own copy (backlog W): the catalog's now, with only what a copy may change taken from a tuned one.
+  const copied = (o: Agreed["success"] | undefined) => {
+    if (o?.kind !== "effect") return o;
+    const base = catalogCopy(o.effect);
+    return base ? { ...o, copy: o.copy ? retune(base, o.copy) : base } : o;
+  };
+  agreeImprovisation(Number(id), { ...agreed, success: copied(agreed.success)!, failure: copied(agreed.failure), seconds: Math.max(0, Math.min(6, Number(agreed.seconds) || 0)) });
   startImprovisation(Number(id)); // its roll asked for (or, out of combat with none, it plays out now)
   revalidatePath("/play");
   return {};

@@ -6,6 +6,8 @@
 import { NO_SAVE_DC, UNTIL_REMOVED, type AreaFires } from "@/lib/aoe";
 import type { Attribute } from "@/lib/attributes";
 import type { EffectKind } from "@/lib/effects";
+import type { Effect } from "@/lib/conditions";
+import { effectOfCondition } from "@/lib/effectCopy";
 import type { Hazard, SetOffBy } from "@/lib/hazards";
 import type { TrapOften, TrapWho } from "@/lib/traps";
 
@@ -39,7 +41,8 @@ export interface Answers {
   saveAttr: Attribute;
   saveDc: number;
   half: boolean;
-  effectIds: number[]; // catalog effects (copied onto the hazard when saved)
+  effectIds: number[]; // catalog effects, each held as the hazard's own copy
+  effectCopies: Record<number, Effect>; // those copies (tuned, maybe; backlog W)
   lingers: boolean;
   buildUp: number;
   decay: number;
@@ -63,7 +66,7 @@ export function answersFromHazard(h: Partial<Hazard>, now = 0): Answers {
     fires: h.fires ?? ["enter"], who: h.who ?? "", often: h.often ?? "always", stops: !!h.stops,
     visibility: h.visibility ?? "shown", findDc: h.findDc ?? 14, look: h.noLook ? "none" : h.look ?? "fog", sound: h.sound ?? null, soundHidden: !!h.soundHidden,
     damage: h.damage ?? "", damageType: h.damageType ?? "", damageSave: !!h.damage && (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC, saveAttr: h.save ?? "agility", saveDc: (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC ? h.dc! : 12, half: h.half ?? true,
-    effectIds: (h.conditions ?? []).map((c) => c.id), lingers: !!h.lingers, buildUp: h.buildUp ?? 1, decay: h.decay ?? 2, flammable: !!h.flammable,
+    effectIds: (h.conditions ?? []).map((c) => c.id), effectCopies: Object.fromEntries((h.conditions ?? []).map((c) => [c.id, effectOfCondition(c)])), lingers: !!h.lingers, buildUp: h.buildUp ?? 1, decay: h.decay ?? 2, flammable: !!h.flammable,
     lasts: h.ends === undefined || h.ends >= UNTIL_REMOVED ? 0 : Math.max(0.1, Math.round((h.ends - now) * 10) / 10),
   };
 }
@@ -83,7 +86,7 @@ export function hazardPatch(a: Answers): Partial<Hazard> {
 }
 
 /** What the server finishes from the answers: the catalog effects to copy on, and when it ends (from its own game time). */
-export const hazardExtras = (a: Answers) => ({ effectIds: a.effectIds, lasts: a.lasts });
+export const hazardExtras = (a: Answers) => ({ effectIds: a.effectIds, effectCopies: Object.fromEntries(a.effectIds.filter((id) => a.effectCopies[id]).map((id) => [id, a.effectCopies[id]])), lasts: a.lasts });
 
 /** A preset's answers (it only fills them in: everything stays editable). */
 export function applyPreset(a: Answers, p: Preset): Answers {

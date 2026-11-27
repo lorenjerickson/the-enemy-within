@@ -335,7 +335,7 @@ function improviseChoices(levelId: number): ImproviseChoices {
       area: listLastingAreas(levelId).map((x) => ({ id: x.id, name: x.name })),
     },
     scripts: listLibraryScripts().map((x) => x.name),
-    effects: listEffectDefs().filter((e) => e.duration === "rounds").map(({ id, name }) => ({ id, name })),
+    effects: listEffectDefs().filter((e) => e.duration === "rounds"), // whole: an agreed effect is tuned in place (backlog W)
     tokens: listTokens(levelId).map((t) => ({ id: t.id, name: labels.get(t.id) ?? t.name })),
   };
 }
