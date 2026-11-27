@@ -28,17 +28,19 @@ test("a trap with no save always lands: damage, its effects, found, spent; the p
   assert.match(s.gm, /Annis sets off Spike pit: 6 piercing damage; Hobbled/);
 });
 
-test("a save for half (or none); effects only on a failed save", () => {
+test("a save for half (or none); its effects hang off the damage: they land with half, not when the save stops it", () => {
   const strong = character("Bram", { health: "20", attributes: { agility: 30 } }); // always saves (d20 + 10)
   const tok = placeCharacterToken(lv, strong, 2, 2);
-  const stuck = saveEffectDef(null, { name: "Stuck", description: "", modifiers: [{ kind: "forbid", what: "movement" }], rounds: 2 });
+  const stuck = saveEffectDef(null, { name: "Stuck", description: "", modifiers: [{ kind: "forbid", what: "movement" }], rounds: 2, apply_save_attr: "agility", apply_save_dc: 40 });
   const half = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, effects: [stuck] }))!, tok);
   assert.equal(tokenHealth(tok)!.current, 16);
   assert.match(half.player, /partly get clear/);
-  assert.ok(!listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Stuck"));
-  const none = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, save_half: 0 }))!, tok);
-  assert.equal(tokenHealth(tok)!.current, 16);
+  assert.ok(listAfflictions(lv).get(tok)?.some((a) => a.condition.name === "Stuck"), "half the damage landed, so Stuck did (its own DC 40 save not rolled)");
+  const other = placeCharacterToken(lv, character("Cato", { health: "20", attributes: { agility: 30 } }), 6, 6);
+  const none = springTrap(lv, getTrap(trapWith({ damage: "8", save_attr: "agility", save_dc: 5, save_half: 0, effects: [stuck] }))!, other);
+  assert.equal(tokenHealth(other)!.current, 20);
   assert.match(none.player, /You get clear/);
+  assert.ok(!listAfflictions(lv).get(other)?.some((a) => a.condition.name === "Stuck"), "the save stopped the damage, so nothing hanging off it");
 });
 
 test("walking: stepping in springs it (once), passing beside doesn't; who it's for counts", () => {

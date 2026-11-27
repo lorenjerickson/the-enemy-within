@@ -29,14 +29,25 @@ test("who it's for: a party-only trap lets the GM's creatures through", () => {
   assert.equal(r.trapsSprung.length, 0);
 });
 
-test("a save for half; its effects only on a failed save", () => {
-  const slow = condition(5, "Hobbled", [{ kind: "speed", factor: 0.5 }], { rounds: 2 });
-  const saved = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
-  assert.equal(saved.hp.get(1), 17);
-  assert.ok(!saved.afflictions.get(1)?.length);
+test("a save for half; its effects hang off the damage: half lands them (no saves of their own), a save that stops it stops them", () => {
+  const slow = condition(5, "Hobbled", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "agility", apply_save_dc: 1 }); // would always resist on its own
+  const half = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
+  assert.equal(half.hp.get(1), 17);
+  assert.ok(half.afflictions.get(1)?.some((a) => a.condition.name === "Hobbled"), "half the damage landed, so Hobbled did");
+  const none = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", save_half: 0, given: [slow] })] });
+  assert.equal(none.hp.get(1), 20);
+  assert.ok(!none.afflictions.get(1)?.length);
   const failed = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 5 }) }, { traps: [pit({ save_attr: "agility", given: [slow] })] });
   assert.equal(failed.hp.get(1), 14);
   assert.ok(failed.afflictions.get(1)?.some((a) => a.condition.name === "Hobbled"));
+});
+
+test("a trap with no damage save (or no damage): each effect stands alone, rolling its own save as it lands (Enervate)", () => {
+  const enervated = condition(7, "Enervated", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "fortitude", apply_save_dc: 12 });
+  const tough = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ damage: null, given: [enervated] })] });
+  assert.ok(!tough.afflictions.get(1)?.length, "beat DC 12 on its own save");
+  const weak = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20, save: 5 }) }, { traps: [pit({ damage: null, given: [enervated] })] });
+  assert.ok(weak.afflictions.get(1)?.some((a) => a.condition.name === "Enervated"));
 });
 
 test("a player's character rolls their own save against a trap: the round waits for it", () => {

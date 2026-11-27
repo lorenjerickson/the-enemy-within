@@ -166,3 +166,19 @@ test("an area with no damage of its own (a smoke bomb) hurts no one: not the use
   assert.ok(!r.log.some((l) => /damage \(|is down/.test(l)), r.log.join("\n"));
   assert.ok(r.log.some((l) => /is caught in Popping Smoke/.test(l)), r.log.join("\n"));
 });
+
+test("an area attack's effects hang off its damage save: half lands them without their own save, a save that stops the damage stops them (the poisoned dagger shape)", () => {
+  const poisoned = condition(8, "Poisoned", [{ kind: "boost", target: "attack", value: "-2" }], { rounds: 3, apply_save_attr: "fortitude", apply_save_dc: 1 }); // would always resist on its own
+  const venom = (half: boolean) => fireball({ area: { shape: "circle", ft: 10, dc: 13, save: "agility", half }, statuses: { minutes: 0.1, target: { source: "Venom", boosts: [], grants: [], conditions: [poisoned] } } });
+  const run = (half: boolean) => resolve(
+    [mover(1, { col: 0, row: 0 }, [act("attack", { use: venom(half), aim: aimAt(5, 5) })]), mover(2, { col: 5, row: 5 }), mover(3, { col: 6, row: 5 })],
+    { 1: fighter({ dmg: 8 }), 2: fighter({ save: 15 }), 3: fighter({ save: 5 }) },
+  );
+  const h = run(true);
+  assert.ok(h.afflictions.get(2)?.some((a) => a.condition.name === "Poisoned"), "saved for half: the poison still landed");
+  assert.ok(h.afflictions.get(3)?.some((a) => a.condition.name === "Poisoned"), "failed: landed");
+  const n = run(false);
+  assert.equal(n.hp.get(2), 20);
+  assert.ok(!n.afflictions.get(2)?.some((a) => a.condition.name === "Poisoned"), "the save stopped the damage: no poison");
+  assert.ok(n.afflictions.get(3)?.some((a) => a.condition.name === "Poisoned"));
+});

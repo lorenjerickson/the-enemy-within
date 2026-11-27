@@ -47,10 +47,12 @@ export function springTrap(levelId: number, trap: Trap, tokenId: number): Sprung
       you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
-  if (!saved) for (const id of trap.effects) {
+  // Effects hang off its damage save when it has one (they land if the damage did, no saves of their own); else each rolls its own.
+  const hangs = !!trap.damage && !!save, lands = !hangs || !saved || !!trap.save_half;
+  if (lands) for (const id of trap.effects) {
     const found = getCondition(id);
     if (!found) continue;
-    const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands
+    const { c, note } = hangs ? { c: found, note: "" } : landsOn(tokenId, found); // else the effect's own save as it lands
     if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c);
     gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);

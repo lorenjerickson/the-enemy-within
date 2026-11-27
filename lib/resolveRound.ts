@@ -529,6 +529,13 @@ export function resolveMovement(
   const didAttack = (id: number, sec: number) => {
     for (const a of [...(afflicted.get(id) ?? [])]) if (a.condition.ends_on_attack && !whileWithin(a)) release(id, a, "attack", sec);
   };
+  /**
+   * Effects hanging off a save against damage (Q): that save decides them, so they roll none of their own; they land
+   * if the damage did (a failed save, or one that only halves it). Without a damage save, each effect rolls its own
+   * save as it lands.
+   */
+  const hanging = (c: Condition): Condition => ({ ...c, apply_save_attr: "" });
+  const hangOff = (s: Status | undefined): Status | undefined => s && { ...s, conditions: s.conditions?.map(hanging) };
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
   const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null) => {
     if (!status || down.has(id)) return;
@@ -603,7 +610,8 @@ export function resolveMovement(
     log.splice(before, 0, `${sec} s: ${l.name} ${how}: ${total} damage, ${l.save} save DC ${l.dc}.`);
     for (const h of hits) {
       caughtIn.add(key(h.id));
-      if (h.outcome === "hit") for (const c of l.conditions ?? []) afflict(h.id, c, l.by ?? null, sec, undefined, inside && when !== "leave" ? l.id : undefined);
+      const hangs = !!l.damage && l.dc < NO_SAVE_DC; // its effects hang off its damage save (else each has its own)
+      if (h.outcome === "hit" || h.outcome === "half" || (!hangs && h.outcome === "save")) for (const c of l.conditions ?? []) afflict(h.id, hangs ? hanging(c) : c, l.by ?? null, sec, undefined, inside && when !== "leave" ? l.id : undefined);
     }
     fx.push({ look: "area", from: 0, area: l.area, hits, lasting: true });
   };
@@ -631,7 +639,9 @@ export function resolveMovement(
     log.push(`${sec} s: ${nameOf(id)} sets off ${t.name}${parts.length ? ` (${parts.join("; ")})` : ""}.`);
     story.splice(story.length - (down.has(id) && dmg ? 1 : 0), 0, { sec, k: "trap", who: id, name: t.name, outcome: !s ? "hit" : saved ? (dmg ? "half" : "save") : "hit", hurt: hurt(id, dmg), ...(dmg ? { dmg } : {}), ...(t.stops ? { stops: true } : {}) }); // before their "down"
     if (down.has(id)) log.push(`${sec} s: ${nameOf(id)} is down.`);
-    if (!saved) for (const c of t.given) afflict(id, c, null, sec);
+    const hangs = !!t.damage && !!s; // its effects hang off its damage save (else each has its own)
+    if (!hangs) for (const c of t.given) afflict(id, c, null, sec);
+    else if (!saved || t.save_half) for (const c of t.given) afflict(id, hanging(c), null, sec); // the damage landed (full or half)
   };
   /** Traps springing on whoever (not down, of the side it's for, not spent for them) `catches` says, at `sec`. */
   const trapsFor = (when: "enter" | "start" | "end", sec: number, catches: (t: RoundTrap, id: number) => boolean) => {
@@ -1305,7 +1315,8 @@ export function resolveMovement(
           if (st) {
             leave(m.tokenId, st.self, st.minutes, sec, m.tokenId);
             didAttack(m.tokenId, sec);
-            for (const h of hits) if (h.outcome === "hit") leave(h.id, st.target, st.minutes, sec, m.tokenId);
+            const hangs = !!step.use.damage && area.dc < NO_SAVE_DC; // effects hang off its damage save (else each has its own)
+            for (const h of hits) if (h.outcome === "hit" || h.outcome === "half" || (!hangs && h.outcome === "save")) leave(h.id, hangs ? hangOff(st.target) : st.target, st.minutes, sec, m.tokenId);
           }
         }
         // A lasting one stays on the map, catching whoever is in it at the end of each round.

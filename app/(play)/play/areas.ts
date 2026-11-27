@@ -50,8 +50,10 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
       you.push(`${saved ? "you partly get clear but are" : "you're"} hurt: ${severity(n / Math.max(1, h.maximum))} (-${n})${next.current <= 0 ? ", and you go down" : ""}`);
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
-  if (!saved) for (const found of l.conditions ?? []) {
-    const { c, note } = landsOn(tokenId, found); // the effect's own save as it lands
+  // Effects hang off its damage save when it has one (they land if the damage did, no saves of their own); else each rolls its own.
+  const hangs = !!l.damage && !!save, lands = !hangs || !saved || !!l.half;
+  if (lands) for (const found of l.conditions ?? []) {
+    const { c, note } = hangs ? { c: found, note: "" } : landsOn(tokenId, found); // else the effect's own save as it lands
     if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c, whileIn ? l.id : undefined);
     gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);
