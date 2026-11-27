@@ -721,6 +721,8 @@ export async function removeArea(locationId: number, id: number) {
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
+const clampInt = (v: unknown, lo: number, hi: number, d: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
+
 /**
  * The hazard interview's answers (how it's set off, whom it catches, a preset's settings) saved onto the hazard; the
  * rest of it is kept. Every field is checked: only these, of these kinds.
@@ -750,7 +752,20 @@ export async function saveHazardAnswers(locationId: number, id: number, patchJso
     ...("noLook" in p ? { noLook: p.noLook === true } : {}),
     ...("look" in p && (EFFECT_KINDS as readonly string[]).includes(String(p.look)) ? { look: p.look as EffectKind } : {}),
     ...("lingers" in p ? { lingers: p.lingers === true } : {}),
+    // Part 2 (what it does, who sees and hears it, how long): only when the interview sent it.
+    ...("findDc" in p ? { findDc: clampInt(p.findDc, 1, 40, 14) } : {}),
+    ...("sound" in p ? { sound: Number(p.sound) > 0 ? Number(p.sound) : undefined, soundHidden: p.soundHidden === true } : {}),
+    ...("damage" in p ? (() => {
+      const damage = String(p.damage ?? "").toLowerCase().replace(/\s/g, "");
+      if (damage && !isDiceFormula(damage) && !/^\d+$/.test(damage)) throw new Error("Damage must be dice (2d6) or a number");
+      const damageType = (DAMAGE_TYPES as readonly string[]).includes(String(p.damageType)) ? String(p.damageType) : undefined;
+      return { damage: damage || null, damageType, save: pick(p.save, ATTRIBUTES, "agility"), dc: damage && Number(p.dc) < NO_SAVE_DC ? clampInt(p.dc, 1, 40, 12) : NO_SAVE_DC, half: p.half === true };
+    })() : {}),
+    ...("buildUp" in p ? { buildUp: clampInt(p.buildUp, 0, 20, 1), decay: clampInt(p.decay, 1, 20, 2), flammable: p.flammable === true } : {}),
+    ...(Array.isArray(p.effectIds) ? { conditions: [...new Set(p.effectIds.map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }) } : {}),
+    ...("lasts" in p ? { ends: Number(p.lasts) > 0 ? Math.round((getGameTime() + Math.min(100000, Number(p.lasts))) * 1e6) / 1e6 : UNTIL_REMOVED } : {}),
   });
+  spreadFire(h.level_id); // a fire now, or flammable next to one
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
