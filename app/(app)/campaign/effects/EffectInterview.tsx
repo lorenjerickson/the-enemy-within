@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { Condition, Duration, Modifier } from "@/lib/conditions";
-import { checkRule, compile, render, type Filled } from "@/lib/effectGrammar";
-import { conditionParts } from "@/lib/actionSummary";
-import { ENDS_ON, answerLine, answersFromEffect, lifecycleFromAnswers, lifecyclePosted, questions, type Answers, type Question } from "@/lib/effectWizard";
+import type { Duration, Modifier } from "@/lib/conditions";
+import { checkRule, render, type Filled } from "@/lib/effectGrammar";
+
+import { ENDS_ON, answerLine, answersFromEffect, effectCard, lifecyclePosted, questions, type Answers, type Question } from "@/lib/effectWizard";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { Choices, NumberBox } from "../interviewParts";
 import EffectBuilder from "./EffectBuilder";
@@ -16,7 +16,6 @@ const DURATIONS: [Duration, string, string][] = [
 ];
 
 type Saved = Partial<Answers> & Record<string, unknown>;
-const SHAKE_WHEN: Record<Answers["shakeWhen"], string> = { end: "at the end of each round", start: "at the start of each round", damaged: "whenever they take damage" };
 const WHY: Partial<Record<Question, string>> = { name: "Give it a name.", rules: "Finish or remove the unfinished rule.", duration: "Say how many rounds." };
 
 /** An ability to save with. */
@@ -44,7 +43,6 @@ export default function EffectInterview({ action, initial, initialRules, builtin
   const qs = questions(a);
   const i = Math.max(0, qs.indexOf(at));
   const last = i === qs.length - 1;
-  const conditionId = (name: string) => conditions.find((c) => c.name === name)?.id ?? -1;
   const valid = (q: Question) => q === "name" ? !!a.name.trim()
     : q === "duration" ? a.duration !== "rounds" || a.rounds >= 1
     : q === "rules" ? !!builtinRules || a.rules.every((r) => !checkRule(r))
@@ -52,10 +50,6 @@ export default function EffectInterview({ action, initial, initialRules, builtin
   const ok = valid(at), allOk = qs.every(valid);
   const next = () => { if (ok && !last) setAt(qs[i + 1]); };
 
-  // The card: what it does and its save as it lands, in the words an action's card uses for it.
-  const modifiers = builtinRules?.modifiers ?? a.rules.filter((r) => !checkRule(r)).flatMap((r) => compile(r, conditionId).modifiers);
-  const c: Condition = { ...lifecycleFromAnswers(a), id: 0, name: a.name || "This effect", description: a.description, effects: [{ id: 0, name: a.name, description: a.description, modifiers }] };
-  const { how, save } = conditionParts(c, "them");
   const ruleText = (r: Filled) => render(r);
 
   return (
@@ -74,10 +68,7 @@ export default function EffectInterview({ action, initial, initialRules, builtin
       <div className="rounded-box border border-base-300 bg-base-100 p-3 text-sm" aria-live="polite">
         <div className="mb-1 text-xs uppercase opacity-60">The card reads</div>
         <p className="font-semibold">{a.name || "This effect"}</p>
-        <p>{how ? how[0].toUpperCase() + how.slice(1) : "Does nothing yet."}{save ? `, ${save}` : ""}.</p>
-        {a.duration === "rounds" && (a.shake || a.endsOn.length > 0) && (
-          <p>{[a.shake ? `They can end it with ${a.shakeAttr === "agility" || a.shakeAttr === "intellect" ? "an" : "a"} ${a.shakeAttr[0].toUpperCase() + a.shakeAttr.slice(1)} save (DC ${a.shakeDc}) ${SHAKE_WHEN[a.shakeWhen]}${a.shakeAction ? " or by spending their action" : ""}${a.shakeNeeded > 1 ? `, ${a.shakeNeeded} successes needed` : ""}` : "", a.endsOn.length ? `It ends early when ${answerLine("ends", a)[1]}` : ""].filter(Boolean).join(". ")}.</p>
-        )}
+        {effectCard(a, builtinRules?.sentences ?? a.rules.filter((r) => !checkRule(r)).map((r) => render(r))).map((l, k) => <p key={k}>{l}</p>)}
       </div>
       <ol className="space-y-0.5 text-sm" data-answers>
         {qs.filter((q) => seen.has(q) && q !== at).length > 0 && qs.map((q) => {

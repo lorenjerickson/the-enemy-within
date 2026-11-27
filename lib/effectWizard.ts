@@ -84,3 +84,28 @@ export function answerLine(q: Question, a: Answers, ruleText: (r: Filled) => str
     case "again": return ["Put on again", a.again === "stack" ? `Stacks${a.stackLimit ? ` (up to ${a.stackLimit})` : ""}` : a.again === "ignore" ? "Nothing happens" : "Starts over"];
   }
 }
+
+const YOU_ENDS: Record<EndsOn, string> = { damage: "you take damage", attack: "you attack", trigger: "one of its triggers fires", concentration: "the source stops concentrating on it" };
+const SHAKE_WHEN: Record<Answers["shakeWhen"], string> = { end: "At the end of each round", start: "At the start of each round", damaged: "Whenever you take damage" };
+const throwOf = (attr: Attribute, dc: number) => `${cap(attr)} saving throw against a DC ${dc}`;
+const listed = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`);
+
+/**
+ * The effect's card, from the point of view of whoever it's put on ("Your speed is halved for 3 rounds, unless you
+ * make a successful Fortitude saving throw against a DC 12."). `rules`: its rules as the builder's sentences (already
+ * second person: "Your speed is halved.").
+ */
+export function effectCard(a: Answers, rules: string[]): string[] {
+  const said = rules.map((r) => r.trim().replace(/\.$/, "")).filter(Boolean);
+  const rounds = a.duration === "rounds";
+  const what = said.length ? said.map((s, i) => (i ? s.charAt(0).toLowerCase() + s.slice(1) : s)).join("; ") : "It does nothing yet";
+  const lasts = rounds ? ` for ${a.rounds} round${a.rounds === 1 ? "" : "s"}` : a.duration === "equipped" ? " while you have it equipped" : "";
+  const resist = rounds && a.resist ? (a.resistOutcome === "halves" ? `, or half as long if you make a successful ${throwOf(a.resistAttr, a.resistDc)}` : `, unless you make a successful ${throwOf(a.resistAttr, a.resistDc)}`) : "";
+  // One rule: the timing rides on it ("Your speed is halved for 3 rounds, unless…"); several: a sentence of its own.
+  const out = said.length > 1 ? [`${what}.`, ...(lasts || resist ? [`It lasts${lasts}${resist}.`] : [])] : [`${what}${lasts}${resist}.`];
+  if (rounds && a.shake) out.push(`${SHAKE_WHEN[a.shakeWhen]} you can end the effect with a ${throwOf(a.shakeAttr, a.shakeDc)}${a.shakeAction ? ", or spend your action to try" : ""}${a.shakeNeeded > 1 ? `; it takes ${a.shakeNeeded} successes` : ""}.`);
+  if (rounds && a.endsOn.length) out.push(`It ends early if ${listed(a.endsOn.map((k) => YOU_ENDS[k]))}.`);
+  if (rounds && a.again === "stack") out.push(`If it's put on you again, another one runs alongside${a.stackLimit ? ` (up to ${a.stackLimit})` : ""}.`);
+  if (rounds && a.again === "ignore") out.push("Putting it on you again does nothing while it lasts.");
+  return out;
+}

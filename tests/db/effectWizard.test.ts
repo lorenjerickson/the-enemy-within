@@ -33,3 +33,19 @@ test("each answer has a short line", () => {
     ["Shaken off", "Fortitude DC 12 at the end of each round, or with their action"], ["Also ends when", "they take damage"], ["Put on again", "Stacks (up to 2)"],
   ]);
 });
+
+test("the card speaks to whoever it's put on", async () => {
+  const { effectCard } = await import("@/lib/effectWizard");
+  const a = { ...answersFromEffect({ name: "Enervated", rounds: 3 }), resist: true, resistAttr: "fortitude" as const, resistDc: 12, shake: true, shakeAttr: "fortitude" as const, shakeDc: 12 };
+  assert.deepEqual(effectCard(a, ["Your speed is halved."]), [
+    "Your speed is halved for 3 rounds, unless you make a successful Fortitude saving throw against a DC 12.",
+    "At the end of each round you can end the effect with a Fortitude saving throw against a DC 12.",
+  ]);
+  assert.deepEqual(effectCard({ ...a, resist: false, shake: false, endsOn: ["damage", "attack"], again: "stack", stackLimit: 3 }, ["Your speed is halved.", "When you make an attack roll, subtract 2 from the roll."]), [
+    "Your speed is halved; when you make an attack roll, subtract 2 from the roll.",
+    "It lasts for 3 rounds.",
+    "It ends early if you take damage or you attack.",
+    "If it's put on you again, another one runs alongside (up to 3).",
+  ]);
+  assert.deepEqual(effectCard({ ...a, duration: "equipped" }, ["Your defense increases by 1."]), ["Your defense increases by 1 while you have it equipped."]);
+});
