@@ -21,7 +21,8 @@ export type RollAction =
   | { kind: "rolloff"; levelId: number; tokenId: number } // a roll-off for a contested spot
   | { kind: "conditionSave"; levelId: number; tokenId: number; key: string } // a save against a condition as it lands, mid-round
   | { kind: "improvise"; id: number } // the roll an improvisation needs (its outcome shown when it plays out)
-  | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean };
+  | { kind: "areaSave"; levelId: number; areaId: number; tokenId: number; leaving?: boolean; staying?: boolean }
+  | { kind: "trapSave"; levelId: number; trapId: number; tokenId: number }; // out of combat: the one throw for a trap that sprang on them
 
  // out of combat: a save against a lasting area they walked into (left, stayed in)
 

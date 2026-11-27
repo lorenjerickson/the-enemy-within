@@ -18,7 +18,7 @@ import { rollDice } from "@/lib/dice";
 import { takeDamage, saveTokenHealth, tokenHealth } from "@/lib/health";
 import { severity } from "@/lib/roundStory";
 import { movementBlockers, type Point, type Segment } from "@/lib/visibility";
-import { applyConditionNow, landsOn } from "./workOutRound";
+import { applyConditionNow, effectCheck, landsOn, throwFor, type Check } from "./workOutRound";
 
 const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corner (col, row) to its centre
 
@@ -26,17 +26,16 @@ const centre = (p: Point) => ({ x: p.x + 0.5, y: p.y + 0.5 }); // a token's corn
 export function catchInArea(levelId: number, l: LastingArea, tokenId: number, leaving = false, staying = false, saveTotal?: number): string {
   const doing = leaving ? ["leaves", "leave"] : staying ? ["is still in", "are still in"] : ["walks into", "walk into"];
   setLastingAreaFound(l.id); // hidden: walking into it finds it
-  // A player's character rolls its own save: asked now, settled when the roll comes in (this again, with its total).
-  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = saveTotal === undefined && l.dc < NO_SAVE_DC && tok?.character_id ? getCharacterPlayer(tok.character_id) : null; // no save: nothing to roll
-  if (player && tok?.character_id) {
-    requestRoll(player, tok.character_id, saveRollFor(tokenId, l.save, `${l.name}: ${l.save} save (DC ${l.dc})`), { kind: "areaSave", levelId, areaId: l.id, tokenId, ...(leaving ? { leaving } : {}), ...(staying ? { staying } : {}) });
-    return `You ${doing[1]} ${l.name}! Roll your ${l.save} save.`;
-  }
+  // Its checks (its damage save; or, without one, its effects' own saves) are one throw: a player's character is asked
+  // for it, settled when the roll comes in (this again, with its total); the GM's creatures roll now.
+  const hasSave = !!l.damage && l.dc < NO_SAVE_DC;
+  const checks: Check[] = hasSave ? [{ attr: l.save, dc: l.dc, decides: l.half ? "halves the damage" : "avoids the damage" }] : (l.conditions ?? []).flatMap(effectCheck);
+  const totalOf = throwFor(levelId, tokenId, l.name, checks, { kind: "areaSave", levelId, areaId: l.id, tokenId, ...(leaving ? { leaving } : {}), ...(staying ? { staying } : {}) }, saveTotal);
+  if (!totalOf) return `You ${doing[1]} ${l.name}! Roll your ${checks[0].attr} save.`;
   const exposures = l.lingers && !leaving ? getExposures(levelId) : null, extra = exposures ? exposureExtra(exposures, tokenId, harmOf(l)) : 0; // lingering: plus the build-up so far
   const whileIn = (l.fires ?? []).includes("inside") && !leaving; // its effects last while they're in it
   const name = listTokens(levelId).find((t) => t.id === tokenId)?.name ?? "Someone";
-  const f = fightersOn(levelId).get(tokenId);
-  const save = saveTotal !== undefined ? { total: saveTotal } : f && l.dc < NO_SAVE_DC ? f.save(l.save) : null;
+  const save = hasSave ? { total: totalOf(l.save) } : null;
   const saved = !!save && save.total >= l.dc;
   const gm: string[] = [save ? `${l.save} ${save.total} vs DC ${l.dc}${saved ? " (saved)" : ""}` : ""].filter(Boolean), you: string[] = [];
   const h = tokenHealth(tokenId);
@@ -51,9 +50,9 @@ export function catchInArea(levelId: number, l: LastingArea, tokenId: number, le
     } else you.push(saved ? "you get clear" : "it does you no harm");
   } else if (saved) you.push("you get clear");
   // Effects hang off its damage save when it has one (they land if the damage did, no saves of their own); else each rolls its own.
-  const hangs = !!l.damage && !!save, lands = !hangs || !saved || !!l.half;
+  const hangs = hasSave, lands = !hangs || !saved || !!l.half;
   if (lands) for (const found of l.conditions ?? []) {
-    const { c, note } = hangs ? { c: found, note: "" } : landsOn(tokenId, found); // else the effect's own save as it lands
+    const { c, note } = hangs ? { c: found, note: "" } : landsOn(tokenId, found, totalOf); // else the effect's own save, from the same throw
     if (!c) { gm.push(note); you.push(`you shake off ${found.name.toLowerCase()}`); continue; }
     const happened = applyConditionNow(levelId, tokenId, c, whileIn ? l.id : undefined);
     gm.push(`${note || c.name}${happened.length ? ` (${happened.join(", ")})` : ""}`);

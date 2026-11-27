@@ -5,7 +5,7 @@ import { playImprovisation } from "./improvising";
 import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas } from "@/lib/db/areas";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
 import { clearRoundPlans, getPendingRound, getRoundPlan, setLastRoundLog, setPendingRound, setReplay } from "@/lib/db/rounds";
-import { closeRollRequest, closeRollOffRequests, openRollOffRequest, requestRoll, saveRollResult } from "@/lib/db/rolls";
+import { closeRollRequest, closeRollOffRequests, openRollOffRequest, requestRoll, saveRollResult, type RollAction } from "@/lib/db/rolls";
 import { getEncounter, getEncounterWaiting, saveEncounter } from "@/lib/db/encounters";
 import { getGameTime, setGameTime } from "@/lib/db/calendar";
 import { isGridlessLevel, listStructures } from "@/lib/db/maps";
@@ -24,7 +24,7 @@ import { saveRollFor, skillCheckFor, speedFps, effectiveMaxHp } from "@/lib/crea
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
 import { allegianceOf, relation } from "@/lib/sides";
 import { reveal as revealHidden } from "./hiding";
-import type { Attributes } from "@/lib/attributes";
+import type { Attribute, Attributes } from "@/lib/attributes";
 import { saveTokenHealth, tokenHealth } from "@/lib/health";
 import { lingers, modifiersOf, type Condition } from "@/lib/conditions";
 import { rollDice } from "@/lib/dice";
@@ -302,13 +302,37 @@ export function rollConditionSaveFor(levelId: number) {
   recordConditionSave(levelId, key, rolled.total);
 }
 
+/** One check a cause asks of someone, for the roll prompt: "Agility vs DC 12 halves the damage". */
+export type Check = { attr: Attribute; dc: number; decides: string };
+export const effectCheck = (c: Condition): Check[] => (c.apply_save_attr ? [{ attr: c.apply_save_attr, dc: c.apply_save_dc ?? 12, decides: `${c.apply_save_outcome === "halves" ? "halves" : "keeps out"} ${c.name}` }] : []);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * One d20 per interaction, out of combat (Q): every check a cause asks of one token is one throw. A player's character
+ * is asked for it (one prompt listing what it decides; null back: settle when the roll comes in, with `rolled`); the
+ * GM's creatures roll now. Back: each check's total by ability (the throw, with that ability's modifier in place of
+ * the first check's).
+ */
+export function throwFor(levelId: number, tokenId: number, name: string, checks: Check[], action: RollAction, rolled?: number): ((attr: Attribute) => number) | null {
+  if (!checks.length) return () => 0;
+  const first = checks[0].attr, f = fightersOn(levelId).get(tokenId);
+  const shifted = (total: number) => (attr: Attribute) => total - (f?.saveMod?.(first) ?? 0) + (f?.saveMod?.(attr) ?? 0);
+  if (rolled !== undefined) return shifted(rolled);
+  const tok = listTokens(levelId).find((t) => t.id === tokenId), player = tok?.character_id ? getCharacterPlayer(tok.character_id) : null;
+  if (player && tok?.character_id) {
+    requestRoll(player, tok.character_id, saveRollFor(tokenId, first, `${name}: ${checks.map((c) => `${cap(c.attr)} vs DC ${c.dc} ${c.decides}`).join(" · ")}`), action);
+    return null;
+  }
+  return shifted(f ? f.save(first).total : 0);
+}
+
 /**
  * An effect's own save as it lands, outside rounds (rolled by the server with their numbers): null if they resist it
  * outright, else the effect to put on (with half its rounds on a "halves" success), and a note for the GM's log.
  */
-export function landsOn(tokenId: number, c: Condition): { c: Condition | null; note: string } {
+export function landsOn(tokenId: number, c: Condition, totalOf?: (attr: Attribute) => number): { c: Condition | null; note: string } {
   if (!c.apply_save_attr) return { c, note: "" };
-  const dc = c.apply_save_dc ?? 12, total = rollSpec(saveRollFor(tokenId, c.apply_save_attr, `${c.apply_save_attr} save against ${c.name} (DC ${dc})`)).total;
+  const dc = c.apply_save_dc ?? 12, total = totalOf ? totalOf(c.apply_save_attr) : rollSpec(saveRollFor(tokenId, c.apply_save_attr, `${c.apply_save_attr} save against ${c.name} (DC ${dc})`)).total;
   const vs = `${c.apply_save_attr} ${total} vs DC ${dc}`;
   if (total < dc) return { c, note: `fails to resist ${c.name} (${vs})` };
   if (c.apply_save_outcome !== "halves") return { c: null, note: `resists ${c.name} (${vs})` };

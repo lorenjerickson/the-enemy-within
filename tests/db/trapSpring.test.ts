@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { character, creature, level } from "./seed";
+import { createUser } from "@/lib/db/users";
+import { db } from "@/lib/db/connection";
+import { getOpenRollRequest } from "@/lib/db/rolls";
 import { addCreatureToken, placeCharacterToken } from "@/lib/db/tokens";
 import { addTrap, getTrap, saveTrap } from "@/lib/db/traps";
 import { listAfflictions, saveEffectDef } from "@/lib/db/effects";
@@ -97,4 +100,26 @@ test("each effect a trap puts on rolls its own save as it lands: resisted, partl
   assert.ok(on.some((a) => a.condition.name === "Pinned"), "failed to resist");
   assert.match(s.gm, /resists Netted \(agility \d+ vs DC 5\)/);
   assert.match(s.player, /shake off netted/i);
+});
+
+test("a player's character rolls its own throw for a trap out of combat: one prompt listing what it decides; it lands when the roll comes in", () => {
+  createUser({ name: "trapP", username: "trapP", contact: "", role: "player" } as never, "pw");
+  const pid = db.prepare<[string], { id: number }>("SELECT id FROM users WHERE username = ?").get("trapP")!.id;
+  const fern = character("Fern", { health: "20" });
+  db.prepare("UPDATE characters SET player_id = ? WHERE id = ?").run(pid, fern);
+  const tok = placeCharacterToken(lv, fern, 7, 7);
+  const net = saveEffectDef(null, { name: "Netted", description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 2, apply_save_attr: "agility", apply_save_dc: 12 });
+  const venom = saveEffectDef(null, { name: "Venom", description: "", modifiers: [{ kind: "speed", factor: 0.5 }], rounds: 2, apply_save_attr: "fortitude", apply_save_dc: 30 });
+  const id = trapWith({ damage: "", effects: [net, venom] });
+  const asked = springTrap(lv, getTrap(id)!, tok);
+  assert.match(asked.player, /Roll your agility save/);
+  assert.equal(tokenHealth(tok)!.current, 20, "nothing yet");
+  const req = getOpenRollRequest(pid)!;
+  assert.deepEqual(req.action, { kind: "trapSave", levelId: lv, trapId: id, tokenId: tok });
+  assert.match(req.spec.label, /Agility vs DC 12 keeps out Netted · Fortitude vs DC 30 keeps out Venom/);
+  const done = springTrap(lv, getTrap(id)!, tok, 25); // their throw
+  const on = listAfflictions(lv).get(tok) ?? [];
+  assert.ok(!on.some((a) => a.condition.name === "Netted"), "25 vs 12");
+  assert.ok(on.some((a) => a.condition.name === "Venom"), "the same throw falls short of 30");
+  assert.match(done.player, /shake off netted/i);
 });

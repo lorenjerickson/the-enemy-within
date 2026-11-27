@@ -28,7 +28,8 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
-import { listTraps, setTrapFound } from "@/lib/db/traps";
+import { getTrap, listTraps, setTrapFound } from "@/lib/db/traps";
+import { springTrap } from "./traps";
 import { distanceToTrap } from "@/lib/traps";
 import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
@@ -283,6 +284,12 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     const l = getLastingArea(a.areaId) ?? listHazards(a.levelId).find((x) => x.id === a.areaId);
     success = !!l && scored.total >= l.dc;
     outcome = l ? catchInArea(a.levelId, l, a.tokenId, a.leaving, a.staying, scored.total) : "It's gone.";
+  }
+  if (a.kind === "trapSave") {
+    // A trap that sprang on them (out of combat): it lands now, with their throw.
+    const t = getTrap(a.trapId);
+    success = !!t && !!t.save_attr && scored.total >= t.save_dc;
+    outcome = t ? springTrap(a.levelId, t, a.tokenId, scored.total).player : "It's gone.";
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).
