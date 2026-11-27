@@ -642,7 +642,7 @@ export async function placeArea(locationId: number, levelId: number, drawn: Trap
   const clean: TrapArea = drawn.shape === "circle" ? { shape: "circle", x: n(drawn.x), y: n(drawn.y), r: Math.max(0.25, n(drawn.r)) }
     : drawn.shape === "rect" ? { shape: "rect", x: n(drawn.x), y: n(drawn.y), w: Math.max(0.25, n(drawn.w)), h: Math.max(0.25, n(drawn.h)) }
     : { shape: "line", x1: n(drawn.x1), y1: n(drawn.y1), x2: n(drawn.x2), y2: n(drawn.y2) };
-  addLastingArea(Number(levelId), { name: "Area", look: "fog", area: areaFromDrawn(clean), damage: null, dc: 12, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["enter"], drawn: true });
+  addLastingArea(Number(levelId), { name: "Hazard", look: "fog", area: areaFromDrawn(clean), damage: null, dc: 12, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["enter"], drawn: true });
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
@@ -664,14 +664,14 @@ export async function saveAreaSettings(locationId: number, id: number, formData:
   updateLastingArea(a.id, {
     ...rest,
     flammable: !!formData.get("flammable"),
-    name: text("name") || "Area",
+    name: formData.has("name") ? text("name") || "Area" : a.name,
     damage: damage || null,
     damageType,
     look,
     save: ((ATTRIBUTES as readonly string[]).includes(text("save")) ? text("save") : "agility") as never,
     dc: text("save") ? int("dc", 1, 40, 12) : NO_SAVE_DC, // no save against its damage: it always lands
     half: !!formData.get("half"),
-    fires: fires.length ? fires : ["enter"],
+    fires: formData.has("fires_shown") ? (fires.length ? fires : ["enter"]) : a.fires, // the interview asks this now
     lingers: !!formData.get("lingers"),
     visibility: (["shown", "hidden", "gm"] as const).find((v) => v === text("visibility")) ?? "shown",
     findDc: int("find_dc", 1, 40, 14),
@@ -717,6 +717,40 @@ export async function switchArea(locationId: number, id: number, on: boolean) {
 export async function removeArea(locationId: number, id: number) {
   await requireGm();
   removeLastingArea(Number(id));
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/**
+ * The hazard interview's answers (how it's set off, whom it catches, a preset's settings) saved onto the hazard; the
+ * rest of it is kept. Every field is checked: only these, of these kinds.
+ */
+export async function saveHazardAnswers(locationId: number, id: number, patchJson: string) {
+  await requireGm();
+  const h = getLastingArea(Number(id)) as (Hazard & { level_id: number }) | undefined;
+  if (!h) throw new Error("No such hazard");
+  const p = JSON.parse(String(patchJson)) as Record<string, unknown>;
+  const pick = <T extends string>(v: unknown, ok: readonly T[], d: T): T => (ok.includes(v as T) ? (v as T) : d);
+  const subset = <T extends string>(v: unknown, ok: readonly T[]): T[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is T => ok.includes(x as T)))] : []);
+  const minutes = Number(p.activeMinutes);
+  const { id: _id, level_id: _l, ...rest } = h;
+  updateLastingArea(h.id, {
+    ...rest,
+    name: String(p.name ?? "").trim().slice(0, 80) || "Hazard",
+    activation: pick(p.activation, ["always", "dormant"] as const, "always"),
+    setOffBy: subset(p.setOffBy, ["enter", "start", "end"] as const),
+    byTrigger: p.byTrigger === true,
+    activeFor: pick(p.activeFor, ["instant", "time", "untilOff"] as const, "instant"),
+    activeMinutes: Number.isFinite(minutes) && minutes > 0 ? Math.min(600, minutes) : undefined,
+    fires: subset(p.fires, AREA_FIRES.map(([k]) => k)),
+    who: pick(p.who, ["", "party", "hostile"] as const, ""),
+    often: pick(p.often, ["once", "each", "always"] as const, "always"),
+    stops: p.stops === true,
+    ...("visibility" in p ? { visibility: pick(p.visibility, ["shown", "hidden", "gm"] as const, "shown") } : {}),
+    ...("noLook" in p ? { noLook: p.noLook === true } : {}),
+    ...("look" in p && (EFFECT_KINDS as readonly string[]).includes(String(p.look)) ? { look: p.look as EffectKind } : {}),
+    ...("lingers" in p ? { lingers: p.lingers === true } : {}),
+  });
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }

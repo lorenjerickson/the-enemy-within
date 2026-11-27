@@ -2,10 +2,11 @@
 
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
-import { AREA_FIRES, NO_SAVE_DC, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
 import { EFFECT_KINDS, EFFECT_LABELS } from "@/lib/effects";
 import { rearmHazard, removeArea, saveAreaSettings, setAreaAlight, switchArea } from "../actions";
 import type { Hazard } from "@/lib/hazards";
+import HazardInterview from "./HazardInterview";
 import type { TrapShape } from "./trapDraw";
 
 const SHAPES: [TrapShape, string, string][] = [
@@ -21,14 +22,7 @@ function AreaSettings({ locationId, area: a, effects, now, sounds }: { locationI
   const has = new Set((a.conditions ?? []).map((c) => c.id));
   return (
     <form action={saveAreaSettings.bind(null, locationId, a.id)} className="mt-2 space-y-2 rounded-box border border-base-300 p-2" data-area-settings={a.id}>
-      <input name="name" defaultValue={a.name} placeholder="Name (e.g. Burning hallway)" className="input input-xs w-full" />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="opacity-70">Catches someone who</span>
-        {AREA_FIRES.map(([k, label]) => (
-          <label key={k} className="flex items-center gap-1"><input type="checkbox" name={`fires_${k}`} defaultChecked={(a.fires ?? ["end"]).includes(k)} className="checkbox checkbox-xs" />{label}</label>
-        ))}
-        <span className="text-xs opacity-60">(out of combat: anyone walking into it)</span>
-      </div>
+      <div className="text-xs uppercase opacity-60">What it does (asked in the interview soon)</div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="opacity-70">Damage</span>
         <input name="damage" defaultValue={a.damage ?? ""} placeholder="2d6" className="input input-xs w-20" />
@@ -106,6 +100,7 @@ export default function AreasEditor({ locationId, shape, onShape, areas, effects
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); switchArea(locationId, a.id, !!a.off); }} data-switch-area={a.id}>{a.off ? "Switch on" : "Switch off"}</button>
                   <button type="button" className="btn btn-ghost btn-xs" onClick={(e) => { e.preventDefault(); removeArea(locationId, a.id); }} data-remove-area={a.id}>Remove</button>
                 </summary>
+                <HazardInterview locationId={locationId} hazard={a} isNew={(a.name === "Hazard" || a.name === "Area") && !a.damage && !a.conditions?.length} />
                 <AreaSettings locationId={locationId} area={a} effects={effects} now={now} sounds={sounds} />
               </details>
             </li>
