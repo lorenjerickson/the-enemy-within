@@ -3,7 +3,7 @@
 import { landEffects, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
-import { saveRollFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
+import { skillCheckFor, speedFps } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db/tokens";
 import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
@@ -18,9 +18,9 @@ import { getDoor, setDoorLocked, listStructures, isGridlessLevel, isPortraitLeve
 import { getOpenGameSession, logSessionEvent } from "@/lib/db/sessions";
 import { getPlayerToken, walkToken, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setAssist, listHidden, setHidden } from "@/lib/db/tokens";
 import { listSecrets, setSecretRevealed } from "@/lib/db/story";
-import { getEncounter, getEncounterWaiting, setEncounterWaiting, saveEncounter } from "@/lib/db/encounters";
+import { getEncounter } from "@/lib/db/encounters";
 import { listMapTriggers } from "@/lib/db/traps";
-import { getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
+
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, moveStepEnd, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
 import { snapHeight } from "@/lib/gravity";
@@ -28,11 +28,12 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
-import { getTrap, listTraps, setTrapFound } from "@/lib/db/traps";
+import { getTrap } from "@/lib/db/traps";
 import { springTrap } from "./traps";
 import { hazardRolled } from "./hazards";
+import type { Hazard } from "@/lib/hazards";
 import { getCondition } from "@/lib/db/effects";
-import { distanceToTrap } from "@/lib/traps";
+
 import { interactablesNear } from "@/lib/triggers";
 import { fireTrigger } from "./mapTriggers";
 import { allegianceOf, relation } from "@/lib/sides";
@@ -248,18 +249,16 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
       setSecretRevealed(s.id, true);
       if (s.discovery_id) revealDiscovery(s.discovery_id); // into the party's journals
     }
-    // Traps in range they beat the find DC of (each trap has its own).
-    const traps = me ? listTraps(me.level_id).filter((t) => !t.found && scored.total >= t.find_dc && distanceToTrap(t.area, { x: me.col + 0.5, y: me.row + 0.5 }) <= SEARCH_RANGE + 0.5) : [];
-    for (const t of traps) setTrapFound(t.id, true);
-    // Hidden areas (a pocket of gas) in range whose find DC they beat.
-    const areas = me ? listLastingAreas(me.level_id).filter((l) => l.visibility === "hidden" && !l.found && scored.total >= (l.findDc ?? 14) && caughtByNear(l, { x: me.col + 0.5, y: me.row + 0.5 })) : [];
+    // Hidden hazards (a pit, a pocket of gas) in range whose find DC they beat (each has its own); not spent or off.
+    const areas = me ? (listLastingAreas(me.level_id) as Hazard[]).filter((l) => l.visibility === "hidden" && !l.found && !l.spent && !l.off && scored.total >= (l.findDc ?? 14) && caughtByNear(l, { x: me.col + 0.5, y: me.row + 0.5 })) : [];
     for (const l of areas) setLastingAreaFound(l.id);
+    const traps = areas.filter((l) => l.activation === "dormant"); // a dormant one reads as a trap
     // Anyone hiding from them within 10 ft whose Stealth they beat (Hide).
     const tokens = me ? listTokens(me.level_id) : [], mine = me && tokens.find((t) => t.id === me.token_id), hiddenNow = me ? listHidden(me.level_id) : new Map<number, number>();
     const hiders = me && mine ? tokens.filter((t) => hiddenNow.has(t.id) && scored.total > hiddenNow.get(t.id)! && relation(allegianceOf(mine), allegianceOf(t)) !== "friendly" && Math.hypot(t.col - me.col, t.row - me.row) <= SEARCH_RANGE + 0.5) : [];
     for (const h of hiders) reveal(me!.level_id, h.id, `found by ${me!.name}'s search`);
     const labelsNow = me ? tokenLabels(me.level_id) : new Map<number, string>();
-    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...traps.map((t) => `a trap (${t.name})`), ...areas.map((l) => l.name), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
+    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...areas.map((l) => (l.activation === "dormant" ? `a trap (${l.name})` : l.name)), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
     if (hiders.length) success = true;
     if (traps.length || areas.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.

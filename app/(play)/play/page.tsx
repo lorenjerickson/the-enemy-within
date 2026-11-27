@@ -13,7 +13,7 @@ import { getOpenRollRequest } from "@/lib/db/rolls";
 import { getEncounter } from "@/lib/db/encounters";
 import { getRoundPlan, listPlanTargets, listPlanRoutes, getReplay } from "@/lib/db/rounds";
 import { listTriggers } from "@/lib/db/story";
-import { characterContainers } from "@/lib/db/catalog";
+
 import { listPlayers, type User } from "@/lib/db/users";
 import { triggerText } from "@/lib/game";
 import { scriptNames } from "@/lib/scriptNames";
@@ -32,7 +32,7 @@ import AreaSounds from "./AreaSounds";
 import SharedAmbient from "./SharedAmbient";
 import NearbySounds from "./NearbySounds";
 import SoundControl from "./SoundControl";
-import { playersSee } from "@/lib/aoe";
+
 import ImprovisingCard from "./ImprovisingCard";
 import ImproviseResult from "./ImproviseResult";
 import type { ImproviseChoices } from "./ImproviseWindow";
@@ -59,17 +59,18 @@ import EncounterPanel from "./EncounterPanel";
 import ContestModal from "./ContestModal";
 import SaveWaitModal from "./SaveWaitModal";
 import { getPendingRound, getRoundStories } from "@/lib/db/rounds";
-import { getCharacterPlayer, getTokenTarget, listCharacterSightings } from "@/lib/db/tokens";
+import { getCharacterPlayer, getTokenTarget } from "@/lib/db/tokens";
 import { canShakeOff, restrictionsOn, speedFps } from "@/lib/creatureChanges";
 import { ROUND_SECONDS } from "@/lib/roundPlan";
 import LocationsPanel from "./LocationsPanel";
 import HealthPanel from "./HealthPanel";
 import { afterRefits, onBelt, planEnd, timeline } from "@/lib/roundPlan";
-import { planView } from "@/lib/roundPlanServer";
+
 import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/lib/combat";
-import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
+
 import Journal from "../../(app)/character/Journal";
 import { REACH, distanceToDoor } from "./reach";
+import { heardBy, type Hazard } from "@/lib/hazards";
 
 /** The running session, full screen: the GM's tools dock on the left, a player's panel on the right. */
 export default async function Play() {
@@ -278,7 +279,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {real && levelId !== undefined && <SharedAmbient ambient={getLevelAmbient(levelId)} />}
       {/* Sounds where they are: the GM's placed looping sounds by distance, and the sounds of areas they can see. */}
       {real && levelId !== undefined && <NearbySounds sounds={listPositionalSounds(levelId).filter((p) => p.loop)} at={me && me.level_id === levelId ? { x: me.col + 0.5, y: me.row + 0.5 } : null} />}
-      {real && levelId !== undefined && <AreaSounds sounds={listLastingAreas(levelId).filter((l) => l.sound && playersSee(l)).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} player />}
+      {real && levelId !== undefined && <AreaSounds sounds={(listLastingAreas(levelId) as Hazard[]).filter((l) => !!me && heardBy(l, me.token_id, getGameTime())).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} player />}
       {real && <SoundControl />}
       {!real && <ActingAs session={session} user={user} name={creature !== null && me ? tokenLabels(me.level_id).get(me.token_id) ?? me.name : user.name} />}
       {/* Watching: their prompts show as they see them, but can't be rolled. */}

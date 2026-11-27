@@ -3,7 +3,7 @@ import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/i
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
 import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
-import { asRoundTrap, type Hazard } from "@/lib/hazards";
+import { asRoundTrap, isActive, type Hazard } from "@/lib/hazards";
 import { markHazardSprung } from "./hazardSprung";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
 import { clearRoundPlans, getPendingRound, getRoundPlan, setLastRoundLog, setPendingRound, setReplay } from "@/lib/db/rounds";
@@ -141,7 +141,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
     playImprovisation(getImprovisation(i.id)!);
   } // flammable areas fire reached this round: burning from now on
   // Hidden areas someone ended the round in: found (they know it's there now).
-  for (const l of lasting) if (l.visibility === "hidden" && !l.found && [...final.values()].some((p) => inArea(l.area, { x: p.col + 0.5, y: p.row + 0.5 }))) setLastingAreaFound(l.id);
+  for (const l of lasting) if (l.visibility === "hidden" && !l.found && isActive(l as Hazard, getGameTime()) && [...final.values()].some((p) => inArea(l.area, { x: p.col + 0.5, y: p.row + 0.5 }))) setLastingAreaFound(l.id); // an active one found by being in it (a dormant one: by those who see it go off)
   for (const [id, h] of hp) saveHp(id, h);
   saveAfflictions(levelId, result.afflictions); // effects put on, ticked, worn off or shaken off
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
