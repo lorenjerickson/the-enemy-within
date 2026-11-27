@@ -6,7 +6,7 @@ import { cycles, graph, reaches } from "../../scripts/coupling.mjs";
 // Rule modules that mustn't reach the database (directly or through anything they import at runtime): the start of
 // the shared engine (docs/productization.md). Backlog U adds to this list as rules move out of lib/db.ts; never remove.
 const PURE = [
-  "lib/actionCard.ts", "lib/actionSummary.ts", "lib/actionWizard.ts", "lib/actions.ts", "lib/effectWizard.ts", "lib/hazards.ts", "lib/hazardWizard.ts", "lib/ambientPlayer.ts", "lib/aoe.ts", "lib/attributes.ts",
+  "lib/actionCard.ts", "lib/actionSummary.ts", "lib/actionWizard.ts", "lib/actions.ts", "lib/effectWizard.ts", "lib/hazards.ts", "lib/hazardWizard.ts", "lib/effectCopy.ts", "lib/ambientPlayer.ts", "lib/aoe.ts", "lib/attributes.ts",
   "lib/auras.ts", "lib/builtinConditions.ts", "lib/calendar.ts", "lib/containers.ts", "lib/conditions.ts", "lib/creatureTypes.ts", "lib/dice.ts", "lib/effectGrammar.ts",
   "lib/effectOptions.ts", "lib/effects.ts", "lib/fighter.ts", "lib/encounter.ts", "lib/exposure.ts", "lib/gravity.ts", "lib/hiding.ts", "lib/itemTypes.ts",
   "lib/levelLinks.ts", "lib/light.ts", "lib/loudness.ts", "lib/mail.ts", "lib/maps.ts", "lib/modifiers.ts", "lib/movement.ts", "lib/playerActions.ts",
