@@ -183,7 +183,7 @@ test("idsUnder lists every blank under a choice (cleared when it changes)", () =
 });
 
 test("lifecycles: sentences and back", () => {
-  const lc = { duration: "rounds" as const, rounds: 6, save_attr: "fortitude" as const, save_dc: 13, save_when: "start" as const, save_action: 1, saves_needed: 2, apply_save_attr: "wisdom" as const, apply_save_dc: 14, apply_save_outcome: "halves" as const, ends_on_damage: 1, ends_on_attack: 0, ends_on_trigger: 0, concentration: 1, reapply: "stack" as const, stack_limit: 3 };
+  const lc = { duration: "rounds" as const, rounds: 6, save_attr: "fortitude" as const, save_dc: 13, save_when: "start" as const, save_action: 1, apply_save_attr: "wisdom" as const, apply_save_dc: 14, apply_save_outcome: "halves" as const, ends_on_damage: 1, ends_on_attack: 0, ends_on_trigger: 0, concentration: 1, reapply: "stack" as const, stack_limit: 3 };
   const sentences = lifecycleSentences(lc);
   const texts = sentences.map((f) => render(f, CONDITION_SENTENCE));
   assert.ok(texts.includes("It lasts 6 rounds."));

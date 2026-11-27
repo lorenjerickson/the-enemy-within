@@ -33,11 +33,11 @@ test("a player's save to end a condition waits for their roll", () => {
   assert.deepEqual(r.afflictions.get(2), []);
 });
 
-test("conditions that take several saves count them up", () => {
-  const a = on(poisoned({ saves_needed: 2 }));
+test("one successful save always shakes a condition off", () => {
+  const a = on(poisoned());
+  assert.equal(saveToEnd(a, fighter({ save: 15 }), "T2").ended, true);
+  assert.deepEqual(saveToEnd(a, fighter({ save: 5 }), "T2"), { ended: false, line: "T2 fails to shake off Poisoned (5 vs DC 12)." });
   const f = fighter({ save: 15 });
-  assert.deepEqual(saveToEnd(a, f, "T2"), { ended: false, line: "T2 resists Poisoned (15 vs DC 12): 1 of 2 saves." });
-  assert.equal(saveToEnd(a, f, "T2").ended, true);
   assert.equal(saveToEnd(on(poisoned({ save_attr: "" })), f, "T2").line, "", "no save, nothing to roll");
 });
 

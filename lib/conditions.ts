@@ -170,7 +170,6 @@ export interface Lifecycle {
   apply_save_outcome?: "negates" | "halves";
   save_when?: "end" | "start" | "damaged"; // when the save to end it is rolled (default: the end of each round)
   save_action?: number; // 1: they can also spend their action (Shake off) to roll it
-  saves_needed?: number; // successful saves it takes to end it (default 1)
   ends_on_damage?: number; // 1: ends when they take damage (a deep sleep)
   ends_on_attack?: number; // 1: ends when they attack (invisibility)
   ends_on_trigger?: number; // 1: ends once one of its triggers fires (a one-off burst)
@@ -180,7 +179,7 @@ export interface Lifecycle {
 }
 export const DEFAULT_LIFECYCLE: Required<Lifecycle> = {
   rounds: 1, save_attr: "", save_dc: 12, apply_save_attr: "", apply_save_dc: 12, apply_save_outcome: "negates", save_when: "end", save_action: 0,
-  saves_needed: 1, ends_on_damage: 0, ends_on_attack: 0, ends_on_trigger: 0, concentration: 0, reapply: "refresh", stack_limit: 0,
+  ends_on_damage: 0, ends_on_attack: 0, ends_on_trigger: 0, concentration: 0, reapply: "refresh", stack_limit: 0,
 };
 
 /** A catalog effect: its rules, how long it lasts, and (in rounds) its lifecycle. */
@@ -307,7 +306,7 @@ export const describeLifecycle = (c: Lifecycle, withRounds = true) =>
   [
     c.apply_save_attr && `${cap(c.apply_save_attr)} DC ${c.apply_save_dc ?? 12} when applied ${c.apply_save_outcome === "halves" ? "halves it" : "negates"}`,
     withRounds && `${c.rounds} round${c.rounds === 1 ? "" : "s"}`,
-    c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc}${(c.saves_needed ?? 1) > 1 ? ` ×${c.saves_needed}` : ""} ${c.save_when === "start" ? "at the start of each round" : c.save_when === "damaged" ? "when hurt" : "each round"}${c.save_action ? " (or as an action)" : ""} ends it`,
+    c.save_attr && `${cap(c.save_attr)} DC ${c.save_dc} ${c.save_when === "start" ? "at the start of each round" : c.save_when === "damaged" ? "when hurt" : "each round"}${c.save_action ? " (or as an action)" : ""} ends it`,
     c.ends_on_damage && "ends when hurt",
     c.ends_on_attack && "ends when they attack",
     c.ends_on_trigger && "ends once its trigger fires",

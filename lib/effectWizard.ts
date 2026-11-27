@@ -25,7 +25,6 @@ export interface Answers {
   shakeDc: number;
   shakeWhen: "end" | "start" | "damaged";
   shakeAction: boolean; // they can also spend their action on it
-  shakeNeeded: number; // successes it takes
   endsOn: EndsOn[];
   again: "refresh" | "stack" | "ignore";
   stackLimit: number; // 0: no limit
@@ -46,7 +45,7 @@ export function answersFromEffect(e: Saved = {}, rules: Filled[] = []): Answers 
   return {
     name: e.name ?? "", description: e.description ?? "", duration: e.duration ?? "rounds", rounds: d.rounds || 1, rules,
     resist: !!d.apply_save_attr, resistAttr: (d.apply_save_attr || "fortitude") as Attribute, resistDc: d.apply_save_dc, resistOutcome: d.apply_save_outcome,
-    shake: !!d.save_attr, shakeAttr: (d.save_attr || "fortitude") as Attribute, shakeDc: d.save_dc, shakeWhen: d.save_when, shakeAction: !!d.save_action, shakeNeeded: d.saves_needed || 1,
+    shake: !!d.save_attr, shakeAttr: (d.save_attr || "fortitude") as Attribute, shakeDc: d.save_dc, shakeWhen: d.save_when, shakeAction: !!d.save_action,
     endsOn: ENDS_ON.map(([k]) => k).filter((k) => (k === "damage" ? d.ends_on_damage : k === "attack" ? d.ends_on_attack : k === "trigger" ? d.ends_on_trigger : d.concentration)),
     again: d.reapply, stackLimit: d.stack_limit,
   };
@@ -60,7 +59,7 @@ export function lifecycleFromAnswers(a: Answers): Required<Lifecycle> & { durati
     duration: a.duration, rounds: rounds ? Math.max(1, a.rounds) : 1,
     apply_save_attr: rounds && a.resist ? a.resistAttr : "", apply_save_dc: rounds && a.resist ? a.resistDc : 12, apply_save_outcome: rounds && a.resist ? a.resistOutcome : "negates",
     save_attr: rounds && a.shake ? a.shakeAttr : "", save_dc: rounds && a.shake ? a.shakeDc : 12, save_when: rounds && a.shake ? a.shakeWhen : "end",
-    save_action: rounds && a.shake && a.shakeAction ? 1 : 0, saves_needed: rounds && a.shake ? Math.max(1, a.shakeNeeded) : 1,
+    save_action: rounds && a.shake && a.shakeAction ? 1 : 0,
     ends_on_damage: on("damage"), ends_on_attack: on("attack"), ends_on_trigger: on("trigger"), concentration: on("concentration"),
     reapply: rounds ? a.again : "refresh", stack_limit: rounds && a.again === "stack" ? a.stackLimit : 0,
   };
@@ -79,7 +78,7 @@ export function answerLine(q: Question, a: Answers, ruleText: (r: Filled) => str
     case "duration": return ["Lasts", a.duration === "equipped" ? "While equipped" : a.duration === "always" ? "Always" : `${a.rounds} round${a.rounds === 1 ? "" : "s"}`];
     case "rules": return ["What it does", a.rules.length ? a.rules.map(ruleText).join("; ") : "—"];
     case "resist": return ["Resisted as it lands", a.resist ? `${cap(a.resistAttr)} DC ${a.resistDc}: ${a.resistOutcome === "halves" ? "half as long" : "avoids it"}` : "No"];
-    case "shake": return ["Shaken off", a.shake ? `${cap(a.shakeAttr)} DC ${a.shakeDc} ${WHEN[a.shakeWhen]}${a.shakeAction ? ", or with their action" : ""}${a.shakeNeeded > 1 ? `, ${a.shakeNeeded} successes` : ""}` : "No"];
+    case "shake": return ["Shaken off", a.shake ? `${cap(a.shakeAttr)} DC ${a.shakeDc} ${WHEN[a.shakeWhen]}${a.shakeAction ? ", or with their action" : ""}` : "No"];
     case "ends": return ["Also ends when", a.endsOn.length ? a.endsOn.map((k) => ENDS_ON.find(([x]) => x === k)![1]).join(", ") : "Nothing else"];
     case "again": return ["Put on again", a.again === "stack" ? `Stacks${a.stackLimit ? ` (up to ${a.stackLimit})` : ""}` : a.again === "ignore" ? "Nothing happens" : "Starts over"];
   }
@@ -103,7 +102,7 @@ export function effectCard(a: Answers, rules: string[]): string[] {
   const resist = rounds && a.resist ? (a.resistOutcome === "halves" ? `, or half as long if you make a successful ${throwOf(a.resistAttr, a.resistDc)}` : `, unless you make a successful ${throwOf(a.resistAttr, a.resistDc)}`) : "";
   // One rule: the timing rides on it ("Your speed is halved for 3 rounds, unless…"); several: a sentence of its own.
   const out = said.length > 1 ? [`${what}.`, ...(lasts || resist ? [`It lasts${lasts}${resist}.`] : [])] : [`${what}${lasts}${resist}.`];
-  if (rounds && a.shake) out.push(`${SHAKE_WHEN[a.shakeWhen]} you can end the effect with a ${throwOf(a.shakeAttr, a.shakeDc)}${a.shakeAction ? ", or spend your action to try" : ""}${a.shakeNeeded > 1 ? `; it takes ${a.shakeNeeded} successes` : ""}.`);
+  if (rounds && a.shake) out.push(`${SHAKE_WHEN[a.shakeWhen]} you can end the effect with a ${throwOf(a.shakeAttr, a.shakeDc)}${a.shakeAction ? ", or spend your action to try" : ""}.`);
   if (rounds && a.endsOn.length) out.push(`It ends early if ${listed(a.endsOn.map((k) => YOU_ENDS[k]))}.`);
   if (rounds && a.again === "stack") out.push(`If it's put on you again, another one runs alongside${a.stackLimit ? ` (up to ${a.stackLimit})` : ""}.`);
   if (rounds && a.again === "ignore") out.push("Putting it on you again does nothing while it lasts.");

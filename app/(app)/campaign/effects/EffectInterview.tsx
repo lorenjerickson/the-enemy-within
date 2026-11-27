@@ -140,7 +140,6 @@ export default function EffectInterview({ action, initial, initialRules, builtin
                   </select>
                 </div>
                 <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.shakeAction} onChange={(e) => set({ shakeAction: e.target.checked })} />they can also spend their action on it (Shake off)</label>
-                <label className="flex items-center gap-2">it takes <NumberBox min={1} max={10} value={a.shakeNeeded} onChange={(shakeNeeded) => set({ shakeNeeded })} className="input input-sm w-16" /> success{a.shakeNeeded === 1 ? "" : "es"} to end it</label>
               </div>
             )}
           </>

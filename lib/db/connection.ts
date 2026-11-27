@@ -431,7 +431,6 @@ export const LIFECYCLE_COLUMNS: [keyof Lifecycle | "duration", string][] = [
   ["apply_save_outcome", "TEXT NOT NULL DEFAULT 'negates'"], // on a success: negates | halves (its rounds)
   ["save_when", "TEXT NOT NULL DEFAULT 'end'"], // when the save to end it is rolled: end | start | damaged
   ["save_action", "INTEGER NOT NULL DEFAULT 0"], // 1: Shake off (an action) rolls it too
-  ["saves_needed", "INTEGER NOT NULL DEFAULT 1"], // successful saves to end it
   ["ends_on_damage", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when hurt
   ["ends_on_attack", "INTEGER NOT NULL DEFAULT 0"], // 1: ends when they attack
   ["ends_on_trigger", "INTEGER NOT NULL DEFAULT 0"], // 1: ends once its trigger fires

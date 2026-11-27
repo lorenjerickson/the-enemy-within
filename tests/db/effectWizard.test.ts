@@ -8,7 +8,7 @@ import { answerLine, answersFromEffect, lifecycleFromAnswers, lifecyclePosted, q
 const timing = (e: Record<string, unknown>) => Object.fromEntries([...Object.keys(DEFAULT_LIFECYCLE), "duration"].map((k) => [k, e[k] ?? (DEFAULT_LIFECYCLE as Record<string, unknown>)[k]]));
 
 test("every effect in the catalog opens with its timing as answers and saves back unchanged (lasting rounds)", () => {
-  saveEffectDef(null, { name: "Webbed", description: "", modifiers: [], rounds: 3, apply_save_attr: "might", apply_save_dc: 15, save_attr: "might", save_dc: 15, save_when: "start", save_action: 1, saves_needed: 2, ends_on_damage: 1, reapply: "stack", stack_limit: 3 });
+  saveEffectDef(null, { name: "Webbed", description: "", modifiers: [], rounds: 3, apply_save_attr: "might", apply_save_dc: 15, save_attr: "might", save_dc: 15, save_when: "start", save_action: 1, ends_on_damage: 1, reapply: "stack", stack_limit: 3 });
   const all = listEffectDefs().filter((e) => e.duration === "rounds");
   assert.ok(all.length > 5, "the built-ins are there");
   for (const e of all) {

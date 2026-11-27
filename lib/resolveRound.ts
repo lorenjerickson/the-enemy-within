@@ -1489,11 +1489,9 @@ export type SaveRoll = (id: number, attr: Attribute, dc: number, what: string, s
 export function saveToEnd(a: Affliction, f: Combatant | undefined, who: string, roll?: (attr: Attribute, dc: number) => { total: number; text: string }): { ended: boolean; line: string } {
   const c = a.condition;
   if (!c.save_attr || !f?.save) return { ended: false, line: "" };
-  const s = roll ? roll(c.save_attr, c.save_dc) : f.save(c.save_attr), need = Math.max(1, c.saves_needed ?? 1);
+  const s = roll ? roll(c.save_attr, c.save_dc) : f.save(c.save_attr); // one success always ends it (Loren, 2026-11-26)
   if (s.total < c.save_dc) return { ended: false, line: `${who} fails to shake off ${c.name} (${s.total} vs DC ${c.save_dc}).` };
-  a.saved = (a.saved ?? 0) + 1;
-  if (a.saved >= need) return { ended: true, line: `${who} shakes off ${c.name} (${s.total}: ${s.text} vs DC ${c.save_dc}).` };
-  return { ended: false, line: `${who} resists ${c.name} (${s.total} vs DC ${c.save_dc}): ${a.saved} of ${need} saves.` };
+  return { ended: true, line: `${who} shakes off ${c.name} (${s.total}: ${s.text} vs DC ${c.save_dc}).` };
 }
 
 /**

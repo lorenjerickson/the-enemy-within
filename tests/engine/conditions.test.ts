@@ -125,7 +125,7 @@ test("descriptions read like the handbook", () => {
   assert.equal(describeModifier({ kind: "speed", factor: 0.5 }), "half speed");
   assert.equal(describeModifier({ kind: "resist", damage_type: "fire", level: "immune" }), "immune to fire");
   assert.equal(describeModifier({ kind: "resist", damage_type: "cold", level: "resistant" }), "resistant to cold");
-  assert.equal(describeLifecycle({ rounds: 1, save_attr: "fortitude", save_dc: 13, saves_needed: 2, save_action: 1 }), "1 round · Fortitude DC 13 ×2 each round (or as an action) ends it");
+  assert.equal(describeLifecycle({ rounds: 1, save_attr: "fortitude", save_dc: 13, save_action: 1 }), "1 round · Fortitude DC 13 each round (or as an action) ends it");
   const poisoned = cond(7, [{ kind: "periodic", value: "1d2", heal: false, damage_type: "poison" }], { rounds: 6, save_attr: "fortitude", save_dc: 12 });
   assert.equal(describeCondition(poisoned), "1d2 poison damage a round · 6 rounds · Fortitude DC 12 each round ends it");
   assert.equal(describeCondition(cond(8, [{ kind: "instant", value: "1d10", heal: true, damage_type: "" }])), "heals 1d10");

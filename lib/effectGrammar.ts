@@ -289,7 +289,7 @@ export function render(f: Filled, root: Slot[] = EFFECT_SENTENCE): string {
       if (slot.kind === "word") { if (slot.text.startsWith("it rolls twice")) out[out.length - 1] += ","; out.push(slot.text); }
       else if (slot.kind === "optional") {
         if (f[slot.id] === undefined) continue;
-        const paren = slot.id === "save" || slot.id === "limit" || slot.id === "needed" || slot.id === "reaction";
+        const paren = slot.id === "save" || slot.id === "limit" || slot.id === "reaction";
         const at = out.length;
         out.push(slot.lead);
         walk(slot.slots);
@@ -553,7 +553,6 @@ export const CONDITION_SENTENCE: Slot[] = [{
       num("dc", "DC", 1, 40), attrs("attr"), word("save"),
       { kind: "choice", id: "when", label: "when", options: [{ value: "end", text: "at the end of each round" }, { value: "start", text: "at the start of each round" }, { value: "damaged", text: "when you take damage" }] },
       { kind: "optional", id: "action", lead: "or", slots: [word("by using your action")] },
-      { kind: "optional", id: "needed", lead: "needing", slots: [num("saves", "successes", 2, 10), word("successes")] },
     ] },
     { value: "ends", text: "It ends when", next: [{ kind: "choice", id: "ends", label: "what", options: [{ value: "damage", text: "you take damage" }, { value: "attack", text: "you attack" }, { value: "trigger", text: "one of its triggers fires" }, { value: "concentration", text: "the source stops concentrating on it" }] }] },
     { value: "again", text: "If it's applied again,", next: [{ kind: "choice", id: "again", label: "what happens", options: [
@@ -577,7 +576,7 @@ export function compileLifecycle(rules: Filled[]): { lifecycle?: Required<Lifecy
     rounds: lasts.for === "equipped" || lasts.for === "always" ? 1 : Number(lasts.rounds),
     apply_save_attr: apply ? (apply.attr as Attribute) : "", apply_save_dc: apply ? Number(apply.dc) : 12, apply_save_outcome: apply?.outcome_save === "halves" ? "halves" : "negates",
     save_attr: end ? (end.attr as Attribute) : "", save_dc: end ? Number(end.dc) : 12, save_when: (end?.when as "end" | "start" | "damaged") ?? "end",
-    save_action: end?.action !== undefined ? 1 : 0, saves_needed: end?.needed !== undefined ? Number(end.saves) : 1,
+    save_action: end?.action !== undefined ? 1 : 0,
     ends_on_damage: ends.has("damage") ? 1 : 0, ends_on_attack: ends.has("attack") ? 1 : 0, ends_on_trigger: ends.has("trigger") ? 1 : 0, concentration: ends.has("concentration") ? 1 : 0,
     reapply: (again?.again as "refresh" | "stack" | "ignore") ?? "refresh", stack_limit: again?.limit !== undefined ? Number(again.stack_limit) : 0,
   } };
@@ -587,7 +586,7 @@ export function compileLifecycle(rules: Filled[]): { lifecycle?: Required<Lifecy
 export function lifecycleSentences(c: Partial<Lifecycle & { duration: Duration }>): Filled[] {
   const out: Filled[] = [c.duration === "equipped" || c.duration === "always" ? { rule: "lasts", for: c.duration } : { rule: "lasts", for: "rounds", rounds: c.rounds ?? 1 }];
   if (c.apply_save_attr) out.push({ rule: "apply_save", dc: c.apply_save_dc ?? 12, attr: c.apply_save_attr, outcome_save: c.apply_save_outcome ?? "negates" });
-  if (c.save_attr) out.push({ rule: "end_save", dc: c.save_dc ?? 12, attr: c.save_attr, when: c.save_when ?? "end", ...(c.save_action ? { action: 1 } : {}), ...((c.saves_needed ?? 1) > 1 ? { needed: 1, saves: c.saves_needed! } : {}) });
+  if (c.save_attr) out.push({ rule: "end_save", dc: c.save_dc ?? 12, attr: c.save_attr, when: c.save_when ?? "end", ...(c.save_action ? { action: 1 } : {}) });
   for (const [flag, v] of [[c.ends_on_damage, "damage"], [c.ends_on_attack, "attack"], [c.ends_on_trigger, "trigger"], [c.concentration, "concentration"]] as const) if (flag) out.push({ rule: "ends", ends: v });
   if (c.reapply && c.reapply !== "refresh") out.push({ rule: "again", again: c.reapply, ...(c.reapply === "stack" && c.stack_limit ? { limit: 1, stack_limit: c.stack_limit } : {}) });
   return out;
