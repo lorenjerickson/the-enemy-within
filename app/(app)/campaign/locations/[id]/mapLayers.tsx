@@ -212,7 +212,7 @@ export const FX_MS = 1000; // how long a script's effect plays
 export const SIGHT = 500;
 
 /** Layers only the GM ever sees. */
-export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "triggers", "areas"];
+export const GM_ONLY_LAYERS: MapLayer[] = ["notes", "controls", "sounds", "triggers", "hazards"];
 
 export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw>> = {
   base: () => (ctx, w, h) => {
@@ -330,14 +330,9 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
       drawLasting(ctx, l, toPx, size, state.time, clip);
     }
   },
-  // Traps: dashed while hidden from players, solid once found.
   triggers: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
     for (const t of state.triggers) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { trigger: true, label: t.name });
-  },
-  traps: (state) => (ctx, w, h) => {
-    const { x0, y0, size } = gridOrigin(state, w, h);
-    for (const t of state.traps) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { found: !!t.found, label: t.name });
   },
   // Secrets: the GM sees every one (a dashed ring with "?", solid with "!" once revealed); players get only revealed ones.
   secrets: (state) => (ctx, w, h) => {

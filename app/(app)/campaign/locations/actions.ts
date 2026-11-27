@@ -36,6 +36,7 @@ import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
+import { rearm, type Hazard } from "@/lib/hazards";
 
 const paddingFromForm = (formData: FormData) =>
   Object.fromEntries(EDGES.map((e) => [e, Math.max(0, Math.round(Number(formData.get(`pad_${e}`)) || 0))])) as Padding;
@@ -716,6 +717,17 @@ export async function switchArea(locationId: number, id: number, on: boolean) {
 export async function removeArea(locationId: number, id: number) {
   await requireGm();
   removeLastingArea(Number(id));
+  revalidatePath("/play");
+  revalidatePath(`/campaign/locations/${locationId}`);
+}
+
+/** The GM re-arms a dormant hazard: it forgets whom it has sprung on and waits again (a spent "once" one doesn't). */
+export async function rearmHazard(locationId: number, id: number) {
+  await requireGm();
+  const h = getLastingArea(Number(id)) as Hazard | undefined;
+  if (!h) return;
+  const { id: hid, level_id: _l, ...rest } = rearm(h) as Hazard & { level_id: number };
+  updateLastingArea(hid, rest);
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }

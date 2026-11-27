@@ -1,7 +1,7 @@
 /** A location's map layers, bottom to top. */
 export const MAP_LAYERS = [
   "base", "background", "map", "grid", "templates", "tiles", "structure",
-  "tokens", "secrets", "traps", "triggers", "areas", "sounds", "lighting", "effects", "notes", "controls",
+  "tokens", "secrets", "triggers", "hazards", "sounds", "lighting", "effects", "notes", "controls",
 ] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 

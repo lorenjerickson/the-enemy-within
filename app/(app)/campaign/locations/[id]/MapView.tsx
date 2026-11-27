@@ -34,7 +34,7 @@ import { ScriptPickOverlay, choose, runWithPrompts, useScriptPick } from "../../
 import { FEET_PER_SQUARE, pointToSegment, reachAreas, reachableSquares, squareKey } from "@/lib/movement";
 import type { Contest, Replay } from "@/lib/resolveRound";
 import SecretsEditor, { type SecretDraft } from "./SecretsEditor";
-import TrapsEditor from "./TrapsEditor";
+
 import TriggersEditor from "./TriggersEditor";
 import type { MapTrigger } from "@/lib/triggers";
 import { trapFromDrag, type TrapShape } from "./trapDraw";
@@ -54,9 +54,8 @@ import StructureEditor, { type StructureTool } from "./StructureEditor";
 import GridEditor from "./GridEditor";
 import BackgroundEditor from "./BackgroundEditor";
 import MapImageEditor from "./MapImageEditor";
-import { placeArea as drawArea, placeTrigger, removeTrigger, placeTrap, removeTrap, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, breakStructure, removeTile, removeToken, toggleLayer } from "../actions";
+import { placeArea as drawArea, placeTrigger, removeTrigger, placeSecret, removeSecret, revealSecret, lockDoor, changeLockDc, setWallsHidden, placeInStartArea, setPartyStart, removePartyStart, renameThing, switchThing, moveEffectTo, placeEffect, changeEffectIntensity, removeEffect, movePositionalSoundTo, changeFigureHeight, placeCharacterTokenAt, runControl, changeNoteSize, editNote, placeNote, removeNote, toggleDoor, changeIllumination, placeLight, removeLight, placePositionalSound, moveTileTo, moveTokenTo, placeCreatureToken, placeStructure, placeTile, removeStructure, removeAllStructures, moveStructureEnds, breakStructure, removeTile, removeToken, toggleLayer } from "../actions";
 import { GM_ONLY_LAYERS, capitalize, type Area, EyeIcon, type MapState, type CellRect, useImage, noteLayout, SCENE, JOIN_DISTANCE, fitScene, gridOrigin, figureCells, HOLD_MS, LIFT_MS, PING_MS, FX_MS, SIGHT, LAYER_RENDERERS } from "./mapLayers";
-
 
 /**
  * The location's map, drawn on a single canvas layer by layer (base first, controls last),
@@ -995,7 +994,7 @@ export default function MapView({
       });
       return;
     }
-    if (e.button === 0 && (selected === "traps" || selected === "triggers" || selected === "areas")) {
+    if (e.button === 0 && (selected === "triggers" || selected === "hazards")) {
       const { gx, gy } = gridAt(e);
       const at = { x: quarter(gx), y: quarter(gy) };
       setTrapDrag({ start: at, end: at });
@@ -1378,7 +1377,7 @@ export default function MapView({
       const area = trapFromDrag(trapShape, trapDrag);
       setTrapDrag(null);
       if (!area) return; // a click without a drag places nothing
-      if (selected === "areas") {
+      if (selected === "hazards") {
         startTransition(async () => { await drawArea(locationId, levelId, area); });
         return;
       }
@@ -1389,10 +1388,6 @@ export default function MapView({
         });
         return;
       }
-      startTransition(async () => {
-        changeTraps({ add: { id: -Date.now(), name: "Trap", area, springs: ["enter"], who: "", often: "once", damage: null, damage_type: "", save_attr: "agility", save_dc: 12, save_half: 1, effects: [], stops: 1, find_dc: 14, found: 0, sprung: [] } });
-        await placeTrap(locationId, levelId, area);
-      });
       return;
     }
     if (effectDrag) {
@@ -1714,22 +1709,8 @@ export default function MapView({
                   })
                 }
               />
-            ) : selected === "areas" ? (
+            ) : selected === "hazards" ? (
               <AreasEditor locationId={locationId} shape={trapShape} onShape={setTrapShape} areas={lasting} effects={trapEffects} now={gameNow} sounds={audioAssets.map((a) => ({ id: a.id, name: a.name }))} />
-            ) : selected === "traps" ? (
-              <TrapsEditor
-                locationId={locationId}
-                effects={trapEffects}
-                shape={trapShape}
-                onShape={setTrapShape}
-                traps={optimisticTraps}
-                onRemove={(id) =>
-                  startTransition(async () => {
-                    changeTraps({ remove: id });
-                    await removeTrap(locationId, id);
-                  })
-                }
-              />
             ) : selected === "secrets" ? (
               <SecretsEditor
                 draft={secretDraft}
