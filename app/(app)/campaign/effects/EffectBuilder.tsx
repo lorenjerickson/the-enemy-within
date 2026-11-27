@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ATTRIBUTES } from "@/lib/attributes";
 import { CONDITION_SENTENCE, EFFECT_SENTENCE, checkRule, compile, compileLifecycle, idsUnder, readRule, render, type Filled, type Next, type Option, type Slot } from "@/lib/effectGrammar";
 
@@ -18,7 +18,7 @@ const OPTIONAL_HINTS: Record<string, string> = { save: "a save", with: "melee on
  * An effect's rules as handbook sentences built blank by blank: each choice decides the blanks that follow, and a
  * sentence shows only as far as its first empty blank. Saved as the rules' blanks (JSON); the server compiles them.
  */
-export default function EffectBuilder({ initial, conditions = [], grammar = "effect" }: { initial: Filled[]; conditions?: { id: number; name: string }[]; grammar?: "effect" | "condition" }) {
+export default function EffectBuilder({ initial, conditions = [], grammar = "effect", onChange }: { initial: Filled[]; conditions?: { id: number; name: string }[]; grammar?: "effect" | "condition"; onChange?: (rules: Filled[]) => void }) {
   const root = grammar === "condition" ? CONDITION_SENTENCE : EFFECT_SENTENCE;
   const [rules, setRules] = useState<Filled[]>(initial.length ? initial : [{}]);
   const [view, setView] = useState<"sentences" | "text">("sentences");
@@ -35,6 +35,8 @@ export default function EffectBuilder({ initial, conditions = [], grammar = "eff
     setView(v);
   };
   const saved = view === "text" ? fromText(text) : rules.filter((r) => Object.keys(r).length);
+  const savedKey = JSON.stringify(saved);
+  useEffect(() => { onChange?.(JSON.parse(savedKey)); }, [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps -- tell the interview's card
   return (
     <fieldset className="space-y-2 rounded-box border border-base-300 p-2" data-effect-builder>
       <legend className="px-1 text-sm font-semibold">{grammar === "condition" ? "How long it lasts" : "Rules"}</legend>
