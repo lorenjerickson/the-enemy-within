@@ -94,3 +94,29 @@ test("round stories: whoever set it off learns how bad (and their own damage); t
   const saved = resolve([mover(1, { col: 0, row: 0 }, [move(5, 0, 25)])], { 1: fighter({ hp: 20, save: 15 }) }, { traps: [pit({ save_attr: "agility", save_half: 0, stops: 0 })] });
   assert.deepEqual([...storyFor(saved.story, 1, () => "Ann").values()].flat(), ["You set off a trap (Spike pit): you get clear."]);
 });
+
+test("one d20 per interaction: a trap's two effects with saves of different kinds share one throw; the player is asked once", () => {
+  const net = condition(6, "Netted", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "agility", apply_save_dc: 12 });
+  const venom = condition(9, "Poisoned", [{ kind: "boost", target: "attack", value: "-2" }], { rounds: 2, apply_save_attr: "fortitude", apply_save_dc: 12 });
+  const mods: Record<string, number> = { agility: 2, fortitude: -1 };
+  const me = () => fighter({ hp: 20 }, { saveMod: (a) => mods[a] ?? 0 });
+  const run = (decisions: Record<string, number> = {}) => resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: me() }, { traps: [pit({ damage: null, given: [net, venom] })], rollers: [1], decisions });
+  let key = "";
+  assert.throws(() => run(), (e: unknown) => { assert.ok(e instanceof SaveNeeded); assert.equal(e.save.attr, "agility"); key = e.save.key; return true; });
+  const r = run({ [key]: 13 }); // asked once: 13 with Agility +2, so 10 with Fortitude −1
+  const on = r.afflictions.get(1) ?? [];
+  assert.ok(!on.some((a) => a.condition.name === "Netted"), "13 vs 12: resisted");
+  assert.ok(on.some((a) => a.condition.name === "Poisoned"), "the same throw, 10 vs 12: not");
+  assert.ok(r.log.some((l) => /fails to resist Poisoned \(fortitude 10 vs DC 12\)/.test(l)), r.log.join("\n"));
+});
+
+test("one d20 per interaction for the GM's creatures too: rolled once, each save its own modifier", () => {
+  let rolls = 0;
+  const net = condition(6, "Netted", [{ kind: "speed", factor: 0.5 }], { rounds: 2, apply_save_attr: "agility", apply_save_dc: 12 });
+  const venom = condition(9, "Poisoned", [{ kind: "boost", target: "attack", value: "-2" }], { rounds: 2, apply_save_attr: "fortitude", apply_save_dc: 12 });
+  const rat = fighter({ hp: 20 }, { save: () => { rolls++; return { total: 12, text: "rolled" }; }, saveMod: (a) => (a === "agility" ? 0 : -3) });
+  const r = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: rat }, { traps: [pit({ damage: null, given: [net, venom] })] });
+  assert.equal(rolls, 1);
+  assert.ok(!r.afflictions.get(1)?.some((a) => a.condition.name === "Netted"));
+  assert.ok(r.afflictions.get(1)?.some((a) => a.condition.name === "Poisoned"), "12 − 3 = 9");
+});

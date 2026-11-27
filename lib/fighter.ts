@@ -26,6 +26,7 @@ export interface Fighter {
   defense: () => { total: number; text: string };
   damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
   save: (attr: Attribute) => { total: number; text: string }; // d20 + that attribute's modifier
+  saveMod?: (attr: Attribute) => number; // that attribute's modifier alone (to re-use one throw for a save of another kind)
   wear: (equipment: Equipment) => void; // a refit mid-round: attacks, damage and defense use the new gear from then on
   maxHp?: number; // full health (for how bad a wound sounds)
   allegiance?: Allegiance; // whose side they're on (for actions aimed at friendlies or enemies)
@@ -93,6 +94,7 @@ export function fighterOf(who: Pick<Creature, "attributes" | "equipment">, hp: n
       const m = mod(attr), extra = boosted(f.statuses, "save") + boosted(f.statuses, `save:${attr}`); // Bless +1d4, rolled each time
       return { total: d + m + extra, text: `${text} ${formatModifier(m)}${plus(extra, "boost")}` };
     },
+    saveMod: (attr) => mod(attr),
     defense: () => {
       const agility = mod("agility"), armour = items.reduce((s, i) => s + roll(i.defense), 0), extra = boosted(f.statuses, "defense");
       const s = settled(10 + agility + armour + extra, f.statuses, "defense", mod); // Mage Armor: 13 + Agility if better

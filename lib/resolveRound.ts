@@ -134,6 +134,7 @@ export interface Combatant {
   defense: () => { total: number; text: string };
   damage: (use?: GearAction, crit?: boolean) => { total: number; text: string }; // crit: the damage dice twice
   save?: (attr: Attribute, more?: RollMode[]) => { total: number; text: string }; // more: advantage / disadvantage from the moment (Assist)
+  saveMod?: (attr: Attribute) => number; // that attribute's modifier alone (one throw re-used for a save of another kind)
   wear?: (equipment: Partial<Record<EquipSlot, number | null>>) => void; // after a refit
   maxHp?: number; // for how bad a wound sounds in the players' story
   allegiance?: Allegiance; // whose side they're on (actions aimed at friendlies or enemies)
@@ -227,8 +228,26 @@ export function resolveMovement(
   const strains: { tokenId: number; attribute: Attribute; points: number }[] = []; // strain put on (or taken off) this round, kept after it
   /** A save against something landing on them: a player rolls their own (the round waits for it), the server rolls for the GM's creatures. */
   const asked = new Map<string, number>(); // how many times each save key has come up this round (the same save twice gets "#2"…)
+  /**
+   * One d20 per interaction (Q): while a cause is under way (a trap springing, an area catching, an action's effects
+   * landing), every save it asks of one creature in that second shares one throw. The first rolls (or asks the
+   * player); later ones reuse it with their own ability modifier in place of the first's.
+   */
+  let cause: string | null = null;
+  const throws = new Map<string, { attr: Attribute; total: number }>();
+  const asOne = <T,>(key: string, f: () => T): T => { const was = cause; cause = was ?? key; try { return f(); } finally { cause = was; } };
   const saveRoll = (id: number, attr: Attribute, dc: number, base: string, what: string, sec: number): { total: number; text: string } => {
     if (fighters.get(id)?.limits?.autofail.includes(attr)) return { total: -99, text: "fails automatically" }; // nothing to roll
+    const one = cause ? `${cause}:${id}:${sec}` : null, had = one ? throws.get(one) : undefined;
+    if (had) {
+      const f = fighters.get(id), total = had.total - (f?.saveMod?.(had.attr) ?? 0) + (f?.saveMod?.(attr) ?? 0);
+      return { total, text: `the same throw as their ${had.attr} save` };
+    }
+    const r = rolledSave(id, attr, dc, base, what, sec);
+    if (one) throws.set(one, { attr, total: r.total });
+    return r;
+  };
+  const rolledSave = (id: number, attr: Attribute, dc: number, base: string, what: string, sec: number): { total: number; text: string } => {
     if (rollers.has(id)) {
       const n = (asked.get(base) ?? 0) + 1;
       asked.set(base, n);
@@ -537,7 +556,8 @@ export function resolveMovement(
   const hanging = (c: Condition): Condition => ({ ...c, apply_save_attr: "" });
   const hangOff = (s: Status | undefined): Status | undefined => s && { ...s, conditions: s.conditions?.map(hanging) };
   /** Leaves a status on someone (for the rest of this round too), and logs it. */
-  const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null) => {
+  const leave = (id: number, status: Status | undefined, minutes: number, sec: number, by: number | null = null): void => {
+    if (!cause) return asOne(`leave:${by}`, () => leave(id, status, minutes, sec, by)); // one action's effects on someone: one interaction
     if (!status || down.has(id)) return;
     // A health boost heals straight away (Healing Draught: +1d10), up to their full health.
     const healing = status.boosts.filter((b) => b.target === "health").reduce((sum, b) => sum + rollDice(b.value.replace(/^\+/, "")), 0);
@@ -596,7 +616,8 @@ export function resolveMovement(
    * round or at its end (as the area says). Each rolls the save (the damage dice rolled once for all); a failed save
    * puts its conditions on them too.
    */
-  const areaCatch = (l: LastingArea, sec: number, when: AreaFires, fx: Fx[], only?: Set<number>) => {
+  const areaCatch = (l: LastingArea, sec: number, when: AreaFires, fx: Fx[], only?: Set<number>): void => {
+    if (!cause) return asOne(`area:${l.id}:${when}`, () => areaCatch(l, sec, when, fx, only)); // one interaction per creature caught
     const fires = l.fires ?? ["end"], inside = fires.includes("inside"); // staying in it: caught coming in, and at the end of each round
     if (!fires.includes(when) && !(inside && (when === "enter" || when === "end"))) return;
     const key = (id: number) => `${l.id}:${id}${when === "leave" ? ":leave" : ""}`;
@@ -619,7 +640,8 @@ export function resolveMovement(
   const trapSprung = new Map(traps.map((t) => [t.id, [...t.sprung]]));
   const trapped = new Set<number>(); // stopped by a trap: no more moving this round
   const sprungNow: { trapId: number; tokenId: number }[] = []; // to keep after the round (spent, found)
-  const springTrap = (t: RoundTrap, id: number, sec: number) => {
+  const springTrap = (t: RoundTrap, id: number, sec: number): void => {
+    if (!cause) return asOne(`trap:${t.id}`, () => springTrap(t, id, sec)); // its damage save and its effects' saves: one throw
     trapSprung.set(t.id, [...trapSprung.get(t.id)!, id]);
     sprungNow.push({ trapId: t.id, tokenId: id });
     const s = t.save_attr ? saveRoll(id, t.save_attr as Attribute, t.save_dc, `trap:${sec}:${t.id}:${id}`, t.name, sec) : null;
