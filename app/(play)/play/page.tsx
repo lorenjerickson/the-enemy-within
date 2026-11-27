@@ -38,7 +38,7 @@ import ImproviseResult from "./ImproviseResult";
 import type { ImproviseChoices } from "./ImproviseWindow";
 import { listLights, listEffects } from "@/lib/db/mapThings";
 import { listSecrets } from "@/lib/db/story";
-import { listTraps } from "@/lib/db/traps";
+
 import { listEffectDefs } from "@/lib/db/effects";
 import { listDiscoveries } from "@/lib/story";
 import { listLibraryScripts } from "@/lib/scriptLibrary";
@@ -331,7 +331,6 @@ function improviseChoices(levelId: number): ImproviseChoices {
       light: listLights(levelId).map((x) => ({ id: x.id, name: x.name ?? `Light ${x.id}` })),
       effect: listEffects(levelId).map((x) => ({ id: x.id, name: x.name })),
       secret: listSecrets(levelId).map((x) => ({ id: x.id, name: x.name })),
-      trap: listTraps(levelId).map((x) => ({ id: x.id, name: x.name })),
       discovery: listDiscoveries().map((x) => ({ id: x.id, name: x.title })),
       area: listLastingAreas(levelId).map((x) => ({ id: x.id, name: x.name })),
     },

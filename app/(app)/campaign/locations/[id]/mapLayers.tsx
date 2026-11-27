@@ -10,7 +10,7 @@ import type { PositionalSound } from "@/lib/db/media";
 import { drawLasting } from "@/lib/vfx";
 import { type LastingArea } from "@/lib/aoe";
 import { drawTrap } from "./trapDraw";
-import type { Trap } from "@/lib/traps";
+
 import type { MapTrigger } from "@/lib/triggers";
 import { drawEffect } from "@/lib/effects";
 
@@ -52,7 +52,6 @@ export interface MapState {
   showLightAreas: boolean; // outline each light's area (while editing lighting)
   notes: MapNote[];
   secrets: MapSecret[];
-  traps: Trap[]; // the GM's; a player's map gets only found ones
   triggers: MapTrigger[]; // GM only
   effects: MapEffect[];
   lasting: LastingArea[]; // areas actions left on the map for a while

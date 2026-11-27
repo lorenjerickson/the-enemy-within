@@ -28,8 +28,7 @@ import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon, t
 import { FEET_PER_SQUARE, clearPath, reachableSquares, shortestPath, squareKey, squareRoute } from "@/lib/movement";
 import { revealDiscovery } from "@/lib/storyRules";
 import { SEARCH_DC, SEARCH_RANGE } from "@/lib/playerActions";
-import { getTrap } from "@/lib/db/traps";
-import { springTrap } from "./traps";
+
 import { hazardRolled } from "./hazards";
 import type { Hazard } from "@/lib/hazards";
 import { getCondition } from "@/lib/db/effects";
@@ -300,10 +299,8 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     outcome = hazardRolled(a.levelId, a.hazardId, a.tokenId, scored.total);
   }
   if (a.kind === "trapSave") {
-    // A trap that sprang on them (out of combat): it lands now, with their throw.
-    const t = getTrap(a.trapId);
-    success = !!t && !!t.save_attr && scored.total >= t.save_dc;
-    outcome = t ? springTrap(a.levelId, t, a.tokenId, scored.total).player : "It's gone.";
+    // Retired (traps are hazards now): a prompt still open from before has nothing left to settle.
+    outcome = "It's gone.";
   }
   if (a.kind === "initiative") {
     // Into the turn order, highest first (a re-roll replaces an earlier one).

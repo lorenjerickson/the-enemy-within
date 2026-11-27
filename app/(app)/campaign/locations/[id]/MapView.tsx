@@ -43,7 +43,7 @@ import { setPlaceMode, usePlaceMode } from "../../../../(play)/play/placeMode";
 import { placeImprovise } from "../../../../(play)/play/actions";
 import { gmPlaceImprovise } from "../../../../(play)/play/gmActions";
 import { templateArea, type Template } from "@/lib/templates";
-import type { Trap } from "@/lib/traps";
+
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
 import type { ScriptNames } from "@/lib/scriptSchema";
 import ControlsEditor from "./ControlsEditor";
@@ -101,7 +101,6 @@ export default function MapView({
   lasting = [],
   gmPlans,
   secrets,
-  traps = [],
   trapEffects = [],
   triggers = [],
   discoveries = [],
@@ -153,7 +152,6 @@ export default function MapView({
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
-  traps?: Trap[]; // the GM's traps (players get only the found ones)
   trapEffects?: { id: number; name: string }[]; // catalog effects lasting rounds, for what traps put on
   triggers?: MapTrigger[]; // the GM's map triggers (players get none)
   discoveries?: { id: number; title: string; text: string; found: number }[]; // for the secrets editor
@@ -443,8 +441,6 @@ export default function MapView({
   // Traps: pick a shape, then drag it out on the map; shown straight away (optimistic).
   const [trapShape, setTrapShape] = useState<TrapShape>("rect");
   const [trapDrag, setTrapDrag] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
-  type TrapChange = { add: Trap } | { remove: number };
-  const [optimisticTraps, changeTraps] = useOptimistic(traps, (ts: Trap[], c: TrapChange) => ("add" in c ? [...ts, c.add] : ts.filter((t) => t.id !== c.remove)));
   // Map triggers: drawn the same way (the same shape picker and drag).
   type TriggerChange = { add: MapTrigger } | { remove: number };
   const [optimisticTriggers, changeTriggers] = useOptimistic(triggers, (ts: MapTrigger[], c: TriggerChange) => ("add" in c ? [...ts, c.add] : ts.filter((t) => t.id !== c.remove)));
@@ -672,7 +668,7 @@ export default function MapView({
       const at = walkAt(w);
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, traps: optimisticTraps, triggers: readOnly ? [] : optimisticTriggers,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, triggers: readOnly ? [] : optimisticTriggers,
     effects: drawnEffects, lasting: replayFrame ? lasting.filter((l) => !(replay?.newAreas ?? []).some((n) => n.id === l.id && n.sec > replayFrame.sec)) : lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
@@ -1695,7 +1691,6 @@ export default function MapView({
                   light: optimisticLights.map((x) => ({ id: x.id, name: x.name })),
                   effect: optimisticEffects.map((x) => ({ id: x.id, name: x.name })),
                   secret: optimisticSecrets.map((x) => ({ id: x.id, name: x.name })),
-                  trap: optimisticTraps.map((x) => ({ id: x.id, name: x.name })),
                   discovery: discoveries.map((x) => ({ id: x.id, name: x.title })),
                   area: lasting.map((x) => ({ id: x.id, name: x.name })),
                 }}

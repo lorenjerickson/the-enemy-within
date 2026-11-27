@@ -16,15 +16,15 @@ import { walkWithFollowers } from "../../../(play)/play/walk";
 import { speedFps } from "@/lib/creatureChanges";
 import { revealAfterStep } from "../../../(play)/play/hiding";
 import { audioFromForm, imageFromForm } from "@/lib/images";
-import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger, addTrap, deleteTrap, getTrap, resetTrap, saveTrap, setTrapFound } from "@/lib/db/traps";
-import { listEffectDefs } from "@/lib/db/effects";
-import { AREA_FIRES, NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires } from "@/lib/aoe";
+import { addMapTrigger, deleteMapTrigger, getMapTrigger, resetMapTrigger, saveMapTrigger } from "@/lib/db/traps";
+
+import { AREA_FIRES, NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, inArea } from "@/lib/aoe";
 import { db } from "@/lib/db/connection";
 import { addLastingArea, getLastingArea, igniteAreas, removeLastingArea, setLastingAreaOff, spreadFire, updateLastingArea } from "@/lib/db/areas";
 import { getCondition } from "@/lib/db/effects";
 import { getGameTime } from "@/lib/db/calendar";
 import { catchInArea } from "../../../(play)/play/areas";
-import { lookOf } from "@/lib/combat";
+
 import { ATTRIBUTES } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
 import { isDiceFormula } from "@/lib/itemTypes";
@@ -590,51 +590,6 @@ export async function revealSecret(locationId: number, id: number, revealed: boo
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 
-/** GM places a trap (what it does is set on it afterwards). */
-export async function placeTrap(locationId: number, levelId: number, area: TrapArea) {
-  await requireGm();
-  const n = (v: unknown) => { const x = Number(v); if (!Number.isFinite(x)) throw new Error("Invalid trap"); return x; };
-  const clean: TrapArea = area.shape === "circle" ? { shape: "circle", x: n(area.x), y: n(area.y), r: Math.max(0.25, n(area.r)) }
-    : area.shape === "rect" ? { shape: "rect", x: n(area.x), y: n(area.y), w: Math.max(0.25, n(area.w)), h: Math.max(0.25, n(area.h)) }
-    : { shape: "line", x1: n(area.x1), y1: n(area.y1), x2: n(area.x2), y2: n(area.y2) };
-  addTrap(Number(levelId), clean);
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
-export async function removeTrap(locationId: number, id: number) {
-  await requireGm();
-  deleteTrap(Number(id));
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
-/** GM saves what a trap does: when it springs, on whom, how often, its save and damage, the effects it puts on, whether it stops the mover, how hard it is to find. */
-export async function saveTrapSettings(locationId: number, id: number, formData: FormData) {
-  await requireGm();
-  const t = getTrap(Number(id));
-  if (!t) throw new Error("No such trap");
-  const text = (k: string) => String(formData.get(k) ?? "").trim();
-  const int = (k: string, lo: number, hi: number, d: number) => { const n = Math.round(Number(formData.get(k))); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
-  const damage = text("damage").toLowerCase().replace(/\s/g, "");
-  if (damage && !isDiceFormula(damage) && !/^\d+$/.test(damage)) throw new Error("Damage must be dice (2d6) or a number");
-  const springs = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`springs_${k}`));
-  const known = new Set(listEffectDefs().map((e) => e.id));
-  saveTrap(t.id, {
-    name: text("name") || "Trap",
-    springs, // none ticked: only a trigger sets it off
-    who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
-    often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
-    damage: damage || null,
-    damage_type: (DAMAGE_TYPES as readonly string[]).includes(text("damage_type")) ? text("damage_type") : "",
-    save_attr: (ATTRIBUTES as readonly string[]).includes(text("save_attr")) ? text("save_attr") : "",
-    save_dc: int("save_dc", 1, 40, 12),
-    save_half: formData.get("save_half") ? 1 : 0,
-    effects: [...new Set(formData.getAll("effect").map(Number))].filter((e) => known.has(e)),
-    stops: formData.get("stops") ? 1 : 0,
-    find_dc: int("find_dc", 1, 40, 14),
-  });
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
 /** The GM draws an area on the map (Areas layer): it does nothing until its settings are saved, and lasts until removed. */
 export async function placeArea(locationId: number, levelId: number, drawn: TrapArea) {
   await requireGm();
@@ -643,46 +598,6 @@ export async function placeArea(locationId: number, levelId: number, drawn: Trap
     : drawn.shape === "rect" ? { shape: "rect", x: n(drawn.x), y: n(drawn.y), w: Math.max(0.25, n(drawn.w)), h: Math.max(0.25, n(drawn.h)) }
     : { shape: "line", x1: n(drawn.x1), y1: n(drawn.y1), x2: n(drawn.x2), y2: n(drawn.y2) };
   addLastingArea(Number(levelId), { name: "Hazard", look: "fog", area: areaFromDrawn(clean), damage: null, dc: 12, save: "agility", half: true, ends: UNTIL_REMOVED, fires: ["enter"], drawn: true });
-  revalidatePath("/play");
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
-/** The GM saves what an area does: its name and look, its save and damage, effects on a failed save, when it catches someone, how long it lasts. */
-export async function saveAreaSettings(locationId: number, id: number, formData: FormData) {
-  await requireGm();
-  const a = getLastingArea(Number(id));
-  if (!a) throw new Error("No such area");
-  const text = (k: string) => String(formData.get(k) ?? "").trim();
-  const int = (k: string, lo: number, hi: number, d: number) => { const v = Math.round(Number(formData.get(k))); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
-  const damage = text("damage").toLowerCase().replace(/\s/g, "");
-  if (damage && !isDiceFormula(damage) && !/^\d+$/.test(damage)) throw new Error("Damage must be dice (2d6) or a number");
-  const damageType = (DAMAGE_TYPES as readonly string[]).includes(text("damage_type")) ? text("damage_type") : "";
-  const look = (EFFECT_KINDS as readonly string[]).includes(text("look")) ? (text("look") as EffectKind) : lookOf(damageType);
-  const fires = AREA_FIRES.map(([k]) => k).filter((k) => formData.get(`fires_${k}`)) as AreaFires[];
-  const minutes = Number(formData.get("minutes"));
-  const { id: _id, level_id: _l, ...rest } = a;
-  updateLastingArea(a.id, {
-    ...rest,
-    flammable: !!formData.get("flammable"),
-    name: formData.has("name") ? text("name") || "Area" : a.name,
-    damage: damage || null,
-    damageType,
-    look,
-    save: ((ATTRIBUTES as readonly string[]).includes(text("save")) ? text("save") : "agility") as never,
-    dc: text("save") ? int("dc", 1, 40, 12) : NO_SAVE_DC, // no save against its damage: it always lands
-    half: !!formData.get("half"),
-    fires: formData.has("fires_shown") ? (fires.length ? fires : ["enter"]) : a.fires, // the interview asks this now
-    lingers: !!formData.get("lingers"),
-    visibility: (["shown", "hidden", "gm"] as const).find((v) => v === text("visibility")) ?? "shown",
-    findDc: int("find_dc", 1, 40, 14),
-    found: text("visibility") === "hidden" ? a.found : undefined,
-    sound: Number(formData.get("sound")) || undefined,
-    buildUp: int("build_up", 0, 20, 1),
-    decay: int("decay", 1, 20, 2),
-    conditions: [...new Set(formData.getAll("effect").map(Number))].flatMap((e) => { const c = getCondition(e); return c ? [c] : []; }),
-    ends: Number.isFinite(minutes) && minutes > 0 ? Math.round((getGameTime() + minutes) * 1e6) / 1e6 : UNTIL_REMOVED, // blank: until removed
-  });
-  spreadFire(a.level_id); // a fire now, or flammable next to one
   revalidatePath("/play");
   revalidatePath(`/campaign/locations/${locationId}`);
 }
@@ -778,20 +693,6 @@ export async function rearmHazard(locationId: number, id: number) {
   const { id: hid, level_id: _l, ...rest } = rearm(h) as Hazard & { level_id: number };
   updateLastingArea(hid, rest);
   revalidatePath("/play");
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
-/** GM re-arms a trap: it forgets whom it has sprung on. */
-export async function rearmTrap(locationId: number, id: number) {
-  await requireGm();
-  resetTrap(Number(id));
-  revalidatePath(`/campaign/locations/${locationId}`);
-}
-
-/** GM reveals a trap to the players (or hides it again). */
-export async function revealTrap(locationId: number, id: number, found: boolean) {
-  await requireGm();
-  setTrapFound(Number(id), !!found);
   revalidatePath(`/campaign/locations/${locationId}`);
 }
 

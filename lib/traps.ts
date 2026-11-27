@@ -1,9 +1,8 @@
 /**
- * Traps: hazards the GM places on a map (Traps layer), hidden from players until found. One springs when someone
- * enters it, starts a round in it or ends a move in it (as set), if they're who it's for and it isn't spent. Shapes
- * are in grid units (1 = 5 ft; a token's centre is col + 0.5, row + 0.5): a circle, a rectangle, or a line across a
- * corridor (crossing it springs it). What it does (a save against damage, effects, stopping the mover) is worked out
- * where it springs; this file only decides whether it does.
+ * Zones that go off when someone comes into them, starts a round in them or ends a move in them, if they're who it's
+ * for and it isn't spent: map triggers, and dormant hazards in the round engine (`asRoundTrap`, lib/hazards.ts; the
+ * Traps layer is gone). Shapes are in grid units (1 = 5 ft; a token's centre is col + 0.5, row + 0.5): a circle, a
+ * rectangle, or a line across a corridor (crossing it sets it off). This file only decides whether one goes off.
  */
 import { crosses, pointToSegment } from "@/lib/movement";
 import type { AreaFires } from "@/lib/aoe";
@@ -39,10 +38,6 @@ export interface Trap {
   seen_by?: number[]; // tokens that saw it go off: their players see it (going off out of sight reveals nothing)
   sprung: number[]; // tokens it has sprung on (once: any spends it; each: those it won't spring on again)
 }
-
-/** A trap's middle (a tripwire's midpoint), in grid units: what someone has to see to see it go off. */
-export const trapCentre = (a: TrapArea): { x: number; y: number } =>
-  a.shape === "circle" ? { x: a.x, y: a.y } : a.shape === "rect" ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 };
 
 /** What zone checks need (traps and triggers alike). */
 export type Zone = Pick<Trap, "area" | "springs" | "who" | "often" | "sprung">;

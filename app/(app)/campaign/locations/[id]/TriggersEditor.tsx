@@ -19,7 +19,6 @@ export interface TriggerThings {
   light: { id: number; name: string }[];
   effect: { id: number; name: string }[];
   secret: { id: number; name: string }[];
-  trap: { id: number; name: string }[];
   discovery: { id: number; name: string }[];
   area: { id: number; name: string }[];
 }
@@ -125,7 +124,7 @@ export default function TriggersEditor({ locationId, shape, onShape, triggers, t
           </button>
         ))}
       </div>
-      <p className="text-xs opacity-60">{SHAPES.find(([s]) => s === shape)![2]}. When someone comes into it, it opens doors, switches lights, sets off traps, runs a script… Players never see triggers.</p>
+      <p className="text-xs opacity-60">{SHAPES.find(([s]) => s === shape)![2]}. When someone comes into it, it opens doors, switches lights, sets off hazards, runs a script… Players never see triggers.</p>
       {triggers.length ? (
         <ul className="space-y-1">
           {triggers.map((t) => (

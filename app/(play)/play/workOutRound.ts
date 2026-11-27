@@ -34,9 +34,8 @@ import { addAffliction, addStrain } from "@/lib/db/effects";
 import { clearTokenTargets, recordSightingAt } from "@/lib/db/tokens";
 import { openConditionSaveRequest } from "@/lib/db/rolls";
 
-import { listMapTriggers, trapSeenBy } from "@/lib/db/traps";
-import { seesSpot } from "@/lib/sight";
-import { trapCentre, type Trap } from "@/lib/traps";
+import { listMapTriggers } from "@/lib/db/traps";
+
 import { fireTrigger } from "./mapTriggers";
 import { clearAssist, clearHidden, setHidden, listHidden, listAssists, setAssist, setLinkPrompt } from "@/lib/db/tokens";
 import { getCharacter } from "@/lib/db/catalog";
@@ -386,15 +385,5 @@ export function applyConditionNow(levelId: number, tokenId: number, c: Condition
   }
   if (lingers(c) && !addAffliction(levelId, tokenId, c, null, area)) out.push(`already ${c.name.toLowerCase()}: no change`); // area: while in it
   return out;
-}
-
-/**
- * A trap went off: the characters who could see it (and those it caught) now know it's there; their players see it on
- * the map. Going off out of everyone's sight reveals it to no one (a Search still finds it).
- */
-export function witnessTrap(levelId: number, trap: Trap, caught: number[] = []): void {
-  const middle = trapCentre(trap.area);
-  const saw = listTokens(levelId).filter((t) => t.character_id !== null && (caught.includes(t.id) || seesSpot(levelId, t.id, middle))).map((t) => t.id);
-  if (saw.length) trapSeenBy(trap.id, saw);
 }
 
