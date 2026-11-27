@@ -5,6 +5,9 @@ import { db } from "@/lib/db/connection";
 import { listProfessions, rankChain, saveProfessionGroup, setCharacterRank } from "@/lib/db/catalog";
 import { oldModifiers, saveEffectDef, settleEffects, type OldEffectDef } from "@/lib/db/effects";
 import type { Modifier } from "@/lib/conditions";
+import { getCondition } from "@/lib/db/effects";
+import { hazardFromTrap } from "@/lib/hazards";
+import type { Trap } from "@/lib/traps";
 import type { Boost, RollGrant } from "@/lib/actions";
 
 /** Runs a migration the first time only. */
@@ -97,4 +100,28 @@ export function runMigrations(): void {
 
   // Last, once every table exists: the retired conditions become effects, and the built-in effects are seeded.
   settleEffects();
+}
+
+/**
+ * Traps become hazards (backlog X, claude/hazards-design.md): each trap a dormant hazard on its level (a spent "once"
+ * trap is dropped), trigger outcomes that set one off now set off its hazard, and `map_traps` is left empty (an older
+ * export's traps are moved again after an import). Wired into start-up once play reads hazards for traps.
+ */
+export function trapsToHazards(): void {
+  db.transaction(() => {
+    const rows = db.prepare<[], Record<string, unknown>>("SELECT * FROM map_traps").all();
+    const moved = new Map<number, number>();
+    for (const r of rows) {
+      const t = { ...r, area: JSON.parse(String(r.area)), springs: String(r.springs).split(",").filter(Boolean), effects: JSON.parse(String(r.effects)), sprung: JSON.parse(String(r.sprung)), seen_by: JSON.parse(String(r.seen_by ?? "[]")) } as unknown as Trap & { level_id: number };
+      const h = hazardFromTrap(t, getCondition);
+      if (!h) continue;
+      const { name, ends, ...spec } = h;
+      moved.set(t.id, Number(db.prepare("INSERT INTO hazards (level_id, name, ends, spec) VALUES (?, ?, ?, ?)").run(t.level_id, name, ends, JSON.stringify(spec)).lastInsertRowid));
+    }
+    for (const tr of db.prepare<[], { id: number; outcomes: string }>("SELECT id, outcomes FROM map_triggers").all()) {
+      const outcomes = (JSON.parse(tr.outcomes) as { kind: string; trap?: number }[]).flatMap((o) => (o.kind !== "trap" ? [o] : moved.has(o.trap!) ? [{ kind: "area", area: moved.get(o.trap!), to: "set off" }] : []));
+      db.prepare("UPDATE map_triggers SET outcomes = ? WHERE id = ?").run(JSON.stringify(outcomes), tr.id);
+    }
+    db.prepare("DELETE FROM map_traps").run();
+  })();
 }

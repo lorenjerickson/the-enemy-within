@@ -5,9 +5,11 @@
  * until switched off. Pure rules: whether it's active, whether a moment sets it off, whom it may catch, springing it,
  * and who sees it. Play (walks, rounds) and the editor use these.
  */
-import { UNTIL_REMOVED, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, type AreaFires, type LastingArea } from "@/lib/aoe";
+import type { Attribute } from "@/lib/attributes";
+import type { Condition } from "@/lib/conditions";
 import type { Allegiance } from "@/lib/sides";
-import { canSpring, type TrapOften, type TrapWho } from "@/lib/traps";
+import { canSpring, type Trap, type TrapOften, type TrapWho } from "@/lib/traps";
 
 export type SetOffBy = "enter" | "start" | "end"; // someone coming into it, starting a round in it, ending a round (or move) in it
 
@@ -26,6 +28,7 @@ export interface HazardSettings {
   seenBy?: number[]; // characters who saw it go off (they see it now)
   soundHidden?: boolean; // its sound plays even before it's found (a cue something is there)
   spent?: boolean; // a "once" hazard that has gone off: gone from the map
+  noLook?: boolean; // drawn as an outline only, no animated look (a pit, a tripwire)
 }
 
 export type Hazard = LastingArea & HazardSettings;
@@ -69,3 +72,21 @@ export function seenBy(h: Hazard, tokenId: number): boolean {
 
 /** Whether a player near it hears its sound: when they can see it, or always with "play sound while hidden". */
 export const heardBy = (h: Hazard, tokenId: number, now: number): boolean => !!h.sound && !h.off && !h.spent && now < h.ends && h.visibility !== "gm" && (seenBy(h, tokenId) || !!h.soundHidden); // a dormant one too (a hiss before the gas)
+
+/**
+ * A trap as a hazard (the one-time move from the Traps layer): dormant, set off by what set it off (none: only a map
+ * trigger), an instant, the same who / how often / stops, found as it was, its damage and save, its effects (copies,
+ * from `conditionOf`). Null for a "once" trap that has already gone off: it's spent.
+ */
+export function hazardFromTrap(t: Trap, conditionOf: (id: number) => Condition | undefined): Omit<Hazard, "id"> | null {
+  if (t.often === "once" && t.sprung.length) return null;
+  const setOffBy = t.springs.filter((s): s is SetOffBy => s === "enter" || s === "start" || s === "end");
+  return {
+    name: t.name, look: "fog", noLook: true, area: areaFromDrawn(t.area), drawn: true, ends: UNTIL_REMOVED,
+    damage: t.damage || null, damageType: t.damage_type || undefined, save: (t.save_attr || "agility") as Attribute, dc: t.save_attr ? t.save_dc : NO_SAVE_DC, half: !!t.save_half,
+    conditions: t.effects.flatMap((id) => { const c = conditionOf(id); return c ? [c] : []; }),
+    activation: "dormant", setOffBy, byTrigger: true, activeFor: "instant", fires: ["enter"],
+    who: t.who, often: t.often, sprung: [...t.sprung], stops: !!t.stops,
+    visibility: "hidden", findDc: t.find_dc, found: !!t.found, seenBy: [...(t.seen_by ?? [])],
+  };
+}
