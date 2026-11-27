@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import type { Hazard } from "@/lib/hazards";
-import { CATCHES, PRESETS, SET_OFF_BY, answerLine, answersFromHazard, applyPreset, hazardCard, hazardPatch, questions, type Answers, type Question } from "@/lib/hazardWizard";
+import { CATCHES, PRESETS, SET_OFF_BY, answerLine, answersFromHazard, applyPreset, hazardCard, hazardExtras, hazardPatch, questions, type Answers, type Question } from "@/lib/hazardWizard";
+import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
+import { DAMAGE_TYPES } from "@/lib/actions";
+import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
+import { isDiceFormula } from "@/lib/itemTypes";
 import { Choices, NumberBox } from "../../interviewParts";
 import { saveHazardAnswers } from "../actions";
 
@@ -11,8 +15,8 @@ import { saveHazardAnswers } from "../actions";
  * back), then one question at a time: name, a preset (new ones), activation, how long it stays active, whom it
  * catches, who it's for, how often, whether it stops them. Saves only these; the rest of the hazard is kept.
  */
-export default function HazardInterview({ locationId, hazard, isNew }: { locationId: number; hazard: Hazard; isNew: boolean }) {
-  const [a, setA] = useState<Answers>(() => answersFromHazard(hazard));
+export default function HazardInterview({ locationId, hazard, isNew, effects, sounds, now }: { locationId: number; hazard: Hazard; isNew: boolean; effects: { id: number; name: string }[]; sounds: { id: number; name: string }[]; now: number }) {
+  const [a, setA] = useState<Answers>(() => answersFromHazard(hazard, now));
   const [at, go] = useState<Question>("name");
   const [seen, setSeen] = useState<Set<Question>>(() => new Set(isNew ? ["name"] : questions(answersFromHazard(hazard))));
   const [pending, start] = useTransition();
@@ -24,10 +28,11 @@ export default function HazardInterview({ locationId, hazard, isNew }: { locatio
   const valid = (q: Question) => q === "name" ? !!a.name.trim()
     : q === "activation" ? a.activation === "always" || a.setOffBy.length > 0 || a.byTrigger
     : q === "catches" ? a.fires.length > 0
+    : q === "damage" ? !a.damage.trim() || isDiceFormula(a.damage.toLowerCase().replace(/\s/g, "")) || /^\d+$/.test(a.damage.trim())
     : true;
   const ok = valid(at), allOk = qs.every(valid);
   const next = () => { if (ok && !last) setAt(qs[i + 1]); };
-  const save = () => start(() => saveHazardAnswers(locationId, hazard.id, JSON.stringify(hazardPatch(a))));
+  const save = () => start(() => saveHazardAnswers(locationId, hazard.id, JSON.stringify({ ...hazardPatch(a), ...hazardExtras(a) })));
   const toggle = <T,>(list: T[], v: T, on: boolean) => (on ? [...list, v] : list.filter((x) => x !== v));
 
   return (
@@ -118,6 +123,73 @@ export default function HazardInterview({ locationId, hazard, isNew }: { locatio
           <>
             <div className="font-semibold">How often?</div>
             <Choices value={a.often} options={[["once", "Once", "then it's spent and gone from the map"], ["each", "Once for each creature", "it can be re-armed"], ["always", "Every time", ""]]} onPick={(often) => set({ often })} />
+          </>
+        )}
+        {at === "visible" && (
+          <>
+            <div className="font-semibold">When do players see it?</div>
+            <Choices value={a.visibility} options={[["shown", "Always", "a fire wall, a cloud"], ["hidden", "Once it goes off, or it's found", "a trap: those who see it go off, or a Search"], ["gm", "Never", "only the GM sees it (a ward)"]]} onPick={(visibility) => set({ visibility })} />
+            {a.visibility === "hidden" && <label className="flex items-center gap-2">a Search finds it with <NumberBox min={1} max={40} value={a.findDc} onChange={(findDc) => set({ findDc })} className="input input-sm w-20" /> or more (within 10 feet)</label>}
+          </>
+        )}
+        {at === "look" && (
+          <>
+            <div className="font-semibold">How does it look and sound on the map?</div>
+            <label className="flex flex-wrap items-center gap-2">Look
+              <select value={a.look} onChange={(e) => set({ look: e.target.value as EffectKind | "none" })} className="select select-sm w-auto">
+                <option value="none">an outline only (a pit, a tripwire)</option>
+                {EFFECT_KINDS.map((k) => <option key={k} value={k}>{EFFECT_LABELS[k]}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-wrap items-center gap-2">Sound
+              <select value={a.sound ?? ""} onChange={(e) => set({ sound: Number(e.target.value) || null })} className="select select-sm w-auto"><option value="">none</option>{sounds.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            </label>
+            {a.sound !== null && <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.soundHidden} onChange={(e) => set({ soundHidden: e.target.checked })} />play the sound while it's hidden (a cue that something is there)</label>}
+          </>
+        )}
+        {at === "damage" && (
+          <>
+            <div className="font-semibold">Does it deal damage?</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={a.damage} onChange={(e) => set({ damage: e.target.value })} placeholder="none, or e.g. 2d6" className={`input input-sm w-28 ${ok ? "" : "input-error"}`} />
+              <select value={a.damageType} onChange={(e) => set({ damageType: e.target.value })} className="select select-sm w-auto"><option value="">no type</option>{DAMAGE_TYPES.map((d) => <option key={d} value={d}>{d}</option>)}</select>
+            </div>
+            {a.damage.trim() && (
+              <>
+                <Choices value={a.damageSave ? "yes" : "no"} options={[["no", "No save", "it always lands"], ["yes", "A save against it", "half or none on a success"]]} onPick={(v) => set({ damageSave: v === "yes" })} />
+                {a.damageSave && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select value={a.saveAttr} onChange={(e) => set({ saveAttr: e.target.value as Attribute })} className="select select-sm w-auto">{ATTRIBUTES.map((x) => <option key={x} value={x}>{x[0].toUpperCase() + x.slice(1)}</option>)}</select>
+                    save, DC <NumberBox min={1} max={40} value={a.saveDc} onChange={(saveDc) => set({ saveDc })} className="input input-sm w-20" />
+                    <select value={a.half ? "half" : "none"} onChange={(e) => set({ half: e.target.value === "half" })} className="select select-sm w-auto"><option value="half">half damage on a success</option><option value="none">no damage on a success</option></select>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+        {at === "effects" && (
+          <>
+            <div className="font-semibold">Does it put any effects on whoever it catches?</div>
+            <div className="flex max-h-48 flex-wrap gap-x-3 gap-y-1 overflow-y-auto">
+              {effects.map((e) => <label key={e.id} className="flex items-center gap-1"><input type="checkbox" className="checkbox checkbox-xs" checked={a.effectIds.includes(e.id)} onChange={(ev) => set({ effectIds: toggle(a.effectIds, e.id, ev.target.checked) })} />{e.name}</label>)}
+            </div>
+            <p className="text-xs opacity-60">With a save against its damage, they land when the damage does (full or half); otherwise each rolls its own save as it lands.</p>
+          </>
+        )}
+        {at === "lingers" && (
+          <>
+            <div className="font-semibold">Does its harm linger, and does fire set it burning?</div>
+            <label className="flex flex-wrap items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.lingers} onChange={(e) => set({ lingers: e.target.checked })} />its harm lingers</label>
+            {a.lingers && <div className="flex flex-wrap items-center gap-2 pl-6">+<NumberBox min={0} max={20} value={a.buildUp} onChange={(buildUp) => set({ buildUp })} className="input input-sm w-16" /> each round inside, −<NumberBox min={1} max={20} value={a.decay} onChange={(decay) => set({ decay })} className="input input-sm w-16" /> each round after leaving</div>}
+            <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.flammable} onChange={(e) => set({ flammable: e.target.checked })} />flammable: fire touching it sets it burning for 3 rounds, then it's spent</label>
+          </>
+        )}
+        {at === "lasts" && (
+          <>
+            <div className="font-semibold">How long does it stay on the map?</div>
+            <Choices value={a.lasts > 0 ? "time" : "removed"} options={[["removed", "Until removed", ""], ["time", "A while", "in game minutes (a round is 0.1)"]]} onPick={(v) => set({ lasts: v === "time" ? a.lasts || 1 : 0 })} />
+            {a.lasts > 0 && <label className="flex items-center gap-2"><NumberBox min={0.1} max={100000} step={0.1} value={a.lasts} onChange={(lasts) => set({ lasts })} className="input input-sm w-24" /> minutes from now</label>}
           </>
         )}
         {at === "stops" && (
