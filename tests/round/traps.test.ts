@@ -120,3 +120,19 @@ test("one d20 per interaction for the GM's creatures too: rolled once, each save
   assert.ok(!r.afflictions.get(1)?.some((a) => a.condition.name === "Netted"));
   assert.ok(r.afflictions.get(1)?.some((a) => a.condition.name === "Poisoned"), "12 − 3 = 9");
 });
+
+test("a dormant hazard springs in a round like the trap it was: damage, stopped, once per creature; it goes back to its hazard (negative id)", async () => {
+  const { asRoundTrap, hazardFromTrap, trapAreaOf } = await import("@/lib/hazards");
+  const { areaFromDrawn } = await import("@/lib/aoe");
+  for (const a of [{ shape: "rect" as const, x: 2, y: 0, w: 1, h: 1 }, { shape: "circle" as const, x: 4, y: 4, r: 1.5 }, { shape: "line" as const, x1: 0, y1: 0, x2: 3, y2: 4 }]) {
+    const back = trapAreaOf(areaFromDrawn(a)) as unknown as Record<string, number>;
+    for (const [k, v] of Object.entries(a)) if (k !== "shape") assert.ok(Math.abs(back[k] - (v as number)) < 1e-9, `${a.shape} ${k}`);
+  }
+  const h = { id: 5, ...hazardFromTrap({ ...pit({ stops: 1, often: "each" }), effects: [] }, () => undefined)! };
+  const t = asRoundTrap(h);
+  assert.equal(t.id, -5);
+  const r = resolve([mover(1, { col: 0, row: 0 }, [move(4, 0, 20)])], { 1: fighter({ hp: 20 }) }, { traps: [t] });
+  assert.equal(r.hp.get(1), 14);
+  assert.deepEqual(r.trapsSprung, [{ trapId: -5, tokenId: 1 }]);
+  assert.equal(r.final.get(1)?.col, 2, "stopped in it");
+});

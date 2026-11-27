@@ -2,7 +2,9 @@ import { inArea } from "@/lib/aoe";
 import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
-import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas } from "@/lib/db/areas";
+import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
+import { asRoundTrap, type Hazard } from "@/lib/hazards";
+import { markHazardSprung } from "./hazardSprung";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
 import { clearRoundPlans, getPendingRound, getRoundPlan, setLastRoundLog, setPendingRound, setReplay } from "@/lib/db/rounds";
 import { closeRollRequest, closeRollOffRequests, openRollOffRequest, requestRoll, saveRollResult, type RollAction } from "@/lib/db/rolls";
@@ -42,7 +44,10 @@ import { getDoor, setDoorOpen } from "@/lib/db/maps";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
-const roundTraps = (levelId: number): RoundTrap[] => listTraps(levelId).map((t) => ({ ...t, given: t.effects.flatMap((id) => getCondition(id) ?? []) }));
+const roundTraps = (levelId: number): RoundTrap[] => [
+  ...listTraps(levelId).map((t) => ({ ...t, given: t.effects.flatMap((id) => getCondition(id) ?? []) })),
+  ...(listLastingAreas(levelId) as Hazard[]).filter((h) => h.activation === "dormant" && !h.off && !h.spent).map(asRoundTrap), // dormant hazards spring like traps (negative ids)
+];
 
 /**
  * Game time passing out of an encounter: every 6 s is a round for effects (Poisoned…) on a level with no encounter
@@ -145,7 +150,12 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   saveAuraPasses(levelId, result.passes); // who passed an aura's save and is still within it
   for (const s of result.strains) addStrain(s.tokenId, s.attribute, s.points); // strain outlasts the round (and the condition)
   // Spent (for them), and no secret any more to whoever saw it go off (from where they ended the round).
-  for (const t of result.trapsSprung) { markTrapSprung(t.trapId, t.tokenId); const trap = listTraps(levelId).find((x) => x.id === t.trapId); if (trap) witnessTrap(levelId, trap, [t.tokenId]); }
+  for (const t of result.trapsSprung) {
+    if (t.trapId < 0) { const h = getLastingArea(-t.trapId) as Hazard | undefined; if (h) markHazardSprung(levelId, h, t.tokenId); continue; } // a dormant hazard
+    markTrapSprung(t.trapId, t.tokenId);
+    const trap = listTraps(levelId).find((x) => x.id === t.trapId);
+    if (trap) witnessTrap(levelId, trap, [t.tokenId]);
+  }
   // Temporary health granted this round: the highest of what they have and what they got (it doesn't add up).
   for (const [id, n] of result.temps) {
     const h = tokenHealth(id);

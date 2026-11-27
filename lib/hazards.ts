@@ -90,3 +90,23 @@ export function hazardFromTrap(t: Trap, conditionOf: (id: number) => Condition |
     visibility: "hidden", findDc: t.find_dc, found: !!t.found, seenBy: [...(t.seen_by ?? [])],
   };
 }
+
+/** A hazard's area in the shapes traps were drawn in (circle, rectangle, tripwire): the round engine's trap zones. */
+export function trapAreaOf(a: Hazard["area"]): Trap["area"] {
+  if (a.shape === "rect") return { shape: "rect", x: a.origin.x - (a.w ?? a.size * 2) / 2, y: a.origin.y - (a.h ?? a.size * 2) / 2, w: a.w ?? a.size * 2, h: a.h ?? a.size * 2 };
+  if (a.shape === "line") return { shape: "line", x1: a.origin.x, y1: a.origin.y, x2: a.origin.x + Math.cos(a.dir) * a.size, y2: a.origin.y + Math.sin(a.dir) * a.size };
+  return { shape: "circle", x: a.origin.x, y: a.origin.y, r: a.size };
+}
+
+/**
+ * A dormant hazard as the round engine's trap (until rounds read hazards directly): springs as it's set off, once /
+ * each / every time, stops, its damage and save, its effects (`given`). Its id is the hazard's, negated, so what sprang
+ * in the round goes back to the hazard.
+ */
+export function asRoundTrap(h: Hazard): Trap & { given: Condition[] } {
+  return {
+    id: -h.id, name: h.name, area: trapAreaOf(h.area), springs: h.setOffBy ?? [], who: h.who ?? "", often: h.often ?? "always",
+    damage: h.damage, damage_type: h.damageType ?? "", save_attr: h.dc < NO_SAVE_DC ? h.save : "", save_dc: h.dc, save_half: h.half ? 1 : 0,
+    effects: [], stops: h.stops ? 1 : 0, find_dc: h.findDc ?? 14, found: h.found ? 1 : 0, seen_by: h.seenBy ?? [], sprung: h.sprung ?? [], given: h.conditions ?? [],
+  };
+}
