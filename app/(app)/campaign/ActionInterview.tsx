@@ -12,7 +12,7 @@ import { MODIFIER_TARGET_GROUPS, type ModifierTarget } from "@/lib/modifiers";
 const AID_GROUPS = MODIFIER_TARGET_GROUPS.filter(([g]) => g !== "Movement").map(([g, opts]) => [g, opts.filter(([t]) => t !== "health" && t !== "defense")] as const);
 import { isDiceFormula, isModifierFormula } from "@/lib/itemTypes";
 import { AFFECTS, affectsFor, answerLine, type Affect } from "@/lib/actionWizard";
-import { NO_SAVE_DC } from "@/lib/aoe";
+import { ATTRIBUTES } from "@/lib/attributes";
 import EffectChips, { type EffectOption } from "./EffectChips";
 
 const AFFECT_LABELS: Record<Affect, [string, string]> = {
@@ -115,8 +115,6 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
   const ok = valid(at);
   const allOk = qs.every(valid);
   const next = () => { if (ok && !last) setAt(qs[i + 1]); };
-  // An older area with its own save loses it on saving: saves belong to the effects an area applies.
-  const loses = !!initial?.area_shape && (initial.area_ft ?? 0) > 0 && initial.save_dc < NO_SAVE_DC && a.who === "area" && a.type !== "reaction";
 
   return (
     <form action={action} className="mt-2 space-y-3 rounded-box bg-base-200 p-3" data-action-interview
@@ -275,7 +273,20 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
                 {DAMAGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            {a.who === "area" && <p className="text-xs opacity-60">Everyone caught takes it: an area has no save. A save belongs to an effect it applies (pick one under Apply an effect).</p>}
+          </>
+        )}
+        {at === "damageSave" && (
+          <>
+            <div className="text-sm font-semibold">Can those caught make a save against the damage?</div>
+            <Choices value={a.damageSave ? "yes" : "no"} options={[["no", "No", "everyone caught takes it in full"], ["yes", "Yes", "a save for half or none"]]} onPick={(v) => set({ damageSave: v === "yes" })} />
+            {a.damageSave && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <select value={a.saveAttr} onChange={(e) => set({ saveAttr: e.target.value as Answers["saveAttr"] })} className="select select-sm w-auto">{ATTRIBUTES.map((x) => <option key={x} value={x}>{x[0].toUpperCase() + x.slice(1)}</option>)}</select>
+                save, DC <input type="number" min={1} max={40} value={a.saveDc} onChange={(e) => set({ saveDc: Number(e.target.value) })} className="input input-sm w-20" />
+                <select value={a.saveHalf ? "half" : "none"} onChange={(e) => set({ saveHalf: e.target.value === "half" })} className="select select-sm w-auto"><option value="half">half damage on a success</option><option value="none">no damage on a success</option></select>
+              </div>
+            )}
+            <p className="text-xs opacity-60">Effects it applies land on whoever the damage lands on (full or half), with no save of their own; without a save here, each effect rolls its own.</p>
           </>
         )}
         {at === "toHit" && (
@@ -331,7 +342,6 @@ export default function ActionInterview({ action, initial, conditions, effectOpt
         )}
       </div>
       <HiddenFields f={fields} />
-      {loses && <p className="text-xs text-warning">This area had its own save. Saves now belong to the effects it applies, so saving removes it (the card shows the result).</p>}
       <div className="flex items-center gap-2">
         <button type="button" className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => setAt(qs[i - 1])}>Back</button>
         {!last && <button type="button" className="btn btn-sm" disabled={!ok} onClick={next}>Next</button>}

@@ -28,6 +28,7 @@ export interface Answers {
   damage: string;
   damageType: ActionFields["damage_type"];
   attackBonus: string; // an attack roll's to-hit (not an area: an area always uses a save)
+  damageSave: boolean; // an area attack: a save against its damage (else everyone caught takes it in full)
   saveAttr: ActionFields["save_attr"];
   saveDc: number;
   saveHalf: boolean;
@@ -44,7 +45,7 @@ export interface Answers {
 
 export type Question =
   | "name" | "type" | "who" | "targetWho" | "count" | "range" | "shape" | "place" | "areaSize" | "lasts"
-  | "affects" | "damage" | "toHit" | "defend" | "heal" | "aid" | "duration" | "effects";
+  | "affects" | "damage" | "damageSave" | "toHit" | "defend" | "heal" | "aid" | "duration" | "effects";
 
 const isSelf = (a: Answers) => a.type === "reaction" || a.who === "self";
 /** What it can do to whoever it's on: anything but attack, on yourself (or a reaction, which is on yourself). */
@@ -62,8 +63,8 @@ export function questions(a: Answers): Question[] {
   }
   q.push("affects");
   const has = (x: Affect) => affected(a).includes(x);
-  // An area only decides who is caught: its damage always lands (saves belong to the effects it applies).
-  if (has("attack")) q.push("damage", ...(a.who === "area" && a.type !== "reaction" ? [] : (["toHit"] as const)));
+  // An area attack: a save against its damage (its effects then land when the damage does); else an attack roll.
+  if (has("attack")) q.push("damage", ...(a.who === "area" && a.type !== "reaction" ? (["damageSave"] as const) : (["toHit"] as const)));
   if (has("defend")) q.push("defend");
   if (has("heal")) q.push("heal");
   if (has("aid")) q.push("aid");
@@ -96,7 +97,7 @@ export function fieldsFromAnswers(a: Answers): ActionFields {
     duration_amount: a.durationAmount, duration_unit: a.durationUnit,
     range_ft: isSelf(a) || (area && (a.shape !== "circle" || a.place !== "spot")) ? 0 : a.rangeFt,
     area_shape: area ? a.shape : "", area_ft: area ? a.areaFt : 0,
-    save_attr: a.saveAttr, save_dc: area ? NO_SAVE_DC : a.saveDc, save_half: area ? 0 : a.saveHalf ? 1 : 0,
+    save_attr: a.saveAttr, save_dc: area && attack && a.damageSave ? a.saveDc : NO_SAVE_DC, save_half: a.saveHalf ? 1 : 0,
     area_lasts: area && a.lasts ? 1 : 0, area_fires: a.keep.area_fires, area_at: area && a.shape === "circle" && a.place === "here" ? "self" : "",
     target_who: isSelf(a) ? "" : a.targetWho, target_count: several ? a.count : "one", target_n: several ? a.n : 1,
     targets: isSelf(a) ? "self" : a.targetWho === "enemy" || attack ? "others" : "anyone",
@@ -122,7 +123,7 @@ export function answersFromAction(f?: Partial<ActionFields>): Answers {
     targetWho: f?.target_who ?? "", count: f?.target_count === "exactly" ? "exactly" : "upto", n: f?.target_n && f.target_n > 1 ? f.target_n : 2,
     rangeFt: f?.range_ft ?? 5, shape: f?.area_shape || "circle", place: f?.area_at === "self" ? "here" : "spot", areaFt: f?.area_ft || 10, lasts: !!f?.area_lasts,
     affects, damage: f?.damage ?? "", damageType: f?.damage_type ?? "", attackBonus: f?.attack ?? "",
-    saveAttr: f?.save_attr ?? "agility", saveDc: f?.save_dc ?? 12, saveHalf: f ? !!f.save_half : true,
+    damageSave: area && !!f?.damage && (f.save_dc ?? NO_SAVE_DC) < NO_SAVE_DC, saveAttr: f?.save_attr ?? "agility", saveDc: f?.save_dc ?? 12, saveHalf: f ? !!f.save_half : true,
     defend: defend?.value.replace(/^\+/, "") ?? "", heal: heal?.value.replace(/^\+/, "") ?? "",
     aidTarget: aid?.target ?? "", aid: aid?.value.replace(/^\+/, "") ?? "",
     durationAmount: f?.duration_amount ?? 1, durationUnit: f?.duration_unit || "minute",
@@ -153,6 +154,7 @@ export function answerLine(q: Question, a: Answers, effectName: (id: number) => 
       return ["How it affects them", words ? words[0].toUpperCase() + words.slice(1) : "—"];
     }
     case "damage": return ["Damage", a.damage ? `${a.damage}${a.damageType ? ` ${a.damageType}` : ""}` : "—"];
+    case "damageSave": return ["Save against it", a.damageSave ? `${a.saveAttr[0].toUpperCase()}${a.saveAttr.slice(1)} DC ${a.saveDc}, ${a.saveHalf ? "half" : "none"} on a success` : "None: everyone caught takes it"];
     case "toHit": return ["Bonus to hit", a.attackBonus ? plus(a.attackBonus) : "None"];
     case "defend": return ["Defense", a.defend ? plus(a.defend) : "—"];
     case "heal": return ["Heals", a.heal || "—"];

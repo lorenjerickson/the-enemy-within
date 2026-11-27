@@ -15,7 +15,7 @@ test("a new action starts with name, type, who and how it affects them", () => {
 test("the questions branch on the answers", () => {
   assert.deepEqual(questions(answer({ who: "self" })), ["name", "type", "who", "affects"]);
   assert.deepEqual(questions(answer({ who: "several" })), ["name", "type", "who", "targetWho", "count", "range", "affects"]);
-  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "place", "areaSize", "lasts", "affects", "damage", "duration"]);
+  assert.deepEqual(questions(answer({ who: "area", lasts: true, affects: ["attack"] })), ["name", "type", "who", "shape", "place", "areaSize", "lasts", "affects", "damage", "damageSave", "duration"]);
   assert.deepEqual(questions(answer({ type: "reaction", affects: ["effect"] })), ["name", "type", "affects", "effects"]);
   assert.deepEqual(questions(answer({ affects: ["defend", "heal", "aid"] })), ["name", "type", "who", "targetWho", "range", "affects", "defend", "heal", "aid", "duration"]);
 });
@@ -70,7 +70,7 @@ test("every question has a short answer line", async () => {
   assert.deepEqual(lines, [
     ["Name", "Fireball"], ["Type", "Action, 2 s"], ["Applies to", "Everyone in an area"], ["Shape", "Circle"], ["Where it goes", "A spot you pick"],
     ["Size", "20 feet, aimed up to 150 feet away"], ["Stays on the map", "Yes"], ["How it affects them", "Attack, apply an effect"],
-    ["Damage", "1d10 fire"], ["How long", "1 minute"], ["Effects", "Burning"],
+    ["Damage", "1d10 fire"], ["Save against it", "None: everyone caught takes it"], ["How long", "1 minute"], ["Effects", "Burning"],
   ]);
 });
 
@@ -101,4 +101,14 @@ test("polish: 'How many' starts at 'Up to'; Aid's answer line shows the label", 
   assert.equal(blank.count, "upto");
   assert.deepEqual(answerLine("aid", answer({ aidTarget: "skill:persuasion", aid: "1d4" })), ["Aid", "+1d4 Persuasion"]);
   assert.deepEqual(answerLine("aid", answer({ aidTarget: "check", aid: "1" })), ["Aid", "+1 All ability and skill checks"]);
+});
+
+test("an area attack can have a save against its damage: kept on saving and opening again, and on the card", () => {
+  const a = answer({ name: "Grenade", who: "area", shape: "circle", areaFt: 10, rangeFt: 30, affects: ["attack"], damage: "3d6", damageType: "piercing", damageSave: true, saveAttr: "agility", saveDc: 13, saveHalf: true });
+  const f = fieldsFromAnswers(a);
+  assert.equal(f.save_dc, 13);
+  assert.equal(f.save_half, 1);
+  assert.equal(answersFromAction(f).damageSave, true);
+  assert.equal(fieldsFromAnswers(answer({ ...a, damageSave: false })).save_dc, 99, "no save: everyone caught takes it");
+  assert.match(card(a), /agility save \(DC 13\)|Agility save/i);
 });
