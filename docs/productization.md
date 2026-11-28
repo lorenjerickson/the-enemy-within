@@ -106,6 +106,7 @@ Today's database has exactly one world and one campaign. The migration in Phase 
 - Push everything to origin.
 - Timing at the critical boundaries (browser ↔ server, server ↔ database, full round trips for common requests, resolving a round), written as structured logs behind a flag.
 - At least one play session with the timing on, to capture a performance baseline.
+  - **Recorded:** `docs/baseline-2026-11-28T06:12:30.293Z.json` (06:12–06:57 UTC, 2026-11-28; `next dev`, so later comparisons run under `next dev` too, like for like). Compare with `node scripts/timing-report.mjs --since <start> --compare <baseline>`. Polling actions are named only from about 06:45 on; earlier samples show as `action:<id>`.
 - Convert the repository to a Turborepo monorepo on pnpm, with the app moved to `apps/web` unchanged.
 - CI on every push: tsc, the tests, dependency-cruiser (no import cycles; the engine imports nothing from web, API or database code).
 
