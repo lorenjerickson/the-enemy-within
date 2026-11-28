@@ -190,6 +190,18 @@ test("aimed at a spot, not someone: no one is hit, fire there lights what's flam
   assert.ok(wild.includes(0) && wild.includes(1), `a natural 1: only sometimes, even aimed right at it (${wild})`);
 });
 
+test("cold landing on deep water freezes it; fire landing on ice thaws it (an area, or a bolt at someone standing in it)", () => {
+  const pond = lastingAt(5, 5, { id: 9, name: "Pond", damage: null, traits: ["deep"] } as never);
+  const cold = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball({ name: "Cone of cold", damageType: "cold" }), aim: aimAt(5, 5) })])], { 1: fighter() }, { lasting: [pond] });
+  assert.deepEqual(cold.water, [{ id: 9, from: "deep", to: "frozen" }]);
+  assert.match(cold.text, /Pond freezes over!/);
+  const ice = lastingAt(5, 5, { id: 9, name: "Pond", damage: null, traits: ["frozen"] } as never);
+  const bolt = resolve([mover(1, { col: 0, row: 0 }, [attack(2, { use: gear({ name: "Fire bolt", range: 12, damageType: "fire" }) })]), mover(2, { col: 5, row: 5 })], { 1: fighter({ hit: 3 }), 2: fighter() }, { lasting: [ice] });
+  assert.deepEqual(bolt.water, [{ id: 9, from: "frozen", to: "deep" }], "a plain miss is close enough");
+  assert.match(bolt.text, /Pond thaws!/);
+  assert.deepEqual(resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball(), aim: aimAt(5, 5) })])], { 1: fighter() }, { lasting: [pond] }).water, [], "fire on water: nothing");
+});
+
 test("an area with no damage of its own (a smoke bomb) hurts no one: not the user's weapon damage", () => {
   const blinded = condition(41, "Blinded", [{ kind: "roll", roll: "attack", mode: "disadvantage" }]);
   const smoke = gear({ name: "Popping Smoke", damage: null, area: { shape: "circle", ft: 15, dc: 99, save: "agility", half: false, at: "self" }, statuses: { minutes: 0.1, target: { source: "Popping Smoke", boosts: [], grants: [], conditions: [blinded] } } });

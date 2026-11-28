@@ -1,5 +1,5 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { FOG_SIGHT_FT, NO_SAVE_DC, caughtBy, caughtFire, describeArea, fireLandsAt, inArea, isFire, placeArea, strayFire, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { FOG_SIGHT_FT, NO_SAVE_DC, areasOverlap, caughtBy, caughtFire, describeArea, fireLandsAt, inArea, isFire, placeArea, strayFire, waterChanges, waterReaches, type Retrait, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
@@ -180,6 +180,10 @@ export function resolveMovement(
 ) {
   const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
   const improvised: { id: number; tokenId: number; sec: number; dice?: number[] }[] = []; // dice: its roll, thrown with the plan // improvisations whose planned step was done (they play out after the round)
+  const water: Retrait[] = []; // Deep water frozen by cold, Frozen thawed by fire, this round (from the next round)
+  const changeWater = (cs: Retrait[], say: (s: string) => void) => {
+    for (const c of cs) if (!water.some((w) => w.id === c.id)) { water.push(c); say(`${lasting.find((l) => l.id === c.id)!.name} ${c.to === "frozen" ? "freezes over" : "thaws"}!`); }
+  };
   const ignited: number[] = []; // flammable areas set burning this round (by fire landing in them, or a fire touching them): burning from the next round
   const exposedThisRound = new Set<string>(); // "token:kind": a lingering area of that kind caught them this round (one per kind)
   const hidden = new Map(hiddenAtStart); // as the round goes (Hide, and being revealed)
@@ -761,6 +765,7 @@ export function resolveMovement(
   // Fire thrown or shot at someone (a torch, a lit arrow) lands where they stand, hit or plain miss, setting flammable areas
   // there burning; a ranged one gone wild (a natural 1) lights one within its range half the time, wherever it was aimed.
   const fireLands = (by: number, step: Extract<PlanStep, { kind: "action" }>, at: Pos | undefined, fumble: boolean | undefined, say: (s: string) => void) => {
+    if (at && !fumble) changeWater(waterChanges(lasting, step.use?.damageType, (l) => inArea(l.area, { x: at.col + 0.5, y: at.row + 0.5 })), say); // a frost bolt freezing the water they stand in
     if (step.use?.damageType !== "fire") return;
     const range = rangeOf(step, movers.find((x) => x.tokenId === by)) ?? 1, from = pos.get(by);
     const ids = fumble ? (range > 1 && from ? strayFire(lasting, { x: from.col + 0.5, y: from.row + 0.5 }, range) : []) : at ? fireLandsAt(lasting, { x: at.col + 0.5, y: at.row + 0.5 }) : [];
@@ -1331,6 +1336,7 @@ export function resolveMovement(
         const me = fighters.get(m.tokenId), here = pos.get(m.tokenId)!;
         const at = placeArea(area.shape, area.ft, { x: here.col + 0.5, y: here.row + 0.5 }, { x: step.aim.col, y: step.aim.row });
         if (step.use.damageType === "fire") for (const id of caughtFire(lasting, at)) if (!ignited.includes(id)) { ignited.push(id); say(`${lasting.find((l) => l.id === id)!.name} catches fire!`); }
+        changeWater(waterChanges(lasting, step.use.damageType, (l) => areasOverlap(l.area, at)), say); // cold freezes deep water, fire thaws ice
         let hits: AreaHit[] = [];
         if (me) {
           // No damage of its own (a smoke bomb: only its effects): none, not their weapon's.
@@ -1510,7 +1516,8 @@ export function resolveMovement(
     if (!unmoved(end, m.start)) log.push(`${m.name} ends at ${end.col}, ${end.row}.`);
   }
   for (const f of lasting.filter((l) => isFire(l) && !l.flammable)) for (const id of caughtFire(lasting, f.area)) if (!ignited.includes(id)) { ignited.push(id); log.push(`${ROUND_SECONDS} s: ${lasting.find((l) => l.id === id)!.name} catches fire from ${f.name}!`); }
-  return { improvised, ignited, exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
+  changeWater(waterReaches(lasting), (s) => log.push(`${ROUND_SECONDS} s: ${s}`)); // fire and cold areas touching water
+  return { improvised, ignited, water, exposure, final: pos, hp, log, frames, created, statuses, refits, story, afflictions: afflicted, temps, passes, strains, trapsSprung: sprungNow, triggersFired, linksReached, itemsUsed, doorsWorked, thingsWorked, searches, assistsLeft: [...helped].map(([tokenId, h]) => ({ tokenId, by: h.by, name: h.name })), hiddenLeft: [...hidden].map(([tokenId, stealth]) => ({ tokenId, stealth })), hides };
 }
 
 /** A save rolled for someone (in a round: by its player, the round waiting, or the server): for `what`, at second `sec`. */

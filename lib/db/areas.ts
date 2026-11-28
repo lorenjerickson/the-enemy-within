@@ -1,4 +1,4 @@
-import { fireHazards, fireReaches, ignite, inArea, inFogOf } from "@/lib/aoe";
+import { fireHazards, fireReaches, ignite, inArea, inFogOf, waterReaches, type Retrait } from "@/lib/aoe";
 import type { LastingArea } from "@/lib/aoe";
 import { db } from "@/lib/db/connection";
 import { getGameTime } from "@/lib/db/calendar";
@@ -64,12 +64,23 @@ export function igniteAreas(ids: number[]): void {
   }
 }
 
+/** Water changes (cold froze Deep water, fire thawed Frozen): the trait swapped. */
+export function changeWater(changes: Retrait[]): void {
+  for (const c of changes) {
+    const a = getLastingArea(c.id) as (Hazard & { level_id: number }) | undefined;
+    if (!a || !(a.traits ?? []).includes(c.from)) continue;
+    const { id: _id, level_id: _l, ...rest } = a;
+    updateLastingArea(c.id, { ...rest, traits: [...(a.traits ?? []).filter((t) => t !== c.from), c.to] });
+  }
+}
+
 /** Out of a round: any fire on the level (a fire area, a fire map effect) touching a flammable area sets it burning (and so on, as it spreads). */
 export function spreadFire(levelId: number): void {
   for (let pass = 0; pass < 10; pass++) {
-    const lit = fireReaches(listHazards(levelId));
-    if (!lit.length) return;
+    const hazards = listHazards(levelId), lit = fireReaches(hazards), water = waterReaches(hazards);
+    if (!lit.length && !water.length) return;
     igniteAreas(lit);
+    changeWater(water); // and fire or cold touching water: thawed or frozen
   }
 }
 

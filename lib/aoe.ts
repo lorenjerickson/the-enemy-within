@@ -196,6 +196,19 @@ export function fireHazards(effects: PlacedEffect[]): LastingArea[] {
   }));
 }
 
+/** Water changing: cold landing in Deep water freezes it (Frozen); fire landing on Frozen thaws it (Deep). */
+export type Retrait = { id: number; from: "deep" | "frozen"; to: "deep" | "frozen" };
+const traitsOf = (l: LastingArea) => (l as { traits?: string[] }).traits ?? [];
+/** What `damageType` landing does to the areas it touches (`touches`): cold freezes Deep ones, fire thaws Frozen ones. */
+export function waterChanges(areas: LastingArea[], damageType: string | undefined, touches: (l: LastingArea) => boolean): Retrait[] {
+  const from = damageType === "cold" ? "deep" : damageType === "fire" ? "frozen" : null;
+  if (!from) return [];
+  return areas.filter((l) => l.id > 0 && traitsOf(l).includes(from) && touches(l)).map((l) => ({ id: l.id, from, to: from === "deep" ? "frozen" : "deep" }));
+}
+/** What the fire and cold among these hazards do to the water they touch now (a fire area melting a frozen pond). */
+export const waterReaches = (hazards: LastingArea[]): Retrait[] =>
+  hazards.flatMap((h) => waterChanges(hazards.filter((l) => l.id !== h.id), isFire(h) ? "fire" : h.damageType, (l) => areasOverlap(l.area, h.area)));
+
 /** Which flammable lasting areas the fires among these hazards reach now (ids; one step of fire spreading). */
 export const fireReaches = (hazards: LastingArea[]): number[] =>
   [...new Set(hazards.filter((l) => isFire(l) && !l.flammable).flatMap((f) => caughtFire(hazards, f.area)).filter((id) => id > 0))];

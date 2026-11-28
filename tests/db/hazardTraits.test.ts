@@ -49,3 +49,12 @@ test("Deep (deep water): moving in it uses swimming speed; those who can't swim 
   assert.equal(speedFps(f, { walking: 30, swimming: 15 }), 2.5, "in it: swimming speed");
   assert.equal(speedFps(r, { walking: 30, swimming: 0 }), 0, "can't swim: no moving in it");
 });
+
+test("out of a round: a fire hazard touching a frozen pond thaws it (Deep again)", async () => {
+  const { spreadFire, getLastingArea } = await import("@/lib/db/areas");
+  const lv = level();
+  const pond = addLastingArea(lv, { name: "Frozen pond", look: "snow", area: areaFromDrawn({ shape: "rect", x: 2, y: 0, w: 3, h: 3 }), drawn: true, ends: UNTIL_REMOVED, damage: null, dc: 99, save: "agility", half: false, fires: [], traits: ["frozen"] } as Omit<Hazard, "id">);
+  addLastingArea(lv, { name: "Bonfire", look: "fire", area: areaFromDrawn({ shape: "circle", x: 4.5, y: 1.5, r: 1 }), drawn: true, ends: UNTIL_REMOVED, damage: "1d6", damageType: "fire", dc: 99, save: "agility", half: false, fires: ["inside"] } as Omit<Hazard, "id">);
+  spreadFire(lv);
+  assert.deepEqual((getLastingArea(pond) as Hazard).traits, ["deep"]);
+});

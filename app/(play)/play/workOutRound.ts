@@ -2,7 +2,7 @@ import { inArea } from "@/lib/aoe";
 import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
-import { fogOn, igniteAreas, moveBlockers, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
+import { changeWater, fogOn, igniteAreas, moveBlockers, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
 import { asRoundTrap, isActive, type Hazard } from "@/lib/hazards";
 import { markHazardSprung } from "./hazardSprung";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
@@ -130,6 +130,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   for (const u of result.itemsUsed) useUpItem(u.tokenId, u.item); // consumables used this round are gone
   saveExposures(levelId, result.exposure); // still burning, poisoned… (lingering areas)
   igniteAreas(result.ignited.filter((id) => id > 0));
+  changeWater(result.water); // cold froze deep water, fire thawed ice
   // Improvisations done this round play out, by the roll thrown with the plan (the GM's creatures: rolled now).
   for (const x of result.improvised) {
     const i = getImprovisation(x.id);
