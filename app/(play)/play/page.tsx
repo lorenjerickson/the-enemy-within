@@ -9,7 +9,7 @@ import { getGmLevelId, listLevels, listStructures } from "@/lib/db/maps";
 import { getGameTime, listTimers } from "@/lib/db/calendar";
 import { getOpenGameSession, markPresent, gmPlayedPlayers, isRemovedFrom, type GameSession } from "@/lib/db/sessions";
 import { listMapTriggers } from "@/lib/db/traps";
-import { getOpenRollRequest } from "@/lib/db/rolls";
+import { getOpenRollRequest, rollsWaiting } from "@/lib/db/rolls";
 import { getEncounter } from "@/lib/db/encounters";
 import { getRoundPlan, listPlanTargets, listPlanRoutes, getReplay } from "@/lib/db/rounds";
 import { listTriggers } from "@/lib/db/story";
@@ -289,7 +289,7 @@ function PlayerView({ session, user }: { session: GameSession; user: User }) {
       {/* Watching: their prompts show as they see them, but can't be rolled. */}
       <fieldset disabled={watching} className="contents">
         {rp && me && <PlanRollPrompt key={getEncounter(me.level_id)?.round ?? 0} rolls={diceRolls} rolled={rp.rolled} />}
-        <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} />
+        <RollPrompt key={roll?.id} request={roll ? { id: roll.id, spec: roll.spec, result: roll.result } : null} more={roll ? rollsWaiting(user.id) : 0} />
       </fieldset>
       {place ? (
         <LevelMap readOnly switchable={real ? null : "side"} linkPrompt={me ? getLinkPrompt(me.token_id) ?? null : null} selectedTarget={selectedTarget} replayName={me?.name ?? null} planTargets={me && rp ? listPlanTargets(me.level_id, me.token_id) : []} planRoutes={me && rp ? listPlanRoutes(me.level_id, me.token_id) : []} fog={{ viewers, explored: creature !== null ? [] : listSightings(user.id, levelId!), move: me && !watching ? (plan ? { tokenId: me.token_id, feet: plan.left * walking, free: false, from: plan.from, perSecond: walking, runPerSecond: running } : { tokenId: me.token_id, feet: Math.max(0, walking * ROUND_SECONDS - me.moved), free: true }) : null }} locationId={place.location_id} level={listLevels(place.location_id).find((l) => l.id === levelId)!} levels={listLevels(place.location_id)} dock={{ side: "right", tools: tools.filter((t) => t.id === "actions"), initial: "actions", opposite: { tools: tools.filter((t) => t.id !== "actions"), initial: "me" } }} />

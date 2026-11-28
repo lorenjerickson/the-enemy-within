@@ -17,7 +17,7 @@ const MODE_LABEL = { normal: "No advantage", advantage: "Advantage", disadvantag
  * A roll the player has to make: the formula (hover it for where each part comes from), advantage or
  * disadvantage, and a Roll button that throws 3D dice (dice-box); the dice decide, the server scores and settles.
  */
-export default function RollPrompt({ request }: { request: PromptRequest | null }) {
+export default function RollPrompt({ request, more = 0 }: { request: PromptRequest | null; more?: number }) {
   const [rolling, setRolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -58,6 +58,7 @@ export default function RollPrompt({ request }: { request: PromptRequest | null 
       {/* The 3D dice tumble across the whole screen, above the map (the page's one dice layer: diceBox). */}
       <div data-roll-prompt className="fixed left-1/2 top-16 z-40 w-[min(26rem,calc(100vw-7rem))] -translate-x-1/2 space-y-3 rounded-box bg-base-200/95 p-4 shadow-2xl backdrop-blur">
         <div className="text-sm opacity-80">{spec.label}</div>
+        {more > 0 && <div className="text-xs opacity-60" data-rolls-waiting>{more} more {more === 1 ? "roll" : "rolls"} after this one</div>}
         <div className="flex items-center gap-3">
           <span className="group relative cursor-help" tabIndex={0}>
             <span data-roll-formula className="font-mono text-2xl font-semibold underline decoration-dotted underline-offset-4">{formulaText(spec)}</span>

@@ -58,19 +58,27 @@ export function assistOpenRequest(tokenId: number): boolean {
   return true;
 }
 
+/**
+ * Asks a player to roll. Rolls queue: each waits its turn (the first asked first, one already rolled until it's closed);
+ * asking for the same thing again replaces the one not yet rolled.
+ */
 export function requestRoll(playerId: number, characterId: number, spec: RollSpec, action: RollAction): void {
   spec = withAssist(characterId, spec, action);
   db.transaction(() => {
-    db.prepare<[number]>("UPDATE roll_requests SET done = 1 WHERE player_id = ?").run(playerId);
+    db.prepare<[number, string]>("UPDATE roll_requests SET done = 1 WHERE player_id = ? AND done = 0 AND result IS NULL AND action = ?").run(playerId, JSON.stringify(action));
     db.prepare("INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ?, ?)").run(playerId, characterId, JSON.stringify(spec), JSON.stringify(action));
   })();
 }
 
-/** The roll a player is being asked for (or has just rolled and not yet closed). */
+/** The roll a player is being asked for now (one they've rolled and not yet closed, else the first asked). */
 export function getOpenRollRequest(playerId: number): RollRequest | undefined {
-  const r = db.prepare<[number], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE player_id = ? AND done = 0 ORDER BY id DESC LIMIT 1").get(playerId);
+  const r = db.prepare<[number], RollRequestRow>("SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHERE player_id = ? AND done = 0 ORDER BY result IS NULL, id LIMIT 1").get(playerId);
   return r && parseRequest(r);
 }
+
+/** How many more rolls a player has waiting after the one shown. */
+export const rollsWaiting = (playerId: number): number =>
+  Math.max(0, db.prepare<[number], { n: number }>("SELECT COUNT(*) AS n FROM roll_requests WHERE player_id = ? AND done = 0").get(playerId)!.n - 1);
 
 /** The open initiative roll asked of whoever plays this token, if they haven't rolled it. */
 export function openInitiativeRequest(tokenId: number): RollRequest | undefined {
