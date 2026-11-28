@@ -4,7 +4,8 @@
  * work lasting areas out in round resolution instead. A player's character rolls its own save (it's asked, and the
  * area lands when the roll comes in); the server rolls for the GM's creatures.
  */
-import { setLastingAreaFound, getExposures, listHazards, saveExposures } from "@/lib/db/areas";
+import { exposedLevels, setLastingAreaFound, getExposures, listHazards, saveExposures } from "@/lib/db/areas";
+import { getEncounter } from "@/lib/db/encounters";
 import { getCharacterPlayer, listTokens } from "@/lib/db/tokens";
 import { leaveAreaAfflictions } from "@/lib/db/effects";
 import { listStructures } from "@/lib/db/maps";
@@ -86,6 +87,32 @@ export function areasOnStep(levelId: number, tokenId: number, from: Point, to: P
     }
   }
   return told;
+}
+
+/**
+ * Game time passing out of combat (the GM moves time on, a rest): each 6 s, lingering harm lands again, less each time,
+ * until it fades (on everyone exposed on levels not in a round). Not on anyone still standing in it: they stop there.
+ */
+export function exposureOverTime(minutes: number): void {
+  const intervals = Math.min(600, Math.floor(minutes * 10 + 1e-9));
+  for (const levelId of exposedLevels()) {
+    if (getEncounter(levelId)) continue;
+    for (const [tokenId] of getExposures(levelId)) {
+      const t = listTokens(levelId).find((x) => x.id === tokenId);
+      if (!t) continue;
+      for (let k = 0; k < intervals; k++) {
+        const was = JSON.stringify(getExposures(levelId).get(tokenId) ?? []);
+        if (was === "[]" || areaNow(levelId, tokenId, t)) break;
+        exposureTick(levelId, tokenId, { x: t.col, y: t.row });
+      }
+    }
+  }
+}
+
+/** Whether a token stands in a lingering area of a kind they're exposed to. */
+function areaNow(levelId: number, tokenId: number, t: { col: number; row: number }): boolean {
+  const kinds = new Set((getExposures(levelId).get(tokenId) ?? []).map((e) => e.kind)), walls = movementBlockers(listStructures(levelId));
+  return listHazards(levelId).some((l) => l.lingers && kinds.has(harmOf(l)) && caughtBy(l.area, centre({ x: t.col, y: t.row }), walls));
 }
 
 /**

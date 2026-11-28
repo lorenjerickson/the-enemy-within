@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { passTimeForEffects } from "../../(play)/play/workOutRound";
+import { exposureOverTime } from "../../(play)/play/areas";
 import { redirect } from "next/navigation";
 import { requireGm, setActingAs } from "@/lib/auth";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
@@ -30,6 +31,7 @@ export async function advanceTime(minutes: number) {
   const step = Math.max(0, Number(minutes) || 0);
   setGameTime(getGameTime() + step);
   passTimeForEffects(step); // effects (Poisoned…) tick a round per 6 s out of an encounter
+  exposureOverTime(step); // and lingering harm (still burning…) lands again, less each 6 s
   fireTriggers(); // e.g. ON timer.expired
   revalidatePath("/", "layout");
 }
@@ -40,6 +42,7 @@ export async function takeRest(kind: "short" | "long") {
   const minutes = kind === "short" ? 60 : 480;
   setGameTime(getGameTime() + minutes);
   passTimeForEffects(minutes);
+  exposureOverTime(minutes);
   restStrain(kind === "short" ? "short" : "long");
   logSessionEvent(`The party takes a ${kind} rest (${kind === "short" ? "1 hour" : "8 hours"}): strain eases.`);
   fireTriggers();

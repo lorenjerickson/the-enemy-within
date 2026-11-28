@@ -17,6 +17,9 @@ export function getExposures(levelId: number): Exposures {
   return new Map(r ? (JSON.parse(r.data) as [number, Exposure[]][]) : []);
 }
 
+/** Levels where someone is still exposed to lingering harm (burning, poisoned…). */
+export const exposedLevels = (): number[] => db.prepare<[], { level_id: number }>("SELECT level_id FROM level_exposure WHERE data != '[]'").all().map((r) => r.level_id);
+
 export function saveExposures(levelId: number, all: Exposures): void {
   const data = [...all].filter(([, l]) => l.length);
   db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
