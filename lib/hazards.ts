@@ -5,7 +5,7 @@
  * until switched off. Pure rules: whether it's active, whether a moment sets it off, whom it may catch, springing it,
  * and who sees it. Play (walks, rounds) and the editor use these.
  */
-import { NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires, type LastingArea } from "@/lib/aoe";
 import type { Attribute } from "@/lib/attributes";
 import type { Condition } from "@/lib/conditions";
 import type { Allegiance } from "@/lib/sides";
@@ -29,6 +29,7 @@ export interface HazardSettings {
   soundHidden?: boolean; // its sound plays even before it's found (a cue something is there)
   spent?: boolean; // a "once" hazard that has gone off: gone from the map
   noLook?: boolean; // drawn as an outline only, no animated look (a pit, a tripwire)
+  traits?: Trait[]; // what the place itself does to moving (ice, deep water, a chasm)
   obscures?: boolean; // fog, smoke: no one sees further than 15 ft into it (sight, fog of war, targets, Hide's blind spots)
   activatesWhen?: string; // a script condition: switched on when it becomes true (game.vars.sluiceOpen)
   deactivatesWhen?: string; // a script condition: switched off when it becomes true
@@ -36,6 +37,14 @@ export interface HazardSettings {
 }
 
 export type Hazard = LastingArea & HazardSettings;
+
+/** What a place does to moving through it (the areas design, 2.4), and what each says in the interview. */
+export const TRAITS = [["frozen", "Frozen (ice): moving in it costs double"]] as const;
+export type Trait = (typeof TRAITS)[number][0];
+
+/** Whether a spot (grid units) is in an active hazard with this trait. */
+export const traitAt = (hazards: Hazard[], trait: Trait, p: { x: number; y: number }, now: number) =>
+  hazards.some((h) => (h.traits ?? []).includes(trait) && isActive(h, now) && inArea(h.area, p));
 
 /** Whether it's doing anything at `now` (game minutes): on, not spent, and always active until it ends, or triggered and still active. */
 export function isActive(h: Hazard, now: number): boolean {

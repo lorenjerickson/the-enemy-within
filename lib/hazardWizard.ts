@@ -8,7 +8,7 @@ import type { Attribute } from "@/lib/attributes";
 import type { EffectKind } from "@/lib/effects";
 import type { Effect } from "@/lib/conditions";
 import { effectOfCondition } from "@/lib/effectCopy";
-import type { Hazard, SetOffBy } from "@/lib/hazards";
+import { TRAITS, type Hazard, type SetOffBy, type Trait } from "@/lib/hazards";
 import type { TrapOften, TrapWho } from "@/lib/traps";
 
 export type Preset = "trap" | "cloud" | "fire" | "ward";
@@ -36,6 +36,7 @@ export interface Answers {
   sound: number | null; // an audio asset
   soundHidden: boolean; // heard even before it's found
   obscures: boolean; // fog, smoke: cuts sight into it
+  traits: Trait[];
   damage: string;
   damageType: string;
   damageSave: boolean;
@@ -53,12 +54,12 @@ export interface Answers {
   deactivatesWhen: string;
 }
 
-export type Question = "name" | "preset" | "activation" | "activeFor" | "catches" | "who" | "often" | "stops" | "visible" | "look" | "damage" | "effects" | "lingers" | "lasts" | "when";
+export type Question = "name" | "preset" | "activation" | "activeFor" | "catches" | "who" | "often" | "stops" | "visible" | "look" | "damage" | "effects" | "lingers" | "traits" | "lasts" | "when";
 
 /** The questions for these answers: presets only for a new hazard; how long it stays active only for a dormant one; whom it catches unless it acts for an instant. */
 export function questions(a: Answers, isNew = false): Question[] {
   const dormantInstant = a.activation === "dormant" && a.activeFor === "instant";
-  return ["name", ...(isNew ? (["preset"] as const) : []), "activation", ...(a.activation === "dormant" ? (["activeFor"] as const) : []), ...(dormantInstant ? [] : (["catches"] as const)), "who", "often", "stops", "visible", "look", "damage", "effects", "lingers", "lasts", "when"];
+  return ["name", ...(isNew ? (["preset"] as const) : []), "activation", ...(a.activation === "dormant" ? (["activeFor"] as const) : []), ...(dormantInstant ? [] : (["catches"] as const)), "who", "often", "stops", "visible", "look", "damage", "effects", "lingers", "traits", "lasts", "when"];
 }
 
 /** The answers for a hazard as it is (`now`: game minutes, for how long it has left). */
@@ -67,7 +68,7 @@ export function answersFromHazard(h: Partial<Hazard>, now = 0): Answers {
     name: h.name ?? "", activation: h.activation ?? "always", setOffBy: h.setOffBy ?? (h.activation === "dormant" ? ["enter"] : []), byTrigger: !!h.byTrigger,
     activeFor: h.activeFor ?? "instant", activeRounds: Math.max(1, Math.round((h.activeMinutes ?? 1) * 10)),
     fires: h.fires ?? ["enter"], who: h.who ?? "", often: h.often ?? "always", stops: !!h.stops,
-    visibility: h.visibility ?? "shown", findDc: h.findDc ?? 14, look: h.noLook ? "none" : h.look ?? "fog", sound: h.sound ?? null, soundHidden: !!h.soundHidden, obscures: !!h.obscures,
+    visibility: h.visibility ?? "shown", findDc: h.findDc ?? 14, look: h.noLook ? "none" : h.look ?? "fog", sound: h.sound ?? null, soundHidden: !!h.soundHidden, obscures: !!h.obscures, traits: h.traits ?? [],
     damage: h.damage ?? "", damageType: h.damageType ?? "", damageSave: !!h.damage && (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC, saveAttr: h.save ?? "agility", saveDc: (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC ? h.dc! : 12, half: h.half ?? true,
     effectIds: (h.conditions ?? []).map((c) => c.id), effectCopies: Object.fromEntries((h.conditions ?? []).map((c) => [c.id, effectOfCondition(c)])), lingers: !!h.lingers, buildUp: h.buildUp ?? 1, decay: h.decay ?? 2, flammable: !!h.flammable,
     lasts: h.ends === undefined || h.ends >= UNTIL_REMOVED ? 0 : Math.max(0.1, Math.round((h.ends - now) * 10) / 10),
@@ -83,7 +84,7 @@ export function hazardPatch(a: Answers): Partial<Hazard> {
     setOffBy: dormant ? a.setOffBy : [], byTrigger: dormant && a.byTrigger,
     activeFor: dormant ? a.activeFor : "instant", activeMinutes: dormant && a.activeFor === "time" ? a.activeRounds / 10 : undefined,
     fires: a.fires.length ? a.fires : ["enter"], who: a.who, often: a.often, stops: a.stops,
-    visibility: a.visibility, findDc: a.findDc, noLook: a.look === "none", ...(a.look !== "none" ? { look: a.look } : {}), sound: a.sound ?? undefined, soundHidden: !!a.sound && a.soundHidden, obscures: a.obscures,
+    visibility: a.visibility, findDc: a.findDc, noLook: a.look === "none", ...(a.look !== "none" ? { look: a.look } : {}), sound: a.sound ?? undefined, soundHidden: !!a.sound && a.soundHidden, obscures: a.obscures, traits: a.traits,
     damage: a.damage.trim() || null, damageType: a.damageType || undefined, save: a.saveAttr, dc: a.damage.trim() && a.damageSave ? a.saveDc : NO_SAVE_DC, half: a.half,
     lingers: a.lingers, buildUp: a.buildUp, decay: a.decay, flammable: a.flammable,
     activatesWhen: a.activatesWhen.trim(), deactivatesWhen: a.deactivatesWhen.trim(), // blank: none (sent, so clearing one clears it)
@@ -131,6 +132,7 @@ export function answerLine(q: Question, a: Answers): [string, string] {
     case "effects": return ["Effects", a.effectIds.length ? `${a.effectIds.length} from the catalog` : "None"];
     case "lingers": return ["Lingering, flammable", [a.lingers ? `lingers (+${a.buildUp}, −${a.decay})` : "", a.flammable ? "flammable" : ""].filter(Boolean).join(", ") || "Neither"];
     case "when": return ["Scripted", [a.activatesWhen.trim() && `activates when ${a.activatesWhen.trim()}`, a.deactivatesWhen.trim() && `deactivates when ${a.deactivatesWhen.trim()}`].filter(Boolean).join("; ") || "No"];
+    case "traits": return ["The place", a.traits.length ? a.traits.map((t) => TRAITS.find(([k]) => k === t)?.[1].split(":")[0] ?? t).join(", ") : "Nothing special"];
     case "lasts": return ["Lasts", a.lasts ? `${a.lasts} minute${a.lasts === 1 ? "" : "s"}` : "Until removed"];
   }
 }

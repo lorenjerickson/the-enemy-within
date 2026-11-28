@@ -10,7 +10,9 @@ import { getItem, getProfession, listCharacterProfessionIds, listProfessionModif
 import { getStandingEffects, listAfflictions, listEffectDefs } from "@/lib/db/effects";
 import { listTokenStatuses } from "@/lib/db/tokens";
 import { blindRangeOf, sensesFrom, type Senses } from "@/lib/conditions";
-import { FOG_SIGHT_FT, inFog } from "@/lib/db/areas";
+import { FOG_SIGHT_FT, inFog, listLastingAreas } from "@/lib/db/areas";
+import { getGameTime } from "@/lib/db/calendar";
+import { traitAt, type Hazard } from "@/lib/hazards";
 import { combineResist, extrasOf, modifiersOf, resistsOf, restrictionsOf, rollChanges, noRestrictions, type EffectDef, type Extra, type Resist, type Restrictions } from "@/lib/conditions";
 import { combineModes, d20Tweaks, settled, type Status } from "@/lib/status";
 import { diceRange } from "@/lib/dice";
@@ -151,6 +153,12 @@ export function speedFactor(tokenId: number): number {
   return mods.reduce((f, m) => (m.kind === "speed" ? f * m.factor : f), 1);
 }
 
+/** Whether a token stands on ice (an active Frozen hazard). */
+function onFrozen(tokenId: number): boolean {
+  const t = db.prepare<[number], { level_id: number; col: number; row: number }>("SELECT level_id, col, row FROM map_tokens WHERE id = ?").get(tokenId);
+  return !!t && traitAt(listLastingAreas(t.level_id) as Hazard[], "frozen", { x: t.col + 0.5, y: t.row + 0.5 }, getGameTime());
+}
+
 /** A token's speed (feet a round) of one kind, with what changes it (boosts, then multipliers); never below 0. */
 export function speedOf(tokenId: number, movement: string | Record<string, unknown>, type: MovementType = "walking"): number {
   // Feet a round (6 s): boosts are still in feet per round until they carry units. Use speedFps (feet per second).
@@ -163,7 +171,8 @@ export function speedOf(tokenId: number, movement: string | Record<string, unkno
     sets: s.sets?.map((x) => (x.target === target ? { ...x, value: speedChangeFtPerRound(x.value, x.unit) } : x)),
     caps: s.caps?.map((x) => (x.target === target ? { ...x, value: speedChangeFtPerRound(x.value, x.unit) } : x)),
   }));
-  return Math.max(0, Math.round(settled(base + steadyBoost(changes, target), changes, target).value * speedFactor(tokenId) * 100) / 100);
+  const ice = type === "walking" && onFrozen(tokenId) ? 0.5 : 1; // Frozen (ice): moving costs double
+  return Math.max(0, Math.round(settled(base + steadyBoost(changes, target), changes, target).value * speedFactor(tokenId) * ice * 100) / 100);
 }
 
 /** A token's speed now (boosts, conditions), in feet per second. */

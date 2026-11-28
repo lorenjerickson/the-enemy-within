@@ -13,7 +13,7 @@ test("a hazard opens with its answers and saves back the same settings", () => {
 test("the questions branch: presets for a new one; how long it's active only when dormant; whom it catches unless it acts once", () => {
   const always = answersFromHazard({ name: "Fire wall" });
   assert.deepEqual(questions(always, true).slice(0, 7), ["name", "preset", "activation", "catches", "who", "often", "stops"]);
-  assert.deepEqual(questions(always).slice(-7), ["visible", "look", "damage", "effects", "lingers", "lasts", "when"]);
+  assert.deepEqual(questions(always).slice(-8), ["visible", "look", "damage", "effects", "lingers", "traits", "lasts", "when"]);
   const pit = { ...always, activation: "dormant" as const, activeFor: "instant" as const };
   assert.deepEqual(questions(pit).slice(0, 6), ["name", "activation", "activeFor", "who", "often", "stops"]);
   assert.deepEqual(questions({ ...pit, activeFor: "time" }).slice(0, 7), ["name", "activation", "activeFor", "catches", "who", "often", "stops"]);

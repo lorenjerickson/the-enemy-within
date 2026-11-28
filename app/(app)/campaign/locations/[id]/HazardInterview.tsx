@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Hazard } from "@/lib/hazards";
+import { TRAITS, type Hazard } from "@/lib/hazards";
 import { CATCHES, PRESETS, SET_OFF_BY, answerLine, answersFromHazard, applyPreset, hazardCard, hazardExtras, hazardPatch, questions, type Answers, type Question } from "@/lib/hazardWizard";
 import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { DAMAGE_TYPES } from "@/lib/actions";
@@ -195,6 +195,14 @@ export default function HazardInterview({ locationId, hazard, isNew, effects, so
             <label className="flex flex-wrap items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.lingers} onChange={(e) => set({ lingers: e.target.checked })} />its harm lingers</label>
             {a.lingers && <div className="flex flex-wrap items-center gap-2 pl-6">+<NumberBox min={0} max={20} value={a.buildUp} onChange={(buildUp) => set({ buildUp })} className="input input-sm w-16" /> each round inside, −<NumberBox min={1} max={20} value={a.decay} onChange={(decay) => set({ decay })} className="input input-sm w-16" /> each round after leaving</div>}
             <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.flammable} onChange={(e) => set({ flammable: e.target.checked })} />flammable: fire touching it sets it burning for 3 rounds, then it's spent</label>
+          </>
+        )}
+        {at === "traits" && (
+          <>
+            <div className="font-semibold">What does the place itself do to moving through it? <span className="font-normal opacity-60">(none: nothing special)</span></div>
+            {TRAITS.map(([t, label]) => (
+              <label key={t} className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.traits.includes(t)} onChange={(e) => set({ traits: e.target.checked ? [...a.traits, t] : a.traits.filter((x) => x !== t) })} data-trait={t} />{label}</label>
+            ))}
           </>
         )}
         {at === "when" && (

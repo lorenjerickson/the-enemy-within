@@ -36,7 +36,7 @@ import { EFFECT_KINDS, type EffectKind } from "@/lib/effects";
 import { landingRow, snapHeight } from "@/lib/gravity";
 import { tryGameScript, type ScriptResult } from "@/lib/game";
 import { cleanAnswers, type ScriptAnswers } from "@/lib/scriptPrompt";
-import { rearm, type Hazard } from "@/lib/hazards";
+import { TRAITS, rearm, type Hazard } from "@/lib/hazards";
 import { effectOfCondition, retune } from "@/lib/effectCopy";
 import { catalogCopy } from "@/lib/db/effects";
 import { asCondition, type Effect } from "@/lib/conditions";
@@ -677,6 +677,7 @@ export async function saveHazardAnswers(locationId: number, id: number, patchJso
     ...("look" in p && (EFFECT_KINDS as readonly string[]).includes(String(p.look)) ? { look: p.look as EffectKind } : {}),
     ...("lingers" in p ? { lingers: p.lingers === true } : {}),
     ...("obscures" in p ? { obscures: p.obscures === true } : {}),
+    ...("traits" in p ? { traits: subset(p.traits, TRAITS.map(([t]) => t)) } : {}),
     // Part 2 (what it does, who sees and hears it, how long): only when the interview sent it.
     ...("findDc" in p ? { findDc: clampInt(p.findDc, 1, 40, 14) } : {}),
     ...("sound" in p ? { sound: Number(p.sound) > 0 ? Number(p.sound) : undefined, soundHidden: p.soundHidden === true } : {}),
