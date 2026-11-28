@@ -14,7 +14,7 @@ const fire = (o: Partial<Hazard> = {}): Omit<Hazard, "id"> => ({
   damage: "5", damageType: "fire", save: "agility", dc: 99, half: false, fires: ["inside"], off: true, ...o,
 });
 
-test("scripts: game.locations.current.hazards switches one on (catching whoever is in it), reads who's inside, sets one off", () => {
+test("scripts: game.locations.current.hazards switches one on (catching whoever is in it), reads who's inside, activates one", () => {
   const lv = level(), rat = addCreatureToken(lv, creature("Rat", { health: "20" }), 2, 0), hp = tokenHealth(rat)!.current;
   const id = addLastingArea(lv, fire());
   const here = "game.locations.current.hazards['fire wall']";
@@ -25,7 +25,7 @@ test("scripts: game.locations.current.hazards switches one on (catching whoever 
   assert.equal(tryGameScript(`${here}.on = false`, lv).ok, true);
   assert.equal(!!(getLastingArea(id) as Hazard).off, true);
   const trap = addLastingArea(lv, fire({ name: "Dart trap", off: false, activation: "dormant", setOffBy: ["enter"], activeFor: "instant", often: "always", damage: "3", damageType: "piercing" }));
-  assert.equal(tryGameScript("game.locations.current.hazards['dart trap'].setOff()", lv).ok, true);
+  assert.equal(tryGameScript("game.locations.current.hazards['dart trap'].activate()", lv).ok, true);
   assert.equal(tokenHealth(rat)!.current, hp - 8, "set off: the darts");
   assert.ok(getLastingArea(trap));
 });

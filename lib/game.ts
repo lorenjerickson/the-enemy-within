@@ -98,7 +98,7 @@ export interface CurrentLocation extends GameLocation {
 export interface ScriptLight { id: number; name: string; kind: string; range: number; flicker: boolean; on: boolean }
 /** An effect as scripts see it. */
 export interface ScriptEffect { id: number; name: string; kind: string; intensity: number; on: boolean }
-/** A hazard as scripts see it (by name, e.g. hazards['fog']): on switches it; inside is who's in it now; setOff() sets it off. */
+/** A hazard as scripts see it (by name, e.g. hazards['fog']): on switches it; inside is who's in it now; activate() sets it off. */
 export interface ScriptHazard { id: number; name: string; on: boolean; readonly inside: Collection<Actor> }
 /** What a script did to a hazard, done after it's saved (by the play code: catching whoever is in it, fire spreading). */
 export type HazardOp = { id: number; to: "on" | "off" | "set off" };
@@ -223,7 +223,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
     changes.hazardsOn.set(h.id, !h.off);
     const z = { id: h.id, name: h.name, on: !h.off } as ScriptHazard;
     Object.defineProperty(z, "inside", { enumerable: false, get: () => new Collection("actor", actorsColl.items.filter((a) => a.position && inArea(h.area, { x: a.position.col + 0.5, y: a.position.row + 0.5 }))) });
-    Object.defineProperty(z, "setOff", { enumerable: false, value: new Method(() => void changes.hazardOps.push({ id: h.id, to: "set off" })) });
+    Object.defineProperty(z, "activate", { enumerable: false, value: new Method(() => void changes.hazardOps.push({ id: h.id, to: "set off" })) });
     return z;
   });
   return [
