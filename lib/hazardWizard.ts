@@ -48,14 +48,16 @@ export interface Answers {
   decay: number;
   flammable: boolean;
   lasts: number; // game minutes from now (0: until removed)
+  activatesWhen: string; // script conditions (blank: none)
+  deactivatesWhen: string;
 }
 
-export type Question = "name" | "preset" | "activation" | "activeFor" | "catches" | "who" | "often" | "stops" | "visible" | "look" | "damage" | "effects" | "lingers" | "lasts";
+export type Question = "name" | "preset" | "activation" | "activeFor" | "catches" | "who" | "often" | "stops" | "visible" | "look" | "damage" | "effects" | "lingers" | "lasts" | "when";
 
 /** The questions for these answers: presets only for a new hazard; how long it stays active only for a dormant one; whom it catches unless it acts for an instant. */
 export function questions(a: Answers, isNew = false): Question[] {
   const dormantInstant = a.activation === "dormant" && a.activeFor === "instant";
-  return ["name", ...(isNew ? (["preset"] as const) : []), "activation", ...(a.activation === "dormant" ? (["activeFor"] as const) : []), ...(dormantInstant ? [] : (["catches"] as const)), "who", "often", "stops", "visible", "look", "damage", "effects", "lingers", "lasts"];
+  return ["name", ...(isNew ? (["preset"] as const) : []), "activation", ...(a.activation === "dormant" ? (["activeFor"] as const) : []), ...(dormantInstant ? [] : (["catches"] as const)), "who", "often", "stops", "visible", "look", "damage", "effects", "lingers", "lasts", "when"];
 }
 
 /** The answers for a hazard as it is (`now`: game minutes, for how long it has left). */
@@ -68,6 +70,7 @@ export function answersFromHazard(h: Partial<Hazard>, now = 0): Answers {
     damage: h.damage ?? "", damageType: h.damageType ?? "", damageSave: !!h.damage && (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC, saveAttr: h.save ?? "agility", saveDc: (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC ? h.dc! : 12, half: h.half ?? true,
     effectIds: (h.conditions ?? []).map((c) => c.id), effectCopies: Object.fromEntries((h.conditions ?? []).map((c) => [c.id, effectOfCondition(c)])), lingers: !!h.lingers, buildUp: h.buildUp ?? 1, decay: h.decay ?? 2, flammable: !!h.flammable,
     lasts: h.ends === undefined || h.ends >= UNTIL_REMOVED ? 0 : Math.max(0.1, Math.round((h.ends - now) * 10) / 10),
+    activatesWhen: h.activatesWhen ?? "", deactivatesWhen: h.deactivatesWhen ?? "",
   };
 }
 
@@ -82,6 +85,7 @@ export function hazardPatch(a: Answers): Partial<Hazard> {
     visibility: a.visibility, findDc: a.findDc, noLook: a.look === "none", ...(a.look !== "none" ? { look: a.look } : {}), sound: a.sound ?? undefined, soundHidden: !!a.sound && a.soundHidden,
     damage: a.damage.trim() || null, damageType: a.damageType || undefined, save: a.saveAttr, dc: a.damage.trim() && a.damageSave ? a.saveDc : NO_SAVE_DC, half: a.half,
     lingers: a.lingers, buildUp: a.buildUp, decay: a.decay, flammable: a.flammable,
+    activatesWhen: a.activatesWhen.trim(), deactivatesWhen: a.deactivatesWhen.trim(), // blank: none (sent, so clearing one clears it)
   };
 }
 
@@ -125,6 +129,7 @@ export function answerLine(q: Question, a: Answers): [string, string] {
     case "damage": return ["Damage", a.damage ? `${a.damage}${a.damageType ? ` ${a.damageType}` : ""}${a.damageSave ? `, ${cap(a.saveAttr)} DC ${a.saveDc} for ${a.half ? "half" : "none"}` : ""}` : "None"];
     case "effects": return ["Effects", a.effectIds.length ? `${a.effectIds.length} from the catalog` : "None"];
     case "lingers": return ["Lingering, flammable", [a.lingers ? `lingers (+${a.buildUp}, −${a.decay})` : "", a.flammable ? "flammable" : ""].filter(Boolean).join(", ") || "Neither"];
+    case "when": return ["Scripted", [a.activatesWhen.trim() && `activates when ${a.activatesWhen.trim()}`, a.deactivatesWhen.trim() && `deactivates when ${a.deactivatesWhen.trim()}`].filter(Boolean).join("; ") || "No"];
     case "lasts": return ["Lasts", a.lasts ? `${a.lasts} minute${a.lasts === 1 ? "" : "s"}` : "Until removed"];
   }
 }

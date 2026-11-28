@@ -666,6 +666,12 @@ export async function saveHazardAnswers(locationId: number, id: number, patchJso
     who: pick(p.who, ["", "party", "hostile"] as const, ""),
     often: pick(p.often, ["once", "each", "always"] as const, "always"),
     stops: p.stops === true,
+    ...("activatesWhen" in p || "deactivatesWhen" in p ? (() => {
+      const when = (v: unknown) => { const s = String(v ?? "").trim().slice(0, 500); const bad = s && checkScript(s); if (bad) throw new Error(`That condition doesn't read: ${bad}`); return s || undefined; };
+      const activatesWhen = when(p.activatesWhen), deactivatesWhen = when(p.deactivatesWhen);
+      const same = activatesWhen === h.activatesWhen && deactivatesWhen === h.deactivatesWhen;
+      return { activatesWhen, deactivatesWhen, whenHeld: same ? h.whenHeld : undefined }; // changed: checked afresh
+    })() : {}),
     ...("visibility" in p ? { visibility: pick(p.visibility, ["shown", "hidden", "gm"] as const, "shown") } : {}),
     ...("noLook" in p ? { noLook: p.noLook === true } : {}),
     ...("look" in p && (EFFECT_KINDS as readonly string[]).includes(String(p.look)) ? { look: p.look as EffectKind } : {}),

@@ -196,6 +196,13 @@ export default function HazardInterview({ locationId, hazard, isNew, effects, so
             <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.flammable} onChange={(e) => set({ flammable: e.target.checked })} />flammable: fire touching it sets it burning for 3 rounds, then it's spent</label>
           </>
         )}
+        {at === "when" && (
+          <>
+            <div className="font-semibold">Does a script condition activate or deactivate it? <span className="font-normal opacity-60">(optional; checked whenever the game changes, acting as it becomes true)</span></div>
+            <label className="block">Activates when… <input value={a.activatesWhen} onChange={(e) => set({ activatesWhen: e.target.value })} placeholder="e.g. game.vars.alarmRaised" className="input input-sm w-full font-mono" data-activates-when /></label>
+            <label className="block">Deactivates when… <input value={a.deactivatesWhen} onChange={(e) => set({ deactivatesWhen: e.target.value })} placeholder="e.g. game.vars.sluiceOpen" className="input input-sm w-full font-mono" data-deactivates-when /></label>
+          </>
+        )}
         {at === "lasts" && (
           <>
             <div className="font-semibold">How long does it stay on the map?</div>

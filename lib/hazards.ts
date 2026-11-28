@@ -29,6 +29,9 @@ export interface HazardSettings {
   soundHidden?: boolean; // its sound plays even before it's found (a cue something is there)
   spent?: boolean; // a "once" hazard that has gone off: gone from the map
   noLook?: boolean; // drawn as an outline only, no animated look (a pit, a tripwire)
+  activatesWhen?: string; // a script condition: switched on when it becomes true (game.vars.sluiceOpen)
+  deactivatesWhen?: string; // a script condition: switched off when it becomes true
+  whenHeld?: { activates?: boolean; deactivates?: boolean }; // how those conditions stood at the last check (they act as one becomes true)
 }
 
 export type Hazard = LastingArea & HazardSettings;

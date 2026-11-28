@@ -1,7 +1,7 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
 import { AREA_SHAPES, inArea, placeArea, type AreaShape } from "./aoe";
-import { listLastingAreas, setLastingAreaOff } from "@/lib/db/areas";
+import { listLastingAreas, listScriptedHazards, setLastingAreaOff, updateLastingArea } from "@/lib/db/areas";
 import type { Hazard } from "@/lib/hazards";
 import type { AttackFx, Fx } from "./vfx";
 import type { Point } from "./visibility";
@@ -719,7 +719,40 @@ export function fireTriggers(depth = 0): string[] {
       fail(e);
     }
   }
+  hazardConditions();
   return went;
+}
+
+/**
+ * Hazards a script condition activates or deactivates: each acts as its condition becomes true (not again while it
+ * stays true), switched on or off as a map trigger would. A condition that fails is noted in the session log (once, after the GM sets it).
+ */
+function hazardConditions(): void {
+  for (const h of listScriptedHazards()) {
+    const held = { ...h.whenHeld }, ops: HazardOp[] = [];
+    for (const [key, cond, to] of [["activates", h.activatesWhen, "on"], ["deactivates", h.deactivatesWhen, "off"]] as const) {
+      if (!cond) continue;
+      let holds = false;
+      try {
+        const [game, changes] = loadGame(h.level_id);
+        holds = truthy(runScript(cond, withLibrary({ game, ...HELPERS, ...mapHelpers(game, changes) })));
+      } catch (e) {
+        if (!(e instanceof ScriptError)) throw e;
+        if (held[key] === undefined) logSessionEvent(`⚠ ${h.name}: "${cond}" failed (${e.message}).`);
+      }
+      if (holds && !held[key]) ops.push({ id: h.id, to });
+      held[key] = holds;
+    }
+    if (JSON.stringify(held) !== JSON.stringify(h.whenHeld ?? {})) {
+      const { id: _id, level_id: _l, ...rest } = h;
+      updateLastingArea(h.id, { ...rest, whenHeld: held });
+    }
+    for (const op of ops) {
+      logSessionEvent(`⚡ ${h.name} ${op.to === "on" ? "activates" : "deactivates"} (${op.to === "on" ? h.activatesWhen : h.deactivatesWhen}).`);
+      if (hazardOutcome) hazardOutcome(h.level_id, op);
+      else setLastingAreaOff(op.id, op.to === "off");
+    }
+  }
 }
 
 /** A trigger's condition with its WITH names written out, e.g. game.calendar.timers['find holmes'].expired. */

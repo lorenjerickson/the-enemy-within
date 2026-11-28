@@ -90,6 +90,14 @@ export function updateLastingArea(id: number, a: Omit<Hazard, "id">): void {
   db.prepare<[string, number, string, number]>("UPDATE hazards SET name = ?, ends = ?, spec = ? WHERE id = ?").run(name, ends, JSON.stringify(spec), id);
 }
 
+/** Hazards (on any level) that a script condition activates or deactivates, with their levels. */
+export function listScriptedHazards(): (Hazard & { level_id: number })[] {
+  return db
+    .prepare<[number], { id: number; level_id: number; name: string; ends: number; spec: string }>("SELECT id, level_id, name, ends, spec FROM hazards WHERE ends > ? AND (spec LIKE '%\"activatesWhen\":\"_%' OR spec LIKE '%\"deactivatesWhen\":\"_%') ORDER BY id")
+    .all(getGameTime())
+    .map((r) => ({ id: r.id, level_id: r.level_id, name: r.name, ends: r.ends, ...JSON.parse(r.spec) }));
+}
+
 /** A level's lasting areas still in effect. */
 export function listLastingAreas(levelId: number): LastingArea[] {
   return db
