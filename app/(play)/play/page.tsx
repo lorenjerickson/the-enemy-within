@@ -43,7 +43,7 @@ import { listEffectDefs } from "@/lib/db/effects";
 import { listDiscoveries } from "@/lib/story";
 import { listLibraryScripts } from "@/lib/scriptLibrary";
 import type { PlanStep } from "@/lib/roundPlan";
-import { agreedImprovisation, improvisationResult, listAgreedImprovisations, listOpenImprovisations, openImprovisation, templateOf, waitingOnTemplate } from "@/lib/improvise";
+import { agreedImprovisation, improvisationResult, listAgreedImprovisations, listMissedImprovisations, listOpenImprovisations, openImprovisation, templateOf, waitingOnTemplate } from "@/lib/improvise";
 import GmSheetPanel from "./GmSheetPanel";
 import { sheetFor } from "@/lib/sheet";
 import { seenFrom } from "@/lib/sight";
@@ -162,6 +162,10 @@ function GmView({ session }: { session: GameSession }) {
           const t = templateOf(i), me = listTokens(levelId!).find((x) => x.id === i.token_id);
           const state = t && !i.placed ? "waiting for them to place it" : t && !i.agreed?.go ? "placed: move it or go ahead" : getEncounter(levelId!) ? "for their plan (rolled with it)" : i.agreed?.roll && !i.rolled ? "waiting for their roll" : "playing out";
           return { id: i.id, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone", name: i.agreed?.name ?? "", state, template: t && me && !i.agreed?.go && i.placed ? { template: t, from: { x: me.col + 0.5, y: me.row + 0.5 } } : null };
+        })}
+        missed={listMissedImprovisations(levelId!).flatMap((i) => {
+          const t = templateOf(i), me = listTokens(levelId!).find((x) => x.id === i.token_id);
+          return t && me ? [{ id: i.id, who: tokenLabels(levelId!).get(i.token_id) ?? "Someone", name: i.agreed?.name ?? "", template: { template: t, from: { x: me.col + 0.5, y: me.row + 0.5 } } }] : [];
         })} />
       <AreaSounds sounds={listLastingAreas(levelId!).filter((l) => l.sound).flatMap((l) => { const url = getAssetUrl(l.sound!); return url ? [{ id: l.id, url }] : []; })} />
       {contest && <ContestModal contest={contest} rolloff={pending?.rolloff} players={contestPlayers} />}

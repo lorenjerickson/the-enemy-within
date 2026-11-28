@@ -42,7 +42,7 @@ import { trapFromDrag, type TrapShape } from "./trapDraw";
 import AreasEditor from "./AreasEditor";
 import { setPlaceMode, usePlaceMode } from "../../../../(play)/play/placeMode";
 import { placeImprovise } from "../../../../(play)/play/actions";
-import { gmPlaceImprovise } from "../../../../(play)/play/gmActions";
+import { gmLandMiss, gmPlaceImprovise } from "../../../../(play)/play/gmActions";
 import { templateArea, type Template } from "@/lib/templates";
 
 import EffectsEditor, { type EffectTool } from "./EffectsEditor";
@@ -877,7 +877,8 @@ export default function MapView({
       setPlaceMode(null);
       setPlaceAt(null);
       startTransition(async () => {
-        if (m.gm) await gmPlaceImprovise(m.id, gx, gy);
+        if (m.miss) await gmLandMiss(m.id, gx, gy);
+        else if (m.gm) await gmPlaceImprovise(m.id, gx, gy);
         else { const r = await placeImprovise(gx, gy); if (r.error) setControlResult({ label: "Improvise", ok: false, text: r.error }); }
       });
       return;

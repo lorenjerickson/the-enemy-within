@@ -5,7 +5,7 @@ import type { Template } from "@/lib/improvise";
 
 // Placing an improvisation's template: it follows the cursor on the map until a click puts it down (the player's, or the
 // GM moving it). Set by the Actions panel or the GM's notice, read by the map (two client trees: a tiny shared store).
-export type PlaceMode = { id: number; template: Template; from: { x: number; y: number }; gm: boolean } | null;
+export type PlaceMode = { id: number; template: Template; from: { x: number; y: number }; gm: boolean; miss?: boolean } | null; // miss: the GM placing where a missed one lands
 let mode: PlaceMode = null;
 const listeners = new Set<() => void>();
 

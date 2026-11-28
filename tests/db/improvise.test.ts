@@ -130,3 +130,29 @@ test("a template to place: nothing (no roll, no outcome) until it's placed and t
   assert.equal(getImprovisation(id)!.status, "done");
   assert.ok(listLastingAreas(lv).some((l) => l.name === "Lamp oil"));
 });
+
+test("a plain miss that places an area waits for the GM to place where it lands; a natural 1 goes astray at once", async () => {
+  const { setImprovisePlaced, listMissedImprovisations } = await import("@/lib/improvise");
+  const { listLastingAreas } = await import("@/lib/db/areas");
+  const lv = level(), tok = placeCharacterToken(lv, character("Ivo"), 0, 0);
+  const throwOil = (rolled: { total: number; natural: number }) => {
+    const id = askImprovise(lv, tok, "throw the oil flask at them");
+    agreeImprovisation(id, { name: "Throw oil", cost: "action", seconds: 2, roll: { type: "check", skill: "Athletics", dc: 12 } as never, success: { kind: "narrative", text: "It smashes at their feet." },
+      failure: { kind: "area", template: { shape: "circle", ft: 5 }, settings: { name: "Spilt oil", look: "oil", damage: null, dc: 12, save: "agility", half: true, fires: ["inside"], flammable: true, minutes: 0 } } });
+    setImprovisePlaced(id, { x: 6, y: 6 });
+    setImproviseRolled(id, rolled);
+    return id;
+  };
+  const id = throwOil({ total: 8, natural: 8 });
+  assert.deepEqual(playImprovisation(getImprovisation(id)!).get(tok), ["Throw oil: it doesn't work. The GM decides where it lands."]);
+  assert.equal(getImprovisation(id)!.status, "missed");
+  assert.deepEqual(listMissedImprovisations(lv).map((i) => i.id), [id]);
+  assert.equal(listLastingAreas(lv).length, 0, "nothing yet");
+  setImprovisePlaced(id, { x: 2, y: 3 }); // the GM picks (gmLandMiss)
+  playImprovisation(getImprovisation(id)!);
+  assert.equal(getImprovisation(id)!.status, "done");
+  assert.deepEqual(listLastingAreas(lv).map((l) => [l.name, l.area.origin]), [["Spilt oil", { x: 2, y: 3 }]]);
+  const wild = throwOil({ total: 4, natural: 1 });
+  playImprovisation(getImprovisation(wild)!);
+  assert.equal(getImprovisation(wild)!.status, "done", "a natural 1: astray, no waiting");
+});

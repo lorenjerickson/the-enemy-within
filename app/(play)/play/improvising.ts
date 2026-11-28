@@ -10,7 +10,7 @@ import { getEncounter } from "@/lib/db/encounters";
 import { logSessionEvent } from "@/lib/db/sessions";
 import { requestRoll } from "@/lib/db/rolls";
 import { rollSpec } from "@/lib/rolls";
-import { finishImprovisation, getImprovisation, improviseRollSpec, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
+import { finishImprovisation, getImprovisation, gmPlacesMiss, improviseRollSpec, markImproviseMissed, waitingOnTemplate, rollSucceeds, setImproviseRolled, shifted, templateArea, type Improvisation, type ImproviseOutcome } from "@/lib/improvise";
 import { runGameScript } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { fireTrigger } from "./mapTriggers";
@@ -70,6 +70,11 @@ export function playImprovisation(i: Improvisation): Map<number, string[]> {
   const a = i.agreed;
   if (!a) return new Map();
   const ok = rollSucceeds(a.roll, i.rolled);
+  if (i.status !== "missed" && gmPlacesMiss(i)) { // a plain miss: it lands where the GM picks (then this again)
+    markImproviseMissed(i.id);
+    logSessionEvent(`💡 ${tokenLabels(i.level_id).get(i.token_id) ?? "Someone"}: ${a.name} misses (${i.rolled?.total} vs DC ${a.roll?.dc}): place where it lands.`);
+    return new Map([[i.token_id, [`${a.name}: it doesn't work. The GM decides where it lands.`]]]);
+  }
   const verdict = !a.roll ? "" : ok ? "it works" : i.rolled?.natural === 1 ? "it goes badly wrong" : "it doesn't work";
   const o = ok ? a.success : a.failure;
   const told = o ? playOutcome(i.level_id, o, i.token_id, a.name, i.placed, !!a.roll && i.rolled?.natural === 1) : new Map<number, string[]>();

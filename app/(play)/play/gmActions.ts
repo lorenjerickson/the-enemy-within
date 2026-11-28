@@ -1,7 +1,7 @@
 "use server";
 import { agreeImprovisation, dropImprovisation, getImprovisation, goAheadImprovisation, setImprovisePlaced, type Agreed } from "@/lib/improvise";
 import { checkScript } from "@/lib/script";
-import { startImprovisation } from "./improvising";
+import { playImprovisation, startImprovisation } from "./improvising";
 
 import { revalidatePath } from "next/cache";
 import { requireGm } from "@/lib/auth";
@@ -301,6 +301,16 @@ export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<
 export async function gmPlaceImprovise(id: number, x: number, y: number): Promise<void> {
   await requireGm();
   setImprovisePlaced(Number(id), { x: Number(x), y: Number(y) });
+  revalidatePath("/play");
+}
+
+/** The GM places where a missed improvisation lands: it plays out there. */
+export async function gmLandMiss(id: number, x: number, y: number): Promise<void> {
+  await requireGm();
+  const i = getImprovisation(Number(id));
+  if (i?.status !== "missed") return;
+  setImprovisePlaced(i.id, { x: Number(x), y: Number(y) });
+  playImprovisation(getImprovisation(i.id)!);
   revalidatePath("/play");
 }
 

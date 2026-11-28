@@ -19,7 +19,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS improvisations (
   level_id INTEGER NOT NULL,
   token_id INTEGER NOT NULL,
   intent TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'asked', -- asked (waiting on the GM) | agreed | done | dropped
+  status TEXT NOT NULL DEFAULT 'asked', -- asked (waiting on the GM) | agreed | missed (the GM places where it lands) | done | dropped
   details TEXT -- JSON: what was agreed
 )`);
 try { db.exec("ALTER TABLE improvisations ADD COLUMN rolled TEXT"); } catch { /* there already */ }
@@ -62,7 +62,7 @@ export interface Improvisation {
   level_id: number;
   token_id: number;
   intent: string;
-  status: "asked" | "agreed" | "done" | "dropped"; // asked: waiting on the GM; agreed: settled (to roll, plan or do)
+  status: "asked" | "agreed" | "missed" | "done" | "dropped"; // asked: waiting on the GM; agreed: settled (to roll, plan or do); missed: a plain miss, the GM places where it lands
   agreed?: Agreed;
   rolled?: { total: number; natural: number }; // the player's roll (its outcome isn't shown to them until it plays out)
   placed?: { x: number; y: number }; // where the player put its template (the GM may move it)
@@ -105,6 +105,16 @@ export function agreeImprovisation(id: number, agreed: Agreed): void {
 
 /** Its template is put down (by the player, or moved by the GM). */
 export const setImprovisePlaced = (id: number, at: { x: number; y: number }): void => void db.prepare("UPDATE improvisations SET placed = ? WHERE id = ?").run(JSON.stringify({ x: at.x, y: at.y }), id);
+
+/** A plain miss (not a natural 1) whose failure places an area: the GM picks where it lands (a natural 1 goes astray at random). */
+export const gmPlacesMiss = (i: Improvisation) => !!i.agreed?.roll && !!i.rolled && i.rolled.natural !== 1 && !rollSucceeds(i.agreed.roll, i.rolled) && i.agreed.failure?.kind === "area";
+
+/** It missed: waiting for the GM to place where it lands. */
+export const markImproviseMissed = (id: number): void => void db.prepare("UPDATE improvisations SET status = 'missed' WHERE id = ?").run(id);
+
+/** Improvisations on a level that missed, waiting for the GM to place where they land. */
+export const listMissedImprovisations = (levelId: number): Improvisation[] =>
+  db.prepare<[number], Row>(`SELECT ${COLS} FROM improvisations WHERE level_id = ? AND status = 'missed' ORDER BY id`).all(levelId).map((r) => parse(r)!);
 
 /** The GM goes ahead with where its template was put. */
 export function goAheadImprovisation(id: number): void {

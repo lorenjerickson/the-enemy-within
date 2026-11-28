@@ -9,10 +9,10 @@ import type { Template } from "@/lib/improvise";
 type AgreedRow = { id: number; who: string; name: string; state: string; template: { template: Template; from: { x: number; y: number } } | null };
 
 /** The GM's notice: who wants to improvise, and what; Settle opens the Improvise window. */
-export default function ImprovisingCard({ asks, choices, agreed = [] }: { asks: { id: number; intent: string; who: string }[]; choices: ImproviseChoices; agreed?: AgreedRow[] }) {
+export default function ImprovisingCard({ asks, choices, agreed = [], missed = [] }: { asks: { id: number; intent: string; who: string }[]; choices: ImproviseChoices; agreed?: AgreedRow[]; missed?: { id: number; who: string; name: string; template: { template: Template; from: { x: number; y: number } } }[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const settling = asks.find((a) => a.id === open);
-  if (!asks.length && !agreed.length) return null;
+  if (!asks.length && !agreed.length && !missed.length) return null;
   return (
     <>
       <div data-improvising-card className="fixed right-4 top-14 z-40 w-80 space-y-2 rounded-box bg-warning/95 p-3 text-sm text-warning-content shadow-xl">
@@ -32,6 +32,12 @@ export default function ImprovisingCard({ asks, choices, agreed = [] }: { asks: 
                 <button type="button" className="btn btn-xs btn-primary" onClick={() => gmGoAheadImprovise(a.id)}>Go ahead</button>
               </div>
             )}
+          </div>
+        ))}
+        {missed.map((a) => (
+          <div key={a.id} className="space-y-1 rounded-box bg-base-100/20 p-2" data-missed-improvisation={a.id}>
+            <div><b>{a.who}</b>: {a.name} <span className="text-xs opacity-80">(missed)</span></div>
+            <button type="button" className="btn btn-xs btn-primary" onClick={() => setPlaceMode({ id: a.id, template: a.template.template, from: a.template.from, gm: true, miss: true })}>Place where it lands</button>
           </div>
         ))}
         {asks.length > 0 && <p className="text-xs opacity-80">Talk it over; their planning clock waits meanwhile.</p>}
