@@ -9,7 +9,7 @@ pnpm install
 pnpm dev
 ```
 
-The project uses pnpm (the version pinned in `package.json`'s `packageManager`).
+The project uses pnpm (the version pinned in `package.json`'s `packageManager`) and Turborepo: the app is in `apps/web`, shared packages will live in `packages/`. Local data (the database, media, timing logs) stays in `data/` at the root.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

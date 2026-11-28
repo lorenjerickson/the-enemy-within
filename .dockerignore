@@ -1,9 +1,10 @@
 .git
 .github
-node_modules
-.next
+**/node_modules
+**/.next
+**/.turbo
 data
 Claude outputs
-*.tsbuildinfo
-.env*
-tests
+**/*.tsbuildinfo
+**/.env*
+apps/web/tests
