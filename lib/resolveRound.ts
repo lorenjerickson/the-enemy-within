@@ -753,12 +753,13 @@ export function resolveMovement(
   const dist = (a: Pos, b: Pos) => Math.hypot(a.col - b.col, a.row - b.row);
   // Fire thrown or shot at someone (a torch, a lit arrow) lands where they stand, hit or plain miss, setting flammable areas
   // there burning; a ranged one gone wild (a natural 1) lights one within its range half the time, wherever it was aimed.
-  const fireLands = (by: number, step: Extract<PlanStep, { kind: "action" }>, target: number, fumble: boolean | undefined, sec: number, say: (s: string) => void) => {
+  const fireLands = (by: number, step: Extract<PlanStep, { kind: "action" }>, at: Pos | undefined, fumble: boolean | undefined, say: (s: string) => void) => {
     if (step.use?.damageType !== "fire") return;
-    const range = rangeOf(step, movers.find((x) => x.tokenId === by)) ?? 1, from = pos.get(by), at = where(target);
+    const range = rangeOf(step, movers.find((x) => x.tokenId === by)) ?? 1, from = pos.get(by);
     const ids = fumble ? (range > 1 && from ? strayFire(lasting, { x: from.col + 0.5, y: from.row + 0.5 }, range) : []) : at ? fireLandsAt(lasting, { x: at.col + 0.5, y: at.row + 0.5 }) : [];
     for (const id of ids) if (!ignited.includes(id)) { ignited.push(id); say(`${lasting.find((l) => l.id === id)!.name} catches fire${fumble ? ` from a stray ${step.use.name}` : ""}!`); }
   };
+
   const budget = new Map(order.map((m) => [m.tokenId, 0])); // squares (or units) of chase movement banked
   /**
    * One second of a planned move that has to leave its line: around a body lying in the way, or back onto its route
@@ -1272,7 +1273,7 @@ export function resolveMovement(
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
           // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
           const crit = !!a.crit && !critImmune(them.statuses);
-          fireLands(m.tokenId, step, id, a.fumble, sec, say);
+          fireLands(m.tokenId, step, where(id), a.fumble, say);
           if (a.fumble || (!a.crit && a.total < d.total)) {
             say(`${use.name} misses ${nameOf(id)}: ${a.total} (${a.text}) vs defense ${d.total}${a.fumble ? " (a natural 1)" : ""}.`);
             story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "miss" });
@@ -1358,6 +1359,22 @@ export function resolveMovement(
         fx.push({ look: "area", from: m.tokenId, area: at, hits });
         continue;
       }
+      // Aimed at a spot, not someone (a torch at the oil, an arrow at the ground): no one is hit; the die is still thrown,
+      // as only a natural 1 counts (it goes astray). Fire landing there lights what's flammable.
+      if (!step.target && step.aim && !area && (rangeOf(step, m) ?? 1) > 1) {
+        const me = fighters.get(m.tokenId), here = pos.get(m.tokenId)!, range = rangeOf(step, m) ?? 1;
+        const spot = { col: Math.floor(step.aim.col), row: Math.floor(step.aim.row) }, what = step.use?.name ?? "an attack";
+        if (Math.hypot(step.aim.col - (here.col + 0.5), step.aim.row - (here.row + 0.5)) > range + 0.5) {
+          say(`${m.name}'s ${what} fails: the spot is out of reach.`);
+          continue;
+        }
+        const a = me ? usingDice(step.dice?.hit, () => me.attack(step.use, undefined, [])) : undefined;
+        say(`${m.name} aims ${what} at ${spot.col}, ${spot.row}${a?.fumble ? ": a natural 1, it goes astray" : ""}.`);
+        fx.push({ look: "arrow", from: m.tokenId, to: -1, outcome: "miss", spot: step.aim });
+        fireLands(m.tokenId, step, spot, a?.fumble, say);
+        leave(m.tokenId, step.use?.statuses?.self, step.use?.statuses?.minutes ?? 0, sec, m.tokenId);
+        continue;
+      }
       const target = step.target;
       const me = fighters.get(m.tokenId), them = target && fighters.get(target.id);
       const at = target && where(target.id);
@@ -1382,7 +1399,7 @@ export function resolveMovement(
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         const crit = !!a.crit && !critImmune(them.statuses), misses = a.fumble || (!a.crit && a.total < d.total); // a natural 1 misses; a critical hits
         if (misses) shown("miss");
-        fireLands(m.tokenId, step, target.id, a.fumble, sec, say);
+        fireLands(m.tokenId, step, where(target.id), a.fumble, say);
         const dodging = (them.statuses ?? []).some((s) => s.source === "Dodge"); // said, so a Dodge can be seen to count
         const dodgeNote = dodging ? ` (${target.name} is dodging: disadvantage)` : "";
         if (misses) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss${a.fumble ? " (a natural 1)" : ""}${dodgeNote}.`);

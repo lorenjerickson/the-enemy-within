@@ -5,7 +5,7 @@ import { setPlanRolled, getRoundPlan, saveRoundPlan } from "@/lib/db/rounds";
 import { getEncounter } from "@/lib/db/encounters";
 import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { snapHeight } from "@/lib/gravity";
-import { FEET_PER_SQUARE, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
+import { FEET_PER_SQUARE, crosses, reachableSquares, shortestPath, squareKey } from "@/lib/movement";
 import { CHASE_ACTIONS, actionKind, type PlayerActionId } from "@/lib/playerActions";
 import { ROUND_SECONDS, afterRefits, cannotAdd, onBelt, planEnd, stepKind, timeline, unavailable, type GearAction, type PlanStep, type Put, type Refit } from "@/lib/roundPlan";
 import { agreedImprovisation, waitingOnTemplate } from "@/lib/improvise";
@@ -13,7 +13,7 @@ import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
-import { movementBlockers } from "@/lib/visibility";
+import { blockingSegments, movementBlockers } from "@/lib/visibility";
 import { REACH, distanceToDoor } from "../app/(play)/play/reach";
 import { interactablesNear } from "@/lib/triggers";
 import { hidingPlaces } from "../app/(play)/play/hiding";
@@ -130,6 +130,15 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
       if (!Number.isFinite(aim.col) || !Number.isFinite(aim.row)) return "Aim it on the map";
       const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
       if (use.area.shape === "circle" && Math.hypot(aim.col - (from.col + 0.5), aim.row - (from.row + 0.5)) > use.range + 0.5) return `Out of range (${use.range * 5} ft)`;
+    } else if (step.aim && step.action === "attack" && step.target === undefined) {
+      // A ranged attack aimed at a spot, not someone (a torch at the oil): in range and in sight from where the plan leaves them.
+      aim = { col: Math.floor(Number(step.aim.col)) + 0.5, row: Math.floor(Number(step.aim.row)) + 0.5 };
+      if (!Number.isFinite(aim.col) || !Number.isFinite(aim.row)) return "Aim it on the map";
+      const range = use?.range ?? attackRange(p.tok.token_id, plannedEquipment(p));
+      if (range <= 1) return "Only a ranged attack can be aimed at a spot";
+      const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row }), eye = { x: from.col + 0.5, y: from.row + 0.5 };
+      if (Math.hypot(aim.col - eye.x, aim.row - eye.y) > range + 0.5) return `Out of range (${range * 5} ft)`;
+      if (blockingSegments(listStructures(p.tok.level_id)).some((w) => crosses(eye, { x: aim!.col, y: aim!.row }, w))) return "They can't see that spot from there";
     }
     // Evade / Pursue for a whole number of seconds (or, unset, the rest of the round).
     let seconds: number | undefined;

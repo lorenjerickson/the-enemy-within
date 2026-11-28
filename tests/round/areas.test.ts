@@ -172,6 +172,24 @@ test("fire at someone (a lit arrow) lights what they stand in, hit or plain miss
   assert.match(withSeed(wild.indexOf(1) + 1, () => shoot({ nat: 1, hit: 1 }, 9)).text, /Oil slick catches fire from a stray Lit arrow!/);
 });
 
+test("aimed at a spot, not someone: no one is hit, fire there lights what's flammable; a natural 1 goes astray", () => {
+  const oil = lastingAt(5, 5, { id: 7, name: "Oil slick", damage: null, flammable: true });
+  const torch = gear({ name: "Thrown torch", range: 8, damageType: "fire" });
+  const toss = (o: { nat?: number }, aim = aimAt(5, 5), use = torch) =>
+    resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use, aim })]), mover(2, { col: 5, row: 5 })], { 1: fighter(o), 2: fighter({ hp: 10 }) }, { lasting: [oil] });
+  const r = toss({});
+  assert.deepEqual(r.ignited, [7]);
+  assert.equal(r.hp.get(2), 10, "no one is hit, even standing there");
+  assert.match(r.text, /aims Thrown torch at 5, 5\./);
+  assert.match(r.text, /Oil slick catches fire!/);
+  assert.ok(r.frames.some((f) => f.fx?.some((x) => x.look === "arrow" && "spot" in x && !!x.spot)), "it flies to the spot");
+  assert.deepEqual(toss({}, aimAt(2, 2)).ignited, [], "somewhere else");
+  assert.deepEqual(toss({}, aimAt(5, 5), gear({ name: "Arrow", range: 12 })).ignited, [], "no fire");
+  assert.match(toss({}, aimAt(9, 9)).text, /out of reach/);
+  const wild = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((seed) => withSeed(seed, () => toss({ nat: 1 }).ignited.length));
+  assert.ok(wild.includes(0) && wild.includes(1), `a natural 1: only sometimes, even aimed right at it (${wild})`);
+});
+
 test("an area with no damage of its own (a smoke bomb) hurts no one: not the user's weapon damage", () => {
   const blinded = condition(41, "Blinded", [{ kind: "roll", roll: "attack", mode: "disadvantage" }]);
   const smoke = gear({ name: "Popping Smoke", damage: null, area: { shape: "circle", ft: 15, dc: 99, save: "agility", half: false, at: "self" }, statuses: { minutes: 0.1, target: { source: "Popping Smoke", boosts: [], grants: [], conditions: [blinded] } } });

@@ -382,7 +382,7 @@ export function drawSessionOverlays(ctx: CanvasRenderingContext2D, state: MapSta
         drawAreaFx(ctx, f, k, toPx, size, (id) => at(id), clip);
         continue;
       }
-      const a = at(f.from), b = at(f.to);
+      const a = at(f.from), b = f.spot ? { ...toPx({ x: f.spot.col, y: f.spot.row }), seen: false } : at(f.to); // a spot: seen if the shooter is
       if (a && b && (a.seen || b.seen)) drawFx(ctx, f, k, a, b, size);
     }
   }

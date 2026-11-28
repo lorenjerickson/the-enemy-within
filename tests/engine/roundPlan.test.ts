@@ -69,6 +69,7 @@ test("cannotAdd: targeted actions need a target (or an aim, or 'all')", () => {
   const area = gear({ area: { shape: "circle", ft: 10, dc: 12, save: "agility", half: true } });
   assert.equal(cannotAdd([], act("attack", { use: area }), 5), "Aim it on the map");
   assert.equal(cannotAdd([], act("attack", { use: area, aim: { col: 3, row: 3 } }), 5), null);
+  assert.equal(cannotAdd([], act("attack", { aim: { col: 3, row: 3 } }), 5), null, "aimed at a spot (the server checks it is ranged)");
   assert.equal(cannotAdd([], act("attack", { use: gear({ targeting: { who: "enemy", count: "all", n: 0 } }) }), 5), null);
 });
 

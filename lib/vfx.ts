@@ -11,6 +11,7 @@ export interface AttackFx {
   from: number; // token ids
   to: number;
   outcome: "hit" | "miss" | "down";
+  spot?: { col: number; row: number }; // aimed at a spot, not someone (map position): it flies there (`to` is -1)
 }
 /** Someone caught in an area: failed (hit), saved for half, saved for nothing, or dropped. */
 export type AreaHit = { id: number; outcome: "hit" | "half" | "save" | "down" };

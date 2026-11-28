@@ -152,7 +152,7 @@ export function cannotAdd(plan: PlanStep[], step: PlanStep, walkFps: number): st
   if (isDash(step) && plan.some((s) => kind(s) === "action")) return "You've already planned your action this round: no Dash";
   if (kind(step) === "reaction" && plan.some((s) => kind(s) === "reaction")) return "You've already planned your reaction this round";
   if (kind(step) === "bonus" && plan.some((s) => kind(s) === "bonus")) return "You've already planned your bonus action this round";
-  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !(step.use?.area && step.aim) && step.use?.targeting?.count !== "all") return step.use?.area ? "Aim it on the map" : "Pick a target";
+  if (step.kind === "action" && TARGETED_ACTIONS.includes(step.action) && !step.target && !step.aim && step.use?.targeting?.count !== "all") return step.use?.area ? "Aim it on the map" : "Pick a target";
   if (step.kind === "action" && CHASE_ACTIONS.includes(step.action) && timeline(plan, walkFps).left <= 0) return "No time left this round";
   if (timeline([...plan, step], walkFps).used > ROUND_SECONDS + 1e-9) return "That doesn't fit in the six seconds left";
   return null;
