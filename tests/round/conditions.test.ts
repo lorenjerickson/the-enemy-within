@@ -173,3 +173,12 @@ test("temporary health and strain from a condition come back with the round", ()
   assert.equal(r.temps.get(1), 6);
   assert.deepEqual(r.strains, [{ tokenId: 1, attribute: "might", points: 1 }]);
 });
+
+test("an aura gives its condition to those within it, but not through a wall", async () => {
+  const { wall } = await import("./harness");
+  const stench = condition(70, "Sickened", [{ kind: "roll", roll: "attack", mode: "disadvantage" }]);
+  const ghoul = fighter({ side: "hostile" }, { auras: [{ kind: "aura", condition: 70, radius: 10, who: "enemy", self: false, given: stench }] });
+  const run = (walls: ReturnType<typeof wall>[] = []) => resolve([mover(1, { col: 0, row: 0 }), mover(2, { col: 2, row: 0 })], { 1: ghoul, 2: fighter({ side: "party" }) }, { walls });
+  assert.deepEqual(run().afflictions.get(2)?.map((a) => a.condition.name), ["Sickened"]);
+  assert.deepEqual(run([wall(1, -3, 1, 3)]).afflictions.get(2)?.map((a) => a.condition.name) ?? [], [], "a wall between them");
+});

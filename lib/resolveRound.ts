@@ -1092,7 +1092,7 @@ export function resolveMovement(
       if (near !== undefined || seer !== undefined) reveal(id, sec, near !== undefined ? `${nameOf(near)} is right next to them` : `${nameOf(seer!)} sees them move`);
     }
     // Auras follow whoever gives them off: those now within one get its condition (a save as it lands, on entering), those out of it lose it.
-    syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless }), passes,
+    syncAuras(afflicted, auraWants({ ids: [...fighters.keys()], where, allegiance: (id) => fighters.get(id)?.allegiance ?? "hostile", down, standing: (id) => fighters.get(id)?.auras ?? [], afflicted, gridless, walls: effectWalls }), passes,
       (target, c, source) => afflict(target, c, source, sec, source), (target, a) => release(target, a, "left", sec));
     // Reactions get ready in the second they're planned for (after anything planned before them): Dodge gives
     // attacks against them disadvantage from then until the round ends.

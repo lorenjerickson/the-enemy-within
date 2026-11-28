@@ -9,7 +9,8 @@ import { logSessionEvent } from "@/lib/db/sessions";
 import { fightersOn } from "@/lib/combat";
 import { auraAffliction, auraWants, syncAuras } from "@/lib/auras";
 import { describeCondition } from "@/lib/conditions";
-import { isGridlessLevel } from "@/lib/db/maps";
+import { isGridlessLevel, listStructures } from "@/lib/db/maps";
+import { blockingSegments } from "@/lib/visibility";
 
 /** Brings a level's aura conditions in line with where everyone is; returns what happened (also logged). */
 export function syncAurasOn(levelId: number): string[] {
@@ -26,6 +27,7 @@ export function syncAurasOn(levelId: number): string[] {
     standing: (id) => fighters.get(id)?.auras ?? [],
     afflicted,
     gridless: isGridlessLevel(levelId),
+    walls: blockingSegments(listStructures(levelId)),
   });
   syncAuras(afflicted, wants, passes,
     (target, c, source) => {

@@ -3,10 +3,12 @@
  * from gear, or from a condition on it), following it as it moves. The condition lasts while they're within it and
  * ends as they leave. A condition with a save as it lands is rolled on entering; passing keeps them safe until they
  * leave and come back (a "pass", kept per creature and condition). The same condition from two auras counts once.
+ * Walls and closed doors between them block an aura (Q8).
  */
 import { modifiersOf, type Affliction, type Condition, type Modifier } from "@/lib/conditions";
 import { fits, relation, type Allegiance } from "@/lib/sides";
-import { FEET_PER_SQUARE } from "@/lib/movement";
+import { FEET_PER_SQUARE, crosses } from "@/lib/movement";
+import type { Segment } from "@/lib/visibility";
 
 export type AuraModifier = Extract<Modifier, { kind: "aura" }>;
 type Pos = { col: number; row: number };
@@ -32,6 +34,7 @@ export function auraWants(o: {
   standing: (id: number) => AuraModifier[];
   afflicted: Map<number, Affliction[]>;
   gridless: boolean;
+  walls?: Segment[]; // what blocks an aura (walls, closed doors; not windows)
 }): Map<string, { target: number; source: number; condition: Condition }> {
   const out = new Map<string, { target: number; source: number; condition: Condition; d: number }>();
   for (const source of o.ids) {
@@ -43,6 +46,7 @@ export function auraWants(o: {
         if (!at || o.down.has(target)) continue;
         if (target === source ? !aura.self : !fits(aura.who, relation(o.allegiance(source), o.allegiance(target)))) continue;
         if (!withinFeet(from, at, aura.radius, o.gridless)) continue;
+        if (target !== source && o.walls?.some((w) => crosses({ x: from.col + 0.5, y: from.row + 0.5 }, { x: at.col + 0.5, y: at.row + 0.5 }, w))) continue; // a wall in the way
         const key = `${target}:${aura.given.id}`, d = Math.hypot(from.col - at.col, from.row - at.row);
         if (!out.has(key) || d < out.get(key)!.d) out.set(key, { target, source, condition: aura.given, d });
       }
