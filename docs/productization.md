@@ -34,7 +34,7 @@ The current application is a Next.js/React/TypeScript/SQLite application where t
 ## Target Architecture
 
 - Web: Next.js, React, TypeScript, Tailwind CSS/DaisyUI, Zustand for transient observable state (a proxy for game state), zod for data validation
-- API: NestJS REST API, WebSocket server, WebRTC
+- API: NestJS REST API, WebSocket server (WebRTC descoped: backlog)
 - DB: PostgreSQL, Prisma for data migrations
 - Content: Media assets (image, audio, video): object storage plus an asset library in our own API
 - Auth: Auth0
@@ -77,3 +77,86 @@ Symptoms seen in play, all from separate polls arriving in either order:
 
 For productization: push changes from the server over WebSockets instead of polling. Ordering still matters with one channel: send events (a walk, an area placed) before, or with, the end state they lead to, and have the client hold an end state until its animation has played. The near-term fix for the jump does the same holding without WebSockets (backlog T).
 
+## Worlds and campaigns
+
+One engine, many worlds, many campaigns per world (Loren, 2026-11-27). This shapes the domain model from Phase 1 and the PostgreSQL schema in Phase 5, even though the UI for several of each comes last.
+
+- **Engine:** the rules (rounds, movement, saves, hazards, effects…), the same for every world. Owns no content.
+- **World:** what's built for a setting. Its maps and locations, creatures, items, effects, actions, professions, media and script library. A world can be played by many campaigns.
+- **Campaign:** one group's play in a world. Its characters and party, sessions, story (objectives, discoveries, journals, vars, triggers), game time, and the live state of the world's maps as this campaign has left them (token positions, doors opened, hazards sprung or spent, secrets found).
+- **To settle in Phase 1:** where each table's rows belong. Most are clearly world or campaign. The rest are map things that are both: designed in the world (a door, a trap), with their state kept per campaign (open, sprung). The likely answer is world-owned definitions plus a campaign overlay for their state.
+
+Today's database has exactly one world and one campaign. The migration in Phase 5 makes both explicit, and nothing changes for the campaign being played.
+
+## Phased Implementation
+
+**How the work is done:**
+- **Trunk-based:** small steps merged to main (or branches merged within a day), each one tested and deployable.
+- **Strangler pattern:** the game stays playable after every step, and each phase ends with a play session.
+- **Tests:** tsc, the full test suite and the coupling checks pass on every commit, so no coverage is lost along the way. Each phase's steps are planned at about 5 minutes each and approved before work starts.
+
+**Why PostgreSQL comes late:** the domain model is the contract. The schema is designed from it once the domain model and repositories exist, so switching databases becomes one adapter behind a flag. Moving the data first would make today's SQLite schema the contract by default.
+
+**Making the late move safe:**
+- **Phase 1:** a draft Prisma schema is written from the domain model, including world and campaign ownership, and reviewed but not used.
+- **Phase 2:** every repository gets contract tests, so the PostgreSQL adapter must pass the same tests as the SQLite one.
+
+### Phase 0: Preparation
+
+- Push everything to origin.
+- Timing at the critical boundaries (browser ↔ server, server ↔ database, full round trips for common requests, resolving a round), written as structured logs behind a flag.
+- At least one play session with the timing on, to capture a performance baseline.
+- Convert the repository to a Turborepo monorepo on pnpm, with the app moved to `apps/web` unchanged.
+- CI on every push: tsc, the tests, dependency-cruiser (no import cycles; the engine imports nothing from web, API or database code).
+
+### Phase 1: Domain model and engine
+
+- `packages/domain`: the domain model as zod types, in the ubiquitous language. That includes the engine, world and campaign split above, and where each kind of data belongs.
+- `packages/engine`: the pure rules moved in (`resolveRound`, `hazards`, `aoe`, `effectCopy`, `exposure`, `auras` and the rest already checked as pure), depending only on the domain.
+- Break the remaining import cycles.
+- A draft Prisma schema from the domain model, reviewed but not yet used.
+
+### Phase 2: Application services
+
+- One application service per area of the domain (catalog, maps, sessions and rounds, story, media…) with repository interfaces behind it, still on SQLite.
+- Server actions and pages call services, never the database. Moved one area at a time; today 89 app files import `lib/db` directly.
+- Repository contract tests.
+
+### Phase 3: NestJS API alongside
+
+- `apps/api`: NestJS. The application services move in behind pure REST routes that show ownership (worlds, campaigns, sessions…), with zod validation (JSON Schema generated from it where needed).
+- Next calls the API through a typed client, one area at a time, design data first. Areas not yet moved stay in-process meanwhile.
+
+### Phase 4: Live play
+
+- A WebSocket gateway. Session commands become events (CQRS, event-sourced), with every die an event (as plan dice already are).
+- Polling is replaced through a client abstraction: walks and script effects first, which fixes the out-of-order jumps, then the play page.
+
+### Phase 5: PostgreSQL
+
+- PostgreSQL in Docker Compose, with a Prisma adapter behind the repositories, using the schema from Phase 1 with world and campaign ownership.
+- Migrate the data from SQLite: today's data becomes one world and one campaign. Verify the migration, then optimise the indexes.
+- The switch sits behind a flag, with SQLite kept for rollback until a play session confirms it.
+- Export and import carry worlds and campaigns.
+
+### Phase 6: Media
+
+- Object storage for images, audio and video, plus an asset library in the API. Existing media is migrated, with every reference checked.
+
+### Phase 7: Platform
+
+- Auth0.
+- Several worlds and several campaigns per world in the UI: world building as its own function next to campaigns.
+- Deploying as separate services (Docker), with a migration script that orchestrates the switch.
+
+### Checked at the end of every phase
+
+- Basic create, read, update, delete and list for what moved.
+- Export and import.
+- Live map updates (from Phase 4).
+- Performance against the Phase 0 baseline at each boundary.
+- A play session.
+
+### Descoped
+
+- WebRTC (voice or video at the table): in the backlog, after productization.
