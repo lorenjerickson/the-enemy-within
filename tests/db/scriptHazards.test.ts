@@ -28,4 +28,8 @@ test("scripts: game.locations.current.hazards switches one on (catching whoever 
   assert.equal(tryGameScript("game.locations.current.hazards['dart trap'].activate()", lv).ok, true);
   assert.equal(tokenHealth(rat)!.current, hp - 8, "set off: the darts");
   assert.ok(getLastingArea(trap));
+  const offTrap = addLastingArea(lv, fire({ name: "Spikes", off: true, activation: "dormant", setOffBy: ["enter"], activeFor: "instant", often: "always", damage: "2", damageType: "piercing" }));
+  assert.equal(tryGameScript("game.locations.current.hazards['spikes'].activate()", lv).ok, true);
+  assert.equal(!!(getLastingArea(offTrap) as Hazard).off, false, "activate() switches it on");
+  assert.equal(tokenHealth(rat)!.current, hp - 10, "and the trap springs");
 });

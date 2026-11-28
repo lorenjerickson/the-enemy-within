@@ -98,13 +98,16 @@ export interface CurrentLocation extends GameLocation {
 export interface ScriptLight { id: number; name: string; kind: string; range: number; flicker: boolean; on: boolean }
 /** An effect as scripts see it. */
 export interface ScriptEffect { id: number; name: string; kind: string; intensity: number; on: boolean }
-/** A hazard as scripts see it (by name, e.g. hazards['fog']): on switches it; inside is who's in it now; activate() sets it off. */
+/** A hazard as scripts see it (by name, e.g. hazards['fog']): on switches it; inside is who's in it now; activate() switches it on and sets it off. */
 export interface ScriptHazard { id: number; name: string; on: boolean; readonly inside: Collection<Actor> }
 /** What a script did to a hazard, done after it's saved (by the play code: catching whoever is in it, fire spreading). */
 export type HazardOp = { id: number; to: "on" | "off" | "set off" };
 let hazardOutcome: ((levelId: number, op: HazardOp) => void) | null = null;
 /** The play code says how a hazard switched on or set off plays out (so this module needn't import it). */
 export const setHazardOutcome = (f: (levelId: number, op: HazardOp) => void) => void (hazardOutcome = f);
+/** Activating a hazard (a script's activate(), "Activates when…"): switched on if it's off (an always-active one then catches whoever is in it); a trap, or one already on, set off too. */
+const activating = (h: { id: number; off?: boolean; activation?: string }): HazardOp[] =>
+  [...(h.off ? [{ id: h.id, to: "on" as const }] : []), ...(!h.off || h.activation === "dormant" ? [{ id: h.id, to: "set off" as const }] : [])];
 /** A door as scripts see it. */
 export interface ScriptDoor { id: number; name: string; open: boolean; locked: boolean }
 
@@ -223,7 +226,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
     changes.hazardsOn.set(h.id, !h.off);
     const z = { id: h.id, name: h.name, on: !h.off } as ScriptHazard;
     Object.defineProperty(z, "inside", { enumerable: false, get: () => new Collection("actor", actorsColl.items.filter((a) => a.position && inArea(h.area, { x: a.position.col + 0.5, y: a.position.row + 0.5 }))) });
-    Object.defineProperty(z, "activate", { enumerable: false, value: new Method(() => void changes.hazardOps.push({ id: h.id, to: "set off" })) });
+    Object.defineProperty(z, "activate", { enumerable: false, value: new Method(() => void changes.hazardOps.push(...activating({ ...h, off: !z.on }))) });
     return z;
   });
   return [
@@ -740,7 +743,7 @@ function hazardConditions(): void {
         if (!(e instanceof ScriptError)) throw e;
         if (held[key] === undefined) logSessionEvent(`⚠ ${h.name}: "${cond}" failed (${e.message}).`);
       }
-      if (holds && !held[key]) ops.push({ id: h.id, to });
+      if (holds && !held[key]) ops.push(...(to === "on" ? activating(h) : [{ id: h.id, to }]));
       held[key] = holds;
     }
     if (JSON.stringify(held) !== JSON.stringify(h.whenHeld ?? {})) {
@@ -748,7 +751,7 @@ function hazardConditions(): void {
       updateLastingArea(h.id, { ...rest, whenHeld: held });
     }
     for (const op of ops) {
-      logSessionEvent(`⚡ ${h.name} ${op.to === "on" ? "activates" : "deactivates"} (${op.to === "on" ? h.activatesWhen : h.deactivatesWhen}).`);
+      if (op === ops[0] || op.to === "off") logSessionEvent(`⚡ ${h.name} ${op.to === "off" ? "deactivates" : "activates"} (${op.to === "off" ? h.deactivatesWhen : h.activatesWhen}).`);
       if (hazardOutcome) hazardOutcome(h.level_id, op);
       else setLastingAreaOff(op.id, op.to === "off");
     }

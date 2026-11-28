@@ -68,7 +68,7 @@ const TYPES: Record<string, Member[]> = {
   light: [text("name", "read-only"), text("kind", "point / directional"), num("range", "cells"), flag("flicker", ""), flag("on", "switched on")],
   effect: [text("name", "read-only"), text("kind", "rain, fire …"), num("intensity", "0 to 1"), flag("on", "switched on")],
   door: [text("name", "read-only"), flag("open", "")],
-  hazard: [text("name", "read-only"), flag("on", "switched on (on: catches whoever is in it)"), { label: "inside", type: "coll:actor", detail: "who's in it now" }, { label: "activate", detail: "activate(): sets it off (a trap springs)", method: true }],
+  hazard: [text("name", "read-only"), flag("on", "switched on (on: catches whoever is in it)"), { label: "inside", type: "coll:actor", detail: "who's in it now" }, { label: "activate", detail: "activate(): switches it on; a trap springs", method: true }],
   calendar: [
     num("now", "game minutes since the campaign began"), { label: "timers", type: "coll:timer", detail: "start / stop" },
     { label: "advance", detail: "advance(2, 'hours')", method: true },
