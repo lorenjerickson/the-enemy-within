@@ -5,7 +5,7 @@ import { ATTRIBUTES, SKILLS_BY_ATTRIBUTE } from "./attributes";
  * anything missing here still runs, it just isn't suggested). Types are names like "character" or
  * "coll:light" (a collection of lights); a collection's items are also reachable by name, from ScriptNames.
  */
-export type ItemKind = "character" | "location" | "actor" | "creature" | "light" | "effect" | "door" | "timer" | "objective";
+export type ItemKind = "character" | "location" | "actor" | "creature" | "light" | "effect" | "door" | "hazard" | "timer" | "objective";
 
 /** Real names to suggest: characters, locations, the level's lights … and game.vars keys. */
 export type ScriptNames = Partial<Record<ItemKind | "var" | "script", string[]>> & { about?: Record<string, string> }; // script: the library's names (about: their descriptions)
@@ -50,6 +50,7 @@ const TYPES: Record<string, Member[]> = {
     { label: "lights", type: "coll:light", detail: "light sources" },
     { label: "effects", type: "coll:effect", detail: "animated effects" },
     { label: "doors", type: "coll:door", detail: "doors" },
+    { label: "hazards", type: "coll:hazard", detail: "hazards (fire, fog, traps…)" },
   ],
   actor: [
     text("name", "read-only"), text("type", "creature / character"),
@@ -67,6 +68,7 @@ const TYPES: Record<string, Member[]> = {
   light: [text("name", "read-only"), text("kind", "point / directional"), num("range", "cells"), flag("flicker", ""), flag("on", "switched on")],
   effect: [text("name", "read-only"), text("kind", "rain, fire …"), num("intensity", "0 to 1"), flag("on", "switched on")],
   door: [text("name", "read-only"), flag("open", "")],
+  hazard: [text("name", "read-only"), flag("on", "switched on (on: catches whoever is in it)"), { label: "inside", type: "coll:actor", detail: "who's in it now" }, { label: "setOff", detail: "setOff(): sets it off (a trap springs)", method: true }],
   calendar: [
     num("now", "game minutes since the campaign began"), { label: "timers", type: "coll:timer", detail: "start / stop" },
     { label: "advance", detail: "advance(2, 'hours')", method: true },

@@ -14,7 +14,7 @@ import { allegianceOf } from "@/lib/sides";
 import { sprungByStep, sprungWhereStanding } from "@/lib/traps";
 import { describeOutcome, type MapTrigger } from "@/lib/triggers";
 import type { Point } from "@/lib/visibility";
-import { runGameScript } from "@/lib/game";
+import { runGameScript, setHazardOutcome, type HazardOp } from "@/lib/game";
 import { ScriptError } from "@/lib/script";
 import { setOffHazard } from "./hazards";
 import { isActive, type Hazard } from "@/lib/hazards";
@@ -45,15 +45,7 @@ export function fireTrigger(levelId: number, t: MapTrigger, tokenId: number | nu
       const d = listSecrets(levelId).find((s) => s.id === o.secret)?.discovery_id;
       if (d) revealDiscovery(d);
     } else if (o.kind === "discovery") revealDiscovery(o.discovery);
-    else if (o.kind === "area") {
-      // A hazard: switched off; switched on (an active one catches whoever is in it now); set off (a dormant one
-      // springs, an active one catches whoever is in it now, whatever its timings).
-      if (o.to !== "set off") setLastingAreaOff(o.area, o.to === "off");
-      const l = o.to === "off" ? undefined : (getLastingArea(o.area) as Hazard | undefined);
-      if (l && !l.off && l.activation === "dormant" && o.to === "set off") for (const s of setOffHazard(levelId, l)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
-      else if (l && isActive(l, getGameTime())) for (const tok of listTokens(levelId)) if (inArea(l.area, { x: tok.col + 0.5, y: tok.row + 0.5 })) told.set(tok.id, [...(told.get(tok.id) ?? []), catchInArea(levelId, l, tok.id)]);
-      spreadFire(levelId);
-    }
+    else if (o.kind === "area") for (const [id, lines] of hazardNow(levelId, { id: o.area, to: o.to })) told.set(id, [...(told.get(id) ?? []), ...lines]);
     else if (o.kind === "script") {
       try { runGameScript(o.script, levelId); } catch (e) {
         if (!(e instanceof ScriptError)) throw e;
@@ -82,3 +74,18 @@ export function triggersWhereStopped(levelId: number, tokenId: number, at: Point
   if (!token) return [];
   return sprungWhereStanding(listMapTriggers(levelId), tokenId, allegianceOf(token), centre(at), "end").map((t) => fireTrigger(levelId, t, tokenId));
 }
+
+/**
+ * A hazard switched off; switched on (an active one catches whoever is in it now); set off (a dormant one springs, an
+ * active one catches whoever is in it now, whatever its timings). By a map trigger or a script. What each token is told.
+ */
+export function hazardNow(levelId: number, op: HazardOp): Map<number, string[]> {
+  const told = new Map<number, string[]>();
+  if (op.to !== "set off") setLastingAreaOff(op.id, op.to === "off");
+  const l = op.to === "off" ? undefined : (getLastingArea(op.id) as Hazard | undefined);
+  if (l && !l.off && l.activation === "dormant" && op.to === "set off") for (const s of setOffHazard(levelId, l)) told.set(s.tokenId, [...(told.get(s.tokenId) ?? []), s.player]);
+  else if (l && isActive(l, getGameTime())) for (const tok of listTokens(levelId)) if (inArea(l.area, { x: tok.col + 0.5, y: tok.row + 0.5 })) told.set(tok.id, [...(told.get(tok.id) ?? []), catchInArea(levelId, l, tok.id)]);
+  spreadFire(levelId);
+  return told;
+}
+setHazardOutcome((levelId, op) => void hazardNow(levelId, op)); // scripts' game.locations.current.hazards

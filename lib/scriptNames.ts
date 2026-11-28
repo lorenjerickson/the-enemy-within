@@ -4,6 +4,7 @@ import { listEffects, listLights } from "@/lib/db/mapThings";
 import { listLocations, listStructures } from "@/lib/db/maps";
 import { listTimers } from "@/lib/db/calendar";
 import { listTokens } from "@/lib/db/tokens";
+import { listLastingAreas } from "@/lib/db/areas";
 import type { ScriptNames } from "./scriptSchema";
 import { listObjectives } from "./story";
 import { listLibraryScripts } from "./scriptLibrary";
@@ -28,6 +29,7 @@ export function scriptNames(levelId?: number): ScriptNames {
     names.creature = tokens.filter((t) => t.creature_id).map((t) => t.name);
     names.light = listLights(levelId).map((l) => l.name);
     names.effect = listEffects(levelId).map((e) => e.name);
+    names.hazard = listLastingAreas(levelId).map((h) => h.name);
     names.door = listStructures(levelId).filter((s) => s.kind === "door").map((s) => s.name ?? `Door ${s.id}`);
   }
   // Each name once (several rats share a name).

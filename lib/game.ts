@@ -1,6 +1,8 @@
 import { MAX_SCORE, MIN_SCORE, modifier, type Attributes } from "./attributes";
 import { rollDice } from "./dice";
-import { AREA_SHAPES, placeArea, type AreaShape } from "./aoe";
+import { AREA_SHAPES, inArea, placeArea, type AreaShape } from "./aoe";
+import { listLastingAreas, setLastingAreaOff } from "@/lib/db/areas";
+import type { Hazard } from "@/lib/hazards";
 import type { AttackFx, Fx } from "./vfx";
 import type { Point } from "./visibility";
 
@@ -89,12 +91,20 @@ export interface CurrentLocation extends GameLocation {
   lights: Collection<ScriptLight>;
   effects: Collection<ScriptEffect>;
   doors: Collection<ScriptDoor>;
+  hazards: Collection<ScriptHazard>;
 }
 
 /** A light source as scripts see it (by name, e.g. lights['lamp']). */
 export interface ScriptLight { id: number; name: string; kind: string; range: number; flicker: boolean; on: boolean }
 /** An effect as scripts see it. */
 export interface ScriptEffect { id: number; name: string; kind: string; intensity: number; on: boolean }
+/** A hazard as scripts see it (by name, e.g. hazards['fog']): on switches it; inside is who's in it now; setOff() sets it off. */
+export interface ScriptHazard { id: number; name: string; on: boolean; readonly inside: Collection<Actor> }
+/** What a script did to a hazard, done after it's saved (by the play code: catching whoever is in it, fire spreading). */
+export type HazardOp = { id: number; to: "on" | "off" | "set off" };
+let hazardOutcome: ((levelId: number, op: HazardOp) => void) | null = null;
+/** The play code says how a hazard switched on or set off plays out (so this module needn't import it). */
+export const setHazardOutcome = (f: (levelId: number, op: HazardOp) => void) => void (hazardOutcome = f);
 /** A door as scripts see it. */
 export interface ScriptDoor { id: number; name: string; open: boolean; locked: boolean }
 
@@ -130,6 +140,8 @@ interface ActorChanges {
   gridless: boolean; // positions anywhere, distances in straight lines
   structures: MapStructure[];
   fx: (() => Fx)[]; // effects the script played, made when saving (so new creatures have their token ids)
+  hazardsOn: Map<number, boolean>; // hazards switched on when the script began
+  hazardOps: HazardOp[]; // set off by the script (switching is worked out when saving)
 }
 
 /** Fresh health for a new creature: the maximum rolled from its formula. */
@@ -142,7 +154,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   const place = getLevelPlace(levelId);
   if (!place) throw new ScriptError("This map level no longer exists");
   const changes: ActorChanges = {
-    levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null, fx: [],
+    levelId, added: new Map(), start: new Map(), startHp: new Map(), encounter: () => null, fx: [], hazardsOn: new Map(), hazardOps: [],
     portrait: isPortraitLevel(levelId), gridless: isGridlessLevel(levelId), structures: listStructures(levelId),
   };
   const templates = listCreatures();
@@ -207,6 +219,13 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
   const doors = changes.structures
     .filter((s) => s.kind === "door")
     .map((s): ScriptDoor => ({ id: s.id, name: s.name ?? `Door ${s.id}`, open: !!s.open, locked: !!s.locked }));
+  const hazards = (listLastingAreas(levelId) as Hazard[]).filter((h) => !h.spent).map((h): ScriptHazard => {
+    changes.hazardsOn.set(h.id, !h.off);
+    const z = { id: h.id, name: h.name, on: !h.off } as ScriptHazard;
+    Object.defineProperty(z, "inside", { enumerable: false, get: () => new Collection("actor", actorsColl.items.filter((a) => a.position && inArea(h.area, { x: a.position.col + 0.5, y: a.position.row + 0.5 }))) });
+    Object.defineProperty(z, "setOff", { enumerable: false, value: new Method(() => void changes.hazardOps.push({ id: h.id, to: "set off" })) });
+    return z;
+  });
   return [
     {
       id: place.location_id, name: place.location, level: place.level, actors: actorsColl, creatures, encounter,
@@ -214,6 +233,7 @@ function loadLocation(levelId: number, players: Player[]): [CurrentLocation, Act
       lights: new Collection("light", lights),
       effects: new Collection("effect", effects),
       doors: new Collection("door", doors),
+      hazards: new Collection("hazard", hazards),
     },
     changes,
   ];
@@ -285,7 +305,7 @@ function loadGame(levelId?: number): [Game, ActorChanges | null] {
   if (current) setRef(current, "game.locations.current"); // before the list names it by name
   refCollection(locations, "game.locations");
   if (current) {
-    for (const key of ["actors", "creatures", "lights", "effects", "doors"] as const) {
+    for (const key of ["actors", "creatures", "lights", "effects", "doors", "hazards"] as const) {
       refCollection(current[key] as Collection<{ id: number; name: string }>, `game.locations.current.${key}`);
     }
   }
@@ -392,6 +412,14 @@ function saveGame(game: Game, changes: ActorChanges | null, triggers: TriggerDef
     for (const t of triggers) addTrigger({ ...t, level_id: changes?.levelId ?? null, created: game.calendar.now });
     if (changes && game.locations.current) saveActors(changes, game.locations.current as CurrentLocation);
   });
+  // Hazards switched or set off: after saving (switching on catches whoever is in it; fire spreads).
+  if (changes && game.locations.current) {
+    const switched = (game.locations.current as CurrentLocation).hazards.items.filter((h) => changes.hazardsOn.get(h.id) !== !!h.on).map((h): HazardOp => ({ id: h.id, to: h.on ? "on" : "off" }));
+    for (const op of [...switched, ...changes.hazardOps]) {
+      if (hazardOutcome) hazardOutcome(changes.levelId, op);
+      else if (op.to !== "set off") setLastingAreaOff(op.id, op.to === "off");
+    }
+  }
   return settled;
 }
 
