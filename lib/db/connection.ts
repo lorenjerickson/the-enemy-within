@@ -2,12 +2,25 @@
 // Every lib/db/* module and lib/db.ts use \`db\` from here (backlog U: lib/db.ts is being split by area).
 import Database from "better-sqlite3";
 import fs from "node:fs";
+import { timed } from "@/lib/timing";
 import type { Lifecycle } from "@/lib/conditions";
 
 // Where the database and uploaded media live: ./data locally, a mounted volume when deployed (DATA_DIR=/data).
 export const DATA_DIR = process.env.DATA_DIR ?? "data";
 fs.mkdirSync(DATA_DIR, { recursive: true });
 export const db = new Database(`${DATA_DIR}/game.db`);
+// Timing (TIMING=1; productization Phase 0, lib/timing.ts): each statement's run / get / all / iterate, by its SQL.
+{
+  const prepare = db.prepare.bind(db);
+  db.prepare = ((sql: string) => {
+    const st = prepare(sql) as unknown as Record<string, (...a: unknown[]) => unknown>, name = sql.replace(/\s+/g, " ").trim().slice(0, 80);
+    for (const m of ["run", "get", "all", "iterate"]) {
+      const f = st[m].bind(st);
+      st[m] = (...a: unknown[]) => timed("db", name, () => f(...a));
+    }
+    return st;
+  }) as unknown as typeof db.prepare;
+}
 // Several processes may open it at once (the production build collects pages with parallel workers): wait for each
 // other rather than failing with "database is locked".
 db.pragma("busy_timeout = 5000");
