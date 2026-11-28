@@ -87,3 +87,16 @@ test("a trigger that fires when a move ends in it", () => {
   assert.equal(triggersWhereStopped(l4, tok, { x: 6, y: 4 }).length, 0);
   assert.equal(getVars().plate, 1);
 });
+
+test("a pressure plate: hidden until found; setting it off finds it (they're told), and players see it from then on", async () => {
+  const { triggerSeen } = await import("@/lib/triggers");
+  const id = addMapTrigger(lv, { shape: "rect", x: 20, y: 0, w: 1, h: 1 });
+  saveMapTrigger(id, { name: "Pressure plate", springs: ["enter"], who: "", often: "always", outcomes: [], visibility: "hidden", findDc: 16 });
+  const t = getMapTrigger(id)!;
+  assert.deepEqual([t.visibility, t.findDc, t.found, triggerSeen(t)], ["hidden", 16, false, false]);
+  const tok = placeCharacterToken(lv, character("Pell"), 20, 0);
+  assert.deepEqual(fireTrigger(lv, t, tok).told.get(tok), ["You set off Pressure plate."]);
+  assert.equal(triggerSeen(getMapTrigger(id)!), true, "found");
+  assert.equal(fireTrigger(lv, getMapTrigger(id)!, tok).told.get(tok), undefined, "found already: nothing more to tell");
+  assert.equal(triggerSeen({ visibility: "gm", found: true }), false, "GM-only ones never");
+});

@@ -53,6 +53,7 @@ export interface MapState {
   notes: MapNote[];
   secrets: MapSecret[];
   triggers: MapTrigger[]; // GM only
+  seenTriggers: MapTrigger[]; // players: triggers they've found or can see (a pressure plate), drawn with secrets
   effects: MapEffect[];
   lasting: LastingArea[]; // areas actions left on the map for a while
   time: number; // seconds, drives animated effects
@@ -336,6 +337,7 @@ export const LAYER_RENDERERS: Partial<Record<MapLayer, (state: MapState) => Draw
   // Secrets: the GM sees every one (a dashed ring with "?", solid with "!" once revealed); players get only revealed ones.
   secrets: (state) => (ctx, w, h) => {
     const { x0, y0, size } = gridOrigin(state, w, h);
+    for (const t of state.seenTriggers) drawTrap(ctx, t.area, (x, y) => ({ x: x0 + x * size, y: y0 + y * size }), size, { found: true, label: t.name });
     for (const s of state.secrets) {
       const x = x0 + s.x * size, y = y0 + s.y * size, r = size * 0.28;
       ctx.save();

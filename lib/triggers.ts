@@ -29,7 +29,13 @@ export interface MapTrigger {
   outcomes: TriggerOutcome[];
   sprung: number[]; // tokens it has fired for
   interact?: boolean; // also fires when someone within reach Interacts with it (a lever, a switch, an object: by its name)
+  visibility?: "gm" | "hidden" | "shown"; // players: never see it (default); see it once found (a Search beating findDc, setting it off); always
+  findDc?: number;
+  found?: boolean;
 }
+
+/** Whether players see a trigger on the map (a found pressure plate, a lever in plain sight). */
+export const triggerSeen = (t: Pick<MapTrigger, "visibility" | "found">) => t.visibility === "shown" || (t.visibility === "hidden" && !!t.found);
 
 export const OUTCOME_KINDS: [TriggerOutcome["kind"], string][] = [
   ["door", "a door"], ["light", "a light"], ["effect", "a map effect"], ["secret", "reveal a secret"], ["discovery", "reveal a discovery"],

@@ -792,6 +792,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS map_triggers (
 )`);
 
 addColumn("map_triggers", "interact", "INTEGER NOT NULL DEFAULT 0");
+addColumn("map_triggers", "visibility", "TEXT NOT NULL DEFAULT 'gm'"); // gm (never shown) | hidden (until found) | shown
+addColumn("map_triggers", "find_dc", "INTEGER NOT NULL DEFAULT 14"); // hidden: a Search beating this within 10 ft finds it
+addColumn("map_triggers", "found", "INTEGER NOT NULL DEFAULT 0");
 
 // One-time data migrations already run (lib/db/migrations.ts), by name.
 db.exec("CREATE TABLE IF NOT EXISTS migrations_done (name TEXT PRIMARY KEY)");

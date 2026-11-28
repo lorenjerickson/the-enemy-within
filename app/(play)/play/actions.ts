@@ -19,7 +19,8 @@ import { getOpenGameSession, logSessionEvent } from "@/lib/db/sessions";
 import { getPlayerToken, walkToken, listSightings, moveToken, moveTokenToLevel, getLinkPrompt, clearLinkPrompt, setStandingOrder, clearStandingOrder, listTokens, addTokenWalk, listTokenWalks, tokenLabels, setAssist, listHidden, setHidden } from "@/lib/db/tokens";
 import { listSecrets, setSecretRevealed } from "@/lib/db/story";
 import { getEncounter } from "@/lib/db/encounters";
-import { listMapTriggers } from "@/lib/db/traps";
+import { listMapTriggers, setMapTriggerFound } from "@/lib/db/traps";
+import { distanceToTrap } from "@/lib/traps";
 
 import { addPlanStep, setReady, startPlanRoll, submitPlanRoll, tokenPlanner, removePlanStep, moveStepEnd, type StepRequest } from "@/lib/roundPlanServer";
 import { syncAurasOn } from "@/lib/auraSync";
@@ -251,18 +252,21 @@ function settleRoll(who: string, me0: ActorToken | undefined, a: RollAction, sco
     // Hidden hazards (a pit, a pocket of gas) in range whose find DC they beat (each has its own); not spent or off.
     const areas = me ? (listLastingAreas(me.level_id) as Hazard[]).filter((l) => l.visibility === "hidden" && !l.found && !l.spent && !l.off && scored.total >= (l.findDc ?? 14) && caughtByNear(l, { x: me.col + 0.5, y: me.row + 0.5 })) : [];
     for (const l of areas) setLastingAreaFound(l.id);
+    // Hidden map triggers (a pressure plate) in range whose Search DC they beat.
+    const plates = me ? listMapTriggers(me.level_id).filter((t) => t.visibility === "hidden" && !t.found && scored.total >= (t.findDc ?? 14) && distanceToTrap(t.area, { x: me.col + 0.5, y: me.row + 0.5 }) <= SEARCH_RANGE + 0.5) : [];
+    for (const t of plates) setMapTriggerFound(t.id);
     const traps = areas.filter((l) => l.activation === "dormant"); // a dormant one reads as a trap
     // Anyone hiding from them within 10 ft whose Stealth they beat (Hide).
     const tokens = me ? listTokens(me.level_id) : [], mine = me && tokens.find((t) => t.id === me.token_id), hiddenNow = me ? listHidden(me.level_id) : new Map<number, number>();
     const hiders = me && mine ? tokens.filter((t) => hiddenNow.has(t.id) && scored.total > hiddenNow.get(t.id)! && relation(allegianceOf(mine), allegianceOf(t)) !== "friendly" && Math.hypot(t.col - me.col, t.row - me.row) <= SEARCH_RANGE + 0.5) : [];
     for (const h of hiders) reveal(me!.level_id, h.id, `found by ${me!.name}'s search`);
     const labelsNow = me ? tokenLabels(me.level_id) : new Map<number, string>();
-    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...areas.map((l) => (l.activation === "dormant" ? `a trap (${l.name})` : l.name)), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
+    const names = [...found.map((s) => (s.text ? `${s.name} (${s.text})` : s.name)), ...areas.map((l) => (l.activation === "dormant" ? `a trap (${l.name})` : l.name)), ...plates.map((t) => t.name), ...hiders.map((h) => `${labelsNow.get(h.id) ?? "someone"}, hiding`)];
     if (hiders.length) success = true;
-    if (traps.length || areas.length) success = true;
+    if (traps.length || areas.length || plates.length) success = true;
     // Failing and finding nothing read the same, so a failed roll doesn't give away that something's there.
     outcome = names.length ? `You find: ${names.join("; ")}` : "You search but find nothing.";
-    logSessionEvent(`${me?.name ?? who} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`)].join(", ")}` : success ? "nothing there" : "failed"}`);
+    logSessionEvent(`${me?.name ?? who} searched (${scored.total} vs DC ${a.dc}): ${names.length ? `found ${[...found.map((s) => s.name), ...traps.map((t) => `trap ${t.name}`), ...plates.map((t) => t.name)].join(", ")}` : success ? "nothing there" : "failed"}`);
   }
   if (a.kind === "hide" && a.inRound) {
     // Hidden already (in the round): the roll sets how hard they are to find, if they haven't been given away since.

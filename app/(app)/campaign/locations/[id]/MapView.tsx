@@ -669,7 +669,7 @@ export default function MapView({
       const at = walkAt(w);
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
-    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, triggers: readOnly ? [] : optimisticTriggers,
+    lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, triggers: readOnly ? [] : optimisticTriggers, seenTriggers: readOnly ? optimisticTriggers : [],
     effects: drawnEffects, lasting: replayFrame ? lasting.filter((l) => !(replay?.newAreas ?? []).some((n) => n.id === l.id && n.sec > replayFrame.sec)) : lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 

@@ -91,6 +91,14 @@ function TriggerSettings({ locationId, trigger: t, things, scripts }: { location
         <select name="who" defaultValue={t.who} className="select select-xs w-auto">{TRAP_WHO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
         <select name="often" defaultValue={t.often} className="select select-xs w-auto">{TRAP_OFTEN.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="opacity-70">Players see it</span>
+        <select name="visibility" defaultValue={t.visibility ?? "gm"} className="select select-xs w-auto" data-trigger-visibility>
+          <option value="gm">never (GM only)</option><option value="hidden">once found (a pressure plate)</option><option value="shown">always (a lever in plain sight)</option>
+        </select>
+        <label className="flex items-center gap-1"><span className="opacity-70">Search DC</span><input type="number" name="findDc" min={1} max={40} defaultValue={t.findDc ?? 14} className="input input-xs w-14" /></label>
+        {t.visibility === "hidden" && <span className="text-xs opacity-60">{t.found ? "found" : "not found yet"}</span>}
+      </div>
       <div className="space-y-1">
         <div className="opacity-70">What it does</div>
         {outcomes.length ? (

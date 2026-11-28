@@ -772,6 +772,8 @@ export async function saveTriggerSettings(locationId: number, id: number, formDa
     who: TRAP_WHO.find(([w]) => w === text("who"))?.[0] ?? "",
     often: TRAP_OFTEN.find(([o]) => o === text("often"))?.[0] ?? "once",
     outcomes,
+    visibility: (["gm", "hidden", "shown"] as const).find((v) => v === text("visibility")) ?? "gm",
+    findDc: clampInt(formData.get("findDc"), 1, 40, 14),
   });
   revalidatePath(`/campaign/locations/${locationId}`);
 }

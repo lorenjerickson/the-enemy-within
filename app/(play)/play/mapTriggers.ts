@@ -4,7 +4,7 @@
  * apply them after the round (see workOutRound).
  */
 import { getDoor, setDoorLocked, setDoorOpen } from "@/lib/db/maps";
-import { listMapTriggers, markMapTriggerSprung } from "@/lib/db/traps";
+import { listMapTriggers, markMapTriggerSprung, setMapTriggerFound } from "@/lib/db/traps";
 import { listSecrets, setSecretRevealed } from "@/lib/db/story";
 import { listTokens } from "@/lib/db/tokens";
 import { logSessionEvent } from "@/lib/db/sessions";
@@ -33,6 +33,7 @@ export interface Fired {
 export function fireTrigger(levelId: number, t: MapTrigger, tokenId: number | null): Fired {
   if (tokenId !== null) markMapTriggerSprung(t.id, tokenId);
   const told = new Map<number, string[]>(), done: string[] = [];
+  if (tokenId !== null && t.visibility === "hidden" && !t.found) { setMapTriggerFound(t.id); told.set(tokenId, [`You set off ${t.name}.`]); } // found: they felt it click
   for (const o of t.outcomes) {
     if (o.kind === "door") {
       if (o.to === "open") { setDoorLocked(o.door, false); setDoorOpen(o.door, true); } // a trigger's door opens even if locked (a portcullis)

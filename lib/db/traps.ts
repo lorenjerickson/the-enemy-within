@@ -5,9 +5,9 @@ import { areaFires } from "@/lib/aoe";
 
 /* Map triggers (the Traps layer is gone: traps are hazards, lib/hazards.ts; map_traps is kept empty for older exports). */
 
-type MapTriggerRow = Omit<MapTrigger, "area" | "springs" | "outcomes" | "sprung" | "interact"> & { area: string; springs: string; outcomes: string; sprung: string; interact: number };
+type MapTriggerRow = Omit<MapTrigger, "area" | "springs" | "outcomes" | "sprung" | "interact" | "findDc" | "found"> & { area: string; springs: string; outcomes: string; sprung: string; interact: number; find_dc: number; found: number };
 
-const parseTrigger = (r: MapTriggerRow): MapTrigger => ({ ...r, area: JSON.parse(r.area), springs: areaFires(r.springs), outcomes: JSON.parse(r.outcomes), sprung: JSON.parse(r.sprung), interact: !!r.interact });
+const parseTrigger = ({ find_dc, ...r }: MapTriggerRow): MapTrigger => ({ ...r, area: JSON.parse(r.area), springs: areaFires(r.springs), outcomes: JSON.parse(r.outcomes), sprung: JSON.parse(r.sprung), interact: !!r.interact, findDc: find_dc, found: !!r.found });
 
 /** A level's map triggers. */
 export function listMapTriggers(levelId: number): MapTrigger[] {
@@ -26,8 +26,13 @@ export function addMapTrigger(levelId: number, area: TrapArea, name = "Trigger")
 
 /** Saves when a map trigger fires, for whom, how often, and what it does. */
 export function saveMapTrigger(id: number, t: Omit<MapTrigger, "id" | "area" | "sprung">): void {
-  db.prepare("UPDATE map_triggers SET name = @name, springs = @springs, who = @who, often = @often, outcomes = @outcomes, interact = @interact WHERE id = @id")
-    .run({ ...t, springs: t.springs.join(","), outcomes: JSON.stringify(t.outcomes), interact: t.interact ? 1 : 0, id });
+  db.prepare("UPDATE map_triggers SET name = @name, springs = @springs, who = @who, often = @often, outcomes = @outcomes, interact = @interact, visibility = @visibility, find_dc = @find_dc WHERE id = @id")
+    .run({ name: t.name, who: t.who, often: t.often, springs: t.springs.join(","), outcomes: JSON.stringify(t.outcomes), interact: t.interact ? 1 : 0, visibility: t.visibility ?? "gm", find_dc: t.findDc ?? 14, id });
+}
+
+/** A hidden trigger is found (a Search beat its DC, or someone set it off): players see it from now on. */
+export function setMapTriggerFound(id: number, found = true): void {
+  db.prepare("UPDATE map_triggers SET found = ? WHERE id = ?").run(found ? 1 : 0, id);
 }
 
 export function deleteMapTrigger(id: number): void {
