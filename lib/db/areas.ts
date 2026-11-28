@@ -1,4 +1,4 @@
-import { fireHazards, fireReaches, ignite, inFogOf } from "@/lib/aoe";
+import { fireHazards, fireReaches, ignite, inArea, inFogOf } from "@/lib/aoe";
 import type { LastingArea } from "@/lib/aoe";
 import { db } from "@/lib/db/connection";
 import { getGameTime } from "@/lib/db/calendar";
@@ -28,9 +28,13 @@ export function saveExposures(levelId: number, all: Exposures): void {
 /** How far anyone sees in fog (feet): fog map effects are Obscured (the areas design, Q7). */
 export const FOG_SIGHT_FT = 15;
 
-/** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on. */
-export function inFog(levelId: number, p: { x: number; y: number }): boolean {
-  return inFogOf(listEffects(levelId), p);
+/** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on; or an active hazard that obscures sight (smoke). */
+export const inFog = (levelId: number, p: { x: number; y: number }): boolean => fogOn(levelId)(p);
+
+/** The same, read once for many spots (Hide's blind spots). */
+export function fogOn(levelId: number): (p: { x: number; y: number }) => boolean {
+  const effects = listEffects(levelId), now = getGameTime(), smoke = (listLastingAreas(levelId) as Hazard[]).filter((h) => h.obscures && isActive(h, now));
+  return (p) => inFogOf(effects, p) || smoke.some((h) => inArea(h.area, p));
 }
 
 /**

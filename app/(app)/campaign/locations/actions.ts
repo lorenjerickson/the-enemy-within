@@ -676,6 +676,7 @@ export async function saveHazardAnswers(locationId: number, id: number, patchJso
     ...("noLook" in p ? { noLook: p.noLook === true } : {}),
     ...("look" in p && (EFFECT_KINDS as readonly string[]).includes(String(p.look)) ? { look: p.look as EffectKind } : {}),
     ...("lingers" in p ? { lingers: p.lingers === true } : {}),
+    ...("obscures" in p ? { obscures: p.obscures === true } : {}),
     // Part 2 (what it does, who sees and hears it, how long): only when the interview sent it.
     ...("findDc" in p ? { findDc: clampInt(p.findDc, 1, 40, 14) } : {}),
     ...("sound" in p ? { sound: Number(p.sound) > 0 ? Number(p.sound) : undefined, soundHidden: p.soundHidden === true } : {}),

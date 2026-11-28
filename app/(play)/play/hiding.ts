@@ -11,6 +11,11 @@ import { seesThem } from "@/lib/conditions";
 import { sensesOf } from "@/lib/creatureChanges";
 import { allegianceOf, relation } from "@/lib/sides";
 import { seenFrom } from "@/lib/sight";
+import { FOG_SIGHT_FT, fogOn } from "@/lib/db/areas";
+import { blindRangeOf } from "@/lib/conditions";
+
+/** Fog (a fog effect, a smoke hazard) at a spot hides it from anyone further than 15 ft away. */
+const fogged = (inFog: (p: { x: number; y: number }) => boolean, from: { x: number; y: number }, p: { x: number; y: number }) => inFog(p) && Math.hypot(p.x - from.x, p.y - from.y) > blindRangeOf(FOG_SIGHT_FT);
 
 /**
  * Hidden tokens (Hide) given away out of encounters. A hidden one who moves into an enemy's view, or has an enemy right
@@ -54,13 +59,13 @@ export function knownWatchers(levelId: number, tokenId: number, at: { col: numbe
   const tokens = listTokens(levelId), me = tokens.find((t) => t.id === tokenId);
   if (!me) return [];
   const seen = seenFrom(levelId, at, tokenId);
-  const walls = blockingSegments(listStructures(levelId)), illumination = getIllumination(levelId), lights = listLights(levelId), mine = sensesOf(tokenId, levelId);
+  const walls = blockingSegments(listStructures(levelId)), illumination = getIllumination(levelId), lights = listLights(levelId), mine = sensesOf(tokenId, levelId), fog = fogOn(levelId);
   return tokens
     .filter((t) => seen.has(t.id) && relation(allegianceOf(t), allegianceOf(me)) !== "friendly")
     .map((t) => {
       const s = sensesOf(t.id, levelId), from = { x: t.col + 0.5, y: t.row + 0.5 };
       const view = visibilityPolygon(from, s.blind ? s.blindRange : SIGHT, walls);
-      return { id: t.id, sees: (p) => seesThem(s, mine) && insidePolygon(p, view) && (s.blind || brightEnough(from, p, s.darkvision, illumination, lights, walls)) };
+      return { id: t.id, sees: (p) => seesThem(s, mine) && insidePolygon(p, view) && !fogged(fog, from, p) && (s.blind || brightEnough(from, p, s.darkvision, illumination, lights, walls)) };
     });
 }
 
@@ -80,13 +85,13 @@ export function hidingPlaces(levelId: number, tokenId: number, at: { col: number
 export function allWatchers(levelId: number, tokenId: number): Watcher[] {
   const tokens = listTokens(levelId), me = tokens.find((t) => t.id === tokenId);
   if (!me) return [];
-  const walls = blockingSegments(listStructures(levelId)), illumination = getIllumination(levelId), lights = listLights(levelId), mine = sensesOf(tokenId, levelId);
+  const walls = blockingSegments(listStructures(levelId)), illumination = getIllumination(levelId), lights = listLights(levelId), mine = sensesOf(tokenId, levelId), fog = fogOn(levelId);
   return tokens
     .filter((t) => t.id !== tokenId && relation(allegianceOf(t), allegianceOf(me)) !== "friendly")
     .map((t) => {
       const s = sensesOf(t.id, levelId), from = { x: t.col + 0.5, y: t.row + 0.5 };
       const view = visibilityPolygon(from, s.blind ? s.blindRange : SIGHT, walls);
-      return { id: t.id, sees: (p) => seesThem(s, mine) && insidePolygon(p, view) && (s.blind || brightEnough(from, p, s.darkvision, illumination, lights, walls)) };
+      return { id: t.id, sees: (p) => seesThem(s, mine) && insidePolygon(p, view) && !fogged(fog, from, p) && (s.blind || brightEnough(from, p, s.darkvision, illumination, lights, walls)) };
     });
 }
 

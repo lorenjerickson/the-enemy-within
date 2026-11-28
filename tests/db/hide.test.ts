@@ -64,3 +64,20 @@ test("a creature's Search (server-rolled) finds someone hiding from it within 10
   assert.equal(listHidden(lv).has(milo), false);
   assert.equal(listHidden(lv).has(far), true);
 });
+
+test("hiding places: a smoke hazard (obscures sight) is a blind spot from an enemy more than 15 ft away, and cuts sight into it", async () => {
+  const { addLastingArea } = await import("@/lib/db/areas");
+  const { UNTIL_REMOVED, areaFromDrawn } = await import("@/lib/aoe");
+  const lv = level("Smoky yard");
+  const milo = placeCharacterToken(lv, character("Milo"), 2, 0), guard = addCreatureToken(lv, creature("Guard"), 12, 0);
+  const smoke = { name: "Smoke", look: "fog" as const, area: areaFromDrawn({ shape: "circle", x: 4.5, y: 0.5, r: 1 }), drawn: true, ends: UNTIL_REMOVED, damage: null, dc: 99, save: "agility" as const, half: false, fires: [] };
+  const before = hidingPlaces(lv, milo, { col: 2, row: 0 }, 10);
+  assert.ok(!before.spots.some((s) => s.col === 4 && s.row === 0), "no smoke yet: no blind spot there");
+  addLastingArea(lv, { ...smoke, obscures: true } as never);
+  const after = hidingPlaces(lv, milo, { col: 2, row: 0 }, 10);
+  assert.ok(after.spots.some((s) => s.col === 4 && s.row === 0), JSON.stringify(after.spots));
+  assert.equal(after.seen, true, "where he stands, outside it, he's still seen");
+  assert.equal(seenFrom(lv, { col: 12, row: 0 }, guard).has(milo), true);
+  moveToken(milo, 4, 0);
+  assert.equal(seenFrom(lv, { col: 12, row: 0 }, guard).has(milo), false, "in the smoke: lost to sight from afar");
+});

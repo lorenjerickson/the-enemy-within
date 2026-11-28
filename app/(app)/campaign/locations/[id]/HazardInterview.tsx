@@ -146,6 +146,7 @@ export default function HazardInterview({ locationId, hazard, isNew, effects, so
             <label className="flex flex-wrap items-center gap-2">Sound
               <select value={a.sound ?? ""} onChange={(e) => set({ sound: Number(e.target.value) || null })} className="select select-sm w-auto"><option value="">none</option>{sounds.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
             </label>
+            <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.obscures} onChange={(e) => set({ obscures: e.target.checked })} data-obscures />obscures sight (fog, smoke): no one sees further than 15 ft into it</label>
             {a.sound !== null && <label className="flex items-center gap-2"><input type="checkbox" className="checkbox checkbox-sm" checked={a.soundHidden} onChange={(e) => set({ soundHidden: e.target.checked })} />play the sound while it's hidden (a cue that something is there)</label>}
           </>
         )}

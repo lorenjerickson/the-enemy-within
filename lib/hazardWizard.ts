@@ -35,6 +35,7 @@ export interface Answers {
   look: EffectKind | "none"; // none: an outline only (a pit)
   sound: number | null; // an audio asset
   soundHidden: boolean; // heard even before it's found
+  obscures: boolean; // fog, smoke: cuts sight into it
   damage: string;
   damageType: string;
   damageSave: boolean;
@@ -66,7 +67,7 @@ export function answersFromHazard(h: Partial<Hazard>, now = 0): Answers {
     name: h.name ?? "", activation: h.activation ?? "always", setOffBy: h.setOffBy ?? (h.activation === "dormant" ? ["enter"] : []), byTrigger: !!h.byTrigger,
     activeFor: h.activeFor ?? "instant", activeRounds: Math.max(1, Math.round((h.activeMinutes ?? 1) * 10)),
     fires: h.fires ?? ["enter"], who: h.who ?? "", often: h.often ?? "always", stops: !!h.stops,
-    visibility: h.visibility ?? "shown", findDc: h.findDc ?? 14, look: h.noLook ? "none" : h.look ?? "fog", sound: h.sound ?? null, soundHidden: !!h.soundHidden,
+    visibility: h.visibility ?? "shown", findDc: h.findDc ?? 14, look: h.noLook ? "none" : h.look ?? "fog", sound: h.sound ?? null, soundHidden: !!h.soundHidden, obscures: !!h.obscures,
     damage: h.damage ?? "", damageType: h.damageType ?? "", damageSave: !!h.damage && (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC, saveAttr: h.save ?? "agility", saveDc: (h.dc ?? NO_SAVE_DC) < NO_SAVE_DC ? h.dc! : 12, half: h.half ?? true,
     effectIds: (h.conditions ?? []).map((c) => c.id), effectCopies: Object.fromEntries((h.conditions ?? []).map((c) => [c.id, effectOfCondition(c)])), lingers: !!h.lingers, buildUp: h.buildUp ?? 1, decay: h.decay ?? 2, flammable: !!h.flammable,
     lasts: h.ends === undefined || h.ends >= UNTIL_REMOVED ? 0 : Math.max(0.1, Math.round((h.ends - now) * 10) / 10),
@@ -82,7 +83,7 @@ export function hazardPatch(a: Answers): Partial<Hazard> {
     setOffBy: dormant ? a.setOffBy : [], byTrigger: dormant && a.byTrigger,
     activeFor: dormant ? a.activeFor : "instant", activeMinutes: dormant && a.activeFor === "time" ? a.activeRounds / 10 : undefined,
     fires: a.fires.length ? a.fires : ["enter"], who: a.who, often: a.often, stops: a.stops,
-    visibility: a.visibility, findDc: a.findDc, noLook: a.look === "none", ...(a.look !== "none" ? { look: a.look } : {}), sound: a.sound ?? undefined, soundHidden: !!a.sound && a.soundHidden,
+    visibility: a.visibility, findDc: a.findDc, noLook: a.look === "none", ...(a.look !== "none" ? { look: a.look } : {}), sound: a.sound ?? undefined, soundHidden: !!a.sound && a.soundHidden, obscures: a.obscures,
     damage: a.damage.trim() || null, damageType: a.damageType || undefined, save: a.saveAttr, dc: a.damage.trim() && a.damageSave ? a.saveDc : NO_SAVE_DC, half: a.half,
     lingers: a.lingers, buildUp: a.buildUp, decay: a.decay, flammable: a.flammable,
     activatesWhen: a.activatesWhen.trim(), deactivatesWhen: a.deactivatesWhen.trim(), // blank: none (sent, so clearing one clears it)
@@ -125,7 +126,7 @@ export function answerLine(q: Question, a: Answers): [string, string] {
     case "often": return ["How often", cap(OFTEN[a.often])];
     case "stops": return ["Stops them", a.stops ? "Yes" : "No"];
     case "visible": return ["Players see it", a.visibility === "shown" ? "Always" : a.visibility === "gm" ? "Never (GM only)" : `Once set off or found (Search DC ${a.findDc})`];
-    case "look": return ["Look and sound", `${a.look === "none" ? "An outline" : a.look}${a.sound ? `, a sound${a.soundHidden ? " (heard while hidden)" : ""}` : ""}`];
+    case "look": return ["Look and sound", `${a.look === "none" ? "An outline" : a.look}${a.sound ? `, a sound${a.soundHidden ? " (heard while hidden)" : ""}` : ""}${a.obscures ? ", obscures sight" : ""}`];
     case "damage": return ["Damage", a.damage ? `${a.damage}${a.damageType ? ` ${a.damageType}` : ""}${a.damageSave ? `, ${cap(a.saveAttr)} DC ${a.saveDc} for ${a.half ? "half" : "none"}` : ""}` : "None"];
     case "effects": return ["Effects", a.effectIds.length ? `${a.effectIds.length} from the catalog` : "None"];
     case "lingers": return ["Lingering, flammable", [a.lingers ? `lingers (+${a.buildUp}, −${a.decay})` : "", a.flammable ? "flammable" : ""].filter(Boolean).join(", ") || "Neither"];
