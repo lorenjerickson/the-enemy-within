@@ -8,10 +8,13 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "coupling": "pnpm --filter @tew/web coupling",
-    "timing-report": "pnpm --filter @tew/web timing-report --"
+    "timing-report": "pnpm --filter @tew/web timing-report --",
+    "deps": "depcruise apps packages --config .dependency-cruiser.cjs --ignore-known --output-type err"
   },
   "devDependencies": {
-    "turbo": "^2"
+    "dependency-cruiser": "^18.9.0",
+    "turbo": "^2",
+    "typescript": "^5.9.3"
   },
   "packageManager": "pnpm@10.12.4",
   "pnpm": {
