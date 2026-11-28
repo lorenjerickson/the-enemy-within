@@ -12,8 +12,8 @@ export default function TimingProbe() {
   useEffect(() => {
     const w = window as typeof window & { __timingProbe?: boolean };
     if (w.__timingProbe || typeof PerformanceObserver === "undefined") return;
-    w.__timingProbe = true;
-    const send = window.fetch.bind(window);
+    w.__timingProbe = true; // one probe at a time (cleared on unmount: React runs effects twice in development)
+    const original = window.fetch, send = original.bind(window);
     const actions: { id: string; at: number }[] = []; // server action calls not yet matched to a timing
     window.fetch = (input, init) => {
       const id = new Headers(init?.headers).get("next-action");
@@ -45,7 +45,14 @@ export default function TimingProbe() {
     };
     const timer = setInterval(flush, 10_000);
     window.addEventListener("pagehide", flush);
-    return () => { clearInterval(timer); observer.disconnect(); window.removeEventListener("pagehide", flush); };
+    return () => {
+      clearInterval(timer);
+      observer.disconnect();
+      window.removeEventListener("pagehide", flush);
+      flush();
+      window.fetch = original;
+      w.__timingProbe = false;
+    };
   }, []);
   return null;
 }
