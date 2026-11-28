@@ -1,0 +1,1650 @@
+{
+  "from": "2026-11-28T06:12:30.293Z",
+  "to": "2026-11-28T06:57:01.393Z",
+  "files": [
+    "2026-11-28.jsonl"
+  ],
+  "figures": {
+    "db": {
+      "PRAGMA table_info(users)": {
+        "count": 6,
+        "total": 0.8260779999943111,
+        "p50": 0.1440399999999818,
+        "p95": 0.20349399999995715,
+        "max": 0.21009999999995443
+      },
+      "PRAGMA table_info(items)": {
+        "count": 84,
+        "total": 4.214137000004428,
+        "p50": 0.034999999999999996,
+        "p95": 0.10605759999999825,
+        "max": 0.1378599999999892
+      },
+      "PRAGMA table_info(creatures)": {
+        "count": 54,
+        "total": 2.112842000027854,
+        "p50": 0.027551020408163263,
+        "p95": 0.06262378000089665,
+        "max": 0.07744300000194926
+      },
+      "PRAGMA table_info(actions)": {
+        "count": 132,
+        "total": 6.62852699998831,
+        "p50": 0.035869565217391305,
+        "p95": 0.09513513513513513,
+        "max": 0.2564039999997476
+      },
+      "PRAGMA table_info(map_levels)": {
+        "count": 42,
+        "total": 1.62660199999101,
+        "p50": 0.025609756097560978,
+        "p95": 0.048658536585365855,
+        "max": 0.2087740000024496
+      },
+      "PRAGMA table_info(map_structures)": {
+        "count": 30,
+        "total": 1.3643920000198477,
+        "p50": 0.028846153846153844,
+        "p95": 0.09166666666666667,
+        "max": 0.300414000001183
+      },
+      "PRAGMA table_info(map_notes)": {
+        "count": 12,
+        "total": 3.9901909999995837,
+        "p50": 0.02727272727272727,
+        "p95": 2.9502927999987136,
+        "max": 3.6257319999967876
+      },
+      "PRAGMA table_info(map_controls)": {
+        "count": 12,
+        "total": 0.49241599999857044,
+        "p50": 0.03,
+        "p95": 0.10052519999968354,
+        "max": 0.10131299999920884
+      },
+      "PRAGMA table_info(characters)": {
+        "count": 60,
+        "total": 2.4606350000211705,
+        "p50": 0.028846153846153844,
+        "p95": 0.06903625000022658,
+        "max": 0.08045800000036252
+      },
+      "PRAGMA table_info(map_tokens)": {
+        "count": 42,
+        "total": 2.0450670000154787,
+        "p50": 0.026250000000000002,
+        "p95": 0.049875,
+        "max": 0.5818690000014612
+      },
+      "PRAGMA table_info(timers)": {
+        "count": 6,
+        "total": 0.1879050000051734,
+        "p50": 0.020790000000488362,
+        "p95": 0.039501000000927884,
+        "max": 0.041580000000976725
+      },
+      "PRAGMA table_info(triggers)": {
+        "count": 12,
+        "total": 0.4003449999974009,
+        "p50": 0.01956849999987753,
+        "p95": 0.037180149999767306,
+        "max": 0.03913699999975506
+      },
+      "PRAGMA table_info(light_sources)": {
+        "count": 18,
+        "total": 0.6214070000042398,
+        "p50": 0.0244395000008808,
+        "p95": 0.04643505000167351,
+        "max": 0.0488790000017616
+      },
+      "PRAGMA table_info(map_effects)": {
+        "count": 30,
+        "total": 1.1080730000116432,
+        "p50": 0.026785714285714288,
+        "p95": 0.06000774999993155,
+        "max": 0.09003099999972619
+      },
+      "PRAGMA table_info(positional_sounds)": {
+        "count": 12,
+        "total": 0.4363619999987236,
+        "p50": 0.02727272727272727,
+        "p95": 0.057925600000003186,
+        "max": 0.06981400000000804
+      },
+      "PRAGMA table_info(ambient_sounds)": {
+        "count": 6,
+        "total": 0.23794499999576146,
+        "p50": 0.03,
+        "p95": 0.0762506999999823,
+        "max": 0.08750099999997474
+      },
+      "PRAGMA table_info(encounters)": {
+        "count": 30,
+        "total": 0.9396699999943507,
+        "p50": 0.018162500000471482,
+        "p95": 0.034508750000895816,
+        "max": 0.036325000000942964
+      },
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ranks'": {
+        "count": 6,
+        "total": 0.1868440000046121,
+        "p50": 0.01965100000234088,
+        "p95": 0.037336900004447664,
+        "max": 0.03930200000468176
+      },
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profession_actions'": {
+        "count": 6,
+        "total": 0.1615989999970111,
+        "p50": 0.01597849999961909,
+        "p95": 0.030359149999276264,
+        "max": 0.03195699999923818
+      },
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'location_hidden_lay": {
+        "count": 6,
+        "total": 0.15327400000643365,
+        "p50": 0.014620500000091852,
+        "p95": 0.027778950000174513,
+        "max": 0.029241000000183703
+      },
+      "PRAGMA table_info(professions)": {
+        "count": 6,
+        "total": 0.26599100000106546,
+        "p50": 0.03,
+        "p95": 0.05122920000052545,
+        "max": 0.051756000000750646
+      },
+      "PRAGMA table_info(token_walks)": {
+        "count": 12,
+        "total": 0.42367499999653546,
+        "p50": 0.02727272727272727,
+        "p95": 0.0553928000001906,
+        "max": 0.06348200000047655
+      },
+      "PRAGMA table_info(link_prompts)": {
+        "count": 6,
+        "total": 0.17935300000414145,
+        "p50": 0.01740750000317348,
+        "p95": 0.03307425000602961,
+        "max": 0.03481500000634696
+      },
+      "PRAGMA table_info(game_sessions)": {
+        "count": 24,
+        "total": 0.7726680000175747,
+        "p50": 0.026086956521739132,
+        "p95": 0.049565217391304345,
+        "max": 0.06411300000002029
+      },
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?": {
+        "count": 6,
+        "total": 0.1907570000009855,
+        "p50": 0.019168499999068445,
+        "p95": 0.03642014999823004,
+        "max": 0.03833699999813689
+      },
+      "PRAGMA table_info(effects)": {
+        "count": 96,
+        "total": 3.7981569999967633,
+        "p50": 0.026086956521739132,
+        "p95": 0.049565217391304345,
+        "max": 0.0626029999984894
+      },
+      "PRAGMA table_info(conditions)": {
+        "count": 90,
+        "total": 3.73917500000789,
+        "p50": 0.028846153846153844,
+        "p95": 0.08750000000000001,
+        "max": 0.10062699999980396
+      },
+      "PRAGMA table_info(token_afflictions)": {
+        "count": 18,
+        "total": 0.5745449999953962,
+        "p50": 0.0178410000007716,
+        "p95": 0.03389790000146604,
+        "max": 0.0356820000015432
+      },
+      "PRAGMA table_info(round_plans)": {
+        "count": 6,
+        "total": 0.19402299999728712,
+        "p50": 0.021723500000007334,
+        "p95": 0.04127465000001393,
+        "max": 0.04344700000001467
+      },
+      "PRAGMA table_info(map_traps)": {
+        "count": 6,
+        "total": 0.21895500000107404,
+        "p50": 0.019732500000827713,
+        "p95": 0.03749175000157265,
+        "max": 0.039465000001655426
+      },
+      "PRAGMA table_info(map_triggers)": {
+        "count": 24,
+        "total": 1.1779860000040685,
+        "p50": 0.03333333333333333,
+        "p95": 0.14132399999994943,
+        "max": 0.20330999999987398
+      },
+      "SELECT 1 FROM professions WHERE group_id IS NULL": {
+        "count": 2,
+        "total": 0.07775200000025961,
+        "p50": 0.01973800000001802,
+        "p95": 0.037502200000034236,
+        "max": 0.03947600000003604
+      },
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'effect_": {
+        "count": 2,
+        "total": 0.20952500000021246,
+        "p50": 0.10278199999997924,
+        "p95": 0.10528579999996054,
+        "max": 0.10556399999995847
+      },
+      "SELECT 1 FROM migrations_done WHERE name = ?": {
+        "count": 4,
+        "total": 0.28056800000047133,
+        "p50": 0.06114266666667542,
+        "p95": 0.08119946666669117,
+        "max": 0.08342800000002626
+      },
+      "SELECT * FROM conditions ORDER BY id": {
+        "count": 2,
+        "total": 0.05475499999965905,
+        "p50": 0.014512999999851672,
+        "p95": 0.027574699999718177,
+        "max": 0.029025999999703345
+      },
+      "SELECT builtin FROM effects WHERE builtin != ''": {
+        "count": 2,
+        "total": 0.2755510000002914,
+        "p50": 0.12907050000000025,
+        "p95": 0.1552339500000005,
+        "max": 0.15814100000000053
+      },
+      "SELECT name FROM effects WHERE builtin = ''": {
+        "count": 2,
+        "total": 0.2496070000000259,
+        "p50": 0.12157550000002289,
+        "p95": 0.14099345000004349,
+        "max": 0.14315100000004577
+      },
+      "UPDATE effects SET modifiers = ? WHERE builtin = ?": {
+        "count": 28,
+        "total": 0.44903700000003255,
+        "p50": 0.025925925925925925,
+        "p95": 0.04925925925925925,
+        "max": 0.057290000000193686
+      },
+      "SELECT name FROM seeded_effects": {
+        "count": 2,
+        "total": 0.2714979999998377,
+        "p50": 0.13090399999991859,
+        "p95": 0.15871759999984533,
+        "max": 0.1618079999998372
+      },
+      "SELECT id, movement FROM creatures": {
+        "count": 2,
+        "total": 0.2238650000002167,
+        "p50": 0.10738699999997721,
+        "p95": 0.1140352999999567,
+        "max": 0.11477399999995441
+      },
+      "SELECT id, movement FROM characters": {
+        "count": 2,
+        "total": 0.21697399999976597,
+        "p50": 0.1,
+        "p95": 0.12487239999999587,
+        "max": 0.12763599999999542
+      },
+      "SELECT * FROM map_traps": {
+        "count": 2,
+        "total": 0.240983999999969,
+        "p50": 0.05,
+        "p95": 0.20167389999993246,
+        "max": 0.21297099999992497
+      },
+      "INSERT INTO hazards (level_id, name, ends, spec) VALUES (?, ?, ?, ?)": {
+        "count": 18,
+        "total": 0.4047690000006696,
+        "p50": 0.028125,
+        "p95": 0.11292240000001558,
+        "max": 0.2292240000001584
+      },
+      "SELECT id, outcomes FROM map_triggers": {
+        "count": 2,
+        "total": 0.01987200000030498,
+        "p50": 0.004971500000010565,
+        "p95": 0.009445850000020073,
+        "max": 0.00994300000002113
+      },
+      "DELETE FROM map_traps": {
+        "count": 2,
+        "total": 0.05354499999998552,
+        "p50": 0.022400500000003376,
+        "p95": 0.04256095000000641,
+        "max": 0.04480100000000675
+      },
+      "SELECT id, conditions FROM actions WHERE conditions != '[]'": {
+        "count": 1,
+        "total": 0.12081899999975576,
+        "p50": 0.11040949999987788,
+        "p95": 0.11977804999976797,
+        "max": 0.12081899999975576
+      },
+      "SELECT * FROM effects ORDER BY name": {
+        "count": 69522,
+        "total": 18404.326039993444,
+        "p50": 0.2057229465317626,
+        "p95": 0.4805123752825091,
+        "max": 67.400246999925
+      },
+      "UPDATE actions SET conditions = ? WHERE id = ?": {
+        "count": 19,
+        "total": 0.5075359999991633,
+        "p50": 0.026388888888888892,
+        "p95": 0.10627954999999484,
+        "max": 0.22559099999989485
+      },
+      "SELECT id, effects FROM items WHERE effects != '[]'": {
+        "count": 1,
+        "total": 0.01640799999995579,
+        "p50": 0.008203999999977896,
+        "p95": 0.015587599999958,
+        "max": 0.01640799999995579
+      },
+      "SELECT id, effects FROM creatures WHERE effects != '[]'": {
+        "count": 1,
+        "total": 0.08495900000025358,
+        "p50": 0.06747950000012679,
+        "p95": 0.0832110500002409,
+        "max": 0.08495900000025358
+      },
+      "UPDATE creatures SET effects = ? WHERE id = ?": {
+        "count": 5,
+        "total": 0.20965099999966696,
+        "p50": 0.04166666666666667,
+        "p95": 0.09077674999966803,
+        "max": 0.0966019999996206
+      },
+      "INSERT OR IGNORE INTO migrations_done (name) VALUES (?)": {
+        "count": 1,
+        "total": 0.8874089999999342,
+        "p50": 0.6937044999999671,
+        "p95": 0.8680385499999375,
+        "max": 0.8874089999999342
+      },
+      "PRAGMA table_info(discoveries)": {
+        "count": 2,
+        "total": 0.1044419999989259,
+        "p50": 0.05,
+        "p95": 0.055555699999949866,
+        "max": 0.056172999999944295
+      },
+      "SELECT id, name, username, contact, role, must_change_password FROM users WHERE ": {
+        "count": 13146,
+        "total": 1607.842198010936,
+        "p50": 0.1095407196969697,
+        "p95": 0.2495904356060606,
+        "max": 28.945942000020295
+      },
+      "SELECT id, started_at, game_time, began_at, ended_at, start_state, summary, ROW_": {
+        "count": 10506,
+        "total": 4279.463701991287,
+        "p50": 0.23225075528700906,
+        "p95": 1.60946308724832,
+        "max": 39.60804500000086
+      },
+      "SELECT id, name, description, image, type, weight, value, rarity, durability, de": {
+        "count": 69071,
+        "total": 4308.025590016983,
+        "p50": 0.040302835803477655,
+        "p95": 0.15313652521661844,
+        "max": 92.22946499998216
+      },
+      "SELECT p.level_id, l.id AS location_id, l.name AS location, m.name AS level, p.x": {
+        "count": 969,
+        "total": 110.49014000150055,
+        "p50": 0.07916666666666668,
+        "p95": 0.2533536585365851,
+        "max": 13.2199729999993
+      },
+      "SELECT now FROM calendar WHERE id = 1": {
+        "count": 24720,
+        "total": 1366.453836998604,
+        "p50": 0.03455023201207581,
+        "p95": 0.14439597315436242,
+        "max": 22.49267300000065
+      },
+      "SELECT name, started, duration FROM timers ORDER BY name": {
+        "count": 2042,
+        "total": 63.95656899331152,
+        "p50": 0.027154255319148935,
+        "p95": 0.07415322580645156,
+        "max": 0.367651000036858
+      },
+      "SELECT * FROM triggers ORDER BY id": {
+        "count": 680,
+        "total": 21.7277799998119,
+        "p50": 0.02711323763955343,
+        "p95": 0.07209302325581396,
+        "max": 0.18475200003013015
+      },
+      "SELECT c.id, c.creature_id, t.name AS template_name, c.name, c.description, c.im": {
+        "count": 9365,
+        "total": 797.3502899985979,
+        "p50": 0.06507522446008251,
+        "p95": 0.22135826771653544,
+        "max": 36.97062800009735
+      },
+      "SELECT id, parent_id, name, description FROM locations": {
+        "count": 2718,
+        "total": 164.63326400577353,
+        "p50": 0.04699170124481328,
+        "p95": 0.1650714285714285,
+        "max": 0.5965549999964423
+      },
+      "SELECT id, title, description, success, success_within_days, success_check, fail": {
+        "count": 1362,
+        "total": 101.46959299998707,
+        "p50": 0.07287862513426424,
+        "p95": 0.1963392857142856,
+        "max": 4.148937999969348
+      },
+      "SELECT key, value FROM game_vars": {
+        "count": 1362,
+        "total": 35.435527996924066,
+        "p50": 0.02611196319018405,
+        "p95": 0.04961273006134969,
+        "max": 0.3960339999757707
+      },
+      "SELECT id, name, description, source FROM library_scripts ORDER BY name COLLATE ": {
+        "count": 3400,
+        "total": 107.65644700376288,
+        "p50": 0.02604964756359179,
+        "p95": 0.0494943303708244,
+        "max": 18.56458800006658
+      },
+      "SELECT user_id, status FROM session_members WHERE session_id = ?": {
+        "count": 17112,
+        "total": 1028.3906150026633,
+        "p50": 0.037915448019143844,
+        "p95": 0.17336933045356367,
+        "max": 21.186054000005242
+      },
+      "SELECT m.id AS level_id FROM gm_view g JOIN map_levels m ON m.id = g.level_id": {
+        "count": 9510,
+        "total": 544.3479210121768,
+        "p50": 0.03924562561901618,
+        "p95": 0.17091439688715954,
+        "max": 6.590805000043474
+      },
+      "SELECT l.id AS location_id, l.name AS location, m.name AS level FROM map_levels ": {
+        "count": 968,
+        "total": 61.87091700176825,
+        "p50": 0.048303393213572854,
+        "p95": 0.18576470588235278,
+        "max": 1.450738999992609
+      },
+      "SELECT id, location_id, name, position, background, map_image, grid, template_co": {
+        "count": 13478,
+        "total": 897.1937820111598,
+        "p50": 0.058662704309063896,
+        "p95": 0.169597222222222,
+        "max": 32.694082999951206
+      },
+      "SELECT layer FROM level_hidden_layers WHERE level_id = ?": {
+        "count": 30724,
+        "total": 819.3862269886813,
+        "p50": 0.026203390986934128,
+        "p95": 0.049786442875174836,
+        "max": 1.2630720001179725
+      },
+      "SELECT round, turn, turn_order FROM encounters WHERE level_id = ?": {
+        "count": 5212,
+        "total": 259.7555999999422,
+        "p50": 0.035130763008897274,
+        "p95": 0.1128735632183906,
+        "max": 1.1109660000001895
+      },
+      "SELECT t.id, t.creature_id, t.character_id, COALESCE(ch.name, cr.name) AS name, ": {
+        "count": 14967,
+        "total": 1467.3682469909945,
+        "p50": 0.08250648653484835,
+        "p95": 0.23399667931688803,
+        "max": 41.75410699998611
+      },
+      "SELECT id, level_id, token_id, intent, status, details, rolled, placed FROM impr": {
+        "count": 4160,
+        "total": 153.54371899771286,
+        "p50": 0.02826855123674912,
+        "p95": 0.08527131782945738,
+        "max": 5.227244999958202
+      },
+      "SELECT s.id, s.kind, s.x1, s.y1, s.x2, s.y2, s.target_level_id, l.name AS target": {
+        "count": 3287,
+        "total": 865.8440050045247,
+        "p50": 0.21069824876515492,
+        "p95": 0.4905075187969924,
+        "max": 12.075582999998005
+      },
+      "SELECT id, kind, x, y, radius, angle, spread, flicker, name, enabled FROM light_": {
+        "count": 2638,
+        "total": 94.8323239987476,
+        "p50": 0.028574523396880415,
+        "p95": 0.09059426229508195,
+        "max": 0.8122310000471771
+      },
+      "SELECT id, kind, x, y, w, h, intensity, name, enabled FROM map_effects WHERE lev": {
+        "count": 9126,
+        "total": 674.613028991731,
+        "p50": 0.05854763654175851,
+        "p95": 0.20232041587901686,
+        "max": 26.099104999913834
+      },
+      "SELECT id, x, y, name, text, discovery_id, revealed FROM map_secrets WHERE level": {
+        "count": 1650,
+        "total": 134.45166099880953,
+        "p50": 0.05248579545454546,
+        "p95": 0.18106617647058823,
+        "max": 27.24297699984163
+      },
+      "SELECT d.id, d.title, d.text, d.kind, d.location_id, d.character_id, d.item_id, ": {
+        "count": 1363,
+        "total": 112.60583700038842,
+        "p50": 0.08051739926739927,
+        "p95": 0.2204166666666666,
+        "max": 0.917935999983456
+      },
+      "SELECT id, name, ends, spec FROM hazards WHERE level_id = ? AND ends > ? ORDER B": {
+        "count": 11803,
+        "total": 390.74986400426496,
+        "p50": 0.027385150812064968,
+        "p95": 0.07810333761232352,
+        "max": 14.835063000005903
+      },
+      "SELECT replay FROM encounters WHERE level_id = ?": {
+        "count": 2554,
+        "total": 182.99628399982612,
+        "p50": 0.04941950464396285,
+        "p95": 0.2201847290640393,
+        "max": 2.6448129999917
+      },
+      "SELECT h.token_id, h.stealth FROM token_hidden h JOIN map_tokens t ON t.id = h.t": {
+        "count": 1296,
+        "total": 52.654144998381526,
+        "p50": 0.02900626678603402,
+        "p95": 0.09137681159420293,
+        "max": 2.2336710000090534
+      },
+      "SELECT t.id FROM map_tokens t LEFT JOIN characters c ON c.id = t.character_id WH": {
+        "count": 4596,
+        "total": 178.48618500087468,
+        "p50": 0.028768152228342517,
+        "p95": 0.08767206477732792,
+        "max": 1.3001010000007227
+      },
+      "SELECT id, token_id, effect, rounds_left, by_token, saved, aura, area FROM token": {
+        "count": 36475,
+        "total": 1265.1651100167583,
+        "p50": 0.027631738432168724,
+        "p95": 0.08111331070889895,
+        "max": 16.6946230000176
+      },
+      "SELECT id, token_id, ends, status FROM token_statuses WHERE level_id = ? AND end": {
+        "count": 2806,
+        "total": 72.3535869973166,
+        "p50": 0.026332582582582583,
+        "p95": 0.050779816513761386,
+        "max": 1.664476999998442
+      },
+      "SELECT character_id, creature_id, equipment FROM map_tokens WHERE id = ?": {
+        "count": 8187,
+        "total": 481.4601030063968,
+        "p50": 0.03341087169441724,
+        "p95": 0.10717479674796734,
+        "max": 34.166836000047624
+      },
+      "SELECT t.character_id, t.hp, t.hp_max, t.hp_temp, cr.health AS formula FROM map_": {
+        "count": 11953,
+        "total": 657.4600389841908,
+        "p50": 0.0349748361423221,
+        "p95": 0.1147000000000001,
+        "max": 16.722455000010086
+      },
+      "SELECT hp, hp_max, hp_temp, health AS formula FROM characters WHERE id = ?": {
+        "count": 8607,
+        "total": 420.3243009971957,
+        "p50": 0.030460787089467724,
+        "p95": 0.09418784749801429,
+        "max": 30.50154700013809
+      },
+      "SELECT level_id, character_id FROM map_tokens WHERE id = ?": {
+        "count": 7986,
+        "total": 379.1884250006333,
+        "p50": 0.031136930754834688,
+        "p95": 0.09695043964828137,
+        "max": 5.604947000043467
+      },
+      "SELECT rank_id FROM characters WHERE id = ?": {
+        "count": 11164,
+        "total": 538.2522300004675,
+        "p50": 0.030393117717521508,
+        "p95": 0.09563181526619627,
+        "max": 24.235526999924332
+      },
+      "SELECT from_id FROM profession_advancements WHERE to_id = ? ORDER BY from_id LIM": {
+        "count": 11164,
+        "total": 380.6247120005173,
+        "p50": 0.027448859166011016,
+        "p95": 0.07736249999999996,
+        "max": 3.9486889999825507
+      },
+      "SELECT id, profession_id, target, value FROM profession_modifiers WHERE professi": {
+        "count": 10876,
+        "total": 434.3239029992292,
+        "p50": 0.02899338878225635,
+        "p95": 0.09022765598650924,
+        "max": 21.351935999991838
+      },
+      "SELECT creature_id, character_id, equipment FROM map_tokens WHERE id = ?": {
+        "count": 68137,
+        "total": 3313.7276070244734,
+        "p50": 0.03126410938790493,
+        "p95": 0.09765629360870777,
+        "max": 29.960824000001594
+      },
+      "SELECT equipment FROM characters WHERE id = ?": {
+        "count": 49851,
+        "total": 3482.800232973259,
+        "p50": 0.04118011498810468,
+        "p95": 0.20370082389289385,
+        "max": 56.00277500017546
+      },
+      "SELECT effects FROM items WHERE id = ?": {
+        "count": 58478,
+        "total": 2547.1377869715834,
+        "p50": 0.029705977973747306,
+        "p95": 0.0937248275862069,
+        "max": 29.62964599998668
+      },
+      "SELECT character_id FROM map_tokens WHERE id = ?": {
+        "count": 9906,
+        "total": 556.4913630053925,
+        "p50": 0.03550537634408602,
+        "p95": 0.15744131455399035,
+        "max": 11.737826999997196
+      },
+      "SELECT attribute, points FROM strain WHERE owner = ?": {
+        "count": 7986,
+        "total": 234.86295099534618,
+        "p50": 0.02651042358252556,
+        "p95": 0.057567934782608673,
+        "max": 13.050446999957785
+      },
+      "SELECT character_id, creature_id FROM map_tokens WHERE id = ?": {
+        "count": 7986,
+        "total": 368.1241159897836,
+        "p50": 0.030663492551067425,
+        "p95": 0.09604880136986302,
+        "max": 13.37621700001182
+      },
+      "SELECT attributes FROM characters WHERE id = ?": {
+        "count": 5710,
+        "total": 284.6060360093288,
+        "p50": 0.030250052977325706,
+        "p95": 0.0947084917617237,
+        "max": 37.24595200002659
+      },
+      "SELECT id, name, description, image, token_overhead, token_side, height, type, a": {
+        "count": 2696,
+        "total": 199.5821229991525,
+        "p50": 0.0586922474549726,
+        "p95": 0.18921052631578938,
+        "max": 8.179638999979943
+      },
+      "SELECT name, equipment FROM creatures WHERE id = ?": {
+        "count": 18286,
+        "total": 1265.1539789992057,
+        "p50": 0.040273984670954104,
+        "p95": 0.19843583678296872,
+        "max": 61.93918899993878
+      },
+      "SELECT effects FROM creatures WHERE id = ?": {
+        "count": 18286,
+        "total": 844.6081210095326,
+        "p50": 0.030535702357891926,
+        "p95": 0.09761404204680685,
+        "max": 14.200636000001396
+      },
+      "SELECT attributes FROM creatures WHERE id = ?": {
+        "count": 1988,
+        "total": 86.32130100150971,
+        "p50": 0.029269729093050652,
+        "p95": 0.09254464285714284,
+        "max": 5.2267839999403805
+      },
+      "SELECT * FROM map_triggers WHERE level_id = ? ORDER BY id": {
+        "count": 1274,
+        "total": 46.21923200061792,
+        "p50": 0.028954545454545455,
+        "p95": 0.09376984126984125,
+        "max": 0.6398599999956787
+      },
+      "SELECT id, name, type, usage, url FROM assets WHERE type = ? AND usage = ? ORDER": {
+        "count": 1360,
+        "total": 123.43864500018026,
+        "p50": 0.08063063063063064,
+        "p95": 0.2128099173553719,
+        "max": 6.640386000042781
+      },
+      "SELECT t.id, t.asset_id, a.name, a.url, t.col, t.row, t.cols, t.rows FROM map_ti": {
+        "count": 968,
+        "total": 30.85418400073104,
+        "p50": 0.027375565610859732,
+        "p95": 0.07781249999999994,
+        "max": 0.29533899994567037
+      },
+      "SELECT id, name, volume FROM ambient_sounds WHERE level_id = ? ORDER BY id": {
+        "count": 680,
+        "total": 36.924593999108765,
+        "p50": 0.037946428571428575,
+        "p95": 0.12142857142857143,
+        "max": 0.7198099999222904
+      },
+      "SELECT c.id, c.asset_id, a.name, a.url, c.mode FROM ambient_clips c JOIN assets ": {
+        "count": 680,
+        "total": 36.026087001017004,
+        "p50": 0.0378619153674833,
+        "p95": 0.09949748743718594,
+        "max": 1.0106379999779165
+      },
+      "SELECT p.id, p.asset_id, a.name, a.url, p.x, p.y, p.radius, p.volume, p.loop FRO": {
+        "count": 680,
+        "total": 18.5302930009384,
+        "p50": 0.0261136712749616,
+        "p95": 0.04961597542242704,
+        "max": 0.16131499991752207
+      },
+      "SELECT id, x, y, w, h, text FROM map_notes WHERE level_id = ? ORDER BY id": {
+        "count": 680,
+        "total": 16.28665899736734,
+        "p50": 0.025718608169440244,
+        "p95": 0.048865355521936465,
+        "max": 0.13929699989967048
+      },
+      "SELECT id, edge, icon, label, script FROM map_controls WHERE level_id = ? ORDER ": {
+        "count": 680,
+        "total": 39.076383000428905,
+        "p50": 0.045576407506702415,
+        "p95": 0.1409090909090909,
+        "max": 0.3360679999459535
+      },
+      "SELECT player_id FROM characters WHERE id = ?": {
+        "count": 11544,
+        "total": 439.90670599823716,
+        "p50": 0.028616757560733765,
+        "p95": 0.08774828767123286,
+        "max": 6.199478000053205
+      },
+      "SELECT t.level_id FROM map_tokens t JOIN characters c ON c.id = t.character_id W": {
+        "count": 6778,
+        "total": 475.44522600632627,
+        "p50": 0.0474782852339591,
+        "p95": 0.19482046678635534,
+        "max": 3.5968860000139102
+      },
+      "SELECT c.name AS character, u.name AS player, u.id AS player_id, t.level_id, l.n": {
+        "count": 1358,
+        "total": 209.35708600525686,
+        "p50": 0.09795197740112994,
+        "p95": 0.42134146341463363,
+        "max": 3.6923519999254495
+      },
+      "SELECT waiting FROM encounters WHERE level_id = ?": {
+        "count": 697,
+        "total": 31.834889002937416,
+        "p50": 0.03281544256120527,
+        "p95": 0.09821691176470587,
+        "max": 0.2508129999987432
+      },
+      "SELECT token_id FROM round_plans WHERE level_id = ? AND ready = 1": {
+        "count": 1608,
+        "total": 52.380211002888245,
+        "p50": 0.027839335180055404,
+        "p95": 0.08483333333333329,
+        "max": 0.4587630000896752
+      },
+      "SELECT token_id FROM round_plans WHERE level_id = ? AND rolled = 1": {
+        "count": 679,
+        "total": 16.83313299848669,
+        "p50": 0.025797872340425534,
+        "p95": 0.049015957446808506,
+        "max": 0.10847300000023097
+      },
+      "DELETE FROM plan_clock WHERE level_id = ?": {
+        "count": 959,
+        "total": 39.801910997746745,
+        "p50": 0.029381127450980395,
+        "p95": 0.09526190476190474,
+        "max": 0.5249840000178665
+      },
+      "SELECT c.id, u.name FROM characters c JOIN users u ON u.id = c.player_id": {
+        "count": 3664,
+        "total": 179.90505299167125,
+        "p50": 0.0331643736422882,
+        "p95": 0.09869918699186991,
+        "max": 0.7886139999973238
+      },
+      "SELECT level_id FROM encounters": {
+        "count": 679,
+        "total": 28.813825998782704,
+        "p50": 0.029728546409807356,
+        "p95": 0.09305232558139533,
+        "max": 0.35269099986180663
+      },
+      "SELECT user_id FROM session_presence WHERE session_id = ? AND last_seen > ?": {
+        "count": 686,
+        "total": 21.602922000554827,
+        "p50": 0.026143292682926828,
+        "p95": 0.04967225609756097,
+        "max": 0.24954700004309416
+      },
+      "SELECT id, name FROM characters WHERE player_id = ? ORDER BY name": {
+        "count": 9594,
+        "total": 559.6424559759544,
+        "p50": 0.03952051408798814,
+        "p95": 0.15653110047846874,
+        "max": 7.1784079999197274
+      },
+      "SELECT id, starts, fx FROM map_fx WHERE level_id = ? AND id > ? AND starts > ? O": {
+        "count": 2456,
+        "total": 93.99520699975255,
+        "p50": 0.029071969696969697,
+        "p95": 0.08749152542372879,
+        "max": 0.34040199988521636
+      },
+      "SELECT id, token_id, route, user_id, fps, times FROM token_walks WHERE level_id ": {
+        "count": 2453,
+        "total": 107.76484099769004,
+        "p50": 0.03119277721261445,
+        "p95": 0.0973181818181818,
+        "max": 0.600109999999404
+      },
+      "SELECT id, x, y, user_id, name, gm FROM pings WHERE level_id = ? AND id > ? AND ": {
+        "count": 2453,
+        "total": 108.89282199694571,
+        "p50": 0.03177461139896373,
+        "p95": 0.09549431818181818,
+        "max": 1.0949190000537783
+      },
+      "SELECT id, name, type, attributes, health, hp, conditions, in_party FROM charact": {
+        "count": 2,
+        "total": 0.4230489999972633,
+        "p50": 0.25,
+        "p95": 0.2580280000001949,
+        "max": 0.25892000000021653
+      },
+      "SELECT character_id FROM journal_entries WHERE discovery_id = ?": {
+        "count": 8,
+        "total": 0.26268400000117254,
+        "p50": 0.02857142857142857,
+        "p95": 0.06490400000067893,
+        "max": 0.07484000000113156
+      },
+      "SELECT game_time, text FROM session_events WHERE session_id = ? ORDER BY id": {
+        "count": 1,
+        "total": 0.06875500000023749,
+        "p50": 0.059377500000118745,
+        "p95": 0.06781725000022562,
+        "max": 0.06875500000023749
+      },
+      "UPDATE game_sessions SET ended_at = ?, summary = ? WHERE id = ?": {
+        "count": 1,
+        "total": 1.422363999998197,
+        "p50": 1.2111819999990985,
+        "p95": 1.401245799998287,
+        "max": 1.422363999998197
+      },
+      "INSERT INTO game_sessions (started_at, game_time, start_state) VALUES (?, ?, ?)": {
+        "count": 1,
+        "total": 1.3378729999967618,
+        "p50": 1.168936499998381,
+        "p95": 1.3209793499969238,
+        "max": 1.3378729999967618
+      },
+      "INSERT INTO session_members (session_id, user_id, status) VALUES (?, ?, ?) ON CO": {
+        "count": 2,
+        "total": 2.241954999997688,
+        "p50": 1,
+        "p95": 1.2609802000006312,
+        "max": 1.2899780000007013
+      },
+      "UPDATE game_sessions SET began_at = COALESCE(began_at, ?) WHERE id = ?": {
+        "count": 1,
+        "total": 1.2602750000005472,
+        "p50": 1.1301375000002736,
+        "p95": 1.2472612500005198,
+        "max": 1.2602750000005472
+      },
+      "SELECT t.id AS token_id, c.id AS character_id, c.name, c.attributes, c.movement,": {
+        "count": 373,
+        "total": 43.891843000164954,
+        "p50": 0.06453804347826088,
+        "p95": 0.2120499999999999,
+        "max": 16.925294000000576
+      },
+      "SELECT id, player_id, character_id, spec, action, result FROM roll_requests WHER": {
+        "count": 305,
+        "total": 45.73048899955029,
+        "p50": 0.07518115942028986,
+        "p95": 0.625,
+        "max": 1.936323000001721
+      },
+      "SELECT level_id, col, row FROM map_tokens WHERE id = ?": {
+        "count": 1262,
+        "total": 76.47239899983106,
+        "p50": 0.04162269129287599,
+        "p95": 0.18612499999999982,
+        "max": 0.5564230000600219
+      },
+      "SELECT level_id FROM map_tokens WHERE id = ?": {
+        "count": 853,
+        "total": 48.157394998874224,
+        "p50": 0.03467479674796748,
+        "p95": 0.15718749999999976,
+        "max": 3.0900409999885596
+      },
+      "SELECT col, row FROM map_tokens WHERE id = ?": {
+        "count": 3950,
+        "total": 232.80077899937896,
+        "p50": 0.039754428341384866,
+        "p95": 0.1745176848874598,
+        "max": 1.0668860001023859
+      },
+      "SELECT illumination FROM map_levels WHERE id = ?": {
+        "count": 310,
+        "total": 49.450800000740855,
+        "p50": 0.14433962264150943,
+        "p95": 0.4464285714285714,
+        "max": 0.7685960000380874
+      },
+      "SELECT id, level_id, character_id, creature_id, allegiance FROM map_tokens WHERE": {
+        "count": 288,
+        "total": 20.609178000195243,
+        "p50": 0.061832061068702295,
+        "p95": 0.2138461538461537,
+        "max": 0.3782900001388043
+      },
+      "SELECT id, container_id, item_id, qty FROM container_items WHERE character_id = ": {
+        "count": 1136,
+        "total": 48.63649199975043,
+        "p50": 0.029800629590766004,
+        "p95": 0.09853846153846156,
+        "max": 1.7102250000461936
+      },
+      "SELECT f.target_id, f.mode FROM token_follows f JOIN map_tokens a ON a.id = f.to": {
+        "count": 8,
+        "total": 0.2376700000022538,
+        "p50": 0.02168800000072224,
+        "p95": 0.041207200001372256,
+        "max": 0.04337600000144448
+      },
+      "SELECT id, profession_id, item_id, creature_id, name, description, roll, attack,": {
+        "count": 471,
+        "total": 91.92426399821125,
+        "p50": 0.09987804878048781,
+        "p95": 0.36208333333333326,
+        "max": 29.7753270000685
+      },
+      "SELECT id, result AS text FROM improvisations WHERE token_id = ? AND status = 'd": {
+        "count": 288,
+        "total": 11.599886999363662,
+        "p50": 0.02868525896414343,
+        "p95": 0.09708333333333327,
+        "max": 0.6126420000800863
+      },
+      "SELECT p.link_id, p.back_col, p.back_row, p.show_at, l.name AS \"to\" FROM link_pr": {
+        "count": 331,
+        "total": 13.54788699879282,
+        "p50": 0.03053505535055351,
+        "p95": 0.09526041666666665,
+        "max": 0.3138409999664873
+      },
+      "SELECT DISTINCT s.x, s.y FROM sightings s JOIN characters c ON c.id = s.characte": {
+        "count": 288,
+        "total": 99.17203600048379,
+        "p50": 0.19495412844036697,
+        "p95": 0.9799999999999983,
+        "max": 20.505142999987584
+      },
+      "SELECT * FROM journal_entries WHERE character_id = ? ORDER BY created DESC, id D": {
+        "count": 294,
+        "total": 44.289637999747356,
+        "p50": 0.1418831168831169,
+        "p95": 0.4217741935483872,
+        "max": 0.6815439998172224
+      },
+      "SELECT name FROM professions WHERE id = ?": {
+        "count": 411,
+        "total": 29.06253900120646,
+        "p50": 0.04467391304347826,
+        "p95": 0.2078676470588235,
+        "max": 1.0720739999960642
+      },
+      "SELECT COUNT(*) AS n FROM roll_requests WHERE player_id = ? AND done = 0": {
+        "count": 107,
+        "total": 10.571948999640881,
+        "p50": 0.08051470588235295,
+        "p95": 0.2738249916631803,
+        "max": 0.46992299996782094
+      },
+      "SELECT id FROM game_sessions WHERE ended_at IS NULL ORDER BY id DESC": {
+        "count": 25,
+        "total": 3.560221000239835,
+        "p50": 0.14852941176470588,
+        "p95": 0.24779411764705883,
+        "max": 0.34564099996350706
+      },
+      "INSERT INTO session_events (session_id, game_time, text) VALUES (?, ?, ?)": {
+        "count": 25,
+        "total": 37.174125999896205,
+        "p50": 1.6375,
+        "p95": 2.48125,
+        "max": 4.913835999905132
+      },
+      "UPDATE roll_requests SET result = ? WHERE id = ?": {
+        "count": 11,
+        "total": 18.288375999909476,
+        "p50": 1.8250000000000002,
+        "p95": 3.3017537499894374,
+        "max": 4.281674999976531
+      },
+      "SELECT grid FROM map_levels WHERE id = ?": {
+        "count": 61,
+        "total": 6.014667999792437,
+        "p50": 0.07685185185185187,
+        "p95": 0.31577713333584434,
+        "max": 0.3837840000051074
+      },
+      "SELECT map_image FROM map_levels WHERE id = ?": {
+        "count": 2,
+        "total": 0.261382999990019,
+        "p50": 0.1,
+        "p95": 0.16408629999292315,
+        "max": 0.17120699999213684
+      },
+      "DELETE FROM map_tokens WHERE character_id = ? AND level_id = ?": {
+        "count": 2,
+        "total": 0.38964999999734573,
+        "p50": 0.05,
+        "p95": 0.3436143999977503,
+        "max": 0.35401599999750033
+      },
+      "INSERT INTO map_tokens (level_id, character_id, col, row) VALUES (?, ?, ?, ?)": {
+        "count": 2,
+        "total": 0.290791999999783,
+        "p50": 0.05,
+        "p95": 0.2766994000019622,
+        "max": 0.2796660000021802
+      },
+      "INSERT OR IGNORE INTO sightings SELECT character_id, level_id, col + 0.5, row + ": {
+        "count": 21,
+        "total": 1.5775770000764169,
+        "p50": 0.07291666666666667,
+        "p95": 0.13586683750319933,
+        "max": 0.1486330000043381
+      },
+      "SELECT id, name, description, group_id FROM professions WHERE id = ?": {
+        "count": 2399,
+        "total": 200.17625700049393,
+        "p50": 0.03610776640577965,
+        "p95": 0.1396354166666664,
+        "max": 73.63544899993576
+      },
+      "UPDATE roll_requests SET done = 1 WHERE player_id = ? AND done = 0 AND result IS": {
+        "count": 9,
+        "total": 0.42181500005244743,
+        "p50": 0.03214285714285715,
+        "p95": 0.07850527501548639,
+        "max": 0.08678100001998246
+      },
+      "INSERT INTO roll_requests (player_id, character_id, spec, action) VALUES (?, ?, ": {
+        "count": 9,
+        "total": 3.1245139999809908,
+        "p50": 0.3587856875074067,
+        "p95": 0.4846662687659773,
+        "max": 0.4986530000169296
+      },
+      "INSERT INTO encounters (level_id, round, turn, turn_order) VALUES (?, ?, ?, ?) O": {
+        "count": 18,
+        "total": 23.0920579998201,
+        "p50": 1.5,
+        "p95": 2.5151829999871547,
+        "max": 2.651829999871552
+      },
+      "DELETE FROM round_plans WHERE level_id = ?": {
+        "count": 14,
+        "total": 17.578771000160486,
+        "p50": 1.375,
+        "p95": 5.152390099968761,
+        "max": 5.507966999895871
+      },
+      "UPDATE encounters SET waiting = ? WHERE level_id = ?": {
+        "count": 5,
+        "total": 5.4993390000017826,
+        "p50": 1.0891445000015665,
+        "p95": 1.1693745500029764,
+        "max": 1.178289000003133
+      },
+      "DELETE FROM token_follows WHERE token_id IN (SELECT id FROM map_tokens WHERE lev": {
+        "count": 1,
+        "total": 0.08103000000119209,
+        "p50": 0.06551500000059604,
+        "p95": 0.07947850000113249,
+        "max": 0.08103000000119209
+      },
+      "SELECT pending FROM encounters WHERE level_id = ?": {
+        "count": 2890,
+        "total": 140.7404759964411,
+        "p50": 0.029489795918367347,
+        "p95": 0.09104166666666667,
+        "max": 19.586903999792412
+      },
+      "SELECT token_id, plan FROM round_plans WHERE level_id = ?": {
+        "count": 1860,
+        "total": 82.52287399645866,
+        "p50": 0.03051181102362205,
+        "p95": 0.09727626459143969,
+        "max": 6.5364979999139905
+      },
+      "SELECT stories FROM encounters WHERE level_id = ?": {
+        "count": 1591,
+        "total": 81.078786001337,
+        "p50": 0.03479877515310586,
+        "p95": 0.11911585365853626,
+        "max": 0.4022919998969883
+      },
+      "SELECT last_log FROM encounters WHERE level_id = ?": {
+        "count": 2,
+        "total": 0.22462099997210316,
+        "p50": 0.1,
+        "p95": 0.12361329999053851,
+        "max": 0.12623699998948723
+      },
+      "SELECT plan, ready, rolled FROM round_plans WHERE level_id = ? AND token_id = ?": {
+        "count": 443,
+        "total": 25.968295999467955,
+        "p50": 0.04027272727272727,
+        "p95": 0.18113636363636348,
+        "max": 0.8255709999939427
+      },
+      "SELECT t.id AS token_id, t.level_id, t.col, t.row, COALESCE(ch.movement, cr.move": {
+        "count": 205,
+        "total": 17.239177000628843,
+        "p50": 0.06441176470588236,
+        "p95": 0.24431818181818182,
+        "max": 0.5927280000178143
+      },
+      "SELECT token_id, condition_id FROM aura_passes WHERE level_id = ?": {
+        "count": 13,
+        "total": 0.45347100000071805,
+        "p50": 0.027083333333333334,
+        "p95": 0.0609578000078909,
+        "max": 0.08130800002254546
+      },
+      "SELECT a.token_id, a.by_token, a.by_name FROM assists a JOIN map_tokens t ON t.i": {
+        "count": 26,
+        "total": 0.9206469999189721,
+        "p50": 0.02826086956521739,
+        "p95": 0.09249999999999999,
+        "max": 0.10610999999335036
+      },
+      "SELECT data FROM level_exposure WHERE level_id = ?": {
+        "count": 13,
+        "total": 1.3712460000824649,
+        "p50": 0.1141694444448351,
+        "p95": 0.14732594444574917,
+        "max": 0.1510100000014063
+      },
+      "UPDATE encounters SET pending = ? WHERE level_id = ?": {
+        "count": 13,
+        "total": 1.0353230001201155,
+        "p50": 0.07750000000000001,
+        "p95": 0.12662470005918294,
+        "max": 0.13944400008767843
+      },
+      "UPDATE map_tokens SET target = NULL WHERE level_id = ?": {
+        "count": 13,
+        "total": 2.1857070002151886,
+        "p50": 0.0325,
+        "p95": 1.213936449997709,
+        "max": 1.6112469999934547
+      },
+      "UPDATE roll_requests SET done = 1 WHERE done = 0 AND result IS NULL AND json_ext": {
+        "count": 13,
+        "total": 0.8186880001885584,
+        "p50": 0.036111111111111115,
+        "p95": 0.14883760001568588,
+        "max": 0.17235200002323836
+      },
+      "UPDATE calendar SET now = ? WHERE id = 1": {
+        "count": 13,
+        "total": 21.877696999901673,
+        "p50": 1.75,
+        "p95": 2.8948290499858556,
+        "max": 3.628082999959588
+      },
+      "INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id)": {
+        "count": 13,
+        "total": 1.981709000232513,
+        "p50": 0.07500000000000001,
+        "p95": 1.0681002000026636,
+        "max": 1.1945720000076108
+      },
+      "UPDATE characters SET hp = ?, hp_max = ?, hp_temp = ? WHERE id = ?": {
+        "count": 65,
+        "total": 2.3040290000499226,
+        "p50": 0.026639344262295084,
+        "p95": 0.05165037500264589,
+        "max": 0.0588020000141114
+      },
+      "UPDATE map_tokens SET hp = ?, hp_max = ?, hp_temp = ? WHERE id = ?": {
+        "count": 26,
+        "total": 0.8880590001062956,
+        "p50": 0.026000000000000002,
+        "p95": 0.0494,
+        "max": 0.09294199995929375
+      },
+      "DELETE FROM token_afflictions WHERE level_id = ?": {
+        "count": 13,
+        "total": 0.4312510000454495,
+        "p50": 0.02954545454545455,
+        "p95": 0.05888165000302251,
+        "max": 0.0631580000044778
+      },
+      "DELETE FROM aura_passes WHERE level_id = ?": {
+        "count": 13,
+        "total": 0.3405039996432606,
+        "p50": 0.017031499999575317,
+        "p95": 0.0323598499991931,
+        "max": 0.034062999999150634
+      },
+      "INSERT OR IGNORE INTO sightings SELECT character_id, level_id, ? + 0.5, ? + 0.5 ": {
+        "count": 390,
+        "total": 115.53509100055089,
+        "p50": 0.03823529411764706,
+        "p95": 1.8610119403569279,
+        "max": 2.2144800000824034
+      },
+      "UPDATE encounters SET last_log = ? WHERE level_id = ?": {
+        "count": 13,
+        "total": 16.44950699985202,
+        "p50": 1.5138471250150662,
+        "p95": 2.060393612531091,
+        "max": 2.121121000032872
+      },
+      "UPDATE encounters SET replay = ? WHERE level_id = ?": {
+        "count": 13,
+        "total": 16.653390999839758,
+        "p50": 1.3356375000051535,
+        "p95": 2.1210292500172123,
+        "max": 2.208295000018552
+      },
+      "UPDATE encounters SET stories = ? WHERE level_id = ?": {
+        "count": 13,
+        "total": 16.33779899975343,
+        "p50": 1.266794150019996,
+        "p95": 1.7127215150534174,
+        "max": 1.762269000057131
+      },
+      "SELECT * FROM triggers WHERE error IS NULL ORDER BY id": {
+        "count": 13,
+        "total": 0.7333549997856608,
+        "p50": 0.053496928570010434,
+        "p95": 0.09441099283913251,
+        "max": 0.09895699998014607
+      },
+      "SELECT id, level_id, name, ends, spec FROM hazards WHERE ends > ? AND (spec LIKE": {
+        "count": 13,
+        "total": 1.8233490000420716,
+        "p50": 0.15685136356729676,
+        "p95": 0.23075813620478253,
+        "max": 0.23896999983116984
+      },
+      "UPDATE roll_requests SET done = 1 WHERE id = ? AND player_id = ?": {
+        "count": 11,
+        "total": 15.436987000022782,
+        "p50": 1.3759587222221954,
+        "p95": 1.9076717722221574,
+        "max": 1.966750999999931
+      },
+      "SELECT target FROM map_tokens WHERE id = ?": {
+        "count": 280,
+        "total": 20.3783879980474,
+        "p50": 0.05964912280701755,
+        "p95": 0.224390243902439,
+        "max": 0.38112600002205
+      },
+      "INSERT INTO round_plans (level_id, token_id, plan, ready) VALUES (?, ?, ?, ?) ON": {
+        "count": 60,
+        "total": 115.88086599966482,
+        "p50": 1.8529411764705883,
+        "p95": 3.3827906250371598,
+        "max": 3.9124650000594556
+      },
+      "DELETE FROM pings WHERE created < ?": {
+        "count": 2,
+        "total": 2.8034110000298824,
+        "p50": 0.1,
+        "p95": 2.7218743000092216,
+        "max": 2.7465270000102464
+      },
+      "INSERT INTO pings (level_id, x, y, user_id, name, gm, created) VALUES (?, ?, ?, ": {
+        "count": 2,
+        "total": 3.2569799999764655,
+        "p50": 1.4167789999919478,
+        "p95": 1.7918800999847009,
+        "max": 1.8335579999838956
+      },
+      "INSERT INTO round_plans (level_id, token_id, plan, rolled) VALUES (?, ?, ?, ?) O": {
+        "count": 2,
+        "total": 2.708145999960834,
+        "p50": 1.2156379999942146,
+        "p95": 1.4097121999890079,
+        "max": 1.4312759999884292
+      },
+      "UPDATE map_tokens SET col = ?, row = ? WHERE id = ?": {
+        "count": 19,
+        "total": 23.389504000137094,
+        "p50": 1.1145160000093959,
+        "p95": 1.7672572000629523,
+        "max": 1.839784000068903
+      },
+      "SELECT a.token_id, a.by_name FROM assists a JOIN map_tokens t ON t.id = a.token_": {
+        "count": 5,
+        "total": 0.19122700003208593,
+        "p50": 0.03125,
+        "p95": 0.05593550000339746,
+        "max": 0.05791400000452995
+      },
+      "UPDATE map_secrets SET revealed = ? WHERE id = ?": {
+        "count": 1,
+        "total": 2.2231440000468865,
+        "p50": 1.6115720000234433,
+        "p95": 2.1619868000445424,
+        "max": 2.2231440000468865
+      },
+      "SELECT id, name, player_id FROM characters WHERE in_party = 1 ORDER BY name": {
+        "count": 1,
+        "total": 0.2490450000623241,
+        "p50": 0.17452250003116204,
+        "p95": 0.24159275005920788,
+        "max": 0.2490450000623241
+      },
+      "SELECT id FROM journal_entries WHERE character_id = ? AND discovery_id = ?": {
+        "count": 8,
+        "total": 0.9655030001886189,
+        "p50": 0.08750000000000001,
+        "p95": 0.2753296000184491,
+        "max": 0.29221600003074855
+      },
+      "INSERT INTO journal_entries (character_id, discovery_id, title, text, created) V": {
+        "count": 6,
+        "total": 11.676112000248395,
+        "p50": 1.723873500013724,
+        "p95": 2.375359650026075,
+        "max": 2.447747000027448
+      },
+      "all": {
+        "count": 776819,
+        "total": 61800.487997957935,
+        "p50": 0.039437961866738695,
+        "p95": 0.24018292148615483,
+        "max": 92.22946499998216
+      }
+    },
+    "page": {
+      "play": {
+        "count": 974,
+        "total": 21120.2000259966,
+        "p50": 18.957597173144876,
+        "p95": 48.576233183856495,
+        "max": 153.05715400003828
+      },
+      "all": {
+        "count": 974,
+        "total": 21120.2000259966,
+        "p50": 18.957597173144876,
+        "p95": 48.576233183856495,
+        "max": 153.05715400003828
+      }
+    },
+    "server": {
+      "submitRoll": {
+        "count": 7,
+        "total": 97.16992899983597,
+        "p50": 17.5,
+        "p95": 28.108286999980916,
+        "max": 29.781979999970645
+      },
+      "rollInitiative": {
+        "count": 1,
+        "total": 17.580658999999287,
+        "p50": 13.790329499999643,
+        "p95": 17.201626049999323,
+        "max": 17.580658999999287
+      },
+      "resolveRound": {
+        "count": 13,
+        "total": 1867.1715289998247,
+        "p50": 135.15669399999751,
+        "p95": 166.79771859999528,
+        "max": 170.31338799999503
+      },
+      "planStep": {
+        "count": 43,
+        "total": 4320.4426620001905,
+        "p50": 22.9,
+        "p95": 493.75000000000006,
+        "max": 609.3873729999978
+      },
+      "dragMoveEnd": {
+        "count": 8,
+        "total": 1038.5038170001062,
+        "p50": 37.5,
+        "p95": 435.63189439999405,
+        "max": 482.03986799999257
+      },
+      "submitPlanDice": {
+        "count": 1,
+        "total": 14.68972299998859,
+        "p50": 12.344861499994295,
+        "p95": 14.45523684998916,
+        "max": 14.68972299998859
+      },
+      "setPlanReady": {
+        "count": 19,
+        "total": 362.82254799993825,
+        "p50": 17.916666666666668,
+        "p95": 26.165041899999796,
+        "max": 48.300837999995565
+      },
+      "fxSince": {
+        "count": 779,
+        "total": 3694.7063600027977,
+        "p50": 1.8279816513761467,
+        "p95": 20.76249999999999,
+        "max": 111.4724489999935
+      },
+      "walksSince": {
+        "count": 779,
+        "total": 1613.992037000462,
+        "p50": 1.705764075067024,
+        "p95": 4.661723163841807,
+        "max": 41.632233999989694
+      },
+      "pingsSince": {
+        "count": 779,
+        "total": 1509.194743001135,
+        "p50": 1.6643401015228427,
+        "p95": 4.586783439490445,
+        "max": 8.54100799979642
+      },
+      "all": {
+        "count": 2429,
+        "total": 14536.274007004278,
+        "p50": 1.7904478976234004,
+        "p95": 17.245652173913008,
+        "max": 609.3873729999978
+      }
+    },
+    "engine": {
+      "resolveRound": {
+        "count": 13,
+        "total": 95.42062799986161,
+        "p50": 7.5,
+        "p95": 14.577288400000906,
+        "max": 16.781168000001344
+      },
+      "all": {
+        "count": 13,
+        "total": 95.42062799986161,
+        "p50": 7.5,
+        "p95": 14.577288400000906,
+        "max": 16.781168000001344
+      }
+    },
+    "browser": {
+      "action:fxSince": {
+        "count": 907,
+        "total": 63531.99999856949,
+        "p50": 19.88938053097345,
+        "p95": 327.4122807017543,
+        "max": 3324.300000190735
+      },
+      "action:walksSince": {
+        "count": 906,
+        "total": 31426.99999189377,
+        "p50": 18.77358490566038,
+        "p95": 148.27272727272708,
+        "max": 1343.6999998092651
+      },
+      "action:pingsSince": {
+        "count": 906,
+        "total": 28800.500002861023,
+        "p50": 17.655889145496538,
+        "p95": 111.24999999999972,
+        "max": 1905.0999999046326
+      },
+      "refresh:/play": {
+        "count": 303,
+        "total": 79546.09999752045,
+        "p50": 241.41221374045801,
+        "p95": 495.8969465648854,
+        "max": 2094.199999809265
+      },
+      "action:40c027d403149db69b02127894ac3a5193973eb9d5": {
+        "count": 1,
+        "total": 196.10000038146973,
+        "p50": 148.05000019073486,
+        "p95": 191.29500036239625,
+        "max": 196.10000038146973
+      },
+      "action:planStep": {
+        "count": 19,
+        "total": 8172.200000762939,
+        "p50": 408.3333333333333,
+        "p95": 1002.0950000047684,
+        "max": 1041.9000000953674
+      },
+      "action:dragMoveEnd": {
+        "count": 2,
+        "total": 770.5,
+        "p50": 348.09999990463257,
+        "p95": 436.38999981880187,
+        "max": 446.19999980926514
+      },
+      "action:setPlanReady": {
+        "count": 8,
+        "total": 3075.4000000953674,
+        "p50": 392.8571428571429,
+        "p95": 530.2400000572204,
+        "max": 550.4000000953674
+      },
+      "action:40ab39657917c51dd3991a2a3305db3da3f6c1cebe": {
+        "count": 2,
+        "total": 715.4999995231628,
+        "p50": 352.34999990463257,
+        "p95": 444.46499981880186,
+        "max": 454.69999980926514
+      },
+      "action:resolveRound": {
+        "count": 4,
+        "total": 1654.1999998092651,
+        "p50": 416.66666666666663,
+        "p95": 688.479999923706,
+        "max": 735.5999999046326
+      },
+      "refresh:/campaign": {
+        "count": 2,
+        "total": 33.299999713897705,
+        "p50": 13.349999904632568,
+        "p95": 16.36499981880188,
+        "max": 16.699999809265137
+      },
+      "refresh:/sessions": {
+        "count": 3,
+        "total": 72.40000009536743,
+        "p50": 21.25,
+        "p95": 37.24000008106231,
+        "max": 39.40000009536743
+      },
+      "refresh:/sessions/5": {
+        "count": 3,
+        "total": 47,
+        "p50": 8.75,
+        "p95": 29.419999837875366,
+        "max": 30.199999809265137
+      },
+      "action:40865f4135761312675dc281991adf40511df0f97e": {
+        "count": 6,
+        "total": 1541.0999994277954,
+        "p50": 212.5,
+        "p95": 337.46500008106227,
+        "max": 352.90000009536743
+      },
+      "action:40cde8ac262580a38db63ae6e7c2da45edb7fa0aa3": {
+        "count": 4,
+        "total": 1023.7000002861023,
+        "p50": 250,
+        "p95": 294.4600000858307,
+        "max": 299.40000009536743
+      },
+      "fetch:/assets/dice-box/themes/default/theme.config.json": {
+        "count": 1,
+        "total": 14.900000095367432,
+        "p50": 12.450000047683716,
+        "p95": 14.65500009059906,
+        "max": 14.900000095367432
+      },
+      "action:submitRoll": {
+        "count": 1,
+        "total": 214,
+        "p50": 157,
+        "p95": 208.3,
+        "max": 214
+      },
+      "action:40c82076d4d7c1efb2bf7675eb16bc4228956fd9ea": {
+        "count": 1,
+        "total": 340.69999980926514,
+        "p50": 295.34999990463257,
+        "p95": 336.1649998188019,
+        "max": 340.69999980926514
+      },
+      "all": {
+        "count": 3079,
+        "total": 221176.59999084473,
+        "p50": 20.969076655052262,
+        "p95": 368.7499999999997,
+        "max": 3324.300000190735
+      }
+    }
+  }
+}
