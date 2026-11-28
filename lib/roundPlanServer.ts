@@ -1,3 +1,4 @@
+import { moveBlockers } from "@/lib/db/areas";
 import { downTokens, setTokenTarget, listTokens, getTokenMover, tokenLabels } from "@/lib/db/tokens";
 import { listMapTriggers } from "@/lib/db/traps";
 import { getItem } from "@/lib/db/catalog";
@@ -13,7 +14,7 @@ import { attackRange, gearActions, putOptions, refitOptions, tokenWho } from "@/
 import { planRolls, withThrownDice } from "@/lib/planRolls";
 import { seenFrom } from "@/lib/sight";
 import { allegianceOf, fits, picksSeveral, relation } from "@/lib/sides";
-import { blockingSegments, movementBlockers } from "@/lib/visibility";
+import { blockingSegments } from "@/lib/visibility";
 import { REACH, distanceToDoor } from "../app/(play)/play/reach";
 import { interactablesNear } from "@/lib/triggers";
 import { hidingPlaces } from "../app/(play)/play/hiding";
@@ -82,7 +83,7 @@ export function addPlanStep(p: Planner, step: StepRequest): string | null {
   if (step.kind === "move") {
     const from = planEnd(p.plan, { col: p.tok.col, row: p.tok.row });
     const feetLeft = timeline(p.plan, p.walking).left * (run ?? p.walking);
-    const walls = movementBlockers(listStructures(p.tok.level_id));
+    const walls = moveBlockers(p.tok.level_id);
     if (isGridlessLevel(p.tok.level_id)) {
       // Straight there, or by the shortest way round walls in the way (a move per leg).
       const to = { col: snapHeight(Number(step.col)), row: snapHeight(Number(step.row)) };
@@ -306,7 +307,7 @@ export function moveStepEnd(p: Planner, index: number, to: { col: number; row: n
 /** A move from `from` to `to` as plan steps (legs round walls on a gridless map), or null if there's no way there. */
 function remeasure(p: Planner, from: { col: number; row: number }, to: { col: number; row: number }): PlanStep[] | null {
   if (Math.hypot(to.col - from.col, to.row - from.row) < 0.1) return [];
-  const walls = movementBlockers(listStructures(p.tok.level_id));
+  const walls = moveBlockers(p.tok.level_id);
   if (isGridlessLevel(p.tok.level_id)) {
     const path = shortestPath({ x: from.col + 0.5, y: from.row + 0.5 }, { x: to.col + 0.5, y: to.row + 0.5 }, walls, () => true);
     if (!path) return null;

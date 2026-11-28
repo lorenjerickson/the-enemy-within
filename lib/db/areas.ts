@@ -4,7 +4,9 @@ import { db } from "@/lib/db/connection";
 import { getGameTime } from "@/lib/db/calendar";
 import type { Exposures, Exposure } from "@/lib/exposure";
 import { listEffects } from "@/lib/db/mapThings";
-import { isActive, type Hazard } from "@/lib/hazards";
+import { impassableEdges, isActive, type Hazard } from "@/lib/hazards";
+import { listStructures } from "@/lib/db/maps";
+import { movementBlockers, type Segment } from "@/lib/visibility";
 
 export function addLastingArea(levelId: number, a: Omit<LastingArea, "id">): number {
   const { name, ends, ...spec } = a;
@@ -92,6 +94,9 @@ export function updateLastingArea(id: number, a: Omit<Hazard, "id">): void {
   const { name, ends, ...spec } = a;
   db.prepare<[string, number, string, number]>("UPDATE hazards SET name = ?, ends = ?, spec = ? WHERE id = ?").run(name, ends, JSON.stringify(spec), id);
 }
+
+/** What stops someone moving on a level: walls, closed doors and windows, and Impassable hazards' outlines. */
+export const moveBlockers = (levelId: number): Segment[] => [...movementBlockers(listStructures(levelId)), ...impassableEdges(listLastingAreas(levelId) as Hazard[], getGameTime())];
 
 /** Hazards (on any level) that a script condition activates or deactivates, with their levels. */
 export function listScriptedHazards(): (Hazard & { level_id: number })[] {

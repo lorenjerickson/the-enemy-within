@@ -6,12 +6,12 @@ import { blindSpots, watched, type Watcher } from "@/lib/hiding";
 import { brightEnough } from "@/lib/light";
 import { FEET_PER_SQUARE, reachableSquares } from "@/lib/movement";
 import { SIGHT } from "@/lib/sight";
-import { blockingSegments, insidePolygon, movementBlockers, visibilityPolygon } from "@/lib/visibility";
+import { blockingSegments, insidePolygon, visibilityPolygon } from "@/lib/visibility";
 import { seesThem } from "@/lib/conditions";
 import { sensesOf } from "@/lib/creatureChanges";
 import { allegianceOf, relation } from "@/lib/sides";
 import { seenFrom } from "@/lib/sight";
-import { FOG_SIGHT_FT, fogOn } from "@/lib/db/areas";
+import { FOG_SIGHT_FT, fogOn, moveBlockers } from "@/lib/db/areas";
 import { blindRangeOf } from "@/lib/conditions";
 
 /** Fog (a fog effect, a smoke hazard) at a spot hides it from anyone further than 15 ft away. */
@@ -76,7 +76,7 @@ export function knownWatchers(levelId: number, tokenId: number, at: { col: numbe
 export function hidingPlaces(levelId: number, tokenId: number, at: { col: number; row: number }, feet: number): { seen: boolean; spots: { col: number; row: number }[] } {
   const watchers = knownWatchers(levelId, tokenId, at);
   const here = { col: Math.round(at.col), row: Math.round(at.row) };
-  const reach = [...reachableSquares(here, Math.max(0, feet) / FEET_PER_SQUARE, movementBlockers(listStructures(levelId))).values()].map((s) => ({ col: s.col, row: s.row }));
+  const reach = [...reachableSquares(here, Math.max(0, feet) / FEET_PER_SQUARE, moveBlockers(levelId)).values()].map((s) => ({ col: s.col, row: s.row }));
   const others = listTokens(levelId).filter((t) => t.id !== tokenId).map((t) => `${Math.round(t.col)},${Math.round(t.row)}`);
   return { seen: watched(at, watchers), spots: blindSpots(reach.filter((c) => !others.includes(`${c.col},${c.row}`)), watchers) };
 }

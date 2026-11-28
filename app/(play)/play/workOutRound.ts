@@ -2,7 +2,7 @@ import { inArea } from "@/lib/aoe";
 import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
-import { fogOn, igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
+import { fogOn, igniteAreas, moveBlockers, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
 import { asRoundTrap, isActive, type Hazard } from "@/lib/hazards";
 import { markHazardSprung } from "./hazardSprung";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
@@ -17,7 +17,7 @@ import { fireTriggers } from "@/lib/game";
 import { ContestedMove, SaveNeeded, resolveMovement, type Mover } from "@/lib/resolveRound";
 import { withSeed } from "@/lib/dice";
 import { attackRange, fightersOn, saveHp, saveRefit, tokenWho, useUpItem } from "@/lib/combat";
-import { blockingSegments, movementBlockers } from "@/lib/visibility";
+import { blockingSegments } from "@/lib/visibility";
 import { rollSpec, type RollSpec } from "@/lib/rolls";
 import { afflictedLevels, listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db/effects";
 import { litOn } from "@/lib/sight";
@@ -101,7 +101,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }])), listHidden(levelId), getExposures(levelId), fogOn(levelId), smokeTrapsOn(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, moveBlockers(levelId), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }])), listHidden(levelId), getExposures(levelId), fogOn(levelId), smokeTrapsOn(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.

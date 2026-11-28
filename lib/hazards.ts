@@ -5,7 +5,8 @@
  * until switched off. Pure rules: whether it's active, whether a moment sets it off, whom it may catch, springing it,
  * and who sees it. Play (walks, rounds) and the editor use these.
  */
-import { NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, inArea, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, UNTIL_REMOVED, areaFromDrawn, areaPolygon, inArea, type AreaFires, type LastingArea } from "@/lib/aoe";
+import type { Segment } from "@/lib/visibility";
 import type { Attribute } from "@/lib/attributes";
 import type { Condition } from "@/lib/conditions";
 import type { Allegiance } from "@/lib/sides";
@@ -39,8 +40,15 @@ export interface HazardSettings {
 export type Hazard = LastingArea & HazardSettings;
 
 /** What a place does to moving through it (the areas design, 2.4), and what each says in the interview. */
-export const TRAITS = [["frozen", "Frozen (ice): moving in it costs double"]] as const;
+export const TRAITS = [["frozen", "Frozen (ice): moving in it costs double"], ["impassable", "Impassable (a chasm, rubble): routes go around it, like a wall that doesn't block sight"]] as const;
 export type Trait = (typeof TRAITS)[number][0];
+
+/** The outlines of active Impassable hazards, as walls for moving (not for sight). */
+export const impassableEdges = (hazards: Hazard[], now: number): Segment[] =>
+  hazards.filter((h) => (h.traits ?? []).includes("impassable") && isActive(h, now)).flatMap((h) => {
+    const pts = areaPolygon(h.area);
+    return pts.map((a, i) => ({ a, b: pts[(i + 1) % pts.length] }));
+  });
 
 /** Whether a spot (grid units) is in an active hazard with this trait. */
 export const traitAt = (hazards: Hazard[], trait: Trait, p: { x: number; y: number }, now: number) =>

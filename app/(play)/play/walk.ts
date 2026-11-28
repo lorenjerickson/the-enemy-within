@@ -1,10 +1,11 @@
+import { moveBlockers } from "@/lib/db/areas";
 import { getTokenMover, downTokens, listStandingOrdersOn, listTokens, moveToken, setLinkPrompt } from "@/lib/db/tokens";
 import { getEncounter } from "@/lib/db/encounters";
 import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { pointAlong, routeTimes, standingRoute, truncateRoute, walkLength, type StandingMode } from "@/lib/standing";
 import { revealAfterStep } from "./hiding";
 import { speedFps } from "@/lib/creatureChanges";
-import { movementBlockers } from "@/lib/visibility";
+
 import { fireTriggers } from "@/lib/game";
 import { syncAurasOn } from "@/lib/auraSync";
 import { linkEntered } from "@/lib/levelLinks";
@@ -89,7 +90,7 @@ export function walkWithFollowers(levelId: number, leaderId: number, route: Poin
   const path = leader.walked, speed = Math.max(0.01, fps);
   const walks: TimedWalk[] = path.length > 1 ? [{ tokenId: leaderId, route: path, times: routeTimes(path, speed, gridless) }] : [];
   if (getEncounter(levelId) || path.length < 2) return { leader, walks };
-  const tokens = listTokens(levelId), down = downTokens(levelId), walls = movementBlockers(listStructures(levelId));
+  const tokens = listTokens(levelId), down = downTokens(levelId), walls = moveBlockers(levelId);
   // Who moves, in order: those on the leader first, then those on them (each once).
   const order: { id: number; target: number; mode: StandingMode; units: number }[] = [];
   const done = new Set([leaderId]);

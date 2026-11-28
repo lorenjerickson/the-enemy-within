@@ -1,5 +1,6 @@
 "use client";
 
+import { impassableEdges, type Hazard } from "@/lib/hazards";
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { MAP_LAYERS, type MapBackground, type MapGrid, type MapImage, type MapLayer, type TemplateColors } from "@/lib/maps";
 import TemplatesEditor from "./TemplatesEditor";
@@ -516,17 +517,18 @@ export default function MapView({
   }, [moveOn, runOn, fog?.move, gmPlan, gmSel, mapImage.perspective, drawnTokens, planRoutes]);
   // The area itself, worked out only when where they start, how far they can go or the walls change (it's costly on
   // gridless maps: the way round each wall end counts too).
+  const impassableKey = JSON.stringify(impassableEdges(lasting as Hazard[], gameNow));
   const reachFromKey = reachAt ? `${reachAt.from.col},${reachAt.from.row},${reachAt.feet}` : "";
   const reachArea = useMemo(() => {
     if (!reachAt) return null;
-    const walls = movementBlockers(optimisticStructures); // windows block movement too
+    const walls = [...movementBlockers(optimisticStructures), ...impassableEdges(lasting as Hazard[], gameNow)]; // windows block movement too, and Impassable hazards
     const squares = reachAt.feet / FEET_PER_SQUARE, { col, row } = reachAt.from;
     if (gridless) {
       const areas = reachAreas({ x: col + 0.5, y: row + 0.5 }, squares, walls);
       return { kind: "area" as const, polys: areas.map((a) => a.poly), areas };
     }
     return { kind: "squares" as const, cells: reachableSquares({ col, row }, squares, walls) };
-  }, [reachFromKey, wallsKey, gridless]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reachFromKey, wallsKey, gridless, impassableKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const reach = reachAt && reachArea ? { ...reachAt, ...reachArea } : null;
   // A move being walked out on screen: the token follows its route (top-left corners, in grid units).
   // Several at once: a walker and those following them, or anyone's walk another map recorded.
