@@ -84,7 +84,7 @@ One engine, many worlds, many campaigns per world (Loren, 2026-11-27). This shap
 - **Engine:** the rules (rounds, movement, saves, hazards, effects…), the same for every world. Owns no content.
 - **World:** what's built for a setting. Its maps and locations, creatures, items, effects, actions, professions, media and script library. A world can be played by many campaigns.
 - **Campaign:** one group's play in a world. Its characters and party, sessions, story (objectives, discoveries, journals, vars, triggers), game time, and the live state of the world's maps as this campaign has left them (token positions, doors opened, hazards sprung or spent, secrets found).
-- **To settle in Phase 1:** where each table's rows belong. Most are clearly world or campaign. The rest are map things that are both: designed in the world (a door, a trap), with their state kept per campaign (open, sprung). The likely answer is world-owned definitions plus a campaign overlay for their state.
+- **Map things that are both** (settled, Loren, 2026-11-27): designed in the world (a door, a trap, a secret, a light), with their state kept per campaign (open, sprung, found, switched on). The world owns the definition; each campaign keeps an overlay holding that thing's state in its play. Phase 1 sorts every table's rows into world, campaign, or a world definition with a campaign overlay.
 
 Today's database has exactly one world and one campaign. The migration in Phase 5 makes both explicit, and nothing changes for the campaign being played.
 
