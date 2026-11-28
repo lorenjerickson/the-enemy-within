@@ -5,16 +5,18 @@ FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 # Tools to compile better-sqlite3 if no prebuilt binary matches.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
-COPY package.json package-lock.json ./
-RUN npm ci
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # The build must not touch the real data: give it a scratch data folder.
-RUN DATA_DIR=/tmp/build-data npm run build
+RUN DATA_DIR=/tmp/build-data pnpm run build
 
 FROM node:22-bookworm-slim AS run
 WORKDIR /app
