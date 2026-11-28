@@ -7,7 +7,9 @@ import { downTokens, listTokens, tokenLabels } from "@/lib/db/tokens";
 import { listAfflictions, listAuraPasses, saveAfflictions, saveAuraPasses } from "@/lib/db/effects";
 import { logSessionEvent } from "@/lib/db/sessions";
 import { fightersOn } from "@/lib/combat";
-import { auraAffliction, auraWants, syncAuras } from "@/lib/auras";
+import { auraAffliction, aurasOf, auraWants, syncAuras } from "@/lib/auras";
+import { NO_SAVE_DC, UNTIL_REMOVED, type LastingArea } from "@/lib/aoe";
+import { FEET_PER_SQUARE } from "@/lib/movement";
 import { describeCondition } from "@/lib/conditions";
 import { isGridlessLevel, listStructures } from "@/lib/db/maps";
 import { blockingSegments } from "@/lib/visibility";
@@ -52,4 +54,14 @@ export function syncAurasOn(levelId: number): string[] {
   if ([...passes].sort().join() !== before) saveAuraPasses(levelId, passes);
   if (log.length) logSessionEvent(log.join(" "));
   return log;
+}
+
+/** Auras with a look, drawn round whoever gives them off (a ghoul's green haze): circles following their tokens, as areas to draw (not stored). */
+export function auraLooks(levelId: number, tokenIds?: number[]): LastingArea[] {
+  const afflicted = listAfflictions(levelId), fighters = fightersOn(levelId), down = downTokens(levelId);
+  return listTokens(levelId).filter((t) => !down.has(t.id) && (!tokenIds || tokenIds.includes(t.id))).flatMap((t) =>
+    aurasOf(fighters.get(t.id)?.auras ?? [], afflicted.get(t.id)).filter((a) => a.look).map((a, i): LastingArea => ({
+      id: -(1_000_000 + t.id * 100 + i), name: `${a.given.name} (aura)`, look: a.look!, ends: UNTIL_REMOVED, damage: null, dc: NO_SAVE_DC, save: "agility", half: false,
+      area: { shape: "circle", origin: { x: t.col + 0.5, y: t.row + 0.5 }, dir: 0, size: a.radius / FEET_PER_SQUARE },
+    })));
 }

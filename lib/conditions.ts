@@ -12,6 +12,7 @@ import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import { targetLabel, type ModifierTarget } from "@/lib/modifiers";
 import type { TargetWho } from "@/lib/sides";
 import type { RollTweak } from "@/lib/status";
+import type { EffectKind } from "@/lib/effects";
 
 /** One change while it's active. More kinds (set, multiply, resist, forbid…) come with the backlog. */
 export type Modifier =
@@ -33,7 +34,7 @@ export type Modifier =
   | { kind: "strain"; attribute: Attribute; points: number } // strain points on an attribute as it lands (each −1; negative: treatment takes them off); they outlast the condition and drain with rest
   | { kind: "sense"; sense: Sense; range?: number } // what they can see, and whether they can be seen (darkvision: range in ft; blind: how far they still perceive, ft, default 5)
   | { kind: "cap"; target: ModifierTarget | "darkvision"; value: number; unit?: string } // at most this ("reduced to"); the lowest cap wins, over boosts and "becomes"
-  | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition }; // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
+  | { kind: "aura"; condition: number; radius: number; who: TargetWho; self: boolean; given?: Condition; look?: EffectKind }; // look: drawn round them on the map (a green haze) // gives a condition to those within `radius` ft (allies, enemies or anyone; maybe itself) while they're there; `given`: that condition, filled in when read
 
 /**
  * Something that fires on an event: when they're hit (the other creature: the attacker) or when they hit someone (the

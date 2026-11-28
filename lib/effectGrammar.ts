@@ -14,6 +14,7 @@ import { ATTRIBUTES, type Attribute } from "@/lib/attributes";
 import type { Duration, Lifecycle, Modifier } from "@/lib/conditions";
 import { MODIFIER_TARGET_GROUPS, SKILLS, type ModifierTarget } from "@/lib/modifiers";
 import { isDiceFormula } from "@/lib/itemTypes";
+import { EFFECT_KINDS, EFFECT_LABELS, type EffectKind } from "@/lib/effects";
 
 /** A blank (or fixed words) in a sentence. */
 export type Slot =
@@ -132,7 +133,7 @@ export const EFFECT_SENTENCE: Slot[] = [{
     { value: "autofail", text: "You automatically fail", next: [attrs("fail_attr"), word("saving throws")] },
     { value: "your", text: "Your", next: [YOUR_STAT] },
     { value: "nocrit", text: "Critical hits against you are normal hits" },
-    { value: "aura", text: "Within", next: [num("radius", "feet", 5, 300), word("feet of you"), { kind: "choice", id: "who", label: "who", options: [{ value: "enemy", text: "enemies" }, { value: "friendly", text: "allies" }, { value: "", text: "creatures" }] }, { kind: "optional", id: "self", lead: "and", slots: [word("you")] }, word("gain the"), ...condition] },
+    { value: "aura", text: "Within", next: [num("radius", "feet", 5, 300), word("feet of you"), { kind: "choice", id: "who", label: "who", options: [{ value: "enemy", text: "enemies" }, { value: "friendly", text: "allies" }, { value: "", text: "creatures" }] }, { kind: "optional", id: "self", lead: "and", slots: [word("you")] }, word("gain the"), ...condition, { kind: "optional", id: "shown", lead: "shown as", slots: [{ kind: "choice", id: "look", label: "look", options: EFFECT_KINDS.map((k) => ({ value: k, text: EFFECT_LABELS[k].toLowerCase() })) }] }] },
     // Rolls
     { value: "roll", text: "When you make", next: [{ kind: "choice", id: "roll", label: "which roll", options: ROLLS }, ON_ROLL] },
     { value: "attacked", text: "When a creature makes an attack roll against you", next: [word("it rolls twice and uses the"), keep, word("result")] },
@@ -211,7 +212,7 @@ export function compile(rule: Filled, conditionId: (name: string) => number = ()
     case "nocrit":
       return one({ kind: "nocrit" });
     case "aura":
-      return one({ kind: "aura", condition: cond, radius: Number(f.radius), who: f.who as never, self: f.self !== undefined });
+      return one({ kind: "aura", condition: cond, radius: Number(f.radius), who: f.who as never, self: f.self !== undefined, ...(f.look ? { look: f.look as EffectKind } : {}) });
     case "your": {
       if (f.stat === "crit") return one({ kind: "crit", range: Number(f.range) });
       if (f.stat === "speed") return one({ kind: "speed", factor: Number(String(f.how).slice(1)) });
@@ -414,7 +415,7 @@ function sentenceOf(m: Modifier, conditionName: (id: number) => string): Filled[
     case "sense":
       return [m.sense === "blind" ? { when: "you", cant: "see", feet: m.range ?? 5 } : m.sense === "invisible" ? { when: "are", are: "invisible" } : m.sense === "seeinvisible" ? { when: "can" } : { when: "your", stat: "darkvision", how: "min", to: m.range ?? 60 }];
     case "aura":
-      return [{ when: "aura", radius: m.radius, who: m.who, ...(m.self ? { self: 1 } : {}), condition: m.given?.name ?? conditionName(m.condition) }];
+      return [{ when: "aura", radius: m.radius, who: m.who, ...(m.self ? { self: 1 } : {}), condition: m.given?.name ?? conditionName(m.condition), ...(m.look ? { look: m.look } : {}) }];
   }
 }
 

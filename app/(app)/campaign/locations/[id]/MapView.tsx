@@ -101,6 +101,7 @@ export default function MapView({
   downTokens = [],
   hiddenTokens = [],
   lasting = [],
+  auraLooks = [],
   gmPlans,
   secrets,
   trapEffects = [],
@@ -152,6 +153,7 @@ export default function MapView({
   downTokens?: number[]; // tokens at 0 health (a skull is drawn over them)
   hiddenTokens?: number[]; // hidden tokens (Hide), drawn faded with a dashed ring (GM only: others don't get them)
   lasting?: LastingArea[]; // areas actions left on the map for a while (a fire wall)
+  auraLooks?: LastingArea[]; // auras with a look, round whoever gives them off (drawn only)
   replayName?: string | null; // a player's character: they see only what happened involving them
   secrets: MapSecret[]; // hidden things (players get only the revealed ones)
   trapEffects?: Effect[]; // catalog effects lasting rounds, for what hazards put on (tuned in place: backlog W)
@@ -672,7 +674,7 @@ export default function MapView({
       return { ...t, col: at.x, row: at.y };
     }), tokenImages: loadedTileImages, positional: drawnPositional, illumination: readOnly ? shownIllumination : 1, figureHeight,
     lights: optimisticLights, showLightAreas: selected === "lighting", notes: drawnNotes, secrets: optimisticSecrets, triggers: readOnly ? [] : optimisticTriggers, seenTriggers: readOnly ? optimisticTriggers : [],
-    effects: drawnEffects, lasting: replayFrame ? lasting.filter((l) => !(replay?.newAreas ?? []).some((n) => n.id === l.id && n.sec > replayFrame.sec)) : lasting, time: performance.now() / 1000, showEffectAreas: selected === "effects",
+    effects: drawnEffects, lasting: [...(replayFrame ? lasting.filter((l) => !(replay?.newAreas ?? []).some((n) => n.id === l.id && n.sec > replayFrame.sec)) : lasting), ...(replayFrame ? [] : auraLooks)], time: performance.now() / 1000, showEffectAreas: selected === "effects",
   };
 
   /** The select() option at a point (grid units): a token, a door (near its line), a light, or a placed effect. */
