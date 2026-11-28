@@ -1,10 +1,10 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { NO_SAVE_DC, caughtBy, caughtFire, describeArea, fireLandsAt, isFire, placeArea, strayFire, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { FOG_SIGHT_FT, NO_SAVE_DC, caughtBy, caughtFire, describeArea, fireLandsAt, inArea, isFire, placeArea, strayFire, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
 const critNote = (rolled: boolean | undefined, counts: boolean) => (!rolled ? "" : counts ? "critically " : "(a critical, but they're immune: a normal hit) ");
-import { savePct, whileWithin } from "@/lib/conditions";
+import { blindRangeOf, savePct, whileWithin } from "@/lib/conditions";
 import { decayed, exposedInside, exposureExtra, harmOf, type Exposures } from "@/lib/exposure";
 import { afterResist, combineResist, describeCondition, extrasOf, lingers, modifiersOf, reapplied, noRestrictions, resistsOf, restrictionsOf, rollChanges, type Affliction, type Condition, type Modifier, type Extra, type Trigger, type Senses, BLIND_RANGE, seesThem, sensesFrom, type Resist, type Restrictions } from "@/lib/conditions";
 import type { Attribute } from "@/lib/attributes";
@@ -175,6 +175,8 @@ export function resolveMovement(
   assists: Map<number, { by: number; name: string }> = new Map(), // who has been helped (Assist): advantage on their next attack roll
   hiddenAtStart: Map<number, number> = new Map(), // who is hidden (Hide), with their Stealth totals: unseen by anyone not on their side
   exposureAtStart: Exposures = new Map(), // exposure to lingering areas' harm (still burning, poisoned…): builds inside, decays after
+  fogAt: (p: { x: number; y: number }) => boolean = () => false, // fog as the round starts (fog effects, smoke hazards): no one sees further than 15 ft into it
+  smokeTraps: Map<number, AreaAt> = new Map(), // dormant hazards that obscure sight once set off (by trap id): fog from the second they go off
 ) {
   const exposure: Exposures = new Map([...exposureAtStart].map(([id, l]) => [id, l.map((e) => ({ ...e }))]));
   const improvised: { id: number; tokenId: number; sec: number; dice?: number[] }[] = []; // dice: its roll, thrown with the plan // improvisations whose planned step was done (they play out after the round)
@@ -403,6 +405,9 @@ export function resolveMovement(
     if (!s || s.total < dc) return breakConcentration(caster, sec, `Fortitude ${s?.total ?? "-"} vs DC ${dc}`);
     log.push(`${sec} s: ${nameOf(caster)} keeps concentrating (Fortitude ${s.total} vs DC ${dc}).`);
   };
+  /** Whether a spot is in fog now: as the round began, or smoke a hazard let out this round (from the second it went off). */
+  const smokeOut: AreaAt[] = []; // smoke let out this round (pushed as its hazard goes off)
+  const foggy = (p: { x: number; y: number }) => fogAt(p) || smokeOut.some((a) => inArea(a, p));
   /** What someone can see and whether they can be seen, now: their own senses and the conditions on them as they stand this second. */
   const sensesNow = (id: number): Senses => sensesFrom([...(fighters.get(id)?.senseMods ?? []), ...(afflicted.get(id) ?? []).flatMap((a) => modifiersOf(a.condition))]); // every source at once (best darkvision, then caps; shortest blindness)
 
@@ -420,6 +425,7 @@ export function resolveMovement(
     if (!pv || !pt) return true;
     const d = Math.hypot(pv.col - pt.col, pv.row - pt.row);
     if (sv.blind) return d <= sv.blindRange;
+    if (d > blindRangeOf(FOG_SIGHT_FT) && foggy({ x: pt.col + 0.5, y: pt.row + 0.5 })) return false; // in fog (or smoke set off this round), too far
     return lit(pt) || d * FEET_PER_SQUARE <= sv.darkvision + 1e-6;
   };
   /** Advantage / disadvantage from not being seen: attacking someone you can't see, attacking someone who can't see you. */
@@ -644,6 +650,7 @@ export function resolveMovement(
     if (!cause) return asOne(`trap:${t.id}`, () => springTrap(t, id, sec)); // its damage save and its effects' saves: one throw
     trapSprung.set(t.id, [...trapSprung.get(t.id)!, id]);
     sprungNow.push({ trapId: t.id, tokenId: id });
+    if (smokeTraps.has(t.id)) smokeOut.push(smokeTraps.get(t.id)!);
     const s = t.save_attr ? saveRoll(id, t.save_attr as Attribute, t.save_dc, `trap:${sec}:${t.id}:${id}`, t.name, sec) : null;
     const saved = !!s && s.total >= t.save_dc;
     const parts: string[] = s ? [`${t.save_attr} ${s.total} vs DC ${t.save_dc}${saved ? ", saved" : ""}`] : [];

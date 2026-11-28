@@ -2,7 +2,7 @@ import { inArea } from "@/lib/aoe";
 import { getImprovisation, improviseRollSpec, setImproviseRolled } from "@/lib/improvise";
 import { rolledTotal } from "@/lib/planRolls";
 import { playImprovisation } from "./improvising";
-import { igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
+import { fogOn, igniteAreas, listHazards, getExposures, saveExposures, setLastingAreaFound, addLastingArea, listLastingAreas, getLastingArea } from "@/lib/db/areas";
 import { asRoundTrap, isActive, type Hazard } from "@/lib/hazards";
 import { markHazardSprung } from "./hazardSprung";
 import { addTokenStatus, downTokens, getCharacterPlayer, getTokenMover, listTokens, moveToken, tokenLabels } from "@/lib/db/tokens";
@@ -43,6 +43,8 @@ import { getDoor, setDoorOpen } from "@/lib/db/maps";
 import type { RoundTrap } from "@/lib/resolveRound";
 
 /** A level's traps for a round, with the effects they put on filled in. */
+/** Dormant hazards that obscure sight once set off (smoke), by their trap ids in the round. */
+const smokeTrapsOn = (levelId: number) => new Map((listLastingAreas(levelId) as Hazard[]).filter((h) => h.activation === "dormant" && h.obscures && !h.off && !h.spent).map((h) => [-h.id, h.area]));
 const roundTraps = (levelId: number): RoundTrap[] => (listLastingAreas(levelId) as Hazard[]).filter((h) => h.activation === "dormant" && !h.off && !h.spent).map(asRoundTrap); // dormant hazards spring as the engine's traps (negative ids)
 
 /**
@@ -99,7 +101,7 @@ export function workOutRound(levelId: number, seed: number, decisions: Record<st
   const rollers = new Set(tokens.filter((t) => t.character_id !== null && getCharacterPlayer(t.character_id) !== null).map((t) => t.id));
   let result: ReturnType<typeof resolveMovement>;
   try {
-    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }])), listHidden(levelId), getExposures(levelId)));
+    result = withSeed(seed, () => resolveMovement(movers, bystanders, movementBlockers(listStructures(levelId)), isGridlessLevel(levelId), fighters, blockingSegments(listStructures(levelId)), lasting, decisions, listAfflictions(levelId), rollers, listAuraPasses(levelId), litOn(levelId), roundTraps(levelId), listMapTriggers(levelId), listStructures(levelId), new Map(listAssists(levelId).map((a) => [a.tokenId, { by: a.byToken, name: a.byName }])), listHidden(levelId), getExposures(levelId), fogOn(levelId), smokeTrapsOn(levelId)));
   } catch (e) {
     if (e instanceof SaveNeeded) {
       // A player's character must save against a condition landing on it: they're asked to roll; the round waits.

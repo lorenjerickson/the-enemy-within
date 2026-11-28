@@ -25,8 +25,7 @@ export function saveExposures(levelId: number, all: Exposures): void {
   db.prepare("INSERT INTO level_exposure (level_id, data) VALUES (?, ?) ON CONFLICT (level_id) DO UPDATE SET data = excluded.data").run(levelId, JSON.stringify(data));
 }
 
-/** How far anyone sees in fog (feet): fog map effects are Obscured (the areas design, Q7). */
-export const FOG_SIGHT_FT = 15;
+export { FOG_SIGHT_FT } from "@/lib/aoe"; // how far anyone sees into fog
 
 /** Whether a spot (grid units, a token's centre) is in fog: a placed fog effect's oval, or fog over the whole map; switched on; or an active hazard that obscures sight (smoke). */
 export const inFog = (levelId: number, p: { x: number; y: number }): boolean => fogOn(levelId)(p);

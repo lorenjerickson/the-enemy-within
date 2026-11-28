@@ -96,6 +96,9 @@ export function strayFire(areas: LastingArea[], from: Point, range: number): num
 /** Whether players see a lasting area (hidden ones once found; GM-only ones never). */
 export const playersSee = (l: LastingArea) => !l.off && ((l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found));
 
+/** How far anyone sees into fog (feet): fog map effects, and hazards that obscure sight (the areas design, Q7). */
+export const FOG_SIGHT_FT = 15;
+
 /** A lasting area that lasts until the GM removes it: its end, far off in game time. */
 export const UNTIL_REMOVED = 1e9;
 
