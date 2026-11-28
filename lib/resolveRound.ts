@@ -1,5 +1,5 @@
 import type { AreaHit, AttackFx, Fx } from "@/lib/vfx";
-import { NO_SAVE_DC, caughtBy, caughtFire, describeArea, isFire, placeArea, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
+import { NO_SAVE_DC, caughtBy, caughtFire, describeArea, fireLandsAt, isFire, placeArea, strayFire, type AreaAt, type AreaFires, type LastingArea } from "@/lib/aoe";
 import { rollDice, usingDice } from "@/lib/dice";
 import { critImmune, describeStatus, type Status } from "@/lib/status";
 /** "critical " (or a critical against someone immune to them: a normal hit), for the log. */
@@ -751,6 +751,14 @@ export function resolveMovement(
   const chaseOver = new Set<number>();
   const close = (a: Pos, b: Pos) => (gridless ? Math.hypot(a.col - b.col, a.row - b.row) <= 1.05 : Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) <= 1);
   const dist = (a: Pos, b: Pos) => Math.hypot(a.col - b.col, a.row - b.row);
+  // Fire thrown or shot at someone (a torch, a lit arrow) lands where they stand, hit or plain miss, setting flammable areas
+  // there burning; a ranged one gone wild (a natural 1) lights one within its range half the time, wherever it was aimed.
+  const fireLands = (by: number, step: Extract<PlanStep, { kind: "action" }>, target: number, fumble: boolean | undefined, sec: number, say: (s: string) => void) => {
+    if (step.use?.damageType !== "fire") return;
+    const range = rangeOf(step, movers.find((x) => x.tokenId === by)) ?? 1, from = pos.get(by), at = where(target);
+    const ids = fumble ? (range > 1 && from ? strayFire(lasting, { x: from.col + 0.5, y: from.row + 0.5 }, range) : []) : at ? fireLandsAt(lasting, { x: at.col + 0.5, y: at.row + 0.5 }) : [];
+    for (const id of ids) if (!ignited.includes(id)) { ignited.push(id); say(`${lasting.find((l) => l.id === id)!.name} catches fire${fumble ? ` from a stray ${step.use.name}` : ""}!`); }
+  };
   const budget = new Map(order.map((m) => [m.tokenId, 0])); // squares (or units) of chase movement banked
   /**
    * One second of a planned move that has to leave its line: around a body lying in the way, or back onto its route
@@ -1264,6 +1272,7 @@ export function resolveMovement(
           const look = (rangeOf(step, m) ?? 1) > 1 ? "arrow" : "slash";
           // A natural 1 always misses; a critical always hits (the damage dice twice, unless they're immune to criticals).
           const crit = !!a.crit && !critImmune(them.statuses);
+          fireLands(m.tokenId, step, id, a.fumble, sec, say);
           if (a.fumble || (!a.crit && a.total < d.total)) {
             say(`${use.name} misses ${nameOf(id)}: ${a.total} (${a.text}) vs defense ${d.total}${a.fumble ? " (a natural 1)" : ""}.`);
             story.push({ sec, k: "attack", who: m.tokenId, target: id, with: use.name, outcome: "miss" });
@@ -1373,6 +1382,7 @@ export function resolveMovement(
         const shown = (outcome: AttackFx["outcome"]) => fx.push({ look, from: m.tokenId, to: target.id, outcome });
         const crit = !!a.crit && !critImmune(them.statuses), misses = a.fumble || (!a.crit && a.total < d.total); // a natural 1 misses; a critical hits
         if (misses) shown("miss");
+        fireLands(m.tokenId, step, target.id, a.fumble, sec, say);
         const dodging = (them.statuses ?? []).some((s) => s.source === "Dodge"); // said, so a Dodge can be seen to count
         const dodgeNote = dodging ? ` (${target.name} is dodging: disadvantage)` : "";
         if (misses) say(`${m.name} attacks ${target.name}${how}: ${a.total} (${a.text}) vs defense ${d.total} (${d.text}): miss${a.fumble ? " (a natural 1)" : ""}${dodgeNote}.`);

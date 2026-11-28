@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { act, condition, fighter, gear, mover, resolve, wall } from "./harness";
+import { act, attack, condition, fighter, gear, mover, resolve, wall } from "./harness";
+import { withSeed } from "@/lib/dice";
 import { placeArea, type LastingArea } from "@/lib/aoe";
 import { SaveNeeded } from "@/lib/resolveRound";
 
@@ -153,6 +154,22 @@ test("fire reaching a flammable area sets it alight: a fire area attack landing 
   assert.deepEqual(r2.ignited, [7]);
   const cold = resolve([mover(1, { col: 0, row: 0 }, [act("attack", { use: fireball({ damageType: "cold" }), aim: aimAt(5, 5) })])], { 1: fighter() }, { lasting: [oil] });
   assert.deepEqual(cold.ignited, [], "cold doesn't light it");
+});
+
+test("fire at someone (a lit arrow) lights what they stand in, hit or plain miss; a natural 1 goes astray, lighting one in range half the time", () => {
+  const oil = lastingAt(5, 5, { id: 7, name: "Oil slick", damage: null, flammable: true });
+  const arrow = gear({ name: "Lit arrow", range: 12, damageType: "fire" });
+  const shoot = (o: { hit?: number; nat?: number }, at = 5, use = arrow) =>
+    resolve([mover(1, { col: 0, row: 0 }, [attack(2, { use })]), mover(2, { col: at, row: 5 })], { 1: fighter(o), 2: fighter({ def: 12 }) }, { lasting: [oil] });
+  const hit = shoot({ hit: 18 });
+  assert.deepEqual(hit.ignited, [7]);
+  assert.match(hit.text, /Oil slick catches fire!/);
+  assert.deepEqual(shoot({ hit: 3 }).ignited, [7], "a plain miss is close enough");
+  assert.deepEqual(shoot({ hit: 18 }, 9).ignited, [], "not standing in it");
+  assert.deepEqual(shoot({ hit: 18 }, 5, gear({ name: "Arrow", range: 12 })).ignited, [], "no fire");
+  const wild = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((seed) => withSeed(seed, () => shoot({ nat: 1, hit: 1 }, 9).ignited.length));
+  assert.ok(wild.includes(0) && wild.includes(1), `a natural 1: sometimes, wherever it was aimed (${wild})`);
+  assert.match(withSeed(wild.indexOf(1) + 1, () => shoot({ nat: 1, hit: 1 }, 9)).text, /Oil slick catches fire from a stray Lit arrow!/);
 });
 
 test("an area with no damage of its own (a smoke bomb) hurts no one: not the user's weapon damage", () => {

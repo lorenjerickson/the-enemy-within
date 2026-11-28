@@ -6,6 +6,7 @@ import type { Attribute } from "@/lib/attributes";
 import type { EffectKind } from "@/lib/effects";
 import type { Condition } from "@/lib/conditions";
 import { FEET_PER_SQUARE, crosses } from "@/lib/movement";
+import { rollDice } from "@/lib/dice";
 import type { Point, Segment } from "@/lib/visibility";
 
 export const AREA_SHAPES = ["circle", "cone", "line"] as const;
@@ -81,6 +82,16 @@ export const isFire = (l: Pick<LastingArea, "damageType" | "look">) => l.damageT
 
 /** Flammable areas a fire touches (by their ids). */
 export const caughtFire = (areas: LastingArea[], fire: AreaAt) => areas.filter((l) => l.flammable && areasOverlap(l.area, fire)).map((l) => l.id);
+
+/** Flammable areas fire lands in at a spot (a thrown torch, a lit arrow: where its target stands, hit or plain miss). */
+export const fireLandsAt = (areas: LastingArea[], p: Point) => areas.filter((l) => l.flammable && inArea(l.area, p)).map((l) => l.id);
+
+/** A fire shot gone wild (a natural 1): half the time it lights one flammable area within its range (squares), picked at random. */
+export function strayFire(areas: LastingArea[], from: Point, range: number): number[] {
+  const near = areas.filter((l) => l.flammable && [l.area.origin, ...areaPolygon(l.area)].some((p) => Math.hypot(p.x - from.x, p.y - from.y) <= range + 0.5));
+  if (!near.length || rollDice("1d2") !== 1) return [];
+  return [near[rollDice(`1d${near.length}`) - 1].id];
+}
 
 /** Whether players see a lasting area (hidden ones once found; GM-only ones never). */
 export const playersSee = (l: LastingArea) => !l.off && ((l.visibility ?? "shown") === "shown" || (l.visibility === "hidden" && !!l.found));
