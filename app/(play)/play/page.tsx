@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { timed } from "@/lib/timing";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/auth";
@@ -74,6 +75,10 @@ import { heardBy, type Hazard } from "@/lib/hazards";
 
 /** The running session, full screen: the GM's tools dock on the left, a player's panel on the right. */
 export default async function Play() {
+  return timed("page", "play", playPage);
+}
+
+async function playPage() {
   await connection();
   const user = await requireUser();
   const session = getOpenGameSession();

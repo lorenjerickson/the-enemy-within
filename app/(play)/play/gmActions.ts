@@ -1,4 +1,6 @@
 "use server";
+
+import { timed } from "@/lib/timing";
 import { agreeImprovisation, dropImprovisation, getImprovisation, goAheadImprovisation, setImprovisePlaced, type Agreed } from "@/lib/improvise";
 import { checkScript } from "@/lib/script";
 import { playImprovisation, startImprovisation } from "./improvising";
@@ -39,6 +41,9 @@ import { retune } from "@/lib/effectCopy";
  * creatures roll theirs straight away. Movement turns restricted while it runs.
  */
 export async function rollInitiative() {
+  return timed("server", "rollInitiative", () => rollInitiativeNow());
+}
+async function rollInitiativeNow() {
   await requireGm();
   const levelId = getGmLevelId();
   if (levelId === undefined) return;
@@ -75,6 +80,9 @@ export async function endEncounter() {
 
 /** The GM plans a creature's round (same rules as players). */
 export async function gmPlanStep(tokenId: number, step: StepRequest): Promise<{ error?: string }> {
+  return timed("server", "gmPlanStep", () => gmPlanStepNow(tokenId, step));
+}
+async function gmPlanStepNow(tokenId: number, step: StepRequest): Promise<{ error?: string }> {
   await requireGm();
   const p = tokenPlanner(Number(tokenId));
   if (!p) return { error: "Not in an encounter" };
@@ -93,6 +101,9 @@ export async function gmRemoveStep(tokenId: number, index: number): Promise<{ er
 }
 
 export async function gmSetReady(tokenId: number, ready: boolean) {
+  return timed("server", "gmSetReady", () => gmSetReadyNow(tokenId, ready));
+}
+async function gmSetReadyNow(tokenId: number, ready: boolean) {
   await requireGm();
   const p = tokenPlanner(Number(tokenId));
   if (p) setReady(p, ready);
@@ -104,6 +115,9 @@ export async function gmSetReady(tokenId: number, ready: boolean) {
  * ties), tokens end where it leaves them, and the next round begins with empty plans.
  */
 export async function resolveRound() {
+  return timed("server", "resolveRound", () => resolveRoundNow());
+}
+async function resolveRoundNow() {
   await requireGm();
   const levelId = getGmLevelId();
   if (levelId === undefined || !getEncounter(levelId) || getPendingRound(levelId)) return;
@@ -113,6 +127,9 @@ export async function resolveRound() {
 
 /** The GM settles a contested move (`winner` gets the spot): the round is worked out again with that call. */
 export async function decideContest(winner: number) {
+  return timed("server", "decideContest", () => decideContestNow(winner));
+}
+async function decideContestNow(winner: number) {
   await requireGm();
   const levelId = getGmLevelId();
   const pending = levelId === undefined ? null : getPendingRound(levelId);
@@ -154,6 +171,9 @@ export async function gmRollOffFor(tokenId: number) {
 
 /** The GM loads a location's level on their map (null = back to the party's). */
 export async function loadLevel(levelId: number | null) {
+  return timed("server", "loadLevel", () => loadLevelNow(levelId));
+}
+async function loadLevelNow(levelId: number | null) {
   await requireGm();
   setGmViewLevel(levelId === null ? null : Number(levelId));
   revalidatePath("/play");
@@ -278,6 +298,9 @@ export async function gmDropImprovisation(id: number): Promise<void> {
 
 /** The GM settles an improvisation: how it plays out, what it costs, the roll; checked first (scripts must parse). */
 export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<{ error?: string }> {
+  return timed("server", "gmAgreeImprovisation", () => gmAgreeImprovisationNow(id, agreed));
+}
+async function gmAgreeImprovisationNow(id: number, agreed: Agreed): Promise<{ error?: string }> {
   await requireGm();
   if (!getImprovisation(Number(id))) return { error: "It's gone" };
   for (const o of [agreed.success, agreed.failure]) {
