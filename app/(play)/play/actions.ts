@@ -3,7 +3,7 @@
 import { landEffects, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
 import type { Condition } from "@/lib/conditions";
-import { skillCheckFor, speedFps } from "@/lib/creatureChanges";
+import { blockersFor, skillCheckFor, speedFps } from "@/lib/creatureChanges";
 import { setTokenTarget } from "@/lib/db/tokens";
 import { seenFrom } from "@/lib/sight";
 import { ROUND_SECONDS, planEnd, timeline } from "@/lib/roundPlan";
@@ -47,7 +47,7 @@ import { REACH, distanceToDoor } from "./reach";
 import { catchInArea } from "./areas";
 import { agreedImprovisation, askImprovise, dropImprovisation, openImprovisation, seenImprovisationResult, setImprovisePlaced, templateOf } from "@/lib/improvise";
 import { improvisationRolled } from "./improvising";
-import { getLastingArea, listHazards, moveBlockers, listLastingAreas, setLastingAreaFound } from "@/lib/db/areas";
+import { getLastingArea, listHazards, listLastingAreas, setLastingAreaFound } from "@/lib/db/areas";
 import { inArea, type LastingArea } from "@/lib/aoe";
 
 /** Whether a Search from `p` reaches an area: within 10 ft of it (inside it, or near its middle or edge). */
@@ -157,7 +157,7 @@ export async function hideAt(col: number, row: number): Promise<{ error?: string
   const places = hidingPlaces(me.level_id, me.token_id, { col: me.col, row: me.row }, speedFps(me.token_id, me.movement) * ROUND_SECONDS);
   const goal = places.spots.find((c) => c.col === Math.round(Number(col)) && c.row === Math.round(Number(row)));
   if (!goal) return { error: "That isn't a blind spot you can reach" };
-  const squares = squareRoute({ col: Math.round(me.col), row: Math.round(me.row) }, goal, moveBlockers(me.level_id), () => true);
+  const squares = squareRoute({ col: Math.round(me.col), row: Math.round(me.row) }, goal, blockersFor(me.level_id, me.token_id), () => true);
   if (!squares) return { error: "You can't get there" };
   clearStandingOrder(me.token_id);
   const w = walkRoute(me.level_id, me.token_id, squares.map((s) => ({ x: s.col, y: s.row })));
@@ -360,7 +360,7 @@ export async function moveMyToken(col: number, row: number): Promise<{ error?: s
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (!getEncounter(me.level_id)) return { error: "Out of an encounter, movement is free" };
   const left = Math.max(0, speedFps(me.token_id, me.movement) * ROUND_SECONDS - me.moved); // feet left this round
-  const walls = moveBlockers(me.level_id);
+  const walls = blockersFor(me.level_id, me.token_id);
   let feet: number;
   if (isGridlessLevel(me.level_id)) {
     const from = { x: me.col + 0.5, y: me.row + 0.5 }, to = { x: Number(col) + 0.5, y: Number(row) + 0.5 };
@@ -395,7 +395,7 @@ export async function freeMove(gx: number, gy: number, run = false): Promise<{ r
   if (isPortraitLevel(me.level_id)) return { error: "Not on side-on maps yet" };
   if (getEncounter(me.level_id)) return { error: "In an encounter, movement is limited" };
   const sight = blockingSegments(listStructures(me.level_id)); // what they could see past
-  const walls = moveBlockers(me.level_id); // what they can walk past (windows block, Impassable hazards)
+  const walls = blockersFor(me.level_id, me.token_id); // what they can walk past (windows block, Impassable hazards)
   const here = { x: me.col + 0.5, y: me.row + 0.5 };
   // What they've seen: from where they stand now and everywhere they've stood on this level. Each spot's view is
   // worked out only when needed, nearest first, and kept (a route asks about many points; most are seen from nearby).

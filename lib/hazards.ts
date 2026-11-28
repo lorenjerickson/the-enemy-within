@@ -40,12 +40,12 @@ export interface HazardSettings {
 export type Hazard = LastingArea & HazardSettings;
 
 /** What a place does to moving through it (the areas design, 2.4), and what each says in the interview. */
-export const TRAITS = [["frozen", "Frozen (ice): moving in it costs double"], ["impassable", "Impassable (a chasm, rubble): routes go around it, like a wall that doesn't block sight"]] as const;
+export const TRAITS = [["frozen", "Frozen (ice): moving in it costs double"], ["impassable", "Impassable (a chasm, rubble): routes go around it, like a wall that doesn't block sight"], ["deep", "Deep (deep water): moving in it uses swimming speed; with none, no moving in it"]] as const;
 export type Trait = (typeof TRAITS)[number][0];
 
-/** The outlines of active Impassable hazards, as walls for moving (not for sight). */
-export const impassableEdges = (hazards: Hazard[], now: number): Segment[] =>
-  hazards.filter((h) => (h.traits ?? []).includes("impassable") && isActive(h, now)).flatMap((h) => {
+/** The outlines of active hazards with a trait (Impassable; Deep, for those who can't swim), as walls for moving (not for sight). */
+export const impassableEdges = (hazards: Hazard[], now: number, trait: Trait = "impassable"): Segment[] =>
+  hazards.filter((h) => (h.traits ?? []).includes(trait) && isActive(h, now)).flatMap((h) => {
     const pts = areaPolygon(h.area);
     return pts.map((a, i) => ({ a, b: pts[(i + 1) % pts.length] }));
   });

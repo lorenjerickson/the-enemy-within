@@ -30,3 +30,22 @@ test("Impassable (a chasm): moves go around it, as round a wall; not while it's 
   assert.equal(reach().get(squareKey(5, 0))?.steps, 4, "off: straight across");
   assert.equal(reach().has(squareKey(3, 0)), true);
 });
+
+test("Deep (deep water): moving in it uses swimming speed; those who can't swim can't move in it or into it", async () => {
+  const { blockersFor } = await import("@/lib/creatureChanges");
+  const { db } = await import("@/lib/db/connection");
+  const { reachableSquares, squareKey } = await import("@/lib/movement");
+  const lv = level();
+  addLastingArea(lv, { name: "Harbour", look: "rain", area: areaFromDrawn({ shape: "rect", x: 3, y: -2, w: 4, h: 5 }), drawn: true, ends: UNTIL_REMOVED, damage: null, dc: 99, save: "agility", half: false, fires: [], traits: ["deep"] } as Omit<Hazard, "id">);
+  const fish = character("Fin"), rock = character("Rocky");
+  db.prepare("UPDATE characters SET movement = ? WHERE id = ?").run(JSON.stringify({ walking: 30, swimming: 15 }), fish);
+  db.prepare("UPDATE characters SET movement = ? WHERE id = ?").run(JSON.stringify({ walking: 30, swimming: 0 }), rock);
+  const f = placeCharacterToken(lv, fish, 1, 0), r = placeCharacterToken(lv, rock, 1, 1);
+  const into = (tok: number, from: { col: number; row: number }) => reachableSquares(from, 3, blockersFor(lv, tok)).has(squareKey(4, 0));
+  assert.equal(into(f, { col: 1, row: 0 }), true, "a swimmer wades in");
+  assert.equal(into(r, { col: 1, row: 1 }), false, "no swimming speed: not into it");
+  moveToken(f, 4, 0);
+  moveToken(r, 4, 1);
+  assert.equal(speedFps(f, { walking: 30, swimming: 15 }), 2.5, "in it: swimming speed");
+  assert.equal(speedFps(r, { walking: 30, swimming: 0 }), 0, "can't swim: no moving in it");
+});
