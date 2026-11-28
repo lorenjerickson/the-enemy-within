@@ -1,5 +1,29 @@
 # Backlog
 
+## Clothing and armor tiles — complete 2026-11-27
+
+Generate 20 tiles: four each for head, chest, hands, legs and feet, ranging visually from everyday clothing through reinforced/padded/mail/plate equipment. Exact selected inventory and prompts: `data/equipment-tiles/manifest.json`. Same weathered palette, strict overhead flat lay, genuine transparency, separate 256 × 256 PNGs with high-resolution originals. Paired equipment shares one tile; no wearers/mannequins. Qualitative protection categories only, no game statistics or real-world protection claims. No app/database changes. Deliver assets, preview and ZIP.
+
+Bound: 20 sequential built-in image calls plus at most 4 targeted corrections, no delegates; reuse established export/checks. Stop at completion, exhausted bound, service block or more than five percentage points of observed account usage increase. Weekly usage baseline 3% before generation on 2026-11-27; check between calls. Shared account usage is not request attribution; separate image allowance unavailable. Preserve other working-tree edits.
+
+Delivered 20 transparent 256 × 256 tiles under `data/equipment-tiles/tiles/`, high-resolution originals in `originals/`, slot-organized preview `preview.png`, prompts/provenance `manifest.json`, checks/hashes `verification.json`, and package `data/equipment-tiles.zip`. Verified four assets per slot, image decoding, dimensions and alpha transparency; visually inspected isolated equipment, overhead/flat-lay orientation and material differentiation at tile size. Used 20 sequential built-in image calls, no corrections or delegates. Weekly account usage stayed at 3% at reported precision from approximately 16:52 to 17:04 PST on 2026-11-27; this does not measure exact request/image cost. No remaining asset-delivery work; no game-stat assignment or app integration performed.
+
+## Placeable tile artwork set 2 (21–40) — complete 2026-11-27
+
+Approved: stool, bench, writing desk, footlocker, wicker basket, wooden bucket, clay urn, candle cluster, bedroll, ladder, pickaxe, shovel, hammer, crowbar, chain coil, key ring, coin pouch, scroll bundle, pressure plate, coffin. Same contracts as set 1: strictly overhead, matching weathered palette, separate transparent 256 × 256 PNGs, untouched high-resolution originals, preserved aspect ratio. Output `data/placeable-tiles-02/`, manifest and preview; no app/database changes. Reuse set 1 export and checks.
+
+Bound: 20 sequential built-in image calls plus at most 4 targeted corrections, no delegates. Stop on completion, exhausted bound, service block or usage increase above five percentage points. Baseline weekly account-wide usage: 2% before generation on 2026-11-27; check between calls. Account-wide movement is shared consumption, not request attribution; separate image allowance unavailable. Existing unrelated working-tree edits preserved.
+
+Delivered all 20 tiles under `data/placeable-tiles-02/tiles/`, untouched selected high-resolution originals under `originals/`, and complete package `data/placeable-tiles-02.zip`. Used 22 sequential calls: 20 initial plus ladder-framing and bedroll-viewpoint corrections. Superseded originals retained in `rejected/`. Verified dimensions, decoded pixels and alpha for every 256 × 256 tile; visually inspected overhead composition and contact sheet at actual tile size. Prompts/provenance in `manifest.json`, checks/hashes in `verification.json`, preview in `preview.png`. Weekly account usage remained 2% from approximately 16:21 to 16:34 PST, 2026-11-27, at reported precision; this is shared account telemetry, not exact request/image cost. No remaining work in this asset-delivery scope.
+
+## Placeable tile artwork — complete 2026-11-27
+
+Generate the approved 20 objects (chest, wardrobe, trapdoor, torch, lever, net, crate, barrel, sack, rope coil, lantern, brazier, table, chair, bed, rug, book, backpack, floor grate, bear trap). Each must be strictly overhead, transparent, separately saved at 256 × 256 with its higher-resolution original preserved. Match existing painted, weathered earth-toned artwork. Deliver under `data/placeable-tiles/`; no application/database integration requested.
+
+Bound: 20 sequential built-in image generation calls plus at most 4 targeted correction calls; no delegates. Stop at completion, exhausted bound, service block, or usage stop threshold. Codex weekly account-wide baseline: 1% used on 2026-11-27 before generation; check before/after calls, stop above a five-percentage-point increase. Shared account usage is not request attribution; separate image-service allowance is not exposed. Preserve prompts, source paths and validation in the asset manifest. Verify alpha, dimensions and overhead composition. Existing `docs/productization.md` changes are unrelated.
+
+Delivered all 20 individual transparent 256 × 256 PNGs in `data/placeable-tiles/tiles/`, with unmodified high-resolution originals in `originals/`. Used 22 sequential built-in calls (20 initial, 2 viewpoint corrections for chair and bed), no delegates. Superseded originals retained in `rejected/`. Verified every tile's dimensions, alpha transparency and decoded pixels, reviewed overhead composition and the full contact sheet at tile size. Aspect ratios preserved with transparent padding. Prompts and provenance: `manifest.json`; checks and hashes: `verification.json`; preview: `preview.png`; package: `data/placeable-tiles.zip`. No remaining work in this asset-delivery scope. Account-wide weekly usage moved from 1% at about 16:03 PST to 2% at about 16:19 PST on 2026-11-27 (one percentage point, not proven task attribution; separate image usage unavailable).
+
 From the code review on 2026-11-06. Roughly in the order to tackle them.
 
 ## ~~Item artwork~~ — closed 2026-11-26 (Loren supplied art for the eight rejected items; every item now has art)
