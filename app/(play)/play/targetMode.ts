@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import type { PlayerActionId } from "@/lib/playerActions";
 import type { AreaShape } from "@/lib/aoe";
-import type { Targeting } from "@/lib/sides";
+import { picksSeveral, type Targeting } from "@/lib/sides";
 
 // Picking a target for a planned action by clicking a token on the map. `tokenId` is set when the GM plans for one
 // of their creatures (null = the player's own character). The panel sets it; the map uses it and clears it.
@@ -12,6 +12,9 @@ import type { Targeting } from "@/lib/sides";
 export type TargetMode = { action: PlayerActionId; tokenId: number | null; use?: number; label?: string; area?: { shape: AreaShape; ft: number; range: number }; seconds?: number; canSelf?: boolean; targeting?: Targeting; picks?: number[]; aimed?: { col: number; row: number }; pickFrom?: number[]; range?: number; visible?: number[]; now?: boolean } | null; // now: out of an encounter, it happens on the click (Assist) // visible: who the one acting could see (only they can be picked) // range: how far it reaches (squares), shown on the map
 // canSelf: the action can be used on themselves too. targeting: who and how many it's for; picks: the targets chosen so far
 // (several); aimed + pickFrom: an area already aimed, with more of them in it than it may affect, so they pick which. // use: a gear action (Aimed shot…)
+/** Whether an empty spot can be clicked instead of someone: a ranged attack aimed at one target (not an area, not several, not now). */
+export const aimsAtSpot = (m: NonNullable<TargetMode>) => m.action === "attack" && (m.range ?? 1) > 1 && !m.area && !m.now && !m.aimed && !picksSeveral(m.targeting);
+
 let mode: TargetMode = null;
 const listeners = new Set<() => void>();
 

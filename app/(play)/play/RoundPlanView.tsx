@@ -28,7 +28,7 @@ export default function RoundPlanView({ plan, pending, label, onRemove, onReady,
 }) {
   const mustRoll = !!dice && dice.count > 0 && dice.rolled !== 2;
   const locked = plan.ready ? "Ready: undo that to change the plan" : dice?.rolled ? "The dice are rolled: the plan is set" : null;
-  const name = (s: TimedStep) => (s.kind === "move" ? `${s.run ? "Dash" : "Move"} ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${s.put ? ` ${s.put.item.name} → ${s.put.into.name}` : ""}${s.door ? ` ${s.door.name}` : ""}${s.thing ? ` ${s.thing.name}` : ""}${(s.picks?.length ?? 0) > 1 ? ` ${s.picks!.map((x) => x.name).join(", ")}` : s.target ? ` ${s.target.name}` : s.aim ? " (aimed)" : ""}`);
+  const name = (s: TimedStep) => (s.kind === "move" ? `${s.run ? "Dash" : "Move"} ${s.feet} ft` : `${s.use?.name ?? label(s.action)}${s.swap ? ` ${s.swap.item.name}` : ""}${s.put ? ` ${s.put.item.name} → ${s.put.into.name}` : ""}${s.door ? ` ${s.door.name}` : ""}${s.thing ? ` ${s.thing.name}` : ""}${(s.picks?.length ?? 0) > 1 ? ` ${s.picks!.map((x) => x.name).join(", ")}` : s.target ? ` ${s.target.name}` : s.aim ? (s.use?.area ? " (aimed)" : ` → ${Math.floor(s.aim.col)}, ${Math.floor(s.aim.row)}`) : ""}`);
   return (
     <div className="space-y-2 rounded-box bg-base-100/60 p-3" data-round-plan>
       <div className="flex items-baseline gap-2">

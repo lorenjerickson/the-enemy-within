@@ -27,7 +27,7 @@ import { setGmPlanToken, useGmPlanToken } from "../../../../(play)/play/gmPlanne
 import { gmPlanStep } from "../../../../(play)/play/gmActions";
 import { setScrub, useScrub } from "../../../../(play)/play/scrub";
 import { areaPolygon, caughtBy, placeArea, type LastingArea } from "@/lib/aoe";
-import { setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
+import { aimsAtSpot, setTargetMode, useTargetMode } from "../../../../(play)/play/targetMode";
 import { setSheetToken } from "../../../../(play)/play/sheetToken";
 import { actAs } from "../../../sessions/actions";
 import { allegianceOf, fits, maxPicks, picksSeveral, relation } from "@/lib/sides";
@@ -909,8 +909,18 @@ export default function MapView({
     if (targetMode && e.button === 0) {
       const { gx, gy } = gridAt(e);
       const hit = targetCandidates.find((t) => gx >= t.col && gx <= t.col + 1 && gy >= t.row && gy <= t.row + 1);
-      if (!hit) return;
       const m = targetMode;
+      if (!hit) {
+        // A ranged attack at no one: aimed at that spot instead (a torch at the oil). The server checks range and sight.
+        if (!aimsAtSpot(m)) return;
+        setTargetMode(null);
+        startTransition(async () => {
+          const step = { kind: "action" as const, action: m.action, aim: { col: Math.floor(gx) + 0.5, row: Math.floor(gy) + 0.5 }, ...(m.use !== undefined ? { use: m.use } : {}) };
+          const r = m.tokenId !== null ? await gmPlanStep(m.tokenId, step) : await planStep(step);
+          if (r.error) setControlResult({ label: "Plan", ok: false, text: r.error });
+        });
+        return;
+      }
       // Picking several (or which of those in an aimed area): a click adds or removes one; Done in the panel plans it.
       if ((picksSeveral(m.targeting) && !m.area) || m.aimed) {
         const picks = m.picks ?? [];
@@ -1568,7 +1578,7 @@ export default function MapView({
                 className="absolute top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-box bg-warning px-3 py-2 text-sm text-warning-content shadow"
                 style={{ left: `calc(50% + ${(dockSide === "left" ? dockWidth : dockSide === "right" ? -dockWidth : 0) / 2}px)` }}
               >
-                {targetMode.area ? `${targetMode.label}: click where to aim it` : targetMode.label ? `${targetMode.label}: click the target` : `Click who to ${targetMode.action}`}
+                {targetMode.area ? `${targetMode.label}: click where to aim it` : targetMode.label ? `${targetMode.label}: click the target${aimsAtSpot(targetMode) ? ", or a spot" : ""}` : `Click who to ${targetMode.action}${aimsAtSpot(targetMode) ? ", or a spot to aim at" : ""}`}
                 <button type="button" className="btn btn-xs" onClick={() => setTargetMode(null)}>Cancel</button>
               </div>
             )}
