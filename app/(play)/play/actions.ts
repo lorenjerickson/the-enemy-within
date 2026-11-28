@@ -339,6 +339,9 @@ export async function closeRoll(requestId: number): Promise<void> {
 
 /** Points at a spot on the map for everyone in the session. */
 export async function sendPing(levelId: number, x: number, y: number): Promise<void> {
+  return timedAction("sendPing", () => sendPingNow(levelId, x, y));
+}
+async function sendPingNow(levelId: number, x: number, y: number): Promise<void> {
   const user = await requireUser();
   if (!getOpenGameSession()?.began_at || user.watching) return;
   addPing(Number(levelId), Number(x), Number(y), user);
@@ -346,6 +349,9 @@ export async function sendPing(levelId: number, x: number, y: number): Promise<v
 
 /** Recent pings on this level after `afterId` (the caller's own are marked, as it has already shown them). */
 export async function pingsSince(levelId: number, afterId: number): Promise<(Ping & { mine: boolean })[]> {
+  return timedAction("pingsSince", () => pingsSinceNow(levelId, afterId));
+}
+async function pingsSinceNow(levelId: number, afterId: number): Promise<(Ping & { mine: boolean })[]> {
   const user = await requireUser();
   return listPings(Number(levelId), Number(afterId)).map((p) => ({ ...p, mine: p.user_id === user.id }));
 }
@@ -353,12 +359,18 @@ export async function pingsSince(levelId: number, afterId: number): Promise<(Pin
 /** Walks out of encounters on a level since the last one this map saw (polled each second, with pings): `mine` ones
  * this screen already played. */
 export async function walksSince(levelId: number, afterId: number) {
+  return timedAction("walksSince", () => walksSinceNow(levelId, afterId));
+}
+async function walksSinceNow(levelId: number, afterId: number) {
   const user = await requireUser();
   return listTokenWalks(Number(levelId), Number(afterId)).map((w) => ({ id: w.id, tokenId: w.token_id, route: w.route, fps: w.fps, ...(w.times ? { times: w.times } : {}), mine: w.user_id === user.id }));
 }
 
 /** Effects scripts played on a level since the last one this map saw (polled each second, with pings). */
 export async function fxSince(levelId: number, afterId: number) {
+  return timedAction("fxSince", () => fxSinceNow(levelId, afterId));
+}
+async function fxSinceNow(levelId: number, afterId: number) {
   await requireUser();
   return listMapFx(Number(levelId), Number(afterId));
 }
@@ -562,6 +574,9 @@ export async function hidePlanOptions(): Promise<{ error?: string; seen?: boolea
 
 /** A screen's planning countdown reached 0: settle it now (the last player goes without a plan) rather than on the next refresh. */
 export async function checkPlanClock(): Promise<void> {
+  return timedAction("checkPlanClock", () => checkPlanClockNow());
+}
+async function checkPlanClockNow(): Promise<void> {
   const user = await requireUser();
   const levelId = user.role === "gm" ? getGmLevelId() : getPlayerToken(user.id)?.level_id;
   if (levelId !== undefined) planClock(levelId);

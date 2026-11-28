@@ -1,10 +1,15 @@
 "use server";
 
+import { timedAction } from "@/lib/timedAction";
+
 import { requireUser } from "@/lib/auth";
 import { getOpenGameSession, isRemovedFrom, listPresentPlayers, markPresent } from "@/lib/db/sessions";
 
 /** A player's lobby page checking in, so they show as present. */
 export async function checkIn() {
+  return timedAction("checkIn", () => checkInNow());
+}
+async function checkInNow() {
   const user = await requireUser();
   const session = getOpenGameSession();
   if (session && user.role === "player" && !user.playedBy) markPresent(session.id, user.id);
