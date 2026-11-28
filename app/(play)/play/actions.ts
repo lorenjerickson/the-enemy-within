@@ -1,6 +1,6 @@
 "use server";
 
-import { timed } from "@/lib/timing";
+import { timedAction } from "@/lib/timedAction";
 
 import { landEffects, recordConditionSave, recordRollOff } from "./workOutRound";
 import { gearActions, useUpItem } from "@/lib/combat";
@@ -70,7 +70,7 @@ async function acting(): Promise<{ user: User; me: ActorToken | undefined; error
 
 /** A player asks to pick a locked door next to their character: they're prompted to roll sleight of hand against its DC. */
 export async function pickLock(doorId: number): Promise<{ error?: string; told?: string }> {
-  return timed("server", "pickLock", () => pickLockNow(doorId));
+  return timedAction("pickLock", () => pickLockNow(doorId));
 }
 async function pickLockNow(doorId: number): Promise<{ error?: string; told?: string }> {
   const { user, me, error } = await acting();
@@ -88,7 +88,7 @@ async function pickLockNow(doorId: number): Promise<{ error?: string; told?: str
 
 /** Interact, out of an encounter: the player opens or closes a door within reach (a locked one has to be picked first). */
 export async function interactDoor(doorId: number): Promise<{ error?: string }> {
-  return timed("server", "interactDoor", () => interactDoorNow(doorId));
+  return timedAction("interactDoor", () => interactDoorNow(doorId));
 }
 async function interactDoorNow(doorId: number): Promise<{ error?: string }> {
   const { user, me, error } = await acting();
@@ -195,7 +195,7 @@ function askStealth(playerId: number, me: ActorToken, disadvantage: boolean): st
 
 /** Search: the player is prompted for an Investigation check (DC 14); success reveals hidden things within 10 ft. */
 export async function search(): Promise<{ error?: string; told?: string }> {
-  return timed("server", "search", () => searchNow());
+  return timedAction("search", () => searchNow());
 }
 async function searchNow(): Promise<{ error?: string; told?: string }> {
   const { user, me, error } = await acting();
@@ -210,7 +210,7 @@ async function searchNow(): Promise<{ error?: string; told?: string }> {
 
 /** The player's dice have landed: check they fit the roll, score it, and settle what it was for. */
 export async function submitRoll(requestId: number, thrown: number[][]): Promise<{ error?: string }> {
-  return timed("server", "submitRoll", () => submitRollNow(requestId, thrown));
+  return timedAction("submitRoll", () => submitRollNow(requestId, thrown));
 }
 async function submitRollNow(requestId: number, thrown: number[][]): Promise<{ error?: string }> {
   const user = await requireUser();
@@ -368,7 +368,7 @@ export async function fxSince(levelId: number, afterId: number) {
  * reach (costing 5 ft per step on the shortest route), on gridless maps a point in a clear straight line.
  */
 export async function moveMyToken(col: number, row: number): Promise<{ error?: string }> {
-  return timed("server", "moveMyToken", () => moveMyTokenNow(col, row));
+  return timedAction("moveMyToken", () => moveMyTokenNow(col, row));
 }
 async function moveMyTokenNow(col: number, row: number): Promise<{ error?: string }> {
   const { user, me, error } = await acting();
@@ -404,7 +404,7 @@ async function moveMyTokenNow(col: number, row: number): Promise<{ error?: strin
  * happens (a trigger goes off). Returns the route walked (token corners, grid units) so the map can play it.
  */
 export async function freeMove(gx: number, gy: number, run = false): Promise<{ route?: Point[]; fps?: number; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[]; times: number[] }[] }> {
-  return timed("server", "freeMove", () => freeMoveNow(gx, gy, run));
+  return timedAction("freeMove", () => freeMoveNow(gx, gy, run));
 }
 async function freeMoveNow(gx: number, gy: number, run = false): Promise<{ route?: Point[]; fps?: number; stopped?: boolean; error?: string; trap?: string; link?: { id: number; to: string }; followers?: { tokenId: number; route: Point[]; times: number[] }[] }> {
   const { user, me, error } = await acting();
@@ -463,7 +463,7 @@ async function freeMoveNow(gx: number, gy: number, run = false): Promise<{ route
  * there that leads back, else the same spot); declining steps them back off it to `back` (where they came from).
  */
 export async function takeLevelLink(linkId: number, go: boolean, back: Point): Promise<{ error?: string }> {
-  return timed("server", "takeLevelLink", () => takeLevelLinkNow(linkId, go, back));
+  return timedAction("takeLevelLink", () => takeLevelLinkNow(linkId, go, back));
 }
 async function takeLevelLinkNow(linkId: number, go: boolean, back: Point): Promise<{ error?: string }> {
   const { user, me, error } = await acting();
@@ -518,7 +518,7 @@ export async function setStanding(mode: "follow" | "pursue" | "evade" | null, ta
  * the server) and a consumable is used up. Attacks and areas need an encounter.
  */
 export async function useItemNow(actionId: number, targetId?: number): Promise<{ error?: string; told?: string }> {
-  return timed("server", "useItemNow", () => useItemNowNow(actionId, targetId));
+  return timedAction("useItemNow", () => useItemNowNow(actionId, targetId));
 }
 async function useItemNowNow(actionId: number, targetId?: number): Promise<{ error?: string; told?: string }> {
   const { user, me, error } = await acting();
@@ -589,7 +589,7 @@ export async function selectTarget(tokenId: number | null): Promise<{ error?: st
 
 /** Round planning: add an action, or a move to a square (reachable from where the plan leaves them, in the time left). */
 export async function planStep(step: StepRequest): Promise<{ error?: string }> {
-  return timed("server", "planStep", () => planStepNow(step));
+  return timedAction("planStep", () => planStepNow(step));
 }
 async function planStepNow(step: StepRequest): Promise<{ error?: string }> {
   const p = await planner();
@@ -605,7 +605,7 @@ async function planStepNow(step: StepRequest): Promise<{ error?: string }> {
 /** Takes a step out of the player's plan (the ones after it move up). */
 /** A planned move's end dragged on the map: the move is that much shorter or longer (later steps kept, if they still fit). */
 export async function dragMoveEnd(index: number, col: number, row: number): Promise<{ error?: string }> {
-  return timed("server", "dragMoveEnd", () => dragMoveEndNow(index, col, row));
+  return timedAction("dragMoveEnd", () => dragMoveEndNow(index, col, row));
 }
 async function dragMoveEndNow(index: number, col: number, row: number): Promise<{ error?: string }> {
   const p = await planner();
@@ -615,7 +615,7 @@ async function dragMoveEndNow(index: number, col: number, row: number): Promise<
 }
 
 export async function removeStep(index: number): Promise<{ error?: string }> {
-  return timed("server", "removeStep", () => removeStepNow(index));
+  return timedAction("removeStep", () => removeStepNow(index));
 }
 async function removeStepNow(index: number): Promise<{ error?: string }> {
   const p = await planner();
@@ -625,7 +625,7 @@ async function removeStepNow(index: number): Promise<{ error?: string }> {
 }
 
 export async function setPlanReady(ready: boolean): Promise<{ error?: string }> {
-  return timed("server", "setPlanReady", () => setPlanReadyNow(ready));
+  return timedAction("setPlanReady", () => setPlanReadyNow(ready));
 }
 async function setPlanReadyNow(ready: boolean): Promise<{ error?: string }> {
   const p = await planner();
@@ -643,7 +643,7 @@ export async function rollPlan(rolling: boolean): Promise<void> {
 
 /** The plan's dice have landed (per roll, per part): checked and kept on the plan, which is then set. */
 export async function submitPlanDice(thrown: number[][][]): Promise<{ error?: string }> {
-  return timed("server", "submitPlanDice", () => submitPlanDiceNow(thrown));
+  return timedAction("submitPlanDice", () => submitPlanDiceNow(thrown));
 }
 async function submitPlanDiceNow(thrown: number[][][]): Promise<{ error?: string }> {
   const p = await planner();
@@ -654,7 +654,7 @@ async function submitPlanDiceNow(thrown: number[][][]): Promise<{ error?: string
 
 /** Improvise: the acting token asks the GM to do something the rules don't cover (a line of intent); the GM is told. */
 export async function improvise(intent: string): Promise<{ error?: string }> {
-  return timed("server", "improvise", () => improviseNow(intent));
+  return timedAction("improvise", () => improviseNow(intent));
 }
 async function improviseNow(intent: string): Promise<{ error?: string }> {
   const { me, error } = await acting();

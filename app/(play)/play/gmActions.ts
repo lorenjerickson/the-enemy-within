@@ -1,6 +1,6 @@
 "use server";
 
-import { timed } from "@/lib/timing";
+import { timedAction } from "@/lib/timedAction";
 import { agreeImprovisation, dropImprovisation, getImprovisation, goAheadImprovisation, setImprovisePlaced, type Agreed } from "@/lib/improvise";
 import { checkScript } from "@/lib/script";
 import { playImprovisation, startImprovisation } from "./improvising";
@@ -41,7 +41,7 @@ import { retune } from "@/lib/effectCopy";
  * creatures roll theirs straight away. Movement turns restricted while it runs.
  */
 export async function rollInitiative() {
-  return timed("server", "rollInitiative", () => rollInitiativeNow());
+  return timedAction("rollInitiative", () => rollInitiativeNow());
 }
 async function rollInitiativeNow() {
   await requireGm();
@@ -80,7 +80,7 @@ export async function endEncounter() {
 
 /** The GM plans a creature's round (same rules as players). */
 export async function gmPlanStep(tokenId: number, step: StepRequest): Promise<{ error?: string }> {
-  return timed("server", "gmPlanStep", () => gmPlanStepNow(tokenId, step));
+  return timedAction("gmPlanStep", () => gmPlanStepNow(tokenId, step));
 }
 async function gmPlanStepNow(tokenId: number, step: StepRequest): Promise<{ error?: string }> {
   await requireGm();
@@ -101,7 +101,7 @@ export async function gmRemoveStep(tokenId: number, index: number): Promise<{ er
 }
 
 export async function gmSetReady(tokenId: number, ready: boolean) {
-  return timed("server", "gmSetReady", () => gmSetReadyNow(tokenId, ready));
+  return timedAction("gmSetReady", () => gmSetReadyNow(tokenId, ready));
 }
 async function gmSetReadyNow(tokenId: number, ready: boolean) {
   await requireGm();
@@ -115,7 +115,7 @@ async function gmSetReadyNow(tokenId: number, ready: boolean) {
  * ties), tokens end where it leaves them, and the next round begins with empty plans.
  */
 export async function resolveRound() {
-  return timed("server", "resolveRound", () => resolveRoundNow());
+  return timedAction("resolveRound", () => resolveRoundNow());
 }
 async function resolveRoundNow() {
   await requireGm();
@@ -127,7 +127,7 @@ async function resolveRoundNow() {
 
 /** The GM settles a contested move (`winner` gets the spot): the round is worked out again with that call. */
 export async function decideContest(winner: number) {
-  return timed("server", "decideContest", () => decideContestNow(winner));
+  return timedAction("decideContest", () => decideContestNow(winner));
 }
 async function decideContestNow(winner: number) {
   await requireGm();
@@ -171,7 +171,7 @@ export async function gmRollOffFor(tokenId: number) {
 
 /** The GM loads a location's level on their map (null = back to the party's). */
 export async function loadLevel(levelId: number | null) {
-  return timed("server", "loadLevel", () => loadLevelNow(levelId));
+  return timedAction("loadLevel", () => loadLevelNow(levelId));
 }
 async function loadLevelNow(levelId: number | null) {
   await requireGm();
@@ -298,7 +298,7 @@ export async function gmDropImprovisation(id: number): Promise<void> {
 
 /** The GM settles an improvisation: how it plays out, what it costs, the roll; checked first (scripts must parse). */
 export async function gmAgreeImprovisation(id: number, agreed: Agreed): Promise<{ error?: string }> {
-  return timed("server", "gmAgreeImprovisation", () => gmAgreeImprovisationNow(id, agreed));
+  return timedAction("gmAgreeImprovisation", () => gmAgreeImprovisationNow(id, agreed));
 }
 async function gmAgreeImprovisationNow(id: number, agreed: Agreed): Promise<{ error?: string }> {
   await requireGm();

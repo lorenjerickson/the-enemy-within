@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { BUCKETS, flushTiming, pendingTiming, record, timed } from "@/lib/timing";
+import { BUCKETS, flushTiming, nameAction, pendingTiming, record, timed } from "@/lib/timing";
+import { POST } from "@/app/api/timing/route";
 import { db } from "@/lib/db/connection";
 
 test("timing: off unless TIMING=1; on, samples go into histograms per boundary and name, flushed as JSON lines", async () => {
@@ -19,6 +20,10 @@ test("timing: off unless TIMING=1; on, samples go into histograms per boundary a
     assert.equal(timed("engine", "resolveRound", () => 7), 7);
     assert.equal(await timed("server", "readyUp", async () => "ok"), "ok");
     db.prepare("SELECT 1").get();
+    nameAction("7f00ab", "planStep");
+    await POST(new Request("http://x/api/timing", { method: "POST", body: JSON.stringify([{ name: "action:7f00ab", ms: 12 }, { name: "refresh:/play", ms: 80 }, { name: 5, ms: "bad" }]) }));
+    assert.equal(pendingTiming().get("browser\taction:7f00ab")?.count, 1, "browsers' samples, as the browser boundary");
+    assert.equal(pendingTiming().get("browser\trefresh:/play")?.max, 80);
     const h = pendingTiming().get("server\tplanStep")!;
     assert.deepEqual([h.count, h.total, h.max], [2, 43, 40]);
     assert.equal(h.buckets[BUCKETS.indexOf(5)], 1, "3 ms in the ≤5 bucket");
@@ -30,6 +35,7 @@ test("timing: off unless TIMING=1; on, samples go into histograms per boundary a
     const lines = fs.readFileSync(path.join(dir, "timing", file), "utf8").trim().split("\n").map((l) => JSON.parse(l));
     assert.ok(lines.some((l) => l.boundary === "engine" && l.name === "resolveRound" && l.count === 1));
     assert.ok(lines.some((l) => l.boundary === "server" && l.name === "readyUp"));
+    assert.ok(lines.some((l) => l.names && l.id === "7f00ab" && l.name === "planStep"), "action ids named");
   } finally {
     delete process.env.TIMING;
     if (was === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = was;

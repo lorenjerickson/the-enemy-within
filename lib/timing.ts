@@ -42,6 +42,18 @@ export function record(boundary: Boundary, name: string, ms: number): void {
   timer.unref?.();
 }
 
+let names = new Map<string, string>(); // server action ids (as browsers see them) → names, not yet written
+const named = new Set<string>();
+
+/** A server action's id is this name: written once, so browser samples ("action:<id>") can be read by name. */
+export function nameAction(id: string, name: string): void {
+  if (!timingOn() || named.has(id)) return;
+  named.add(id);
+  names.set(id, name);
+  timer ??= setInterval(flushTiming, 30_000);
+  timer.unref?.();
+}
+
 /** Times `f` at `boundary` as `name` (sync or async). */
 export function timed<T>(boundary: Boundary, name: string, f: () => T): T {
   if (!timingOn()) return f();
@@ -61,12 +73,14 @@ export function timed<T>(boundary: Boundary, name: string, f: () => T): T {
 
 /** Writes the histograms gathered since the last flush (one JSON line each) and starts afresh. */
 export function flushTiming(): void {
-  if (!open.size) return;
+  if (!open.size && !names.size) return;
   const dir = path.join(process.env.DATA_DIR ?? "data", "timing"), to = new Date();
   const lines = [...open].map(([key, h]) => {
     const [boundary, name] = key.split("\t");
     return JSON.stringify({ from: new Date(since).toISOString(), to: to.toISOString(), boundary, name, ...h });
   });
+  lines.push(...[...names].map(([id, name]) => JSON.stringify({ names: true, id, name })));
+  names = new Map();
   open = new Map();
   since = to.getTime();
   fs.mkdirSync(dir, { recursive: true });
